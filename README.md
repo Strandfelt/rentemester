@@ -1,3 +1,5 @@
+![Rentemester banner](assets/rentemester-banner.png)
+
 # Rentemester
 
 **Bogholderen i maskinen — bygget til små danske virksomheder.**
