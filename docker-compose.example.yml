@@ -1,0 +1,10 @@
+services:
+  rentemester-brokk:
+    build: .
+    image: rentemester:latest
+    environment:
+      RENTEMESTER_COMPANY: /company
+    volumes:
+      - ./companies/brokk:/company
+      - ./imports/brokk:/import
+    command: ["system", "healthcheck", "--company", "/company"]

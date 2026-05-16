@@ -1,0 +1,23 @@
+{
+  "transactionDate": "2026-05-16",
+  "text": "Software expense booked from vendor invoice",
+  "documentId": 1,
+  "lines": [
+    {
+      "accountNo": "3000",
+      "debitAmount": 1000,
+      "vatCode": "DK_PURCHASE_25",
+      "text": "Software subscription"
+    },
+    {
+      "accountNo": "4000",
+      "debitAmount": 250,
+      "text": "Input VAT"
+    },
+    {
+      "accountNo": "2000",
+      "creditAmount": 1250,
+      "text": "Bank payment"
+    }
+  ]
+}

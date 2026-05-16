@@ -1,0 +1,5 @@
+Invoice EU-INV-1
+Supplier: EU Supplier GmbH
+Service: SaaS subscription
+Amount: 1000 DKK
+VAT: 0 DKK

@@ -1,0 +1,19 @@
+{
+  "name": "rentemester",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "rentemester": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "test": "bun test",
+    "smoke": "rm -rf /tmp/rentemester-smoke && bun run src/cli.ts init --company /tmp/rentemester-smoke && bun run src/cli.ts system healthcheck --company /tmp/rentemester-smoke && bun run src/cli.ts bank import --company /tmp/rentemester-smoke --file examples/bank-transactions.csv && bun run src/cli.ts reconcile bank --company /tmp/rentemester-smoke --from 2026-05-01 --to 2026-05-31 && bun run src/cli.ts invoice validate --input examples/full-invoice.dk.json && bun run src/cli.ts documents ingest --company /tmp/rentemester-smoke --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json && bun run src/cli.ts journal post --company /tmp/rentemester-smoke --input examples/journal-entry.expense.json && bun run src/cli.ts vat report --company /tmp/rentemester-smoke --from 2026-05-01 --to 2026-05-31 && bun run src/cli.ts documents ingest --company /tmp/rentemester-smoke --file examples/eu-service-invoice.txt --metadata examples/eu-service-invoice.metadata.json && bun run src/cli.ts vat post-eu-service-purchase --company /tmp/rentemester-smoke --input examples/eu-service-purchase.json && bun run src/cli.ts journal reverse --company /tmp/rentemester-smoke --entry-id 1 --date 2026-05-17 --reason 'Wrong booking period' && bun run src/cli.ts audit verify --company /tmp/rentemester-smoke",
+    "sources:download": "bun run scripts/download-legal-sources.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

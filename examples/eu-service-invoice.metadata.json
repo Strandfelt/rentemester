@@ -1,0 +1,20 @@
+{
+  "source": "email",
+  "issueDate": "2026-05-16",
+  "invoiceNo": "EU-INV-1",
+  "deliveryDescription": "EU software service",
+  "amountIncVat": 1000,
+  "currency": "DKK",
+  "sender": {
+    "name": "EU Supplier GmbH",
+    "address": "Berlin, Germany",
+    "vatOrCvr": "DE123456789"
+  },
+  "recipient": {
+    "name": "Rentemester ApS",
+    "address": "Testvej 1, 2100 København Ø",
+    "vatOrCvr": "DK12345678"
+  },
+  "vatAmount": 0,
+  "paymentDetails": "Bank transfer"
+}

@@ -1,0 +1,61 @@
+version: dk-invoices-v0.0.2
+sources:
+  - DK-MOMSBEKENDTGORELSEN-2023-1435
+rules:
+  - rule_id: DK-INVOICE-FULL-001
+    name: Full invoice must contain core seller/buyer/date/number/content fields
+    category: invoice_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - invoice_date
+        - sequential_invoice_number
+        - seller_name_address
+        - seller_vat_or_cvr
+        - buyer_name_address
+        - goods_or_services_description
+        - vat_base
+        - vat_rate
+        - vat_amount
+        - total_amount
+    explanation: Rentemester must reject issuing or deducting VAT from invoices that lack required full-invoice fields.
+  - rule_id: DK-INVOICE-SIMPLIFIED-001
+    name: Simplified invoice is only allowed up to DKK 3,000 gross and needs the reduced field set
+    category: invoice_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      condition: invoice_type == 'simplified'
+      require:
+        - gross_amount_lte_3000_dkk
+        - invoice_date
+        - sequential_invoice_number
+        - seller_name_address
+        - seller_vat_or_cvr
+        - goods_or_services_description
+        - total_amount
+        - vat_amount_or_20pct_of_gross_basis
+    explanation: Rentemester must reject simplified invoices above DKK 3,000 gross or without the mandatory reduced content set.
+  - rule_id: DK-INVOICE-REVERSE-CHARGE-001
+    name: Reverse-charge invoices must omit VAT amount/rate and include a reverse-charge note
+    category: invoice_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      condition: vat_treatment in ['domestic_reverse_charge', 'foreign_reverse_charge']
+      require:
+        - reverse_charge_note
+      forbid:
+        - vat_rate
+        - vat_amount
+    explanation: Reverse-charge invoices are issued without VAT rate/amount and must clearly state that the buyer settles the VAT.
+  - rule_id: DK-INVOICE-LOCK-001
+    name: Issued invoices cannot be modified
+    category: invoice_integrity
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      forbid: [modify_issued_invoice, delete_issued_invoice]
+      require: credit_note_for_correction
+    explanation: Corrections to issued invoices are handled via credit note and new invoice, not mutation.

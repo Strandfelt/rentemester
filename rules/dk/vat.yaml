@@ -1,0 +1,62 @@
+version: dk-vat-v0.0.2
+sources:
+  - DK-MOMSLOVEN-2024-209
+  - DK-MOMSBEKENDTGORELSEN-2023-1435
+vat_codes:
+  - code: DK_PURCHASE_25
+    type: purchase
+    rate: 0.25
+    reverse_charge: false
+    deductible_percentage: 1.0
+  - code: DK_SALE_25
+    type: sale
+    rate: 0.25
+    reverse_charge: false
+    deductible_percentage: 1.0
+  - code: EU_SERVICE_REVERSE_CHARGE
+    type: purchase
+    rate: 0.25
+    reverse_charge: true
+    deductible_percentage: 1.0
+  - code: NO_VAT
+    type: none
+    rate: 0
+    reverse_charge: false
+    deductible_percentage: 0
+rules:
+  - rule_id: DK-VAT-SEPARATE-AMOUNT-001
+    name: Danish VAT deduction requires stated VAT amount
+    category: vat_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      condition: invoice.country == 'DK' && vat_claimed == true
+      require: [vat_rate, vat_amount]
+    explanation: If Danish purchase VAT is claimed, invoice evidence must state VAT amount/rate separately.
+  - rule_id: DK-VAT-REPORT-001
+    name: VAT settlement basis must show output VAT, input VAT, and net payable for a period
+    category: vat_reporting
+    source_id: DK-MOMSLOVEN-2024-209
+    severity: hard_stop
+    machine_rule:
+      require:
+        - period_start
+        - period_end
+        - output_vat_total
+        - input_vat_total
+        - net_vat_payable
+        - traceable_journal_entries_in_period
+    explanation: Rentemester must deterministically derive the VAT settlement basis for a period from traceable journal data so the business can reconcile and file VAT correctly.
+  - rule_id: DK-VAT-REVERSE-CHARGE-001
+    name: EU service reverse-charge purchases must book both output and deductible input VAT in the period
+    category: vat_posting
+    source_id: DK-MOMSLOVEN-2024-209
+    severity: hard_stop
+    machine_rule:
+      condition: vat_code == 'EU_SERVICE_REVERSE_CHARGE'
+      require:
+        - output_vat_line_on_1200
+        - input_vat_line_on_4000
+        - identical_vat_amounts_when_fully_deductible
+        - reverse_charge_purchase_base
+    explanation: Rentemester must deterministically book reverse-charge VAT on EU service purchases so VAT reporting includes both the payment liability and the deductible input tax when applicable.

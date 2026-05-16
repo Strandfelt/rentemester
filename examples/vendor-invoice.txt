@@ -1,0 +1,5 @@
+Invoice INV-1001
+Seller: Leverandør ApS
+Buyer: Rentemester ApS
+Amount incl. VAT: 1,250 DKK
+VAT: 250 DKK

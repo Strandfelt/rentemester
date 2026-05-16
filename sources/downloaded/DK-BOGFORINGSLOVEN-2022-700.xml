@@ -1,0 +1,1631 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Dokument id="id0dc602cc-2aa6-46a6-9584-038afcd93407" SchemaLocation="http://www.retsinformation.dk/offentlig/xml/schemas/2016/09/26/LOVH.Retsinfo.LexDania_2.1.xsd">
+  <Meta id="id5ec1d78a-52a4-4425-9648-668beafc619c">
+    <DocumentType>LOV H#LOKDOK 01</DocumentType>
+    <Rank>A</Rank>
+    <AccessionNumber>A20220070030</AccessionNumber>
+    <DocumentId>CQ002218</DocumentId>
+    <UniqueDocumentId>231197</UniqueDocumentId>
+    <DocumentTitle>Lov om bogføring</DocumentTitle>
+    <Year>2022</Year>
+    <DiesSigni>2022-05-24</DiesSigni>
+    <DateOfSubmit id="submit_1" />
+    <StartDate REFid="submit_1">2022-05-24</StartDate>
+    <EndDate REFid="submit_1">2025-03-25</EndDate>
+    <Status>Valid</Status>
+    <Number>700</Number>
+    <PopularTitle>Bogføringsloven</PopularTitle>
+    <AnnouncedIn>Lovtidende A</AnnouncedIn>
+    <DiesEdicti>2022-08-30</DiesEdicti>
+    <Republished>Nej</Republished>
+    <Sign id="sign" />
+    <Signature REFid="sign">MARGRETHE R.</Signature>
+    <Sub-Sign id="subsign" />
+    <Signature REFid="subsign">Simon Kollerup</Signature>
+    <PlaceOfSignature>Givet på Amalienborg</PlaceOfSignature>
+    <JournalNumber>Ehvervsmin., \nErhvervsstyrelsen, j.nr. 2021-12887</JournalNumber>
+    <Ministry>Erhvervsministeriet</Ministry>
+    <AdministrativeAuthority>Erhvervsministeriet</AdministrativeAuthority>
+  </Meta>
+  <TitelGruppe id="id0fb9e865-d294-45b1-a505-5e057eac9ec3">
+    <Titel id="idaced4028-4d0e-4e23-84cb-d4e4adb925c0">
+      <Linea>
+        <Char>Lov om bogføring</Char>
+      </Linea>
+    </Titel>
+  </TitelGruppe>
+  <DokumentIndhold id="id5f42074e-9252-4254-9b2c-a849c2ad71f3">
+    <Hymne id="id3de9c066-25ac-4cec-b4c6-95ceba09f40f">
+      <Exitus>
+        <Linea>
+          <Char>VI MARGRETHE DEN ANDEN, af Guds Nåde Danmarks Dronning, gør vitterligt:</Char>
+        </Linea>
+      </Exitus>
+      <Exitus>
+        <Linea>
+          <Char>Folketinget har vedtaget og Vi ved Vort samtykke stadfæstet følgende lov:</Char>
+        </Linea>
+      </Exitus>
+    </Hymne>
+    <Bog id="idacf5e014-9c0f-4954-952e-d60402b1c329">
+      <Afsnit id="idf41165ff-5099-4a95-97df-2d6efa80cebe" localId="1">
+        <Kapitel id="id8a1e4d9a-11b0-42a1-9014-edb29033b4aa" localId="1">
+          <Explicatus>Kapitel 1</Explicatus>
+          <Rubrica id="idf45e22ee-98d9-466e-9ee3-a99ed0bb9687">
+            <Linea>
+              <Char formaChar="Italic">Anvendelsesområde og definitioner</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="id8a81b0ac-ba65-460b-865e-bd17aef0af32" localId="1">
+              <Explicatus>§ 1.</Explicatus>
+              <Stk id="id1c98ede2-2ac1-4f5e-af35-47879a83a604">
+                <Exitus>
+                  <Linea>
+                    <Char>Loven finder anvendelse på erhvervsdrivende virksomheder etableret her i landet af enhver art uanset ejer- eller hæftelsesforhold samt erhvervsaktiviteter, der udøves her i landet af virksomheder, som er hjemmehørende i udlandet.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id67784952-f61f-4309-b497-45193bb17489">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Loven finder endvidere anvendelse på følgende virksomheder, organisationer og sammenslutninger m.v.:</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id62467c58-aa0f-4832-8613-f5939c7f7e77">
+                  <Index>
+                    <Indentatio id="id63420ab8-d091-4d59-a0dd-aeb0cb20478e" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Virksomheder, organisationer og sammenslutninger m.v., der er afgiftspligtige eller fuldt eller begrænset skattepligtige her til landet, i det omfang de ikke er omfattet af stk. 1.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id267e8960-189a-4ebc-a6e8-35779bc423a9" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Virksomheder, organisationer og sammenslutninger m.v., der som betingelse for tildeling af direkte tilskud fra den danske stat eller Den Europæiske Union skal afgive regnskabsmæssige oplysninger, i det omfang de ikke er omfattet af stk. 1.</Char>
+                        </Linea>
+                        <Linea>
+                          <Char>Den bevilgende myndighed kan helt eller delvis fritage enkelte virksomheder, organisationer eller sammenslutninger m.v. fra loven.</Char>
+                        </Linea>
+                        <Linea>
+                          <Char>Er virksomheden, organisationen eller sammenslutningen m.v. tillige omfattet af nr. 1, kan fritagelse dog kun ske efter aftale med told- og skatteforvaltningen.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="id6c5156ef-59ff-4cd5-91c3-58ed3ce59ced">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Loven finder ikke anvendelse på virksomheder, som</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="ide63f3925-a449-4eee-9adf-eb6619eeaa76">
+                  <Index>
+                    <Indentatio id="id931ae3e1-bfda-4820-937a-c0117724d5b8" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>er omfattet af lov om statens regnskabsvæsen m.v. eller</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idb10be5be-c1f1-47c1-bbd9-161fd39858f7" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>udelukkende er omfattet af regnskabsregler fastsat ved eller i henhold til lov om kommunernes styrelse eller regionsloven.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idd322ef8c-69b6-442f-b2c1-162f008f0391" localId="2">
+              <Explicatus>§ 2.</Explicatus>
+              <Stk id="idee587293-a5c3-46d1-baac-77a5e260d50a">
+                <Exitus>
+                  <Linea>
+                    <Char>§ 19, § 20, stk. 2, § 25, stk. 2, § 27, stk. 2-4, § 29 og § 33, stk. 1, nr. 3, finder alene anvendelse på udbydere af digitale bogføringssystemer.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id9446e6dd-1fff-4678-b8b5-0f6aff5600b4" localId="3">
+              <Explicatus>§ 3.</Explicatus>
+              <Stk id="idb2cafb0c-4b41-45b2-b70a-46bcac94909d">
+                <Exitus>
+                  <Linea>
+                    <Char>I denne lov forstås ved:</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="idee289280-8865-4203-b292-c5952016ad51">
+                  <Index>
+                    <Indentatio id="idc535cd9b-cac6-488e-b797-c4b6437b31f3" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Virksomheder: Enheder omfattet af § 1, stk. 1 og 2.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id06a05629-9132-44b2-9012-fe1b21f8a874" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Transaktion: En handling eller et forhold af økonomisk betydning for virksomheden.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id815f202c-5845-4559-ace8-47cb251795c9" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Transaktionsspor: Den sammenhæng, der er mellem de enkelte registreringer og virksomhedens årsregnskab, skatte- eller afgiftsopgørelse, tilskudsregnskab eller tilsvarende regnskabsopstilling, der skal udarbejdes i henhold til lovgivning, eller virksomhedens frivilligt udarbejdede regnskaber, når de ikke udelukkende anvendes til virksomhedens eget brug.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id9ef2c3a8-7d3c-4486-a3ee-929385887131" formaInd="Nummer">
+                      <Explicatus>4)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Kontrolspor: De oplysninger, der dokumenterer registreringernes rigtighed.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id49c082b6-01f2-4cd1-858b-f73aa02a4097" formaInd="Nummer">
+                      <Explicatus>5)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Bilag: Enhver nødvendig dokumentation for transaktioner, der registreres i bogføringen.</Char>
+                        </Linea>
+                        <Linea>
+                          <Char>Ved eksterne bilag forstås dokumentation, der hidrører fra andre end virksomheden.</Char>
+                        </Linea>
+                        <Linea>
+                          <Char>Øvrige bilag anses som interne.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idf239e2df-0447-40d4-bb2d-ef55e59643fe" formaInd="Nummer">
+                      <Explicatus>6)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Digitalt bogføringssystem: En digital service eller software, som indeholder funktioner, hvorved virksomheder kan registrere transaktioner og opbevare registreringer og bilag eller som minimum en fuldstændig sikkerhedskopi heraf på en server hos en udbyder eller en anden tredjepart.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="iddbfc3b95-dfbc-424c-94a1-5c13f3e09506" formaInd="Nummer">
+                      <Explicatus>7)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Udbyder af et digitalt bogføringssystem: En virksomhed, som markedsfører eller påtænker at markedsføre et digitalt bogføringssystem her i landet på ensartede vilkår til en ubestemt kreds af virksomheder.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id8fdda944-b146-4181-ae37-a99d0b8d8780" formaInd="Nummer">
+                      <Explicatus>8)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>E-faktura: En faktura eller kreditnota, der er udstedt, sendt og modtaget i et struktureret, elektronisk format, der gør det muligt at behandle den automatisk og elektronisk.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id833b4a3f-6075-4872-a76c-d6ce037668a7" formaInd="Nummer">
+                      <Explicatus>9)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>E-dokument: Et dokument, der sendes eller modtages i et struktureret, elektronisk format.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id8e1a7d01-c032-4d31-a516-b135c53c92da" localId="4">
+              <Explicatus>§ 4.</Explicatus>
+              <Stk id="id4a3b2488-af86-4c6a-b4f5-edbbd5c4fdd0">
+                <Exitus>
+                  <Linea>
+                    <Char>Som regnskabsmateriale anses:</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id08e4c8f3-08ba-45df-82ed-e7b2db3520ee">
+                  <Index>
+                    <Indentatio id="id33599bb2-98c2-4f3b-a82d-5b7ecdc7d64f" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Registreringer, herunder transaktionssporet.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id2be3700e-7632-4430-a03a-b89e883510a4" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Beskrivelse af virksomhedens bogføringsprocedurer, jf. § 6.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id1077a06e-3247-4a77-908e-9f053847073e" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Bilag.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id46765496-d9e0-485d-906f-10269ec7e0ea" formaInd="Nummer">
+                      <Explicatus>4)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Oplysninger i øvrigt, som er nødvendige for kontrolsporet.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idae9023c7-78b7-477c-a9c2-534ab160c43c" formaInd="Nummer">
+                      <Explicatus>5)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Dokumentation for oplysninger i noterne og ledelsesberetningen i årsrapporten og for skøn og vurderinger foretaget i forbindelse med udarbejdelse af virksomhedens årsrapport.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id6053e642-0f86-4df1-931a-e56388a2af9f" formaInd="Nummer">
+                      <Explicatus>6)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Regnskaber, opgørelser og opstillinger, som kræves udarbejdet i henhold til lovgivning, og frivilligt udarbejdede regnskaber, der er aflagt efter årsregnskabsloven, og som ikke udelukkende anvendes til virksomhedens eget brug.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idc26fdf02-aad2-450b-8000-28fafdf822f8" formaInd="Nummer">
+                      <Explicatus>7)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Eventuelle revisionsprotokoller eller anden tilsvarende rapportering.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="idf0004cbb-ecac-4bea-beb9-cfc8a7f9e47c" localId="2">
+          <Explicatus>Kapitel 2</Explicatus>
+          <Rubrica id="idf4e57a09-1df0-4c8f-9b67-eb0e2e69e155">
+            <Linea>
+              <Char formaChar="Italic">Generelle krav til bogføring</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="id71517c59-ce4e-4710-9136-78fa87fac61e" localId="5">
+              <Explicatus>§ 5.</Explicatus>
+              <Stk id="id0e81d8da-3a00-4487-bdfa-707a81d98d40">
+                <Exitus>
+                  <Linea>
+                    <Char>Bogføringspligten efter denne lov omfatter registrering af virksomhedens transaktioner og opbevaring af virksomhedens regnskabsmateriale.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id75261903-4d55-4d91-8987-9601e4298fbe">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Bogføringen skal tilrettelægges og udføres under hensyn til virksomhedens kompleksitet, antallet af transakti‍oner og transaktionernes økonomiske omfang.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id73e6ca05-baf6-4804-8c69-dd1fb5d8a28c" localId="6">
+              <Explicatus>§ 6.</Explicatus>
+              <Stk id="id5fb7cbca-2ddb-4e5d-9222-bba159d2f073">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder, der er bogføringspligtige efter § 1, stk. 1, og som efter årsregnskabslovens § 3, stk. 1, har pligt til at aflægge en årsrapport, eller hvor nettoomsætningen i 2 på hinanden følgende indkomstår overstiger 300.000 kr., skal under hensyn til § 5, stk. 2, udarbejde</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="idef18caf7-d8c6-498d-919e-35a4015385ed">
+                  <Index>
+                    <Indentatio id="id45bcc412-1c3b-4a14-9146-33dbac13fafb" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>en beskrivelse af virksomhedens procedurer for at sikre, at alle virksomhedens transaktioner løbende registreres,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idaf0dfa28-e0f9-46bb-a496-6d3b6326002c" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>en beskrivelse af virksomhedens procedurer for at sikre, at virksomhedens regnskabsmateriale efter § 4, nr. 2 og 4-7, opbevares på betryggende vis, og</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id7b7441c3-0b9f-4f5b-97c7-368a6957c5ae" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>en beskrivelse af, hvilke medarbejdere der er ansvarlige for procedurerne efter nr. 1 og 2.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="iddc15ca1e-80f5-4e30-84fd-cd9763919acf" localId="3">
+          <Explicatus>Kapitel 3</Explicatus>
+          <Rubrica id="id0306b5b8-16d9-44de-a620-d4696c0617ed">
+            <Linea>
+              <Char formaChar="Italic">Registrering af transaktioner og løbende afstemning med beholdninger</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idd4c9ee9c-6373-4080-88b8-27b82d2d3118" localId="7">
+              <Explicatus>§ 7.</Explicatus>
+              <Stk id="idf27785e8-8aec-4d25-9a5f-60a45592e925">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder skal registrere alle transaktioner nøjagtigt, og snarest muligt efter at de forhold, der danner grundlag for registreringerne, foreligger.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id1666cc7c-06f6-470c-95d0-654e0f651a10">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder, der på grund af deres kompleksitet, antallet af transaktioner eller transaktionernes økonomiske omfang ikke er i stand til at registrere alle individuelle køb eller salg, kan i stedet registrere aggregerede køb eller salg på grundlag af daglige kasseopgørelser.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idaf34be6e-2389-4a14-bdfa-95e79ca461cf" localId="8">
+              <Explicatus>§ 8.</Explicatus>
+              <Stk id="idc101e1f6-799c-468f-a12a-3b35f8f4025f">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder har pligt til at sikre transaktionsspor, ved at registreringer efter § 7, stk. 1, kan følges til de omhandlede regnskaber, opgørelser eller opstillinger, jf. § 4, nr. 6, og at tallene heri kan opløses i de registreringer, hvoraf de er sammensat.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idbe53b7d1-5bd3-4c92-b731-0b275840363a" localId="9">
+              <Explicatus>§ 9.</Explicatus>
+              <Stk id="iddc3e3979-6757-4c04-bb11-7a9ab29e4db3">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder har pligt til at sikre kontrolsporet, ved at registreringer efter § 7, stk. 1, kan dokumenteres ved bilag og indeholder henvisninger hertil.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Hver registrering skal indeholde oplysning om sin tidsmæssige placering i bogføringen.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id9669d2fa-3a7a-404e-ad29-bc4c8a7982a5">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Bilag skal indeholde oplysninger, der er nødvendige for at identificere kontrolsporet, herunder tydeligt angive transaktionsdato og beløb.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Danner eksterne bilag grundlag for en registrering, skal der henvises hertil.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id80f9c0b5-290d-4014-a07f-1e6599e584e9">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Foretages der rettelser i bilagsmaterialet, skal det oprindelige indhold og indholdet af ændringen tydeligt fremgå af materialet.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idececebe9-fc31-4a60-8177-c33d8d6fcd13" localId="10">
+              <Explicatus>§ 10.</Explicatus>
+              <Stk id="id791ac7a1-1d3a-4c5a-b727-81e0fa4dc4fc">
+                <Exitus>
+                  <Linea>
+                    <Char>Registreringerne efter § 7, stk. 1, skal foretages i danske kroner, i euro eller i anden relevant fremmed valuta</Char>
+                    <Char formaChar="Italic">.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id974d569f-bc8c-4d79-89f8-3d101f768dca">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Registreres i fremmed valuta, herunder euro, skal regnskabsmaterialet indeholde oplysninger, herunder om transaktionsdagens kurs eller lignende omregningsfaktorer, som til enhver tid gør det muligt at omregne til danske kroner.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idc73d3c28-6a11-4419-9064-7825e622a14d" localId="11">
+              <Explicatus>§ 11.</Explicatus>
+              <Stk id="idb7aced94-8570-40bc-9758-60403160828c">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder skal foretage de afstemninger, der er nødvendige for at sikre, at der foreligger et opdateret grundlag for lovpligtige indberetninger eller angivelser om moms, skatter, afgifter og års- og delårsrapporter.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idae657dbc-bba1-4e35-83a6-7b78c8ad8d08">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Afstemningen skal senest foretages på datoen for udløbet af fristerne for de lovpligtige indberetninger og angivelser.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="ide3407861-0f6a-4aba-ab85-16c4f744a4e6" localId="4">
+          <Explicatus>Kapitel 4</Explicatus>
+          <Rubrica id="id2c6e20d1-442d-4e8d-bd1d-cbeb34bc70c0">
+            <Linea>
+              <Char formaChar="Italic">Opbevaring af regnskabsmateriale</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idca67e870-ab83-4b5f-aa05-6a6ed53fddcc" localId="12">
+              <Explicatus>§ 12.</Explicatus>
+              <Stk id="id5446ac55-8073-4e91-89ee-67496a55dfb4">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder skal på betryggende vis opbevare regnskabsmateriale, jf. § 4, i 5 år fra udgangen af det regnskabsår, materialet vedrører, jf. dog stk. 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idfcb0db67-7e0d-4359-baaa-b70a2417fca7">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Opbevaringsperioden i stk. 1 gælder ikke for detailhandelsvirksomheders kassestrimler og tilsvarende interne bilag.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id99ee310c-0483-46f2-8dce-6784481b6015" localId="13">
+              <Explicatus>§ 13.</Explicatus>
+              <Stk id="id46c011ac-3806-4450-905f-0e295dbafd3b">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder skal sikre, at regnskabsmaterialet ikke ødelægges, bortskaffes eller forvanskes, ligesom det skal sikres mod fejl og misbrug, jf. dog stk. 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idd6e25bcb-61e7-4ddb-9f96-dfad7860d2bd">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Stk. 1 gælder ikke for registreringer og bilag, der opbevares efter § 16, stk. 1, nr. 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id885ef406-1288-400f-8ab8-00bbd40b2fac" localId="14">
+              <Explicatus>§ 14.</Explicatus>
+              <Stk id="id5b39415f-3aa5-4b39-ad0e-c2f735f9b48b">
+                <Exitus>
+                  <Linea>
+                    <Char>Ophører bogføringspligten, skal den senest fungerende ledelse sørge for, at regnskabsmaterialet fortsat opbevares i overensstemmelse med dette kapitel og kapitel 5.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id94861de3-5bc6-4873-a3b5-23730ba76137">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Ophører bogføringspligten som følge af virksomhedens opløsning ved skifterettens mellemkomst, kan skifteretten beslutte, at andre end den senest fungerende ledelse skal opbevare regnskabsmaterialet.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id65d8c553-cddf-4d99-8892-dc0f086888a6">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>I andre tilfælde, hvor ledelsen fratræder, skal medlemmerne af den fratrædende ledelse sikre, at regnskabsmaterialet for perioden frem til fratrædelsestidspunktet bliver opbevaret i overensstemmelse med dette kapitel og kapitel 5.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Når en ny ledelse afløser en fratrædende ledelse, skal medlemmerne af den fratrædende ledelse overføre regnskabsmaterialet til den nye ledelse.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="ida0cc83c3-8c74-458e-9361-b5bf5b9c89c2" localId="5">
+          <Explicatus>Kapitel 5</Explicatus>
+          <Rubrica id="id53c7702d-a7b9-4f7e-8bbc-63e0b471bd62">
+            <Linea>
+              <Char formaChar="Italic">Krav til digitale bogføringssystemer</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idc621746c-6bcd-4a62-a171-2b2c602e914d" localId="15">
+              <Explicatus>§ 15.</Explicatus>
+              <Stk id="id1b4495db-e319-4ed6-b0e2-32031a3c3e22">
+                <Exitus>
+                  <Linea>
+                    <Char>Et digitalt bogføringssystem, der udbydes eller anvendes til bogføring efter denne lov, skal opfylde følgende krav:</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="ida8d30bb3-2891-4ff0-8ca0-cef31a00c4ca">
+                  <Index>
+                    <Indentatio id="id15aeebfb-9653-4bf7-ba8b-e3e01168e5e0" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Understøtte en løbende registrering af virksomhedens transaktioner med angivelse af bilag for hver registrering og en betryggende opbevaring af registreringer og bilag i 5 år.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id815543eb-b443-4502-a4b2-07fe3137a2f1" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Opfylde anerkendte standarder for it-sikkerhed, herunder for bruger- og adgangsstyring, og sikre automatisk sikkerhedskopiering af registreringer og bilag.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id3c542fbd-4ef4-4baa-98fd-3894adcb6b06" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>Understøtte automatisering af administrative processer, herunder ved automatisk fremsendelse og modtagelse af e-fakturaer og ved mulighed for kontering i overensstemmelse med en offentlig standardkontoplan i registrerede bogføringssystemer.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="id98d2dc83-d916-44f1-9fc5-d8f342d2bd22">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen fastsætter efter høring af told- og skatteforvaltningen nærmere regler om kravene til digitale bogføringssystemer efter stk. 1, herunder særlige regler for nærmere angivne bogføringssystemer, virksomheder eller brancher.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+          <ParagrafGruppe>
+            <Rubrica id="iddd08c4a7-4847-482e-9247-651241a8f924">
+              <Linea>
+                <Char formaChar="Italic">Krav til virksomheders brug af digitale bogføringssystemer</Char>
+              </Linea>
+            </Rubrica>
+            <Paragraf id="id9ef006b8-9260-4475-a0f1-5468a0568dc1" localId="16">
+              <Explicatus>§ 16.</Explicatus>
+              <Stk id="id86bf5ede-e489-4375-8b8e-401bf6f1eebc">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder, der er bogføringspligtige efter § 1, stk. 1, og som efter årsregnskabslovens § 3, stk. 1, har pligt til at aflægge en årsrapport, eller hvor nettoomsætningen i 2 på hinanden følgende indkomstår overstiger 300.000 kr., skal i et digitalt bogføringssystem</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id6619c18a-2527-4ad7-aac4-7fb4081addb9">
+                  <Index>
+                    <Indentatio id="id4d8c94e5-3b67-445a-b837-eef28a80e478" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>registrere virksomhedens transaktioner efter § 7, stk. 1, og</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="ided4f2a98-a742-4ab0-9229-d5fe3b0bea7d" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>opbevare registreringer og de bilag, der dokumenterer registreringerne efter § 9.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="ideadc79d4-9328-4b25-9b06-3204bba52025">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder skal sikre, at det digitale bogføringssystem, de anvender efter stk. 1,</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id9fcb0da6-b06c-4429-b57a-02aeb0c2c952">
+                  <Index>
+                    <Indentatio id="id46b46616-b2a3-4784-a742-f3aee03818fd" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>er registreret efter § 20, stk. 1, eller</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idf031aedd-3229-4a1b-b56b-5643f962897a" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>opfylder kravene efter § 15 og regler udstedt i medfør heraf, hvis bogføringssystemet ikke er registreret efter § 20, stk. 1.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="id49fd21ed-ac21-4835-9bef-1e32d8adc361">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen fastsætter nærmere regler om, hvilke bilag der omfattes af opbevaringspligten efter stk. 1, nr. 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id73546239-1542-4d74-8bdd-d89ce15cdb7d" localId="17">
+              <Explicatus>§ 17.</Explicatus>
+              <Stk id="idbec6731c-48c0-43ee-88e8-154a3dc387a6">
+                <Exitus>
+                  <Linea>
+                    <Char>Virksomheder, der udfører bogføring for andre virksomheder, skal ved bogføringen for disse virksomheder ligeledes iagttage kravene efter § 16, stk. 1 og 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idd9447e90-ede1-4509-b283-b26e60593b18" localId="18">
+              <Explicatus>§ 18.</Explicatus>
+              <Stk id="id388a6f0f-568f-471a-973f-d225e3a61441">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsministeren kan efter høring af skatteministeren fastsætte regler om, at virksomheder, der er omfattet af § 16, stk. 1, og § 17, skal registrere deres transaktioner vedrørende køb og salg med e-fakturaer som dokumentation for transaktionerne.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+          <ParagrafGruppe>
+            <Rubrica id="idf1ab94db-23ea-4609-8d32-dde32ef983b9">
+              <Linea>
+                <Char formaChar="Italic">Krav til udbydere af digitale bogføringssystemer</Char>
+              </Linea>
+            </Rubrica>
+            <Paragraf id="idae07bff3-a4ab-4125-9e24-f4c9c0f54afe" localId="19">
+              <Explicatus>§ 19.</Explicatus>
+              <Stk id="id67c83059-9909-40a9-a257-557b0714359a">
+                <Exitus>
+                  <Linea>
+                    <Char>Udbydere af digitale bogføringssystemer har pligt til at sikre, at systemerne opfylder kravene til digitale bogføringssystemer efter § 15 og regler udstedt i medfør heraf.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Udbyderne har endvidere pligt til at anmelde systemerne, inden de markedsføres her i landet, til Erhvervsstyrelsen med henblik på registrering efter § 20.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idb85572ec-e515-45d3-a7b3-82604acd24b3">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>En udbyder af et digitalt bogføringssystem har pligt til at stille virksomhedens registreringer og bilag efter § 16, stk. 1, nr. 2, til rådighed for myndigheder og en likvidator, kurator eller rekonstruktør, der er trådt i ledelsens sted i den pågældende virksomhed.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id84e99cb5-123d-472d-8e7e-c9729292514b">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan fastsætte nærmere regler om, hvordan oplysninger efter stk. 2 skal stilles til rådighed.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idddad042c-7645-4fe9-9584-fae868cafebd" localId="20">
+              <Explicatus>§ 20.</Explicatus>
+              <Stk id="id580570bc-11db-42ae-95e4-7ba7e56f2b88">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kontrollerer, at anmeldte bogføringssystemer opfylder kravene efter § 15 og regler udstedt i medfør heraf.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Er dette tilfældet, registrerer Erhvervsstyrelsen bogføringssystemerne i en offentligt tilgængelig fortegnelse.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id524ec46a-d71c-4683-8177-8dc7f7326426">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Når et bogføringssystem er registreret efter stk. 1, har udbyderen pligt til at sikre, at systemet løbende lever op til kravene efter § 15 og regler udstedt i medfør heraf, herunder i forbindelse med opdateringer og ændringer af bogføringssystemet.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idac3cc26d-32f4-4e1e-a469-c3b1aed95402">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Registrering af bogføringssystemet kan ikke finde sted, hvis bogføringssystemet ikke opfylder kravene efter § 15 og regler udstedt i medfør heraf.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Opfylder et bogføringssystem, der er anmeldt til Erhvervsstyrelsen, ikke kravene efter § 15 og regler udstedt i medfør heraf, fastsætter styrelsen en frist for berigtigelse af anmeldelsen.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Registrering kan først finde sted, når anmeldelsen er berigtiget.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id4d7a7720-e22e-4980-adf9-688162a5e6d6">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan fastsætte nærmere regler om anmeldelse og registrering af digitale bogføringssystemer efter stk. 1-3.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id19246417-3bf4-47c5-b56b-b43517c63e8a" localId="21">
+              <Explicatus>§ 21.</Explicatus>
+              <Stk id="id10eb2871-0187-42f7-b3e2-e4a00ee210b3">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsministeren kan efter høring af skatteministeren fastsætte regler om digitale bogføringssystemers fremsendelse af registreringer og bilag til et offentligt modtagepunkt gennem anvendelse af den fællesoffentlige digitale infrastruktur for udveksling af e-dokumenter og om opbevaring af sådanne registreringer og bilag og om, til hvilke formål, hvordan og hvor længe sådanne registreringer og bilag må anvendes af offentlige myndigheder.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="idf593670e-ecc3-490d-aeac-1de94c93e282" localId="6">
+          <Explicatus>Kapitel 6</Explicatus>
+          <Rubrica id="id565aef97-1675-425e-a5cb-6a7d13e12f16">
+            <Linea>
+              <Char formaChar="Italic">Kontrol</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="id358cf3f8-4929-4406-ae88-49f3a6e61aa2" localId="22">
+              <Explicatus>§ 22.</Explicatus>
+              <Stk id="idd06f3275-cb0c-4688-b8c0-054a6e6faae9">
+                <Exitus>
+                  <Linea>
+                    <Char>En virksomhed har pligt til at stille sit regnskabsmateriale til rådighed for en offentlig myndighed, i det omfang myndigheden i henhold til denne lov eller anden lovgivning er berettiget til at udføre kontrol med virksomheden.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idd1b9d648-4154-41d1-a030-7f4c795fea28">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Den offentlige myndighed kan forlange, at virksomheden i forbindelse med opfyldelse af pligten i stk. 1</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id58288570-8b2c-42fc-8af6-d14cf729838a">
+                  <Index>
+                    <Indentatio id="id8e2dc82f-6aa3-4e98-bc6f-a1ac2545e810" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>udleverer nærmere angivet regnskabsmateriale,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id729cc0d3-7c77-4d7e-9e6c-61a0c51c3662" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>udleverer det angivne regnskabsmateriale vederlagsfrit i et anerkendt filformat,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="idd9c0c556-b87f-4d39-a663-6e59e4083328" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>omregner registreringer i fremmed valuta, herunder euro, til danske kroner og</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id4152e4f8-3159-4009-9365-dc863bc0d4a9" formaInd="Nummer">
+                      <Explicatus>4)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>sørger for, at regnskabsmaterialet bortset fra eksterne bilag vederlagsfrit oversættes til dansk eller engelsk.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="id49581741-9e9e-497f-a2e7-45434b8c0934">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Stk. 1 og 2 finder tilsvarende anvendelse, hvis regnskabsmaterialet opbevares hos tredjepart.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idb3fcc7fa-6d93-471b-9e0b-b5e9d0308338">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Den offentlige myndighed fastsætter en frist for efterlevelsen af et krav efter stk. 1 og 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+          <ParagrafGruppe>
+            <Rubrica id="id9d55b806-df14-449c-8d72-3af00b843a92">
+              <Linea>
+                <Char formaChar="Italic">Bogføringskontrol</Char>
+              </Linea>
+            </Rubrica>
+            <Paragraf id="id19b51688-d540-4240-af98-c1cb93f44fac" localId="23">
+              <Explicatus>§ 23.</Explicatus>
+              <Stk id="id4547ee4f-4767-4c89-b13e-1f4fe0bf9594">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen gennemfører en risikobaseret kontrol med overholdelse af reglerne i denne lov og regler fastsat i medfør af denne lov for</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id68dad0e7-1bef-40b1-ac52-729fe20ba303">
+                  <Index>
+                    <Indentatio id="id845c74ba-07e6-409f-b5d1-774342552725" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>virksomheder omfattet af årsregnskabsloven, der ikke har indsendt virksomhedens første årsrapport, jf. årsregnskabslovens § 138, stk. 1, 2. pkt., og</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id414f261f-1153-4efa-8169-893601f42d50" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>virksomheder, der har fravalgt revision, jf. årsregnskabslovens § 135, stk. 1, 3. pkt.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="idc3ff49ba-3502-4457-8f6a-3d1c83e3ea2b">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>En virksomhed omfattet af stk. 1, dens nuværende ledelse eller revisor eller dens tidligere ledelse eller revisor har efter anmodning fra Erhvervsstyrelsen pligt til at meddele styrelsen oplysninger og stille regnskabsmateriale til rådighed for styrelsen, som er nødvendigt for at gennemføre kontrollen efter stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id81711e90-a6cd-4459-8c04-c7b0a8750443">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan kræve, at en virksomhed omfattet af stk. 1 indsender en erklæring afgivet af en godkendt revisor om overholdelse af denne lov eller regler fastsat i medfør af denne lov.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen meddeler virksomheden de forhold, som revisorens erklæring skal omfatte.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id3e8fdc22-c0a8-4085-a48d-7b0b966288f8">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen fastsætter en frist for modtagelsen af oplysninger og regnskabsmateriale efter stk. 2 og erklæringer efter stk. 3.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+          <ParagrafGruppe>
+            <Rubrica id="id64654f8a-1f39-4437-b09a-241b07704d04">
+              <Linea>
+                <Char formaChar="Italic">Kontrol med virksomheder, der benytter digitale bogføringssystemer</Char>
+              </Linea>
+            </Rubrica>
+            <Paragraf id="id5027e93a-7e1a-420b-9e3e-aedba535eea0" localId="24">
+              <Explicatus>§ 24.</Explicatus>
+              <Stk id="idab6c5f1e-16f6-4c53-a48b-b8d15ddd3552">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen gennemfører en risikobaseret kontrol med, at virksomheder, der anvender et digitalt bogføringssystem, som ikke er registreret efter § 20, stk. 1, opfylder kravene efter § 15 og regler udstedt i medfør heraf.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>§ 23, stk. 2-4, finder tilsvarende anvendelse for kontrol efter 1. pkt.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idd7c46ca5-006a-4e02-bbf7-df28912f4623">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan benytte ekstern bistand ved udførelse af en kontrol med virksomheders bogføringssystemer m.v. efter stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+          <ParagrafGruppe>
+            <Rubrica id="ide4047a1e-a52a-4611-b605-d3bf82b7c7ac">
+              <Linea>
+                <Char formaChar="Italic">Kontrol med udbydere af digitale bogføringssystemer</Char>
+              </Linea>
+            </Rubrica>
+            <Paragraf id="id14938571-e71c-49fc-ab72-32bd50c36967" localId="25">
+              <Explicatus>§ 25.</Explicatus>
+              <Stk id="id2ebb316f-08bf-44d2-9283-efdd53f1faa4">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen gennemfører en risikobaseret kontrol med, at udbydere af digitale bogføringssystemer overholder pligten efter § 19, stk. 1, til at anmelde digitale bogføringssystemer til registrering, og at bogføringssystemer, der er registreret efter § 20, stk. 1, fortsat overholder kravene efter § 15 og regler udstedt i medfør heraf.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id78526585-640f-4908-ad7e-17a77c7194b2">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Udbydere af digitale bogføringssystemer har efter anmodning fra Erhvervsstyrelsen pligt til at meddele styrelsen alle oplysninger, der er nødvendige for at gennemføre kontrollen efter stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id8797f463-eacb-430e-abb6-b708781add9d">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan benytte ekstern bistand ved udførelse af en kontrol med en udbyders bogføringssystem m.v. efter stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="id392ea9f5-325e-4d0e-84f0-6dc5ae3ad67d" localId="7">
+          <Explicatus>Kapitel 7</Explicatus>
+          <Rubrica id="id61528c80-7a00-417c-b9d1-3a869379b675">
+            <Linea>
+              <Char formaChar="Italic">Reaktionsmuligheder i forbindelse med kontrol</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idcec51c02-0902-4398-b0ae-01a1cb1a4287" localId="26">
+              <Explicatus>§ 26.</Explicatus>
+              <Stk id="id2c828d7e-507d-428c-8c79-2be5af70d371">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan i forbindelse med en kontrol med overholdelse af regler efter denne lov eller regler fastsat i medfør heraf</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id86e2af6c-0f66-42f4-9ef4-52f4c812a7a6">
+                  <Index>
+                    <Indentatio id="id081ab3c3-307c-4413-9bf6-68a697cf5841" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>påtale en overtrædelse,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id551f71ce-b10d-45d4-8fe3-33afd2aaf147" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>påbyde, at en fejl rettes, eller</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id1bc3bddc-7edd-4da7-807c-b71382165701" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>påbyde, at en overtrædelse bringes til ophør, og at virksomheden bekræfter dette ved en erklæring afgivet af en godkendt revisor.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="idaabe7322-cab3-470c-ace7-d5cc1f23b3c5">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen fastsætter en frist for efterlevelsen af et påbud efter stk. 1, nr. 2 og 3.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idc96cf606-24a5-457b-a701-eadc1ab8592f" localId="27">
+              <Explicatus>§ 27.</Explicatus>
+              <Stk id="id5abfc5cd-535e-4a6e-8fe3-be1d34dbc000">
+                <Exitus>
+                  <Linea>
+                    <Char>Undlader en virksomhed uanset påbud efter § 26, stk. 1, nr. 2 eller 3, at lovliggøre sit bogføringssystem eller skifte til et lovligt bogføringssystem, kan Erhvervsstyrelsen påbyde virksomheden at anvende et digitalt bogføringssystem, som er registreret efter § 20, stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id12d0fad1-c615-4c43-a1e7-c2db36205b15">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Undlader udbyderen af et digitalt bogføringssystem uanset påbud efter § 26, stk. 1, nr. 2 eller 3, at anmelde et bogføringssystem efter § 19, stk. 1, eller at ændre systemet, så det overholder kravene efter § 15 og regler udstedt i medfør heraf, kan Erhvervsstyrelsen forbyde fortsat markedsføring af det digitale bogføringssystem, indtil påbuddet efterleves.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id6ff1684e-5132-4a77-a8ac-39eede351204">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Er der tale om fejl eller mangler, som kan medføre væsentlige risici for sikkerheden i virksomhedernes bogføring, kan Erhvervsstyrelsen påbyde udbyderen at advare virksomheder omfattet af § 16, stk. 2, nr. 1, der bruger det pågældende bogføringssystem, om disse risici.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="ide6e85c37-7163-4536-b3cb-b7ebc0a2e806">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Stk. 2 finder tilsvarende anvendelse, hvis en udbyder undlader at efterkomme Erhvervsstyrelsens anmodning om oplysninger efter § 25, stk. 2.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Undlader en udbyder uanset forbud mod markedsføring efter stk. 2 fortsat at efterkomme Erhvervsstyrelsens anmodning om oplysninger, finder § 29, stk. 1, tilsvarende anvendelse.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+          <ParagrafGruppe>
+            <Rubrica id="ideb6f3979-9c8c-4914-b528-5165beaf74c6">
+              <Linea>
+                <Char formaChar="Italic">Tvangsopløsning og sletning</Char>
+              </Linea>
+            </Rubrica>
+            <Paragraf id="id4a329660-4bfe-400d-915b-be489223d0a4" localId="28">
+              <Explicatus>§ 28.</Explicatus>
+              <Stk id="id896858d2-baef-45e4-bc39-1c4165bba26e">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan anmode skifteretten om at opløse en virksomhed i overensstemmelse med den lovgivning, som er gældende for virksomheden, hvis den undlader at</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id83fae8b3-f99d-439c-823c-53555665467e">
+                  <Index>
+                    <Indentatio id="ide5666e0d-02c3-4413-9cab-adcfe838c3be" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>indsende oplysninger eller regnskabsmateriale efter § 23, stk. 2,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id8bab13cb-7338-4abd-838c-e62d4b30ec94" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>indsende en erklæring efter § 23, stk. 3, eller</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="iddf5b6c22-efd8-4cff-b4c3-b6f170487995" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>efterkomme et påbud givet efter § 26, stk. 1, nr. 2 eller 3, i forbindelse med kontrol efter § 23.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="id84e24c5c-1dcd-4069-8f47-c0377947b656">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan slette en filial af en udenlandsk virksomhed fra styrelsens it-system i de i stk. 1, nr. 1-3, nævnte situationer.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idc5f21d44-1f1b-49f5-96d3-b08041de4c3f">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Vedrører de i stk. 1, nr. 1-3, nævnte situationer et interessentskab eller kommanditselskab, kan styrelsen slette registreringen af interessentskabet eller kommanditselskabet i styrelsens register.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id2e2aa1fd-a3ce-4817-a9be-f7100e457e8f">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan træffe afgørelse efter stk. 1-3, når en virksomhed eller en filial af en udenlandsk virksomhed ikke efterlever et krav efter § 23, stk. 2 eller 3, eller et påbud efter § 26, stk. 1, nr. 2 eller 3, i forbindelse med kontrol efter § 23 senest ved udløbet af den af styrelsen fastsatte frist, jf. § 23, stk. 4, eller § 26, stk. 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="idfad7a102-944e-4006-92d0-f866f408891d" localId="29">
+              <Explicatus>§ 29.</Explicatus>
+              <Stk id="id347229cd-7aa6-4f99-8e66-f9cf801b2c14">
+                <Exitus>
+                  <Linea>
+                    <Char>Konstaterer Erhvervsstyrelsen ved kontrol efter § 25, stk. 1, at et registreret digitalt bogføringssystem ikke overholder kravene efter § 15 og regler udstedt i medfør heraf og udbyderen undlader at lovliggøre bogføringssystemet uanset påbud om dette, kan Erhvervsstyrelsen slette det pågældende bogføringssystem fra fortegnelsen, jf. § 20, stk. 1, 2. pkt. Udbyderen har i så fald pligt til at informere virksomheder omfattet af § 16, stk. 2, nr. 1, der bruger bogføringssystemet, om, at dette ikke længere er registreret efter § 20, stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="ida5a5c40c-ec1f-4f47-bd82-fd965281a5fb">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>En udbyder, der på ny ønsker at markedsføre et digitalt bogføringssystem, der er slettet efter stk. 1, skal anmelde bogføringssystemet efter § 19.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="id87457638-a992-456f-8346-913f939c954f" localId="8">
+          <Explicatus>Kapitel 8</Explicatus>
+          <Rubrica id="idfeee98c4-cf98-425a-91dc-7eea3c71cf0f">
+            <Linea>
+              <Char formaChar="Italic">Kommunikation m.v.</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idfaccf4b3-6714-458c-beea-255ac8ddf3eb" localId="30">
+              <Explicatus>§ 30.</Explicatus>
+              <Stk id="id3fdb19ea-da96-4074-b413-a6a4784c0438">
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan fastsætte regler om, at skriftlig kommunikation til og fra myndigheder om forhold, som er omfattet af denne lov eller af regler udstedt i medfør af denne lov, skal foregå digitalt.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idc7de54ef-2fb2-4939-8196-86f54c5fa593">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan fastsætte nærmere regler om digital kommunikation, herunder om anvendelse af bestemte it-systemer, særlige digitale formater og digital signatur el.lign.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id5b91ca80-c07b-4b21-bd78-e9a2b5af9275">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>En digital meddelelse anses for at være kommet frem, når den er tilgængelig for adressaten for meddelelsen.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="ide465346b-37bf-4e6c-b042-4cd259bac6aa" localId="31">
+              <Explicatus>§ 31.</Explicatus>
+              <Stk id="id9e9d7572-6273-4d2a-84ec-2a52e1a456e1">
+                <Exitus>
+                  <Linea>
+                    <Char>Hvor det efter denne lov eller regler udstedt i medfør af denne lov er krævet, at et dokument, som er udstedt af andre end en myndighed, skal være personligt underskrevet, kan dette krav opfyldes ved anvendelse af en teknik, der sikrer entydig identifikation af den, som har udstedt dokumentet</Char>
+                    <Char formaChar="Italic">.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Erhvervsstyrelsen kan fastsætte nærmere regler herom.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="idbe7ab4f4-182c-4eb0-b9a2-55b9aa422b3f" localId="9">
+          <Explicatus>Kapitel 9</Explicatus>
+          <Rubrica id="id09a49225-08d2-47ba-a566-cf9a690c9a33">
+            <Linea>
+              <Char formaChar="Italic">Klageadgang</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idf5fdb77e-a964-4437-9d12-3a9df00b4232" localId="32">
+              <Explicatus>§ 32.</Explicatus>
+              <Stk id="id4ccd9c7c-4772-42d3-bc33-b2f85ac5b3a2">
+                <Exitus>
+                  <Linea>
+                    <Char>Afgørelser truffet af Erhvervsstyrelsen efter denne lov og regler fastsat i medfør heraf kan indbringes for Erhvervsankenævnet, senest 4 uger efter at afgørelsen er meddelt den pågældende, jf. dog stk. 2.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id26aaef26-4633-4e4b-9fdd-580b5049c4ed">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Afgørelser truffet efter § 28 og § 29, stk. 1, kan ikke indbringes for anden administrativ myndighed.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="idc6151ba9-32e9-4e7e-933e-80e2e408df7a" localId="10">
+          <Explicatus>Kapitel 10</Explicatus>
+          <Rubrica id="idca2c9da5-21f6-4709-a759-f8f00a8d9a9c">
+            <Linea>
+              <Char formaChar="Italic">Straf</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="id843dba55-1ba5-423b-8d63-d21687a937f6" localId="33">
+              <Explicatus>§ 33.</Explicatus>
+              <Stk id="idfcaa92f6-f7d3-45e7-a75e-7de03f7d9f63">
+                <Exitus>
+                  <Linea>
+                    <Char>Medmindre strengere straf er forskyldt efter anden lovgivning, straffes med bøde den, der</Char>
+                  </Linea>
+                </Exitus>
+                <Exitus id="id6c7f7976-1832-46ba-b85c-88210fa189be">
+                  <Index>
+                    <Indentatio id="id96cc2232-61cb-4f9e-9051-a9b2771f69f4" formaInd="Nummer">
+                      <Explicatus>1)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>overtræder § 7, stk. 1, §§ 8 og 9, § 12, stk. 1, og §§ 13 og 14,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id49b4aa5c-5350-4202-898f-62ccca0074f7" formaInd="Nummer">
+                      <Explicatus>2)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>overtræder § 16, stk. 1 og 2, og § 17,</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="ide1275dc7-86cc-43e4-b031-e95d99b73508" formaInd="Nummer">
+                      <Explicatus>3)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>overtræder § 19 og § 20, stk. 2, eller</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                    <Indentatio id="id0642bde3-be74-493f-a8f2-e118fb25920c" formaInd="Nummer">
+                      <Explicatus>4)</Explicatus>
+                      <Exitus>
+                        <Linea>
+                          <Char>undlader at efterkomme påbud efter § 26, stk. 1, nr. 2 og 3.</Char>
+                        </Linea>
+                      </Exitus>
+                    </Indentatio>
+                  </Index>
+                </Exitus>
+              </Stk>
+              <Stk id="idf1b06764-9a00-441c-ba4b-a4d08d1f953b">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Ved udmåling af bøder efter denne lov skal der tages hensyn til virksomhedens omsætning, overtrædelsens grovhed og varighed, og om der er tale om gentagne overtrædelser.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Ved særlig omfattende overtrædelser af § 7, stk. 1, §§ 8 og 9, § 12, stk. 1, §§ 13 og 14, § 16, stk. 1 og 2, og § 17 idømmes der en skærpet bøde.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id17931ec4-504c-48c5-81d7-7ebb22f991e1">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>I forskrifter, der udstedes i medfør af loven, kan der fastsættes straf af bøde for overtrædelse af bestemmelser i forskrifterne.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="id9e882a7a-807e-48b4-aabb-48fe77cfa03b">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Der kan pålægges selskaber m.v. (juridiske personer) strafansvar efter reglerne i straffelovens 5. kapitel.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idbc1b936c-ad2b-46e3-afa7-d249d09e4468">
+                <Explicatus>Stk. 5.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Forældelsesfristen for strafansvaret er 5 år.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="idc7a1e396-1661-4a9a-8045-fdbf34223ed8" localId="11">
+          <Explicatus>Kapitel 11</Explicatus>
+          <Rubrica id="id1253f00f-c57b-4541-bf4e-9fb2c8fd6dcd">
+            <Linea>
+              <Char formaChar="Italic">Ikrafttrædelses- og overgangsbestemmelser</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="idec4067ed-4bcb-4e7f-a2b9-46977aff6558" localId="34">
+              <Explicatus>§ 34.</Explicatus>
+              <Stk id="id2ec833ae-9010-42e9-a730-435d5af78728">
+                <Exitus>
+                  <Linea>
+                    <Char>§§ 1-14, 18, 21-23, 26, 28, 30-35, 37 og 38 træder i kraft den 1. juli 2022.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idbac30650-df6a-46c1-886a-c00b4eea677c">
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsministeren fastsætter efter høring af skatteministeren tidspunktet for ikrafttrædelsen af §§ 15-17, 19, 20, 24, 25, 27, 29 og 36.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Ministeren kan fastsætte, at bestemmelserne træder i kraft på forskellige tidspunkter, herunder at § 16, stk. 1 og 2, træder i kraft på forskellige tidspunkter for virksomheder omfattet af forskellige regnskabsklasser efter årsregnskabsloven eller efter forskellige omsætningsgrænser.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idb4d36d98-a434-4986-bced-e280e31af35b">
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Erhvervsministeren kan fastsætte regler om, hvornår anmeldelsespligten efter § 19, stk. 1, 2. pkt., har virkning for eksisterende udbydere af digitale bogføringssystemer.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk id="idd6e568b2-c98c-479a-a5be-41d86deca8b2">
+                <Explicatus>Stk. 4.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Indtil § 16, stk. 1, sættes i kraft efter stk. 2, finder § 6, nr. 2, anvendelse på regnskabsmateriale efter § 4, nr. 1 og 3.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+            <Paragraf id="id913d8ed2-0358-4951-b82d-8fc10013f069" localId="35">
+              <Explicatus>§ 35.</Explicatus>
+              <Stk id="id2bca85b3-9d5b-4cec-849e-911643ab59fa">
+                <Exitus>
+                  <Linea>
+                    <Char>Lov om bogføring, jf. lovbekendtgørelse nr. 648 af 15. juni 2006, ophæves.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="idaf01f1f4-fc86-4e57-9333-d2d6cc7e33d1" localId="12">
+          <Explicatus>Kapitel 12</Explicatus>
+          <Rubrica id="id443ee81c-6f30-4dc3-a795-64cf1dd4fc65">
+            <Linea>
+              <Char formaChar="Italic">Ændringer i anden lovgivning</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <AendringCentreretParagraf id="id33d41d7f-c0f9-4784-9452-9475cf95bd5b" localId="36">
+              <Explicatus>§ 36.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>I årsregnskabsloven, jf. lovbekendtgørelse nr. 838 af 8. august 2019, som ændret ved § 1 i lov nr. 642 af 19. maj 2020, lov nr. 741 af 30. maj 2020 og § 4 i lov nr. 568 af 10. maj 2022, foretages følgende ændring:</Char>
+                </Linea>
+              </Exitus>
+              <AendringsNummer id="id2f613733-bb59-4571-84d2-7f11a96d5a7b">
+                <Explicatus>1.</Explicatus>
+                <Aendring id="idae0ea484-efe5-409f-97ab-df3af2c9e6ce">
+                  <AendringDefinition id="id3856f48c-08c2-4da6-8339-6a18eda32109">
+                    <Exitus>
+                      <Linea>
+                        <Char>Efter § 138 indsættes før overskriften før § 139:</Char>
+                      </Linea>
+                    </Exitus>
+                  </AendringDefinition>
+                  <AendringAktion id="id352c3d95-3157-4599-9bb3-bf6d734b19eb">
+                    <AendringNyTekst>
+                      <Paragraf id="idcfa061f4-581d-448d-813e-b65382aa44af" localId="138a">
+                        <Explicatus>§ 138 a.</Explicatus>
+                        <Stk id="id1af0e263-9ec7-469a-82cf-84ab8f16f475">
+                          <Exitus>
+                            <Linea>
+                              <Char>Virksomheden skal indberette navn og cvr-nummer på udbyderen af det digitale bogføringssystem, som virksomheden anvender eller har anvendt i regnskabsåret efter bogføringslovens § 16, stk. 2, nr. 1, samtidig med at den indsender årsrapporten.</Char>
+                            </Linea>
+                          </Exitus>
+                        </Stk>
+                        <Stk id="idf834c727-d938-4633-ae9d-ffa7233d23d5">
+                          <Explicatus>Stk. 2.</Explicatus>
+                          <Exitus>
+                            <Linea>
+                              <Char>Anvender eller har virksomheden i regnskabsåret anvendt et bogføringssystem efter bogføringslovens § 16, stk. 2, nr. 2, der ikke er registreret efter bogføringslovens § 20, stk. 1, skal det indberettes, hvilket system der er tale om.</Char>
+                            </Linea>
+                            <Linea>
+                              <Char>Hvis virksomheden opbevarer en fuldstændig sikkerhedskopi af registreringer og bilag på en server hos en tredjepart, skal dette anføres med nærmere oplysninger om identiteten på den pågældende tredjepart.</Char>
+                            </Linea>
+                          </Exitus>
+                        </Stk>
+                        <Stk id="idda509487-197d-4715-9e0e-833b0a6890ec">
+                          <Explicatus>Stk. 3.</Explicatus>
+                          <Exitus>
+                            <Linea>
+                              <Char>Oplysninger efter stk. 1 og 2 offentliggøres ikke.</Char>
+                            </Linea>
+                          </Exitus>
+                        </Stk>
+                        <Stk id="idc92ea8f1-46ce-4b45-992f-1e8f31088441">
+                          <Explicatus>Stk. 4.</Explicatus>
+                          <Exitus>
+                            <Linea>
+                              <Char>Erhvervsstyrelsen fastsætter nærmere regler om indberetning af oplysninger efter stk. 1 og 2.</Char>
+                            </Linea>
+                          </Exitus>
+                        </Stk>
+                      </Paragraf>
+                    </AendringNyTekst>
+                  </AendringAktion>
+                </Aendring>
+              </AendringsNummer>
+            </AendringCentreretParagraf>
+            <AendringCentreretParagraf id="id03ea9c78-0a67-48fa-8a2f-36c5146b6f28" localId="37">
+              <Explicatus>§ 37.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>I revisorloven, jf. lovbekendtgørelse nr. 25 af 8. januar 2021, som ændret ved § 32 i lov nr. 1436 af 29. juni 2021 og § 9 i lov nr. 2601 af 28. december 2021, foretages følgende ændringer:</Char>
+                </Linea>
+              </Exitus>
+              <AendringsNummer id="id67510236-0ba6-4bae-9638-622d137e89ef">
+                <Explicatus>1.</Explicatus>
+                <Aendring id="idc1b2f213-fd3a-4f83-a15e-ef0a631b7519">
+                  <AendringDefinition id="idd832f59e-3b9a-4c8c-bbc7-2912fc59829f">
+                    <Exitus>
+                      <Linea>
+                        <Char>I </Char>
+                        <Char signiChar="AendringURN" formaChar="Italic">§ 29, stk. 6,</Char>
+                        <Char> ændres »§ 42« til: »§ 42, stk. 1,«.</Char>
+                      </Linea>
+                    </Exitus>
+                  </AendringDefinition>
+                  <AendringAktion id="id2774fbd3-c367-4128-8cf5-1d8e89039876">
+                    <AendringNyTekst />
+                  </AendringAktion>
+                </Aendring>
+              </AendringsNummer>
+              <AendringsNummer id="id8736d0da-3155-49b0-8583-6e223e2f5b35">
+                <Explicatus>2.</Explicatus>
+                <Aendring id="idf64b6ef2-6f5d-4e20-bb27-d9f7894e2ac0">
+                  <AendringDefinition id="idd81496a3-dc10-435b-9779-55cb9a9ad5b0">
+                    <Exitus>
+                      <Linea>
+                        <Char>I </Char>
+                        <Char signiChar="AendringURN" formaChar="Italic">§ 38</Char>
+                        <Char> indsættes som </Char>
+                        <Char signiChar="AendringURN" formaChar="Italic">stk. 3:</Char>
+                      </Linea>
+                    </Exitus>
+                  </AendringDefinition>
+                  <AendringAktion id="id8bc3eca3-7fdb-4363-b0b6-afa965f64ce6">
+                    <AendringNyTekst>
+                      <Stk id="id2b3556e6-1532-4cf1-8d46-e7d61b6dfeaa">
+                        <Explicatus>Stk. 3.</Explicatus>
+                        <Exitus>
+                          <Linea>
+                            <Char>Ved en undersøgelse kan Erhvervsstyrelsen hos revisorens eller revisionsvirksomhedens kunde indhente relevant regnskabsmateriale vedrørende afgivne erklæringer efter § 1, stk. 2.</Char>
+                          </Linea>
+                          <Linea>
+                            <Char>Revisorens og revisionsvirksomhedens kunde skal give Erhvervsstyrelsen adgang til materialet.</Char>
+                          </Linea>
+                        </Exitus>
+                      </Stk>
+                    </AendringNyTekst>
+                  </AendringAktion>
+                </Aendring>
+              </AendringsNummer>
+              <AendringsNummer id="ide49e1cfc-8579-445b-aaa4-d42e2c4a249c">
+                <Explicatus>3.</Explicatus>
+                <Aendring id="id29aee6de-de41-49cc-97f1-0f987e5a372f">
+                  <AendringDefinition id="id2057e0ac-d116-4663-b86c-bab0d92678c6">
+                    <Exitus>
+                      <Linea>
+                        <Char>I </Char>
+                        <Char signiChar="AendringURN" formaChar="Italic">§ 42, stk. 1, nr. 1,</Char>
+                        <Char> ændres »§ 38« til: »§ 38, stk. 1,«.</Char>
+                      </Linea>
+                    </Exitus>
+                  </AendringDefinition>
+                  <AendringAktion id="id65eab8bd-216b-4860-8c9f-26c7fbfbb433">
+                    <AendringNyTekst />
+                  </AendringAktion>
+                </Aendring>
+              </AendringsNummer>
+              <AendringsNummer id="id1ac30f71-934a-42b0-a9cb-d95bb1a342c5">
+                <Explicatus>4.</Explicatus>
+                <Aendring id="ida281b658-b3f5-4361-a5d5-f6c537187bc9">
+                  <AendringDefinition id="idea1a137a-3c73-47a4-913f-9bfbbfdede70">
+                    <Exitus>
+                      <Linea>
+                        <Char>I </Char>
+                        <Char signiChar="AendringURN" formaChar="Italic">§ 42</Char>
+                        <Char> indsættes efter stk. 1 som nyt stykke:</Char>
+                      </Linea>
+                    </Exitus>
+                  </AendringDefinition>
+                  <AendringAktion id="id4db71c14-3f0a-4c01-9080-2d7d2e22801c">
+                    <AendringNyTekst>
+                      <Stk id="id75d04693-02ed-45a9-a386-1a1264ff132b">
+                        <Explicatus>Stk. 2.</Explicatus>
+                        <Exitus>
+                          <Linea>
+                            <Char>Erhvervsstyrelsen kan som tvangsmiddel pålægge den, som styrelsen i medfør af § 38, stk. 3, har anmodet om at udlevere regnskabsmateriale, daglige eller ugentlige bøder, hvis pågældende undlader at efterkomme anmodningen.</Char>
+                          </Linea>
+                        </Exitus>
+                      </Stk>
+                    </AendringNyTekst>
+                  </AendringAktion>
+                </Aendring>
+                <Rykningsklausul id="id8cedca5f-7cfc-40e6-a8c7-2c0a6fe0dfe8">
+                  <Exitus>
+                    <Linea>
+                      <Char>Stk. 2 og 3 bliver herefter stk. 3 og 4.</Char>
+                    </Linea>
+                  </Exitus>
+                </Rykningsklausul>
+              </AendringsNummer>
+              <AendringsNummer id="idb74142c6-07c0-4bf2-b457-b6a386f64e4e">
+                <Explicatus>5.</Explicatus>
+                <Aendring id="id6327a3e2-c0ed-4927-994b-c6e65e3acee1">
+                  <AendringDefinition id="idfd599fb8-f83d-4de5-b64f-c976fd4e8b78">
+                    <Exitus>
+                      <Linea>
+                        <Char>I </Char>
+                        <Char signiChar="AendringURN" formaChar="Italic">§ 42, stk. 3,</Char>
+                        <Char> der bliver stk. 4, ændres »og 2« til: »og 3«.</Char>
+                      </Linea>
+                    </Exitus>
+                  </AendringDefinition>
+                  <AendringAktion id="id9d8984f7-b2de-4fd1-a904-3626b6cf2148">
+                    <AendringNyTekst />
+                  </AendringAktion>
+                </Aendring>
+              </AendringsNummer>
+            </AendringCentreretParagraf>
+          </ParagrafGruppe>
+        </Kapitel>
+        <Kapitel id="id396b815f-42d0-4d2f-a811-ad273d953059" localId="13">
+          <Explicatus>Kapitel 13</Explicatus>
+          <Rubrica id="id7663e432-e51a-4536-b793-833b4595fc0d">
+            <Linea>
+              <Char formaChar="Italic">Territorialbestemmelser</Char>
+            </Linea>
+          </Rubrica>
+          <ParagrafGruppe>
+            <Paragraf id="id62602653-1a2a-4e72-95cd-4e1c9208753f" localId="38">
+              <Explicatus>§ 38.</Explicatus>
+              <Stk id="idf1086885-c39c-4d99-973d-b736997f43b7">
+                <Exitus>
+                  <Linea>
+                    <Char>Loven gælder ikke for Færøerne og Grønland, men kan ved kongelig anordning sættes i kraft for Grønland med de ændringer, som de grønlandske forhold tilsiger.</Char>
+                  </Linea>
+                  <Linea>
+                    <Char>Loven kan endvidere sættes i kraft på forskellige tidspunkter.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </Paragraf>
+          </ParagrafGruppe>
+        </Kapitel>
+      </Afsnit>
+    </Bog>
+  </DokumentIndhold>
+  <UnderskriftGruppe id="idd9bf024d-e3cc-477c-82de-fee5ae935cc0">
+    <UnderskriftStedDato id="id55030a86-6ba5-4612-8931-01c73638eec4" />
+    <Segl>
+      <Linea>
+        <Char>Under Vor Kongelige Hånd og Segl</Char>
+      </Linea>
+    </Segl>
+    <Underskriver id="idddc603e7-eea9-4ebc-8297-9031692249f3" />
+  </UnderskriftGruppe>
+</Dokument>

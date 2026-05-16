@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Dokument id="idf5e864ce-8079-4c13-b8a0-fc7ddae6da65" SchemaLocation="http://www.retsinformation.dk/offentlig/xml/schemas/2022/05/17/BEKC.Retsinfo.LexDania_2.1.xsd">
+  <Meta id="id7f134096-6818-40a4-b5e7-dbf202f9dabd">
+    <DocumentType>BEK Æ#LOKDOK05</DocumentType>
+    <Rank>B</Rank>
+    <AccessionNumber>B20250030205</AccessionNumber>
+    <DocumentId>CQ003141</DocumentId>
+    <UniqueDocumentId>248303</UniqueDocumentId>
+    <DocumentTitle>Bekendtgørelse om ændring af bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem</DocumentTitle>
+    <Year>2025</Year>
+    <DiesSigni>2025-03-20</DiesSigni>
+    <DateOfSubmit id="submit_1" />
+    <StartDate REFid="submit_1">2025-03-24</StartDate>
+    <EndDate REFid="submit_1">2025-03-25</EndDate>
+    <Status>Valid</Status>
+    <Number>302</Number>
+    <AnnouncedIn>Lovtidende A</AnnouncedIn>
+    <DiesEdicti>2025-03-24</DiesEdicti>
+    <Republished>Nej</Republished>
+    <Sign id="sign" />
+    <Signature REFid="sign">Jørgen Wissing Jensen</Signature>
+    <Sub-Sign id="subsign" />
+    <Signature REFid="subsign">Dennis Lindberg Laursen</Signature>
+    <PlaceOfSignature>Erhvervsstyrelsen</PlaceOfSignature>
+    <JournalNumber>Erhvervsmin.,\nErhvervsstyrelsen, j.nr. 2022-11381</JournalNumber>
+    <Ministry>Erhvervsministeriet</Ministry>
+    <AdministrativeAuthority>Erhvervsstyrelsen</AdministrativeAuthority>
+  </Meta>
+  <TitelGruppe id="idc1e99948-8cb6-4155-ba5d-fa7903483c06">
+    <Titel id="id8116d267-d36d-4b62-9249-61ed579b8453">
+      <Linea>
+        <Char>Bekendtgørelse om ændring af bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem</Char>
+      </Linea>
+    </Titel>
+  </TitelGruppe>
+  <DokumentIndhold id="id31c15f58-cbad-4b69-a07b-e535558acc26">
+    <AendringCentreretParagraf id="id053405fd-2d7b-47a4-9ff2-2cfc98025df4" localId="1">
+      <Explicatus>§ 1</Explicatus>
+      <Exitus>
+        <Linea>
+          <Char>I bekendtgørelse nr. 1383 af 29. november 2023 om pligt til opbevaring af bilag i et digitalt bogføringssystem foretages følgende ændring:</Char>
+        </Linea>
+      </Exitus>
+      <AendringsNummer id="idf35cc079-2271-463e-a9d5-54a3d59fa04b">
+        <Explicatus>1.</Explicatus>
+        <Aendring id="id46d41982-72fe-4416-8d13-2f04b985b608">
+          <AendringDefinition id="id6b8fcd45-1f31-4b2e-a431-f58d45112bf7">
+            <Exitus>
+              <Linea>
+                <Char formaChar="Italic">§ 2, stk. 2 </Char>
+                <Char>og </Char>
+                <Char formaChar="Italic">3, </Char>
+                <Char>ophæves.</Char>
+              </Linea>
+            </Exitus>
+          </AendringDefinition>
+          <AendringAktion id="id8c5f1a11-d7bd-4802-8cc6-835a4e88fa42">
+            <AendringNyTekst />
+          </AendringAktion>
+        </Aendring>
+      </AendringsNummer>
+    </AendringCentreretParagraf>
+    <IkraftCentreretParagraf id="idbf16d7af-0453-4f22-bdbc-a9186c8d363c" localId="2">
+      <Explicatus>§ 2</Explicatus>
+      <Stk id="id12bb0adc-7d08-4665-a495-ba5aba1cdd35">
+        <Exitus>
+          <Linea>
+            <Char>Bekendtgørelsen træder i kraft den 1. januar 2026.</Char>
+          </Linea>
+        </Exitus>
+      </Stk>
+    </IkraftCentreretParagraf>
+  </DokumentIndhold>
+  <UnderskriftGruppe id="idb3b56e3d-e85d-4057-9913-645a282d4173">
+    <UnderskriftStedDato />
+    <Underskriver />
+  </UnderskriftGruppe>
+</Dokument>

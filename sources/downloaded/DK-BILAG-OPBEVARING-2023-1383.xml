@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Dokument id="id07ecfe97-fd73-48d9-a0fc-4a2ac9068606" SchemaLocation="http://www.retsinformation.dk/offentlig/xml/schemas/2022/05/17/BEKH.Retsinfo.LexDania_2.1.xsd">
+  <Meta id="idec8e9053-87fb-4e54-9ca0-4b9071db2275">
+    <DocumentType>BEK H#LOKDOK04</DocumentType>
+    <Rank>B</Rank>
+    <AccessionNumber>B20230138305</AccessionNumber>
+    <DocumentId>CQ002699</DocumentId>
+    <UniqueDocumentId>240328</UniqueDocumentId>
+    <DocumentTitle>Bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem</DocumentTitle>
+    <Year>2023</Year>
+    <DiesSigni>2023-11-29</DiesSigni>
+    <DateOfSubmit id="submit_1" />
+    <StartDate REFid="submit_1">2023-11-30</StartDate>
+    <EndDate REFid="submit_1">2025-03-25</EndDate>
+    <Status>Valid</Status>
+    <Number>1383</Number>
+    <AnnouncedIn>Lovtidende A</AnnouncedIn>
+    <DiesEdicti>2023-11-30</DiesEdicti>
+    <Concerns id="concerns_1" />
+    <Ref_Accn REFid="concerns_1">A20220070030</Ref_Accn>
+    <Ref_Af REFid="concerns_1">2022-05-24</Ref_Af>
+    <Ref_Text REFid="concerns_1">Lov om bogføring</Ref_Text>
+    <Change id="change_1" />
+    <Ref_Accn REFid="change_1">B20250030205</Ref_Accn>
+    <Ref_Af REFid="change_1">2025-03-20</Ref_Af>
+    <Ref_Text REFid="change_1">Bekendtgørelse om ændring af bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem</Ref_Text>
+    <Republished>Nej</Republished>
+    <Sign id="sign" />
+    <Signature REFid="sign">Jørgen Wissing Jensen</Signature>
+    <Sub-Sign id="subsign" />
+    <Signature REFid="subsign">Dennis Lindberg Laursen</Signature>
+    <PlaceOfSignature>Erhvervsstyrelsen</PlaceOfSignature>
+    <JournalNumber>Erhvervsmin.,\nErhvervsstyrelsen, j.nr. 2022-11381</JournalNumber>
+    <Ministry>Erhvervsministeriet</Ministry>
+  </Meta>
+  <TitelGruppe id="id8196c8de-3411-4220-8ee8-72da57156df1">
+    <Titel id="id7c95bbc2-90a9-4153-a9cb-0632228c3618">
+      <Linea>
+        <Char>Bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem</Char>
+      </Linea>
+    </Titel>
+  </TitelGruppe>
+  <DokumentIndhold id="ide441aaaf-673c-4008-84b9-7ba533bc1e99">
+    <Indledning id="idd085d1af-ac65-40a2-adb1-ed028cc54777">
+      <Exitus>
+        <Linea>
+          <Char>I medfør af § 16, stk. 3, i lov nr. 700 af 24. maj 2022 om bogføring fastsættes:</Char>
+        </Linea>
+      </Exitus>
+    </Indledning>
+    <Afsnit id="idbc74d0ba-1937-4a3e-a3fe-d52c877dfb3a" localId="1">
+      <Kapitel id="id6fac6aa5-092a-4bdf-abc8-ea8c98be3ffc" localId="1">
+        <ParagrafGruppe>
+          <Paragraf id="id38156ef6-dba3-47e4-b1a3-fff3b1e3b1c5" localId="1">
+            <Explicatus>§ 1.</Explicatus>
+            <Stk id="id04405d86-050b-4e88-b4e7-477f3db4f307">
+              <Exitus>
+                <Linea>
+                  <Char>Virksomheder omfattet af § 16, stk. 1, i lov om bogføring skal i et digitalt bogføringssystem opbevare enhver dokumentation for en bogført transaktion, jf. § 7 i lov om bogføring, vedrørende køb eller salg, der som minimum indeholder følgende oplysninger:</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="id4020b8ad-6cb8-4960-b3c6-2405af9f05fc">
+                <Index>
+                  <Indentatio id="id1d2091d6-51fc-446b-bf9a-2d35cd11c724" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Udstedelsesdato.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id572d8799-7b9b-4c6b-82e1-e2b5a912c711" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Leverancens art.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id8464bcca-1c75-4407-8ebb-3bd36f51e7c4" formaInd="Nummer">
+                    <Explicatus>3)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Beløb.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idc17051ee-2931-4cd5-b12b-e28e7b81f0ab" formaInd="Nummer">
+                    <Explicatus>4)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Afsender og modtager, herunder navn, adresse, samt CVR-nummer eller SE-nummer.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idd81b6bed-24ed-434c-acbf-ece44d101e11" formaInd="Nummer">
+                    <Explicatus>5)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Oplysning om momsbeløbets størrelse.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id611466d0-b1cc-47a5-b539-48b7d1300e96" formaInd="Nummer">
+                    <Explicatus>6)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Betalingsoplysninger.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+            <Stk id="id4d06fc83-bf90-41a3-9c66-4fb4bbfd9521">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1 finder ikke anvendelse på kassestrimler fra et salgsregistreringssystem.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id142f0d2c-fd3c-4d34-8616-9a8e50a67141">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1 finder endvidere ikke anvendelse på dokumentation for bogførte transaktioner, som alene foreligger i fysisk form, og som modtages vedrørende køb eller salg af varer og tjenesteydelser uden for landets grænser.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="idda492c73-2cb3-4c1b-b448-9eeb50d04cb9" localId="2">
+            <Explicatus>§ 2.</Explicatus>
+            <Stk id="id1ccee2f3-cd5d-45b3-9110-e2d0d95dddd3">
+              <Exitus>
+                <Linea>
+                  <Char>Bekendtgørelsen træder i kraft den 1. juli 2024.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="idedbff4f7-8e19-48cf-9e6d-17f1355357f0">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1 finder ikke anvendelse på datterselskaber af virksomheder omfattet af lov om finansiel virksomhed, lov om forsikringsvirksomhed eller lov om Arbejdsmarkedets Tillægspension, hvis disse anvender et koncernfælles bogføringssystem.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="idf6a51500-cfb1-41bd-8349-8569b2d6343d">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Bekendtgørelsen har kun virkning for virksomheder, som er bogføringspligtige efter bogføringslovens § 1, stk. 1, og som efter årsregnskabslovens § 3, stk. 1, har pligt til at aflægge en årsrapport, for førstkommende regnskabsår, der starter fra og med</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="id7675afe9-1cf0-4b18-9b2f-bbda2ebac291">
+                <Index>
+                  <Indentatio id="id41ade4e7-eff1-4af6-94c2-b1052eceb53b" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>1. juli 2024, hvis virksomheden bruger et registreret standard bogføringssystem, jf. § 16, stk. 2, nr. 1, i lov om bogføring, og</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id41fa593e-7f0d-4003-ada8-9599e7f15eb5" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>1. januar 2025, hvis virksomheden bruger et ikke-registreret bogføringssystem, jf. § 16, stk. 2, nr. 2, i lov om bogføring.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+        </ParagrafGruppe>
+      </Kapitel>
+    </Afsnit>
+  </DokumentIndhold>
+  <UnderskriftGruppe id="idfc3b6aa6-d4b8-4b76-8403-5ea59c576bc8">
+    <UnderskriftStedDato />
+    <Underskriver />
+  </UnderskriftGruppe>
+</Dokument>

@@ -1,0 +1,1311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Dokument id="id5d5a9dd5-0038-4a1c-94a5-7e04284999d1" SchemaLocation="http://www.retsinformation.dk/offentlig/xml/schemas/2022/05/17/BEKH.Retsinfo.LexDania_2.1.xsd">
+  <Meta id="ida15a0e19-1e10-4981-994c-2310ab936563">
+    <DocumentType>BEK H#LOKDOK04</DocumentType>
+    <Rank>B</Rank>
+    <AccessionNumber>B20230009705</AccessionNumber>
+    <DocumentId>CQ002459</DocumentId>
+    <UniqueDocumentId>234495</UniqueDocumentId>
+    <DocumentTitle>Bekendtgørelse om krav til digitale standard bogføringssystemer</DocumentTitle>
+    <Year>2023</Year>
+    <DiesSigni>2023-01-26</DiesSigni>
+    <DateOfSubmit id="submit_1" />
+    <StartDate REFid="submit_1">2023-01-30</StartDate>
+    <EndDate REFid="submit_1">2023-01-31</EndDate>
+    <Status>Valid</Status>
+    <Number>97</Number>
+    <PopularTitle>Kravbekendtgørelsen</PopularTitle>
+    <AnnouncedIn>Lovtidende A</AnnouncedIn>
+    <DiesEdicti>2023-01-30</DiesEdicti>
+    <Concerns id="concerns_1" />
+    <Ref_Accn REFid="concerns_1">A20220070030</Ref_Accn>
+    <Ref_Af REFid="concerns_1">2022-05-24</Ref_Af>
+    <Ref_Text REFid="concerns_1">Lov om bogføring</Ref_Text>
+    <Republished>Nej</Republished>
+    <Sign id="sign" />
+    <Signature REFid="sign">Katrine Winding</Signature>
+    <Sub-Sign id="subsign" />
+    <Signature REFid="subsign">Victor Kjær</Signature>
+    <PlaceOfSignature>Erhvervsstyrelsen</PlaceOfSignature>
+    <JournalNumber>Erhvervsmin.,\nErhvervsstyrelsen, j.nr. 2022-11381</JournalNumber>
+    <Ministry>Erhvervsministeriet</Ministry>
+    <AdministrativeAuthority>Erhvervsstyrelsen</AdministrativeAuthority>
+  </Meta>
+  <TitelGruppe id="ide2936ebe-5f99-40e0-b9b8-359549e0193e">
+    <Titel id="ide0e831de-a364-4760-b1ca-1a756440ec86">
+      <Linea>
+        <Char>Bekendtgørelse om krav til digitale standard bogføringssystemer</Char>
+      </Linea>
+    </Titel>
+  </TitelGruppe>
+  <DokumentIndhold id="id4101239b-bea1-45c9-95e9-6ebd5c1702b3">
+    <Indledning id="id55eebf1d-8dd6-4d46-8abc-486ee8d5c4ef">
+      <Exitus>
+        <Linea>
+          <Char>I medfør af § 15, stk. 2, § 19, stk. 3, og § 33, stk. 3, i lov nr. 700 af 24. maj 2022 om bogføring og efter høring af told- og skatteforvaltningen fastsættes:</Char>
+        </Linea>
+      </Exitus>
+    </Indledning>
+    <Afsnit id="idc4e2252e-e7f7-4195-b958-f1d414eb432e" localId="1">
+      <Kapitel id="id55ecb83a-80aa-44b0-b05f-3f206cd3b8b5" localId="1">
+        <Explicatus>Kapitel 1</Explicatus>
+        <Rubrica id="id77f358c7-3156-4384-981d-019c75e80aca">
+          <Linea>
+            <Char formaChar="Italic">Anvendelsesområde og definitioner</Char>
+          </Linea>
+        </Rubrica>
+        <ParagrafGruppe>
+          <Paragraf id="idf13aeecd-c973-448c-a8e0-012e8a1cd4ef" localId="1">
+            <Explicatus>§ 1.</Explicatus>
+            <Stk id="ida2105838-7e69-412e-9dfd-b4769f0ede7e">
+              <Exitus>
+                <Linea>
+                  <Char>Denne bekendtgørelse finder anvendelse på digitale standard bogføringssystemer der markedsføres her i landet til virksomheder, der er omfattet af § 16, stk. 1, i lov om bogføring, og hvor det digitale standard bogføringssystem skal anmeldes efter § 19, stk. 1, 2. pkt., i lov om bogføring.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id3cd2ec46-c15e-4094-b797-5c3d4d650e07">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Bekendtgørelsen finder tilsvarende anvendelse på moduler og udvidelser til et digitalt standard bogføringssystem, hvis</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="idba5344d6-3130-472f-8d4a-7791b7eb7a6d">
+                <Index>
+                  <Indentatio id="id6f9ad183-314b-4968-ab66-2966674cac97" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>de varetager funktioner, som et digitalt standard bogføringssystem efter denne bekendtgørelse skal understøtte, og</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id94dc2c74-a949-4a9c-83ac-9ea86dcdb5c6" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>virksomheden direkte kan tilgå dem i bogføringssystemet.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+            <Stk id="id3ce505a8-14aa-4134-9094-659f4c537d9d">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 2 finder tilsvarende anvendelse på moduler og udvidelser fra en tredjepart, hvis udbyderen af det digitale standard bogføringssystem har indgået aftale med tredjeparten om, at modulet eller udvidelsen skal være direkte tilgængeligt  i bogføringssystemet.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="id7f2affde-a1cd-4fab-a2c3-b2b7f2dcc080" localId="2">
+            <Explicatus>§ 2.</Explicatus>
+            <Stk id="id97e1e3a1-8768-4aef-941a-9f11dfdc5ac5">
+              <Exitus>
+                <Linea>
+                  <Char>Ved et digitalt bogføringssystem forstås i denne bekendtgørelse en digital service eller software, som indeholder funktioner, hvorved virksomheder kan bogføre transaktioner og opbevare de bogførte transaktioner og bilag omfattet af § 3 i denne bekendtgørelse eller som minimum en fuldstændig sikkerhedskopi heraf på en server hos en udbyder eller en anden tredjepart.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id8291e0e8-1424-4711-96c9-cbb84333401d">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Ved cloud-baserede digitale bogføringssystemer forstås i denne bekendtgørelse bogføringssystemer, der udbydes som en service på internettet, og hvor virksomheden både bogfører transaktioner og opbevarer bogførte transaktioner og bilag på en server hos udbyderen af systemet, eller hos dennes cloud-leverandør.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id7896dce4-08ce-4a88-b1d7-ba3f6c589c8e">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Ved hybride digitale bogføringssystemer forstås i denne bekendtgørelse bogføringssystemer, der installeres lokalt i en virksomhed, og hvor der automatisk og løbende som minimum tages en fuldstændig sikkerhedskopi af bogførte transaktioner og bilag, som opbevares hos en tredjepart.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id3f7c42a5-25e7-44db-a678-01d76a1e0bd4">
+              <Explicatus>Stk. 4.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Ved et standardsystem forstås i denne bekendtgørelse cloud-baserede digitale bogføringssystemer og hybride digitale bogføringssystemer, der udbydes på ensartede vilkår til en ubestemt kreds af virksomheder.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="idd7730a64-1a03-4402-8c02-9365eba13ef1">
+              <Explicatus>Stk. 5.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Ved bogført transaktion i denne bekendtgørelse forstås registreringer omfattet af § 7, stk. 1, i lov om bogføring.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="id8363572e-1187-468d-bc04-1bfd1dbdad5b" localId="3">
+            <Explicatus>§ 3.</Explicatus>
+            <Stk id="idd6002ca3-1854-4497-9fd6-0387f1ccb10c">
+              <Exitus>
+                <Linea>
+                  <Char>Ved bilag, der skal kunne opbevares i et digitalt standard bogføringssystem efter denne bekendtgørelse, forstås enhver dokumentation for en bogført transaktion vedrørende køb eller salg, som indeholder følgende oplysninger:</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="id82ef20ac-c8b0-4308-97d5-a744e509fd60">
+                <Index>
+                  <Indentatio id="id19705113-8504-49fa-ac28-9d060a96cfa2" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Udstedelsesdato.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id82c149cd-583c-4f35-adb7-d11e31545983" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Leverancens art.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idad388ee0-928c-4533-acdb-4fd42df26954" formaInd="Nummer">
+                    <Explicatus>3)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Beløb.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id3c68bcc6-cc17-47f4-83b4-c5129d17da31" formaInd="Nummer">
+                    <Explicatus>4)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Afsender og modtager, herunder navn, adresse, samt CVR-nummer eller SE-nummer.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id9948513c-dd8a-4cea-8722-c38dc341a3ac" formaInd="Nummer">
+                    <Explicatus>5)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Oplysning om momsbeløbets størrelse.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id3a36bb98-9d25-4c54-add5-a7ba59aca8ba" formaInd="Nummer">
+                    <Explicatus>6)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Betalingsoplysninger.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+            <Stk id="ide0dbd8a1-7747-4028-85f0-875d2bcef1f1">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1 finder ikke anvendelse på kassestrimler fra et salgsregistreringssystem.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id0a35544d-0929-4e92-8ef3-9c86a5e10ff4">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1 finder endvidere ikke anvendelse på dokumentation for bogførte transaktioner, som alene foreligger i fysisk form, og som modtages vedrørende køb eller salg af varer og tjenesteydelser uden for landets grænser.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="id04216aed-b60c-4fe3-ab1b-3afbeb6f96cd" localId="4">
+            <Explicatus>§ 4.</Explicatus>
+            <Stk id="ided80b775-ce50-4da0-ad86-b5445c76c3c9">
+              <Exitus>
+                <Linea>
+                  <Char>Ved opbevaring af en sikkerhedskopi af bogførte transaktioner og bilag omfattet af § 3 hos en tredjepart, forstås i denne bekendtgørelse opbevaring hos en part, som ikke er en nærtstående part til den bogføringspligtige virksomhed, eller den der udfører bogføringen for virksomheden.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="idc02773fd-b2a3-4fbb-8ff6-9cc25a6dbd6c">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>En nærtstående part defineres i overensstemmelse med definitionen i den internationale regnskabsstandard IAS 24, således som denne er vedtaget af Kommissionen i overensstemmelse med Europa-Parlamentets og Rådets forordning nr. 1606/2002 af 19. juli 2002 om anvendelse af internationale regnskabsstandarder, samt efterfølgende ændringer i definitionen, som vedtages af Kommissionen i overensstemmelse med den nævnte forordning.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+        </ParagrafGruppe>
+      </Kapitel>
+      <Kapitel id="idb88a4c20-2d2a-4167-bccc-f40cc5e18249" localId="2">
+        <Explicatus>Kapitel 2</Explicatus>
+        <Rubrica id="id1a3d09af-2b62-4777-b223-1fc5c8120145">
+          <Linea>
+            <Char formaChar="Italic">Generelle krav til digitale standard bogføringssystemer</Char>
+          </Linea>
+        </Rubrica>
+        <ParagrafGruppe>
+          <Paragraf id="id9906567f-ca4c-4ba5-b689-7d5d3ae068e9" localId="5">
+            <Explicatus>§ 5.</Explicatus>
+            <Stk id="id6edf40d3-9830-478f-826b-81f0d6b44169">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af flere digitale standard bogføringssystemer, hvoraf kun nogle opfylder kravene i § 15, stk. 1, i lov om bogføring, og denne bekendtgørelse, skal sikre, at det af systemet tydeligt fremgår, hvorvidt det lovligt kan anvendes som et registreret bogføringssystem efter § 16, stk. 2, nr. 1, i lov om bogføring.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="idfaadf0b6-f481-41eb-b8b2-650b3ee2ee68" localId="6">
+            <Explicatus>§ 6.</Explicatus>
+            <Stk id="idff13e6c5-1bc9-45df-ae02-ff9ab3fcfe22">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et digitalt standard bogføringssystem skal sikre, at systemet opfylder kravene i bilag 1 til:</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="id6bab62da-89d7-4869-9167-cada2c7070cb">
+                <Index>
+                  <Indentatio id="idd8de964d-46ff-497e-b689-284a50dfd2bb" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Oplysninger ved bogføring af virksomhedens transaktioner.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id4add2e4a-0aa3-4903-a2a3-00c2169d21e7" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Sikring af kontrolspor ved virksomhedens bogførte transaktioner.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id1527dc3f-2c87-4ac6-b240-6d7ab7d446b2" formaInd="Nummer">
+                    <Explicatus>3)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Opbevaring af bilag omfattet af § 3.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="ide8f8a935-276a-47dc-85aa-5efaccf09b00" formaInd="Nummer">
+                    <Explicatus>4)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Opbevaring af virksomhedens bogførte transaktioner og bilag omfattet af § 3 i 5 år.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="ida1110654-8f0c-4996-a8ad-18c20cd732ec" localId="7">
+            <Explicatus>§ 7.</Explicatus>
+            <Stk id="ida10fc0c1-0a5c-44ae-827b-c229fd9435ef">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et digitalt standard bogføringssystem skal sikre, at systemet automatisk mindst ugentligt tager en  sikkerhedskopi af alle virksomhedens bogførte transaktioner og bilag omfattet af § 3 (fuld sikkerhedskopi).</Char>
+                </Linea>
+                <Linea>
+                  <Char>Udbyderen skal endvidere mindst dagligt tage en  sikkerhedskopi af de data, der er ændret siden sidste sikkerhedskopi (inkrementel sikkerhedskopi).</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id1f15715a-7b2c-49fb-ba70-a4c1d3af23a8">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Udbyderen skal sikre, at såvel den fulde som den inkrementelle sikkerhedskopi efter stk. 1, opbevares hos udbyderen selv eller hos en tredjepart, under passende tekniske og organisatoriske it-sikkerhedsforanstaltninger, der opfylder kravene til høj it-sikkerhed efter § 8, og kravene til udlevering af oplysninger efter § 10 og § 11.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="idcf6db6ad-6ed6-4c1a-b696-17d7022b5fbb">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Udbyderen skal sikre, at mindst én fuld og inkrementel sikkerhedskopi efter stk. 1, opbevares på en server i et EU- eller EØS-land.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="id51218f13-783d-49db-bd01-5b171ac6e589" localId="8">
+            <Explicatus>§ 8.</Explicatus>
+            <Stk id="id58a9e45e-3fb7-4728-9c14-495f9221308e">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et cloud-baseret digitalt standard bogføringssystem, jf. § 2, stk. 2, skal til enhver tid gennemføre passende tekniske og organisatoriske it-sikkerhedsforanstaltninger med henblik på, at systemet til stadighed har et højt it-sikkerhedsniveau i forhold til de funktioner, som et digitalt standard bogføringssystem skal understøtte efter denne bekendtgørelse.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id565a63ef-15c1-4a68-937c-f30323137d30">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et digitalt standard bogføringssystem skal gennemføre en risikovurdering med henblik på at fastsætte passende foranstaltninger efter stk. 1.</Char>
+                </Linea>
+                <Linea>
+                  <Char>Vurderingen skal omfatte risikoen for tab af tilgængelighed, autencitet, integritet og fortrolighed i det digitale standard bogføringssystem.</Char>
+                </Linea>
+                <Linea>
+                  <Char>Vurderingen skal tage hensyn til eventuelle tredjeparter, og skal løbende opdateres ved ændringer i trusselsbilledet.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id811e98bb-441a-4afd-99ad-23cd26936082">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Ved fastsættelse af et passende it-sikkerhedsniveau, jf. stk. 1, skal der navnlig tages hensyn til:</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="idebeded23-c91b-4641-b939-8d8dd2449d9b">
+                <Index>
+                  <Indentatio id="ida21e2171-e941-474a-9703-303cdbd96d60" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Relevante risici for hændelig eller ulovlig tilintetgørelse, tab eller andre former for manglende tilgængelighed, uberettigede ændringer, uautoriseret adgang til eller misbrug af oplysninger.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id2d074014-251b-46d4-a573-471a41f52822" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Relevante risici ved behandling af persondata, herunder navnlig ved at udbyderen indgår en databehandleraftale, der opfylder kravene i databeskyttelsesforordningens art.</Char>
+                      </Linea>
+                      <Linea>
+                        <Char>28, stk. 3, inden etablering af et kundeforhold.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+            <Stk id="idf140a29f-98cd-4894-9357-26f2c105d213">
+              <Explicatus>Stk. 4.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Passende tekniske og organisatoriske it-sikkerhedsforanstaltninger efter stk. 1, skal som minimum omfatte</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="ida413854b-b83c-4e18-ab6e-2a0a96ca534a">
+                <Index>
+                  <Indentatio id="idf8d14446-7dcd-4a16-934b-69d731dbbd71" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>netværkssikkerhed,</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id373982b0-ed2a-476e-88c5-1920ee2f57d3" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>adgangsstyring,</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id1be223aa-9a5f-4e53-b988-123d87d63f8f" formaInd="Nummer">
+                    <Explicatus>3)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>leverandørstyring,</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id1ae78003-84e3-4465-b4bc-f25ec8cb6613" formaInd="Nummer">
+                    <Explicatus>4)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>backup,</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id69004486-bb09-4a21-9cd9-976e08d79cfd" formaInd="Nummer">
+                    <Explicatus>5)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>logning,</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id055e714a-04a0-4915-9220-6c6ae9a694c3" formaInd="Nummer">
+                    <Explicatus>6)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>beredskab og reetablering og</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id82a5ee77-496e-4544-89de-3cc781baaa05" formaInd="Nummer">
+                    <Explicatus>7)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>databeskyttelse.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+            <Stk id="id6dd2f19a-e317-42f1-a536-9054ed856d07">
+              <Explicatus>Stk. 5.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1-4 finder tilsvarende anvendelse på en udbyder af et hybridt digitalt standard bogføringssystem, jf. § 2, stk. 3, hvis sikkerhedskopien af virksomhedens bogførte transaktioner og bilag opbevares hos udbyderen.</Char>
+                </Linea>
+                <Linea>
+                  <Char>I andre tilfælde finder stk. 6 anvendelse.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="ideeada5c9-1468-46a7-95e9-732ba72f7752">
+              <Explicatus>Stk. 6.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Hvis en udbyder af et digitalt standard bogføringssystem anvender tredjepart til opbevaring af bogførte transaktioner og bilag der dokumenterer disse, eller til opbevaring af en sikkerhedskopi heraf, skal udbyderen i relevant omfang ved aftale med eller passende dokumentation fra den pågældende tredjepart sikre, at der også gennemføres passende tekniske og organisatoriske it-sikkerhedsforanstaltninger, jf. stk. 1, hos de respektive tredjeparter.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="id5a6af41c-b5d9-4251-9c7f-e63c2862e423" localId="9">
+            <Explicatus>§ 9.</Explicatus>
+            <Stk id="ideda4710d-dfbb-40bf-aa02-da483e1222cf">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et digitalt standard bogføringssystem skal sikre, at systemet opfylder kravene i bilag 2 til:</Char>
+                </Linea>
+              </Exitus>
+              <Exitus id="idcf90080b-0e8f-47cd-a709-a489ebbf0e9c">
+                <Index>
+                  <Indentatio id="id5af0b3f5-930a-4f7e-a8b0-ebe6994cab17" formaInd="Nummer">
+                    <Explicatus>1)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Automatisk fremsendelse og modtagelse af e-faktura.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id8888309b-ce48-4fd5-9ede-f38a30dfca25" formaInd="Nummer">
+                    <Explicatus>2)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Mulighed for at afstemme virksomhedens bogføring med virksomhedens bankkonto.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idd418f0f1-76a8-4cd4-a905-57a6c95a7984" formaInd="Nummer">
+                    <Explicatus>3)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Mulighed for kontering efter en offentlig standardkontoplan der dækker årsregnskab og moms.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idb8382463-4147-42d3-909e-10f8e631608d" formaInd="Nummer">
+                    <Explicatus>4)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Korrekt bogføring gennem en bogføringsguide eller konteringsvejledning.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id2ebcdb13-e9f5-4aaf-8c95-3ce3d5c30b63" formaInd="Nummer">
+                    <Explicatus>5)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Deling af virksomhedens bogføringsdata.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="id54dd41bb-8553-4c42-9e05-e6a5bf3422cd" formaInd="Nummer">
+                    <Explicatus>6)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Indberetning af årsregnskab og moms.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idc56ad3e8-d225-4931-b7f8-b6ee2fe70215" formaInd="Nummer">
+                    <Explicatus>7)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Meddelelse om mulighed for oprettelse i Nemhandelsregisteret.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                  <Indentatio id="idca3abfb5-b4a6-42df-9bde-8a3ba1313341" formaInd="Nummer">
+                    <Explicatus>8)</Explicatus>
+                    <Exitus>
+                      <Linea>
+                        <Char>Tilmeldingsfunktionalitet til Nemhandelsregisteret.</Char>
+                      </Linea>
+                    </Exitus>
+                  </Indentatio>
+                </Index>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+        </ParagrafGruppe>
+      </Kapitel>
+      <Kapitel id="id76fbe061-bb90-459c-af63-81395981bc8f" localId="3">
+        <Explicatus>Kapitel 3</Explicatus>
+        <Rubrica id="ida0a6e17f-e26e-4aa5-8caa-c5a16acb5e0c">
+          <Linea>
+            <Char formaChar="Italic">Opbevaring og udlevering af oplysninger fra digitale standard bogføringssystemer</Char>
+          </Linea>
+        </Rubrica>
+        <ParagrafGruppe>
+          <Paragraf id="idd023b147-a981-4660-8757-9babe31ac0f9" localId="10">
+            <Explicatus>§ 10.</Explicatus>
+            <Stk id="idcd9278a4-da3f-4e7b-8957-b41b6b44db4d">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et digitalt standard bogføringssystem skal sikre, at opbevaring af bogførte transaktioner og bilag omfattet af § 3 i et digitalt standard bogføringssystem sker på en måde, så regnskabsmaterialet kan gendannes og gøres læsbart inden for fristen efter § 11, stk. 1.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+          <Paragraf id="ide2f26610-870b-49f1-9915-d34cb9b82f2d" localId="11">
+            <Explicatus>§ 11.</Explicatus>
+            <Stk id="id39c6c097-c98e-42b5-82e7-06b8fd19f3ee">
+              <Exitus>
+                <Linea>
+                  <Char>En udbyder af et digitalt standard bogføringssystem skal inden for en frist på 4 uger fra anmodningstidspunktet stille bogførte transaktioner og bilag omfattet af § 3 for en nærmere angivet periode vedrørende en virksomhed til rådighed for en myndighed.</Char>
+                </Linea>
+                <Linea>
+                  <Char>1. pkt. finder tilsvarende anvendelse for en likvidator, kurator eller rekonstruktør, der er trådt i ledelsens sted i den pågældende virksomhed.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id877a7d19-3f50-49e4-b8f1-7d0cfef995c2">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Adgang til oplysninger efter stk. 1 er betinget af, at myndigheden oplyser, at det ikke har været muligt at få stillet oplysningerne til rådighed af virksomheden inden for den frist, som myndigheden har fastsat efter § 22, stk. 4, i lov om bogføring.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id940a7b33-0e59-4ca1-8d87-25a3db5c5a2e">
+              <Explicatus>Stk. 3.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Hvis en myndighed anmoder om, at oplysninger i virksomhedens bogførte transaktioner eller bilag udsøges efter andre kriterier end tidsmæssig afgrænsning efter stk. 1, skal myndigheden dække udbyderens omkostninger herved.</Char>
+                </Linea>
+                <Linea>
+                  <Char>1. pkt. finder tilsvarende anvendelse på en likvidator, kurator eller rekonstruktør, der er trådt i ledelsens sted i den pågældende virksomhed.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id2a1b9c10-61ee-41a6-8096-83a9458f3260">
+              <Explicatus>Stk. 4.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Bogførte transaktioner omfattet af stk. 1, skal kunne udleveres i et struktureret maskinlæsbart format og bilag i et læsbart format.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id227b2cd4-9f04-4c1b-a7c5-3cf136d42e71">
+              <Explicatus>Stk. 5.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Stk. 1-4 finder tilsvarende anvendelse, hvis udbyderen af det digitale standard bogføringssystem opbevarer bogførte transaktioner og bilag, eller en sikkerhedskopi heraf, på en server hos en tredjepart.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+        </ParagrafGruppe>
+      </Kapitel>
+      <Kapitel id="idea4cf8e3-ea62-49ab-aa97-a0a670447894" localId="4">
+        <Explicatus>Kapitel 4</Explicatus>
+        <Rubrica id="id91438d3e-a519-4c07-8dd5-e2316c00bf60">
+          <Linea>
+            <Char formaChar="Italic">Straffebestemmelse</Char>
+          </Linea>
+        </Rubrica>
+        <ParagrafGruppe>
+          <Paragraf id="id4d22b101-8c0e-4ae4-a78c-de94ccbbc6f1" localId="12">
+            <Explicatus>§ 12.</Explicatus>
+            <Stk id="idc09e7eb0-d416-4cdb-900c-5670bce588a9">
+              <Exitus>
+                <Linea>
+                  <Char>Overtrædelse af §§ 5-11 straffes med bøde.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+        </ParagrafGruppe>
+      </Kapitel>
+      <Kapitel id="id0e21d774-d456-497a-8f4a-9900d066cf9c" localId="5">
+        <Explicatus>Kapitel 5</Explicatus>
+        <Rubrica id="idb4e21924-d059-4257-9563-6c7028d70651">
+          <Linea>
+            <Char formaChar="Italic">Ikrafttræden</Char>
+          </Linea>
+        </Rubrica>
+        <ParagrafGruppe>
+          <Paragraf id="id393758c4-2236-44c5-a606-dbfc2e9b90bf" localId="13">
+            <Explicatus>§ 13.</Explicatus>
+            <Stk id="id81e76e9b-4516-4612-8daa-83e36a781745">
+              <Exitus>
+                <Linea>
+                  <Char>Bekendtgørelsen træder i kraft den 1. februar 2023.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+            <Stk id="id03b17c2e-3223-420a-ba2c-01fea291242a">
+              <Explicatus>Stk. 2.</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>§§ 5-12 har virkning fra den 1. november 2023 for digitale standard bogføringssystemer, der markedsføres her i landet på tidspunktet for ikrafttrædelsen af bekendtgørelsen.</Char>
+                </Linea>
+              </Exitus>
+            </Stk>
+          </Paragraf>
+        </ParagrafGruppe>
+      </Kapitel>
+    </Afsnit>
+  </DokumentIndhold>
+  <UnderskriftGruppe id="id27e933db-b0a0-47bb-87f2-9a746599c000">
+    <UnderskriftStedDato id="id00467500-aca2-47f7-88b8-91242624eb3a" />
+    <Underskriver id="id3c0bcd51-802a-4bf7-a295-88ed791ba484" />
+  </UnderskriftGruppe>
+  <Bilag id="id402f06b6-5026-4967-8470-ee9f91548fb9" localId="1">
+    <Explicatus>Bilag 1</Explicatus>
+    <Rubrica id="id8fc5849f-adc8-43d2-8c72-6405894e2943">
+      <Linea>
+        <Char formaChar="Bold">Krav vedrørende bogføring af transaktioner og</Char>
+        <Char formaChar="Bold Italic"></Char>
+        <Char formaChar="Bold">opbevaring af bogførte transaktioner og bilag omfattet af § 3 i digitale standard bogføringssystemer, som skal registreres i Erhvervsstyrelsen</Char>
+      </Linea>
+    </Rubrica>
+    <BilagIndhold id="id10dde62c-b8e4-4af6-8dde-a7e60397cc89">
+      <TekstGruppe id="id1c3778e5-d5a2-413a-a13c-a70d689df72b">
+        <Exitus>
+          <Linea>
+            <Char>1.</Char>
+          </Linea>
+          <Linea>
+            <Char>Oplysninger ved bogføring af virksomhedens transaktioner.</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal indeholde felter til brug for virksomhedens oplysning af følgende forhold ved bogføring af hver enkelt transaktion:</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Transaktionsdato (f.eks. betalingsdato, købsdato osv.).</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Beløb.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Bilagsnummer.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>d)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Transaktionstekst.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>e)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>Transaktionsdagens kurs eller anden omregningsfaktor, hvis registrering foretages i andet end DKK.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>2.</Char>
+          </Linea>
+          <Linea>
+            <Char>Sikring af kontrolspor ved virksomhedens bogførte transaktioner.</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal sikre,</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at systemet tildeler en registreringsdato for hver bogført transaktion,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at systemet tildeler et fortløbende transaktionsnummer eller -id for hver bogført transaktion,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at systemet tildeler initialer eller lignende for vedkommende, der har bogført en transaktion,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>d)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at systemet gemmer ændringer til bogføringen, f.eks. ved at fejlposteringer skal rettes ved nye posteringer, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>e)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>3.</Char>
+          </Linea>
+          <Linea>
+            <Char>Opbevaring af bilag omfattet af § 3.</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal understøtte opbevaring af bilag omfattet af § 3, der dokumenterer virksomhedens bogførte købs- og salgstransaktioner således, at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bilag vedrørende købstransaktioner kan opbevares digitalt i systemet, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bilag vedrørende salgstransaktioner enten genereres automatisk i systemet og opbevares digitalt eller kan opbevares digitalt i systemet, f.eks. som et billede eller en indscannet fil.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>4.</Char>
+          </Linea>
+          <Linea>
+            <Char>Opbevaring af virksomhedens bogførte transaktioner og bilag omfattet af § 3 i 5 år.</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal opbevare virksomhedens bogførte transaktioner og bilag omfattet af § 3 i 5 år fra udgangen af det regnskabsår materialet vedrører.</Char>
+          </Linea>
+          <Linea>
+            <Char>For hybride digitale standard bogføringssystemer gælder den nævnte opbevaringspligt alene i forhold til sikkerhedskopien.</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal endvidere understøtte</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at bogførte transaktioner bevares, så de ikke kan ændres, tilbagedateres eller slettes af virksomheden,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at alle bogførte transaktioner opbevares i et struktureret og maskinlæsbart format i 5 år fra udgangen af det regnskabsår den bogførte transaktion vedrører uanset eventuelt ophør af kundeforhold til virksomheden eller virksomhedens konkurs eller tvangsopløsning,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at alle bilag omfattet af § 3 opbevares i 5 år fra udgangen af det regnskabsår bilaget vedrører uanset eventuelt ophør af kundeforhold til virksomheden eller virksomhedens konkurs eller tvangsopløsning, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>d)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>at krypterede bogføringsdata kan dekrypteres til et struktureret og maskinlæsbart format og at krypterede bilag omfattet af § 3 kan dekrypteres til et læsbart format.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Opbevaringspligten efter litra b og c gælder også, hvis virksomheden i forbindelse med skifte til et nyt digitalt standard bogføringssystem fra en anden udbyder har overført alle bogførte transaktioner og bilag til dette.</Char>
+          </Linea>
+        </Exitus>
+      </TekstGruppe>
+    </BilagIndhold>
+  </Bilag>
+  <Bilag id="idb455f91d-782d-4932-b53a-b923b988c471" localId="2">
+    <Explicatus>Bilag 2</Explicatus>
+    <Rubrica id="id59c19afa-f3a6-43f7-b921-a448cf7ca257">
+      <Linea>
+        <Char formaChar="Bold">Krav til understøttelse af automatisering af administrative processer i digitale standard bogføringssystemer der skal registreres i Erhvervsstyrelsen</Char>
+      </Linea>
+    </Rubrica>
+    <BilagIndhold id="id48b7c58d-814c-42ce-8963-d4382242ffe2">
+      <TekstGruppe id="id51f38a7d-8deb-489d-a8a5-4df2b8fb9d1e">
+        <Exitus>
+          <Linea>
+            <Char>1.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter automatisk fremsendelse og modtagelse af e-faktura via Nemhandel i OIOUBL-format</Char>
+          </Linea>
+          <Nota id="id48cb8b9b-68d8-4854-8ae1-b8c5c71e88d4">
+            <Explicatus>1)</Explicatus>
+            <Exitus>
+              <Linea>
+                <Char>Den gældende OIOUBL standard offentliggøres på Erhvervsstyrelsens hjemmeside www.erst.dk</Char>
+              </Linea>
+            </Exitus>
+          </Nota>
+          <Linea>
+            <Char>på følgende måde</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan sende elektroniske fakturaer i OIOUBL format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan modtage elektroniske fakturaer i OIOUBL format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan sende elektroniske kreditnotaer i OIOUBL format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>d)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan modtage elektroniske kreditnotaer i OIOUBL format, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>e)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan afsende et application response ved modtagelse af en elektronisk faktura</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>2.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter automatisk fremsendelse og modtagelse af e-faktura Peppol BIS-format</Char>
+          </Linea>
+          <Nota id="id8a149f72-9b6a-48b4-8a39-9ae51837bd28">
+            <Explicatus>2)</Explicatus>
+            <Exitus>
+              <Linea>
+                <Char>Den gældende Peppol-BIS standard offentliggøres på Erhvervsstyrelsens hjemmeside www.erst.dk</Char>
+              </Linea>
+            </Exitus>
+          </Nota>
+          <Linea>
+            <Char>på følgende måde</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan sende elektroniske fakturaer i Peppol BIS format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan modtage elektroniske fakturaer i Peppol BIS format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan sende elektroniske kreditnotaer i Peppol BIS format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>d)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan modtage elektroniske kreditnotaer i Peppol BIS format,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>e)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan afsende et message level response ved modtagelse af en elektronisk faktura, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>f)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>kunden kan afsende et invoice response ved modtagelse af en elektronisk faktura.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>3.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter mulighed for at afstemme virksomhedens bogføring med virksomhedens bankkonto ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>virksomheden kan importere en CSV-fil med bankposteringer til bogføringssystemet,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet henter automatisk bankposteringer via integration til virksomhedens bank, eller</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet henter automatisk bankposteringer via PSD2 services.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Bogføringssystemet understøtter, foruden litra a, b eller c, mulighed for at afstemme virksomhedens bogføring med virksomhedens bankkonto ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet sikrer, at bankkonto er repræsenteret i kontoplanen, og at den kan afstemmes med de indlæste bankposteringer, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>der fremgår tydelig difference i bogføringssystemet, hvis indlæste poster fra banken ikke er afstemt.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>4.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter mulighed for brug af en offentlig standardkontoplan</Char>
+          </Linea>
+          <Nota id="id83e3f968-96e1-466f-9e79-6e316a5d1e24">
+            <Explicatus>3)</Explicatus>
+            <Exitus>
+              <Linea>
+                <Char>Den gældende standardkontoplan offentliggøres på Erhvervsstyrelsens hjemmeside www.erst.dk.</Char>
+              </Linea>
+            </Exitus>
+          </Nota>
+          <Linea>
+            <Char>ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>virksomheden benytter den offentlige standardkontoplan direkte i bogføringssystemet,</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemets standardkontoplaner er mappet til den offentlige standardkontoplan, eller</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet stiller et værktøj til rådighed, som gør det muligt for kunden på en enkel måde at mappe egen kontoplan til den fællesoffentlige standardkontoplan.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>Bogføringssystemet understøtter, foruden litra a, b eller c, mulighed for brug af en offentlig standardkontoplan ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet stiller et værktøj til rådighed, som gør det muligt for kunden på en enkel måde at mappe til standardmomskoder.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>5.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter korrekt bogføring gennem bogføringsguide eller konteringsvejledning ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>der er indarbejdet en bogføringsguide/assistent i bogføringssystemet, der hjælper virksomheden med at bogføre, eller</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet indeholder en konteringsvejledning og/eller linker/henviser til en konteringsvejledning/guide hos 3. part.</Char>
+                </Linea>
+                <Linea>
+                  <Char>eller</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet skal understøtte, at brugerne selv kan indtaste en konteringsvejledning for den enkelte konto.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>6.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter deling af virksomhedens bogføringsdata ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet gør det muligt at generere en standardfil, som er defineret af myndighederne</Char>
+                </Linea>
+                <Nota id="ida7bdde83-5fb6-4032-adde-221fcd3c3688">
+                  <Explicatus>4)</Explicatus>
+                  <Exitus>
+                    <Linea>
+                      <Char>Den gældende standardfil offentliggøres på Erhvervsstyrelsens hjemmeside www.erst.dk</Char>
+                    </Linea>
+                  </Exitus>
+                </Nota>
+                <Linea>
+                  <Char>, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet kan eksportere en standardfil, som er defineret af myndighederne, til en anden udbyder af bogføringssystemer, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>c)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet kan indlæse de informationer som indgår i en standardfil, som er defineret af myndighederne, så disse er tilgængelige for kunden.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>7.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem understøtter indberetning af årsregnskab og moms ved at</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Index>
+            <Indentatio formaInd="Litra">
+              <Explicatus>a)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet kan danne en CSV-fil med virksomhedernes bogføringsdata til Regnskab Basis eller årsregnskabet i XBRL- eller iXBRL-format til Regnskab Special, og</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+            <Indentatio formaInd="Litra">
+              <Explicatus>b)</Explicatus>
+              <Exitus>
+                <Linea>
+                  <Char>bogføringssystemet kan understøtte indberetning af moms via Skattestyrelsens moms-API.</Char>
+                </Linea>
+              </Exitus>
+            </Indentatio>
+          </Index>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>8.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal udsende en meddelelse til systemets eksisterende kunder, efter at systemet er registreret hos Erhvervsstyrelsen og når nye kunder registreres i systemet, der gør opmærksom på muligheden for at blive oprettet i NemHandelsregisteret.</Char>
+          </Linea>
+        </Exitus>
+        <Exitus>
+          <Linea>
+            <Char>9.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det digitale standard bogføringssystem skal ved systemopsætning, eller ved direkte besked til systemets eksisterende kunder, kunne vise information om og tilmeldingsfunktionalitet til NemHandelsregisteret.</Char>
+          </Linea>
+          <Linea>
+            <Char>Kunder skal kunne markere, at de ønsker at blive tilmeldt NemHandelsregisteret og give accept til dette, og dermed blive oprettet i registret.</Char>
+          </Linea>
+          <Linea>
+            <Char>Det godkendte bogføringssystem skal herefter håndtere tilmeldingen af systemets kunder i NemHandelsregisteret ud fra de til enhver tid gældende standardfunktioner og krav i NemHandel.</Char>
+          </Linea>
+        </Exitus>
+      </TekstGruppe>
+    </BilagIndhold>
+  </Bilag>
+</Dokument>

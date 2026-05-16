@@ -1,0 +1,72 @@
+version: dk-bookkeeping-v0.0.2
+sources:
+  - DK-BOGFORINGSLOVEN-2022-700
+  - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+rules:
+  - rule_id: DK-BOOKKEEPING-BALANCED-001
+    name: Double-entry postings must balance
+    category: ledger_validation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require: debit_sum_equals_credit_sum
+    explanation: Ledger postings must be balanced. Rentemester rejects unbalanced journal entries before they can be posted.
+  - rule_id: DK-BOOKKEEPING-APPEND-ONLY-001
+    name: Posted journal entries are append-only
+    category: ledger_integrity
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      forbid: [update_posted_entry, delete_posted_entry]
+      require: reversal_entry_for_corrections
+    explanation: Once posted, entries are locked. Corrections must be new reversing/correcting entries with audit trail.
+  - rule_id: DK-BOOKKEEPING-REVERSAL-001
+    name: Corrections must create a single traceable reversal entry
+    category: ledger_integrity
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - reversal_of_original_entry_id
+        - mirrored_lines_with_swapped_debit_credit
+        - immutable_reference_to_original_text
+      forbid:
+        - second_reversal_for_same_original
+    explanation: Rentemester must correct a posted entry by appending one linked reversal entry that mirrors the original lines with opposite signs and leaves the original intact.
+  - rule_id: DK-BOOKKEEPING-DOCUMENT-001
+    name: Bookkeeping entries require evidence where relevant
+    category: document_evidence
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require: document_link_for_expense_or_sale
+    explanation: Transactions must be linked to appropriate documentation unless explicitly exempted.
+  - rule_id: DK-BOOKKEEPING-BANK-IMPORT-001
+    name: Imported bank transactions must preserve transaction date, amount, text, and traceable source batch
+    category: transaction_registration
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - transaction_date
+        - amount
+        - text
+        - import_batch_id
+        - source_file_hash
+        - deterministic_transaction_fingerprint
+      forbid:
+        - duplicate_transaction_fingerprint_in_same_company
+    explanation: Rentemester must import bank transactions with enough metadata to support prompt registration, control trail, and deterministic deduplication.
+  - rule_id: DK-BOOKKEEPING-RECONCILIATION-001
+    name: Bank reconciliation must show matched and unmatched imported transactions for a period
+    category: reconciliation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - period_start
+        - period_end
+        - matched_bank_transactions
+        - unmatched_bank_transactions
+        - traceable_links_to_journal_entries
+    explanation: Rentemester must be able to deterministically reconcile imported bank transactions against posted journal entries so reporting has an updated control basis.

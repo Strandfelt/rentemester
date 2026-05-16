@@ -1,0 +1,10 @@
+node_modules/
+.env
+.DS_Store
+*.log
+companies/
+imports/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+/tmp/

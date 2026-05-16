@@ -1,0 +1,3 @@
+transaction_date,booking_date,text,amount,currency,reference
+2026-05-16,2026-05-17,Card payment,-1250,DKK,REF-1
+2026-05-18,2026-05-18,Customer payment,2500,DKK,REF-2

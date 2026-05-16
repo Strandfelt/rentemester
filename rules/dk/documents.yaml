@@ -1,0 +1,35 @@
+version: dk-documents-v0.0.1
+sources:
+  - DK-BOGFORINGSLOVEN-2022-700
+  - DK-BILAG-OPBEVARING-2023-1383
+  - DK-BILAG-OPBEVARING-AMEND-2025-302
+rules:
+  - rule_id: DK-DOCUMENT-STORAGE-001
+    name: Purchase and sale supporting documents stored digitally must include the statutory minimum fields
+    category: document_validation
+    source_id: DK-BILAG-OPBEVARING-2023-1383
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issue_date
+        - delivery_description
+        - amount_inc_vat
+        - sender_name_address_vat_or_cvr
+        - recipient_name_address_vat_or_cvr
+        - vat_amount
+        - payment_details
+      unless:
+        - document_type == 'cash_register_receipt'
+        - exemption_code == 'FOREIGN_PHYSICAL_ONLY'
+    explanation: Rentemester must reject digitally stored purchase/sale supporting documents that lack the statutory minimum metadata unless an explicit legal exception applies.
+  - rule_id: DK-DOCUMENT-INTEGRITY-001
+    name: Original supporting documents must be preserved without silent overwrite or mutation
+    category: document_integrity
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - sha256_content_addressed_storage
+        - duplicate_hash_rejected
+        - append_only_audit_log
+    explanation: Stored supporting documents must be kept on a secure, traceable basis so the original content is preserved and duplicates are not silently mutated or overwritten.
