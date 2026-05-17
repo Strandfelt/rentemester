@@ -37,6 +37,8 @@ describe("system backups", () => {
 
     const manifest = JSON.parse(readFileSync(result.manifestPath!, "utf8"));
     expect(manifest.backupId).toBe("backup-20260517T020900Z");
+    expect(manifest.dbSnapshot.path).toBe("ledger.sqlite");
+    expect(manifest.copiedFiles.documentsOriginals[0].path).toStartWith("documents-originals/");
     expect(manifest.copiedFiles.documentsOriginals.length).toBe(1);
     expect(manifest.ledgerStats.documents).toBe(1);
 

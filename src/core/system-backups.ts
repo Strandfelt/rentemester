@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { createHash } from "node:crypto";
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 
 const BACKUP_RULE_ID = "DK-BOOKKEEPING-BACKUP-001";
@@ -40,15 +40,17 @@ export type BackupComplianceStatus = {
   errors: string[];
 };
 
-type BackupManifest = {
+export type ManifestFile = { path: string; sha256: string; sizeBytes: number };
+
+export type BackupManifest = {
   backupId: string;
   createdAt: string;
   ruleIds: string[];
-  dbSnapshot: { path: string; sha256: string; sizeBytes: number };
+  dbSnapshot: ManifestFile;
   copiedFiles: {
-    documentsOriginals: Array<{ path: string; sha256: string; sizeBytes: number }>;
-    invoicesIssued: Array<{ path: string; sha256: string; sizeBytes: number }>;
-    config: Array<{ path: string; sha256: string; sizeBytes: number }>;
+    documentsOriginals: ManifestFile[];
+    invoicesIssued: ManifestFile[];
+    config: ManifestFile[];
   };
   ledgerStats: {
     journalEntries: number;
@@ -61,8 +63,12 @@ function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function copyDirWithManifest(sourceDir: string, targetDir: string) {
-  const copied: Array<{ path: string; sha256: string; sizeBytes: number }> = [];
+function relativeBackupPath(backupDir: string, filePath: string) {
+  return relative(backupDir, filePath).replaceAll("\\", "/");
+}
+
+function copyDirWithManifest(sourceDir: string, targetDir: string, backupDir: string) {
+  const copied: ManifestFile[] = [];
   if (!existsSync(sourceDir)) return copied;
   mkdirSync(targetDir, { recursive: true });
   for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
@@ -71,7 +77,7 @@ function copyDirWithManifest(sourceDir: string, targetDir: string) {
     const targetPath = join(targetDir, entry.name);
     copyFileSync(sourcePath, targetPath);
     const stats = statSync(targetPath);
-    copied.push({ path: targetPath, sha256: sha256File(targetPath), sizeBytes: stats.size });
+    copied.push({ path: relativeBackupPath(backupDir, targetPath), sha256: sha256File(targetPath), sizeBytes: stats.size });
   }
   return copied.sort((a, b) => a.path.localeCompare(b.path));
 }
@@ -137,25 +143,29 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
   db.exec("PRAGMA wal_checkpoint(FULL);");
   db.exec(`VACUUM INTO ${sqlString(dbSnapshotPath)}`);
 
+  const snapshotDb = new Database(dbSnapshotPath, { readonly: true });
+  const ledgerStats = {
+    journalEntries: (snapshotDb.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number }).n,
+    documents: (snapshotDb.query("SELECT COUNT(*) AS n FROM documents").get() as { n: number }).n,
+    bankTransactions: (snapshotDb.query("SELECT COUNT(*) AS n FROM bank_transactions").get() as { n: number }).n,
+  };
+  snapshotDb.close();
+
   const manifest: BackupManifest = {
     backupId,
     createdAt,
     ruleIds: [BACKUP_RULE_ID],
     dbSnapshot: {
-      path: dbSnapshotPath,
+      path: relativeBackupPath(backupDir, dbSnapshotPath),
       sha256: sha256File(dbSnapshotPath),
       sizeBytes: statSync(dbSnapshotPath).size,
     },
     copiedFiles: {
-      documentsOriginals: copyDirWithManifest(paths.documentsOriginals, documentsBackupDir),
-      invoicesIssued: copyDirWithManifest(paths.invoicesIssued, invoicesBackupDir),
-      config: copyDirWithManifest(paths.config, configBackupDir),
+      documentsOriginals: copyDirWithManifest(paths.documentsOriginals, documentsBackupDir, backupDir),
+      invoicesIssued: copyDirWithManifest(paths.invoicesIssued, invoicesBackupDir, backupDir),
+      config: copyDirWithManifest(paths.config, configBackupDir, backupDir),
     },
-    ledgerStats: {
-      journalEntries: (db.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number }).n,
-      documents: (db.query("SELECT COUNT(*) AS n FROM documents").get() as { n: number }).n,
-      bankTransactions: (db.query("SELECT COUNT(*) AS n FROM bank_transactions").get() as { n: number }).n,
-    },
+    ledgerStats,
   };
 
   const manifestPath = join(backupDir, "manifest.json");
