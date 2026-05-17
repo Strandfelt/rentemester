@@ -7,7 +7,7 @@ import { openDb, migrate } from "../../src/core/db";
 import { importBankCsv } from "../../src/core/bank";
 
 describe("bank import", () => {
-  test("imports valid bank rows and skips deterministic duplicates", () => {
+  test("stores null FX columns for DKK-only rows and skips deterministic duplicates", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-"));
     const csv = join(root, "transactions.csv");
     writeFileSync(csv, [
@@ -29,11 +29,15 @@ describe("bank import", () => {
     expect(second.imported).toBe(0);
     expect(second.skippedDuplicates).toBe(2);
 
-    const rows = db.query("SELECT transaction_date, text, amount, import_batch_id, transaction_hash FROM bank_transactions ORDER BY id ASC").all() as any[];
+    const rows = db.query("SELECT transaction_date, text, amount, amount_dkk, fx_rate_to_dkk, import_batch_id, transaction_hash FROM bank_transactions ORDER BY id ASC").all() as any[];
     expect(rows).toHaveLength(2);
     expect(rows[0].transaction_date).toBe("2026-05-16");
     expect(rows[0].transaction_hash).toBeTruthy();
+    expect(rows[0].amount_dkk).toBeNull();
+    expect(rows[0].fx_rate_to_dkk).toBeNull();
     expect(rows[1].text).toBe("Customer payment");
+    expect(rows[1].amount_dkk).toBeNull();
+    expect(rows[1].fx_rate_to_dkk).toBeNull();
 
     db.close();
     rmSync(root, { recursive: true, force: true });

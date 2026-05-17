@@ -170,6 +170,12 @@ function normalizeDateText(value: string | undefined) {
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
+function normalizeAmountOrNull(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const normalized = normalizeAmount(value);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
 function toRow(input: Record<string, string>): BankImportRow {
   return {
     transactionDate: normalizeDateText(input.transaction_date) ?? "",
@@ -217,8 +223,8 @@ function transactionFingerprint(row: BankImportRow) {
     amount: normalizeAmount(row.amount),
     currency: row.currency ?? "DKK",
     reference: row.reference ?? null,
-    amount_dkk: normalizeAmount(row.amountDkk),
-    fx_rate_to_dkk: normalizeAmount(row.fxRateToDkk),
+    amount_dkk: normalizeAmountOrNull(row.amountDkk),
+    fx_rate_to_dkk: normalizeAmountOrNull(row.fxRateToDkk),
   }));
 }
 
@@ -261,8 +267,8 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
         normalizeAmount(row.amount),
         (row.currency ?? "DKK").trim().toUpperCase(),
         row.reference ?? null,
-        normalizeAmount(row.amountDkk),
-        normalizeAmount(row.fxRateToDkk),
+        normalizeAmountOrNull(row.amountDkk),
+        normalizeAmountOrNull(row.fxRateToDkk),
         sourceFileHash,
         importBatchId,
         hash,
