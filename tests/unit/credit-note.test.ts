@@ -8,6 +8,7 @@ import { issueInvoice } from "../../src/core/issued-invoices";
 import { issueCreditNote } from "../../src/core/credit-notes";
 import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { postIssuedInvoiceToLedger } from "../../src/core/invoice-booking";
+import { storeViesValidation } from "../../src/core/vies";
 
 function failingDocumentInsertDb(realDb: any) {
   return new Proxy(realDb, {
@@ -157,6 +158,59 @@ describe("credit notes", () => {
     expect(retried.creditNoteNumber).toBe("CN-2026-0001");
 
     realDb.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("uses reverse-charge fallback lines when crediting an unposted reverse-charge invoice", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-credit-reverse-fallback-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+    storeViesValidation(db, {
+      vatOrCvr: "DE123456789",
+      valid: true,
+      validatedAt: "2026-05-15T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      rawResponse: JSON.stringify({ valid: true })
+    });
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "foreign_reverse_charge",
+      reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
+      reverseChargeNote: "Reverse charge",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0950RC",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, grossAmount: 1000 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+
+    const credit = issueCreditNote(db, root, {
+      originalInvoiceDocumentId: issued.documentId!,
+      issueDate: "2026-05-17",
+      reason: "Cancel reverse-charge invoice"
+    });
+    expect(credit.ok).toBe(true);
+    expect(credit.appliedRules).toContain("DK-INVOICE-BOOKKEEPING-REVERSE-002");
+
+    const lines = db.query(
+      `SELECT a.account_no, jl.debit_amount, jl.credit_amount, jl.vat_code
+       FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+       WHERE jl.journal_entry_id = ? ORDER BY jl.id ASC`
+    ).all(credit.journalEntryId!) as any[];
+    expect(lines).toEqual([
+      { account_no: "1000", debit_amount: 1000, credit_amount: 0, vat_code: "REVERSE_CHARGE_EXEMPT" },
+      { account_no: "1100", debit_amount: 0, credit_amount: 1000, vat_code: null },
+    ]);
+
+    const chain = verifyAuditChain(db);
+    expect(chain.ok).toBe(true);
+
+    db.close();
     rmSync(root, { recursive: true, force: true });
   });
 

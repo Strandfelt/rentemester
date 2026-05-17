@@ -13,6 +13,7 @@ export type VatPeriodReport = {
   netVatPayable: number;
   purchaseBase25: number;
   salesBase25: number;
+  reverseChargeSalesBase: number;
   reverseChargePurchaseBase: number;
   representationPurchaseBase: number;
   badDebtReliefBase25: number;
@@ -156,6 +157,7 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
       netVatPayable: 0,
       purchaseBase25: 0,
       salesBase25: 0,
+      reverseChargeSalesBase: 0,
       reverseChargePurchaseBase: 0,
       representationPurchaseBase: 0,
       badDebtReliefBase25: 0,
@@ -194,6 +196,7 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   let inputVat = 0;
   let purchaseBase25 = 0;
   let salesBase25 = 0;
+  let reverseChargeSalesBase = 0;
   let reverseChargePurchaseBase = 0;
   let representationPurchaseBase = 0;
   let badDebtReliefBase25 = 0;
@@ -228,6 +231,7 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
 
     if (row.vat_code === "DK_PURCHASE_25") purchaseBase25 += debit - credit;
     if (row.vat_code === "DK_SALE_25") salesBase25 += credit - debit;
+    if (row.vat_code === "REVERSE_CHARGE_EXEMPT") reverseChargeSalesBase += credit - debit;
     if (row.vat_code === "EU_SERVICE_REVERSE_CHARGE") reverseChargePurchaseBase += debit - credit;
     if (row.vat_code === "REPRESENTATION_SPECIAL") representationPurchaseBase += debit - credit;
     if (row.vat_code === "DK_BAD_DEBT_25") badDebtReliefBase25 += debit - credit;
@@ -237,6 +241,7 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   inputVat = round2(inputVat);
   purchaseBase25 = round2(purchaseBase25);
   salesBase25 = round2(salesBase25);
+  reverseChargeSalesBase = round2(reverseChargeSalesBase);
   reverseChargePurchaseBase = round2(reverseChargePurchaseBase);
   representationPurchaseBase = round2(representationPurchaseBase);
   badDebtReliefBase25 = round2(badDebtReliefBase25);
@@ -261,6 +266,7 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     netVatPayable: round2(outputVat - inputVat),
     purchaseBase25,
     salesBase25,
+    reverseChargeSalesBase,
     reverseChargePurchaseBase,
     representationPurchaseBase,
     badDebtReliefBase25,

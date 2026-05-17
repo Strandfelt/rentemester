@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 
 const RULE_ID = "DK-INVOICE-BOOKKEEPING-001";
+const REVERSE_RULE_ID = "DK-INVOICE-BOOKKEEPING-REVERSE-002";
 
 export type PostIssuedInvoiceInput = {
   invoiceDocumentId: number;
@@ -15,6 +16,24 @@ export type PostIssuedInvoiceInput = {
 
 function round2(value: number) {
   return Number(value.toFixed(2));
+}
+
+function issuedInvoiceJournalLines(doc: { invoice_no: string }, payload: any, grossAmount: number, netAmount: number, vatAmount: number, input: PostIssuedInvoiceInput) {
+  const vatTreatment = payload?.vatTreatment ?? "standard";
+  const isReverseCharge = vatTreatment === "domestic_reverse_charge" || vatTreatment === "foreign_reverse_charge";
+  const lines: Array<{ accountNo: string; debitAmount?: number; creditAmount?: number; vatCode?: string; text: string }> = [
+    { accountNo: input.receivableAccountNo ?? "1100", debitAmount: grossAmount, text: `Receivable ${doc.invoice_no}` },
+    {
+      accountNo: input.revenueAccountNo ?? "1000",
+      creditAmount: netAmount,
+      vatCode: isReverseCharge ? "REVERSE_CHARGE_EXEMPT" : "DK_SALE_25",
+      text: `Revenue ${doc.invoice_no}`
+    },
+  ];
+  if (!isReverseCharge && vatAmount > 0) {
+    lines.push({ accountNo: input.outputVatAccountNo ?? "1200", creditAmount: vatAmount, text: `Output VAT ${doc.invoice_no}` });
+  }
+  return { lines, isReverseCharge };
 }
 
 export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoiceInput): JournalPostResult {
@@ -53,21 +72,18 @@ export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoice
   if (!(grossAmount > 0)) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} is missing gross amount`] };
   if (netAmount <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} produced invalid net amount`] };
 
+  const posting = issuedInvoiceJournalLines(doc, payload, grossAmount, netAmount, vatAmount, input);
   const journal = postJournalEntry(db, {
     transactionDate: input.transactionDate ?? doc.invoice_date ?? payload?.issueDate,
     text: `Issued invoice ${doc.invoice_no}`,
     documentId: input.invoiceDocumentId,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
-    lines: [
-      { accountNo: input.receivableAccountNo ?? "1100", debitAmount: grossAmount, text: `Receivable ${doc.invoice_no}` },
-      { accountNo: input.revenueAccountNo ?? "1000", creditAmount: netAmount, vatCode: "DK_SALE_25", text: `Revenue ${doc.invoice_no}` },
-      { accountNo: input.outputVatAccountNo ?? "1200", creditAmount: vatAmount, text: `Output VAT ${doc.invoice_no}` },
-    ],
+    lines: posting.lines,
   });
 
   return {
     ...journal,
-    appliedRules: [...new Set([...(journal.appliedRules ?? []), RULE_ID])],
+    appliedRules: [...new Set([...(journal.appliedRules ?? []), RULE_ID, ...(posting.isReverseCharge ? [REVERSE_RULE_ID] : [])])],
   };
 }

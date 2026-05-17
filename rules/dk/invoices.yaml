@@ -246,6 +246,19 @@ rules:
       forbid:
         - second_sales_posting_for_same_invoice
     explanation: Rentemester must be able to deterministically book an issued invoice into the ledger so open receivables, revenue, and output VAT are traceable to the invoice.
+  - rule_id: DK-INVOICE-BOOKKEEPING-REVERSE-002
+    name: Reverse-charge sales invoices and fallback credit notes must post without an output-VAT line
+    category: invoice_accounting
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - reverse_charge_sales_base_classification
+        - receivable_and_revenue_only_for_reverse_charge_sales
+      forbid:
+        - output_vat_line_on_reverse_charge_sales_posting
+        - zero_amount_output_vat_line_on_reverse_charge_credit_note_fallback
+    explanation: Rentemester must post reverse-charge sales documents without a Danish output-VAT line while still classifying the sales base, so lawful reverse-charge invoices and fallback credit notes remain bookable and auditable.
   - rule_id: DK-INVOICE-SETTLEMENT-001
     name: Bank-settled customer payments must clear receivables with traceable invoice and bank links
     category: invoice_lifecycle

@@ -34,6 +34,7 @@ export type IssueCreditNoteResult = {
 };
 
 const RULE_ID = "DK-CREDIT-NOTE-001";
+const REVERSE_RULE_ID = "DK-INVOICE-BOOKKEEPING-REVERSE-002";
 
 function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
@@ -119,6 +120,24 @@ function creditNoteLinesFromOriginalJournal(db: Database, originalInvoiceDocumen
     .filter((line) => (line.debitAmount ?? 0) > 0 || (line.creditAmount ?? 0) > 0);
 
   return reversedLines.length > 0 ? reversedLines : null;
+}
+
+function fallbackCreditNoteLines(originalInvoiceNo: string, payload: any, grossAmount: number, netAmount: number, vatAmount: number) {
+  const vatTreatment = payload?.vatTreatment ?? "standard";
+  const isReverseCharge = vatTreatment === "domestic_reverse_charge" || vatTreatment === "foreign_reverse_charge";
+  const lines: Array<{ accountNo: string; debitAmount?: number; creditAmount?: number; vatCode?: string; text: string }> = [
+    {
+      accountNo: "1000",
+      debitAmount: netAmount,
+      vatCode: isReverseCharge ? "REVERSE_CHARGE_EXEMPT" : "DK_SALE_25",
+      text: `Revenue reversal ${originalInvoiceNo}`
+    },
+    { accountNo: "1100", creditAmount: grossAmount, text: `Receivable reversal ${originalInvoiceNo}` },
+  ];
+  if (!isReverseCharge && vatAmount > 0) {
+    lines.splice(1, 0, { accountNo: "1200", debitAmount: vatAmount, text: `VAT reversal ${originalInvoiceNo}` });
+  }
+  return { lines, isReverseCharge };
 }
 
 export function issueCreditNote(db: Database, companyRoot: string, input: IssueCreditNoteInput): IssueCreditNoteResult {
@@ -220,17 +239,14 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
         retainUntilForDate(db, input.issueDate),
       ) as { id: number };
 
+      const fallback = fallbackCreditNoteLines(creditNoteNumber, payload, grossAmount, netAmount, vatAmount);
       const journal = postJournalEntry(db, {
         transactionDate: input.issueDate,
         text: `Credit note ${creditNoteNumber} for invoice ${original.invoice_no}`,
         documentId: doc.id,
         createdBy: input.createdBy,
         createdByProgram: input.createdByProgram,
-        lines: creditNoteLinesFromOriginalJournal(db, original.id, originalGrossAmount, grossAmount) ?? [
-          { accountNo: "1000", debitAmount: netAmount, vatCode: "DK_SALE_25", text: `Revenue reversal ${creditNoteNumber}` },
-          { accountNo: "1200", debitAmount: vatAmount, text: `VAT reversal ${creditNoteNumber}` },
-          { accountNo: "1100", creditAmount: grossAmount, text: `Receivable reversal ${creditNoteNumber}` },
-        ],
+        lines: creditNoteLinesFromOriginalJournal(db, original.id, originalGrossAmount, grossAmount) ?? fallback.lines,
       });
       if (!journal.ok) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
 
@@ -243,7 +259,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
         createdByProgram: input.createdByProgram,
       });
 
-      return { ok: true as const, docId: doc.id, creditNoteNumber, sha256: hash, journal };
+      return { ok: true as const, docId: doc.id, creditNoteNumber, sha256: hash, journal, isReverseCharge: fallback.isReverseCharge };
     }, { immediate: true })();
 
     if (!result.ok) return { ok: false, appliedRules: [RULE_ID], errors: [result.error] };
@@ -257,7 +273,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
       sha256: result.sha256,
       journalEntryId: result.journal.entryId,
       journalEntryNo: result.journal.entryNo,
-      appliedRules: [...new Set([RULE_ID, ...(result.journal.appliedRules ?? [])])],
+      appliedRules: [...new Set([RULE_ID, ...(result.journal.appliedRules ?? []), ...(result.isReverseCharge ? [REVERSE_RULE_ID] : [])])],
       errors: [],
     };
   } catch (error) {
