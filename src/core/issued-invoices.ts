@@ -6,7 +6,7 @@ import { companyPaths } from "./paths";
 import { validateInvoice, type InvoicePayload } from "./invoice";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
-import { fiscalYearLabelFromDate } from "./sequences";
+import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue, reserveSequenceValue } from "./sequences";
 import { retainUntilForDate } from "./retention";
 
 export type IssueInvoiceResult = {
@@ -34,10 +34,35 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function nextIssuedInvoiceNumber(db: Database, issueDate: string) {
+function canonicalInvoiceNumber(scope: string, value: number) {
+  return `${scope}-${String(value).padStart(5, "0")}`;
+}
+
+function invoiceSequenceState(db: Database, issueDate: string) {
   const scope = fiscalYearLabelFromDate(db, issueDate);
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -5) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no LIKE ?`).get(`${scope}-%`) as { n: number };
-  return `${scope}-${String(Number(row.n ?? 0) + 1).padStart(5, "0")}`;
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -5) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no GLOB ?`).get(`${scope}-[0-9][0-9][0-9][0-9][0-9]`) as { n: number };
+  return { scope, currentFloor: Number(row.n ?? 0), sequenceScope: companySequenceScope(db, scope) };
+}
+
+function reserveManualInvoiceNumber(db: Database, issueDate: string, invoiceNumber: string) {
+  const { scope, currentFloor, sequenceScope } = invoiceSequenceState(db, issueDate);
+  const match = new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([0-9]{5})$`).exec(invoiceNumber);
+  if (!match) return { ok: true as const, invoiceNumber };
+  const requestedValue = Number(match[1]);
+  const reserved = reserveSequenceValue(db, "issued_invoice", sequenceScope, requestedValue, currentFloor);
+  if (!reserved.ok) {
+    return {
+      ok: false as const,
+      error: `manual invoiceNumber ${invoiceNumber} exceeds næste fortløbende nummer ${canonicalInvoiceNumber(scope, reserved.expectedValue)}`,
+    };
+  }
+  return { ok: true as const, invoiceNumber };
+}
+
+function nextIssuedInvoiceNumber(db: Database, issueDate: string) {
+  const { scope, currentFloor, sequenceScope } = invoiceSequenceState(db, issueDate);
+  const nextValue = nextSequenceValue(db, "issued_invoice", sequenceScope, currentFloor);
+  return canonicalInvoiceNumber(scope, nextValue);
 }
 
 export function issueInvoice(db: Database, companyRoot: string, payload: InvoicePayload): IssueInvoiceResult {
@@ -45,7 +70,12 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
   const appliedRules = [...new Set([...(validation.appliedRules ?? []), RULE_ID, LOCK_RULE_ID])];
   if (!validation.ok) return { ok: false, appliedRules, errors: validation.errors };
 
-  const invoiceNumber = payload.invoiceNumber?.trim() || nextIssuedInvoiceNumber(db, payload.issueDate!);
+  const explicitInvoiceNumber = payload.invoiceNumber?.trim();
+  if (explicitInvoiceNumber) {
+    const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, explicitInvoiceNumber);
+    if (!reserved.ok) return { ok: false, appliedRules, errors: [reserved.error] };
+  }
+  const invoiceNumber = explicitInvoiceNumber || nextIssuedInvoiceNumber(db, payload.issueDate!);
   const paths = companyPaths(companyRoot);
   mkdirSync(paths.invoicesIssued, { recursive: true });
 

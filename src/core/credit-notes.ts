@@ -7,7 +7,7 @@ import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
-import { fiscalYearLabelFromDate } from "./sequences";
+import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue, reserveSequenceValue } from "./sequences";
 import { retainUntilForDate } from "./retention";
 
 export type IssueCreditNoteInput = {
@@ -40,10 +40,28 @@ function sha256(text: string) {
 }
 
 
-function nextCreditNoteNumber(db: Database, issueDate: string) {
+function creditNoteSequenceState(db: Database, issueDate: string) {
   const scope = fiscalYearLabelFromDate(db, issueDate);
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -4) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'credit_note' AND invoice_no LIKE ?`).get(`CN-${scope}-%`) as { n: number };
-  return `CN-${scope}-${String(Number(row.n ?? 0) + 1).padStart(4, "0")}`;
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -4) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'credit_note' AND invoice_no GLOB ?`).get(`CN-${scope}-[0-9][0-9][0-9][0-9]`) as { n: number };
+  return { scope, currentFloor: Number(row.n ?? 0), sequenceScope: companySequenceScope(db, `CN-${scope}`) };
+}
+
+function nextCreditNoteNumber(db: Database, issueDate: string) {
+  const { scope, currentFloor, sequenceScope } = creditNoteSequenceState(db, issueDate);
+  const nextValue = nextSequenceValue(db, "credit_note", sequenceScope, currentFloor);
+  return `CN-${scope}-${String(nextValue).padStart(4, "0")}`;
+}
+
+function reserveManualCreditNoteNumber(db: Database, issueDate: string, creditNoteNumber: string) {
+  const { scope, currentFloor, sequenceScope } = creditNoteSequenceState(db, issueDate);
+  const match = new RegExp(`^CN-${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([0-9]{4})$`).exec(creditNoteNumber);
+  if (!match) return { ok: true as const };
+  const requestedValue = Number(match[1]);
+  const reserved = reserveSequenceValue(db, "credit_note", sequenceScope, requestedValue, currentFloor);
+  if (!reserved.ok) {
+    return { ok: false as const, error: `manual creditNoteNumber ${creditNoteNumber} exceeds næste fortløbende nummer CN-${scope}-${String(reserved.expectedValue).padStart(4, "0")}` };
+  }
+  return { ok: true as const };
 }
 
 function round2(value: number) { return Number(value.toFixed(2)); }
@@ -122,7 +140,12 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
   const vatRatio = originalGrossAmount > 0 ? originalVatAmount / originalGrossAmount : 0;
   const vatAmount = round2(grossAmount * vatRatio);
   const netAmount = round2(grossAmount - vatAmount);
-  const creditNoteNumber = input.creditNoteNumber?.trim() || nextCreditNoteNumber(db, input.issueDate);
+  const explicitCreditNoteNumber = input.creditNoteNumber?.trim();
+  if (explicitCreditNoteNumber) {
+    const reserved = reserveManualCreditNoteNumber(db, input.issueDate, explicitCreditNoteNumber);
+    if (!reserved.ok) return { ok: false, appliedRules: [RULE_ID], errors: [reserved.error] };
+  }
+  const creditNoteNumber = explicitCreditNoteNumber || nextCreditNoteNumber(db, input.issueDate);
 
   const creditPayload = {
     type: "credit_note",

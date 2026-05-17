@@ -189,6 +189,66 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("reserves the canonical manual invoice number when it matches the next sequence", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-seq-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const first = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-00001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(first.ok).toBe(true);
+    expect(first.invoiceNumber).toBe("2026-00001");
+
+    const second = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-17",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde B ApS", address: "Købervej 10" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 500, lineTotalExVat: 500 }],
+      totals: { netAmount: 500, vatRate: 0.25, vatAmount: 125, grossAmount: 625 },
+      currency: "DKK"
+    });
+    expect(second.ok).toBe(true);
+    expect(second.invoiceNumber).toBe("2026-00002");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects canonical manual invoice numbers that skip the next sequence value", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-gap-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-00099",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]).toContain("næste fortløbende nummer 2026-00001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("does not leave an orphan invoice file when document insert fails", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-fail-"));
     const realDb = openDb(ensureCompanyDirs(root).db);

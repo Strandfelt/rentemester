@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
-import { currentUtcIsoDate, fiscalYearLabelFromDate } from "./sequences";
+import { companySequenceScope, currentUtcIsoDate, fiscalYearLabelFromDate, nextSequenceValue } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
 
@@ -77,8 +77,9 @@ function detectMimeType(path: string) {
 
 function nextDocumentNo(db: Database, issueDate?: string) {
   const scope = fiscalYearLabelFromDate(db, issueDate ?? currentUtcIsoDate(db));
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(document_no, -6) AS INTEGER)), 0) AS n FROM documents WHERE document_no LIKE ?`).get(`DOC-${scope}-%`) as { n: number };
-  return `DOC-${scope}-${String(Number(row.n ?? 0) + 1).padStart(6, "0")}`;
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(document_no, -6) AS INTEGER)), 0) AS n FROM documents WHERE document_no GLOB ?`).get(`DOC-${scope}-[0-9][0-9][0-9][0-9][0-9][0-9]`) as { n: number };
+  const nextValue = nextSequenceValue(db, "document", companySequenceScope(db, scope), Number(row.n ?? 0));
+  return `DOC-${scope}-${String(nextValue).padStart(6, "0")}`;
 }
 
 export function validateDocumentMetadata(metadata: DocumentMetadata): DocumentValidationResult {
