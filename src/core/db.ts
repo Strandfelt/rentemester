@@ -11,7 +11,7 @@ function hasColumn(db: Database, table: string, column: string) {
 export function openDb(path: string) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
-  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
+  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
   return db;
 }
 

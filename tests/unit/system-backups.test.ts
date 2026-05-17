@@ -47,6 +47,89 @@ describe("system backups", () => {
     rmSync(inboxRoot, { recursive: true, force: true });
   });
 
+  test("takes a locked snapshot so concurrent writes wait and stay out of the backup", async () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-backup-lock-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+
+    const writerScript = join(companyRoot, "writer.ts");
+    writeFileSync(writerScript, `
+      await Bun.sleep(50);
+      const { openDb } = await import(${JSON.stringify(join(process.cwd(), "src/core/db.ts"))});
+      const db = openDb(process.argv[2]);
+      const started = Date.now();
+      db.run(
+        "INSERT INTO bank_transactions (transaction_date, booking_date, text, amount, currency, reference, import_batch_id, source_file_hash, transaction_hash) VALUES (?, ?, ?, ?, 'DKK', ?, ?, ?, ?)",
+        "2026-05-17",
+        "2026-05-17",
+        "Concurrent customer payment",
+        500,
+        "LOCK-REF-1",
+        "batch-lock-1",
+        "hash-lock-a",
+        "tx-lock-1",
+      );
+      console.log(String(Date.now() - started));
+      db.close();
+    `);
+
+    const writer = Bun.spawn(["bun", "run", writerScript, paths.db], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const backup = createSystemBackup(db, companyRoot, { createdAt: "2026-05-17T02:09:00.000Z", debugHoldMs: 400 });
+    expect(backup.ok).toBe(true);
+
+    const writerStdout = await new Response(writer.stdout).text();
+    const writerStderr = await new Response(writer.stderr).text();
+    const writerExit = await writer.exited;
+    expect({ writerExit, writerStderr }).toEqual({ writerExit: 0, writerStderr: "" });
+
+    const waitedMs = Number(writerStdout.trim());
+    expect(Number.isFinite(waitedMs)).toBe(true);
+    expect(waitedMs).toBeGreaterThanOrEqual(250);
+
+    const manifest = JSON.parse(readFileSync(backup.manifestPath!, "utf8"));
+    expect(manifest.ledgerStats.bankTransactions).toBe(0);
+    const liveCount = (db.query("SELECT COUNT(*) AS n FROM bank_transactions").get() as { n: number }).n;
+    expect(liveCount).toBe(1);
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+  });
+
+  test("treats same-day bank activity as newer than an earlier same-day backup", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-backup-sameday-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+
+    const backup = createSystemBackup(db, companyRoot, { createdAt: "2026-05-17T02:09:00.000Z" });
+    expect(backup.ok).toBe(true);
+
+    db.run(
+      "INSERT INTO bank_transactions (transaction_date, booking_date, text, amount, currency, reference, import_batch_id, source_file_hash, transaction_hash) VALUES (?, ?, ?, ?, 'DKK', ?, ?, ?, ?)",
+      "2026-05-17",
+      "2026-05-17",
+      "Later same-day bank activity",
+      500,
+      "REF-SAMEDAY-1",
+      "batch-sameday-1",
+      "hash-sameday-a",
+      "tx-sameday-1",
+    );
+
+    const status = getBackupComplianceStatus(db, companyRoot, "2026-05-17T03:00:00.000Z");
+    expect(status.hasActivitySinceBackup).toBe(true);
+    expect(status.latestBackupId).toBe("backup-20260517T020900Z");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+  });
+
   test("flags weekly backup duty when activity exists after an old backup", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-backup-due-"));
     const paths = ensureCompanyDirs(companyRoot);

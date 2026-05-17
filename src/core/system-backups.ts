@@ -9,6 +9,7 @@ const BACKUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type CreateSystemBackupInput = {
   createdAt?: string;
+  debugHoldMs?: number;
 };
 
 export type CreateSystemBackupResult = {
@@ -122,9 +123,41 @@ function latestActivityTimestamps(db: Database) {
   return { latestJournalEntryAt, latestDocumentAt, latestBankImportAt };
 }
 
+function parseActivityMoment(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T23:59:59.999Z`).getTime();
+  return new Date(value).getTime();
+}
+
+function sleepSync(ms: number) {
+  if (ms <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function buildLockedSnapshot(db: Database, sourceDbPath: string, snapshotPath: string, holdMs = 0) {
+  const snapshotDb = new Database(sourceDbPath);
+  snapshotDb.exec("PRAGMA busy_timeout = 5000;");
+  let began = false;
+  try {
+    db.exec("BEGIN IMMEDIATE;");
+    began = true;
+    sleepSync(holdMs);
+    snapshotDb.exec(`VACUUM INTO ${sqlString(snapshotPath)}`);
+    db.exec("COMMIT;");
+    began = false;
+  } catch (error) {
+    if (began) db.exec("ROLLBACK;");
+    throw error;
+  } finally {
+    snapshotDb.close();
+  }
+}
+
 export function createSystemBackup(db: Database, companyRoot: string, input: CreateSystemBackupInput = {}): CreateSystemBackupResult {
   const createdAt = resolveCreatedAt(input.createdAt);
   if (!createdAt) return { ok: false, appliedRules: [BACKUP_RULE_ID], errors: ["createdAt must be a valid ISO-8601 datetime when provided"] };
+  if (input.debugHoldMs !== undefined && (!Number.isFinite(input.debugHoldMs) || input.debugHoldMs < 0)) {
+    return { ok: false, appliedRules: [BACKUP_RULE_ID], errors: ["debugHoldMs must be a non-negative number when provided"] };
+  }
 
   const paths = companyPaths(companyRoot);
   mkdirSync(paths.backups, { recursive: true });
@@ -140,8 +173,11 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
   const invoicesBackupDir = join(backupDir, "invoices-issued");
   const configBackupDir = join(backupDir, "config");
 
-  db.exec("PRAGMA wal_checkpoint(FULL);");
-  db.exec(`VACUUM INTO ${sqlString(dbSnapshotPath)}`);
+  try {
+    buildLockedSnapshot(db, paths.db, dbSnapshotPath, input.debugHoldMs ?? 0);
+  } catch (error) {
+    return { ok: false, appliedRules: [BACKUP_RULE_ID], errors: [`failed to create locked backup snapshot: ${String(error)}`] };
+  }
 
   const snapshotDb = new Database(dbSnapshotPath, { readonly: true });
   const ledgerStats = {
@@ -206,7 +242,7 @@ export function getBackupComplianceStatus(db: Database, companyRoot: string, asO
 
   const activityMoments = [evidence.latestJournalEntryAt, evidence.latestDocumentAt, evidence.latestBankImportAt]
     .filter((value): value is string => Boolean(value))
-    .map((value) => new Date(value).getTime())
+    .map((value) => parseActivityMoment(value))
     .filter((value) => Number.isFinite(value));
 
   const latestBackupMs = latestBackupAt ? new Date(latestBackupAt).getTime() : null;
