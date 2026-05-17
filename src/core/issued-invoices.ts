@@ -20,6 +20,14 @@ export type IssueInvoiceResult = {
 const RULE_ID = "DK-INVOICE-ISSUE-001";
 const LOCK_RULE_ID = "DK-INVOICE-LOCK-001";
 
+function deliveryDescription(payload: InvoicePayload) {
+  if (payload.deliveryDate) return `Delivery date ${payload.deliveryDate}`;
+  if (payload.deliveryPeriodStart && payload.deliveryPeriodEnd) {
+    return `Delivery period ${payload.deliveryPeriodStart}..${payload.deliveryPeriodEnd}`;
+  }
+  return payload.lines?.map((l) => l.description).filter(Boolean).join('; ') ?? null;
+}
+
 function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
@@ -59,7 +67,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
       supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
       document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
       recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json
-    ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+    ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
     RETURNING id`
   ).get(
     invoiceNumber,
@@ -71,7 +79,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
     payload.issueDate ?? null,
     grossAmount,
     payload.currency ?? 'DKK',
-    payload.lines?.map((l) => l.description).filter(Boolean).join('; ') ?? null,
+    deliveryDescription(payload),
     payload.seller?.name ?? null,
     payload.seller?.address ?? null,
     payload.seller?.vatOrCvr ?? null,
@@ -79,7 +87,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
     payload.buyer?.address ?? null,
     payload.buyer?.vatOrCvr ?? null,
     vatAmount,
-    payload.reverseChargeNote ?? null,
+    payload.reverseChargeBasis ?? null,
     serialized,
   ) as { id: number };
 

@@ -1,6 +1,7 @@
-version: dk-invoices-v0.0.2
+version: dk-invoices-v0.0.3
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
+  - DK-MOMSLOVEN-2024-209
   - DK-RENTELOVEN-2014-459
   - DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105
 rules:
@@ -47,11 +48,37 @@ rules:
     machine_rule:
       condition: vat_treatment in ['domestic_reverse_charge', 'foreign_reverse_charge']
       require:
-        - reverse_charge_note
+        - reverse_charge_basis
       forbid:
         - vat_rate
         - vat_amount
-    explanation: Reverse-charge invoices are issued without VAT rate/amount and must clearly state that the buyer settles the VAT.
+    explanation: Reverse-charge invoices are issued without VAT rate/amount and must clearly state the legal reverse-charge basis so the buyer can settle the VAT correctly.
+  - rule_id: DK-INVOICE-REVERSE-CHARGE-BASIS-001
+    name: Reverse-charge faktura skal angive den specifikke lovbestemmelse som fritagelsesgrundlag
+    category: invoice_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      condition: vat_treatment in ['domestic_reverse_charge', 'foreign_reverse_charge']
+      require:
+        - reverse_charge_basis_from_enum
+        - basis_matches_vat_treatment_direction
+      forbid:
+        - free_text_only_reverse_charge_note
+    explanation: Rentemester must reject reverse-charge invoices unless they cite a structured legal basis that matches whether the reverse charge is domestic or foreign.
+  - rule_id: DK-INVOICE-DELIVERY-DATE-001
+    name: Faktura skal angive leveringsdato når den afviger fra udstedelsesdato
+    category: invoice_validation
+    source_id: DK-MOMSLOVEN-2024-209
+    severity: hard_stop
+    machine_rule:
+      require:
+        - delivery_date_or_period_is_valid_when_present
+        - omitted_delivery_date_means_same_as_issue_date
+      forbid:
+        - malformed_delivery_date
+        - malformed_delivery_period
+    explanation: Rentemester must validate explicit delivery dates or delivery periods when they are present, while treating omission as delivery on the issue date.
   - rule_id: DK-INVOICE-ARITHMETIC-001
     name: Invoice line sums and totals must be arithmetically consistent before issue
     category: invoice_validation

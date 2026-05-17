@@ -65,6 +65,38 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("stores structured delivery and reverse-charge basis fields on issued invoices", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-structured-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "foreign_reverse_charge",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0500-RC",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      lines: [{ description: "EU consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
+      totals: { netAmount: 8000, grossAmount: 8000 },
+      reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
+      reverseChargeNote: "VAT reverse charge — VAT to be accounted by the recipient",
+      deliveryPeriodStart: "2026-05-01",
+      deliveryPeriodEnd: "2026-05-15",
+      currency: "DKK"
+    });
+
+    expect(result.ok).toBe(true);
+
+    const row = db.query("SELECT delivery_description, exemption_code, payload_json FROM documents WHERE id = ?").get(result.documentId!) as any;
+    expect(row.delivery_description).toBe("Delivery period 2026-05-01..2026-05-15");
+    expect(row.exemption_code).toBe("EU_MOMSDIREKTIV_ART_196");
+    expect(JSON.parse(row.payload_json).deliveryPeriodEnd).toBe("2026-05-15");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("does not leave an orphan invoice file when document insert fails", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-fail-"));
     const realDb = openDb(ensureCompanyDirs(root).db);

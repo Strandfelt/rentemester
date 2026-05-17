@@ -1,5 +1,11 @@
 export type InvoiceType = "full" | "simplified";
 export type VatTreatment = "standard" | "domestic_reverse_charge" | "foreign_reverse_charge";
+export type ReverseChargeBasis =
+  | "DK_MOMSLOVEN_§46_STK_1_NR_3"
+  | "DK_MOMSLOVEN_§46_STK_1_NR_6"
+  | "DK_MOMSLOVEN_§46_STK_1_NR_7"
+  | "EU_MOMSDIREKTIV_ART_196"
+  | "EU_MOMSDIREKTIV_ART_199";
 
 export type InvoicePayload = {
   invoiceType: InvoiceType;
@@ -16,9 +22,13 @@ export type InvoicePayload = {
     grossAmount?: number;
     vatComputationBasis?: "VAT_20_OF_GROSS" | string;
   };
+  reverseChargeBasis?: ReverseChargeBasis;
   reverseChargeNote?: string;
   currency?: string;
   dueDate?: string;
+  deliveryDate?: string;
+  deliveryPeriodStart?: string;
+  deliveryPeriodEnd?: string;
 };
 
 export type InvoiceValidationResult = {
@@ -33,9 +43,21 @@ const RULES = {
   FULL: "DK-INVOICE-FULL-001",
   SIMPLIFIED: "DK-INVOICE-SIMPLIFIED-001",
   REVERSE_CHARGE: "DK-INVOICE-REVERSE-CHARGE-001",
+  REVERSE_CHARGE_BASIS: "DK-INVOICE-REVERSE-CHARGE-BASIS-001",
+  DELIVERY_DATE: "DK-INVOICE-DELIVERY-DATE-001",
   ARITHMETIC: "DK-INVOICE-ARITHMETIC-001",
   VAT_SEPARATE_AMOUNT: "DK-VAT-SEPARATE-AMOUNT-001",
 } as const;
+
+const FOREIGN_REVERSE_CHARGE_BASES: ReverseChargeBasis[] = [
+  "DK_MOMSLOVEN_§46_STK_1_NR_3",
+  "EU_MOMSDIREKTIV_ART_196",
+  "EU_MOMSDIREKTIV_ART_199",
+];
+const DOMESTIC_REVERSE_CHARGE_BASES: ReverseChargeBasis[] = [
+  "DK_MOMSLOVEN_§46_STK_1_NR_6",
+  "DK_MOMSLOVEN_§46_STK_1_NR_7",
+];
 
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -46,7 +68,11 @@ function hasPositiveNumber(value: unknown): value is number {
 }
 
 function looksLikeIsoDate(value: unknown) {
-  return hasText(value) && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+  if (!hasText(value)) return false;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === trimmed;
 }
 
 function hasLineDescriptions(lines: InvoicePayload["lines"]) {
@@ -67,6 +93,27 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
   if (payload.dueDate !== undefined && !looksLikeIsoDate(payload.dueDate)) errors.push("dueDate must be YYYY-MM-DD when present");
   if (looksLikeIsoDate(payload.issueDate) && looksLikeIsoDate(payload.dueDate) && payload.dueDate < payload.issueDate) {
     errors.push("dueDate cannot be earlier than issueDate");
+  }
+  appliedRules.push(RULES.DELIVERY_DATE);
+  if (payload.deliveryDate !== undefined && !looksLikeIsoDate(payload.deliveryDate)) {
+    errors.push("deliveryDate must be YYYY-MM-DD when present");
+  }
+  if (payload.deliveryPeriodStart !== undefined && !looksLikeIsoDate(payload.deliveryPeriodStart)) {
+    errors.push("deliveryPeriodStart must be YYYY-MM-DD when present");
+  }
+  if (payload.deliveryPeriodEnd !== undefined && !looksLikeIsoDate(payload.deliveryPeriodEnd)) {
+    errors.push("deliveryPeriodEnd must be YYYY-MM-DD when present");
+  }
+  const hasDeliveryPeriodStart = payload.deliveryPeriodStart !== undefined;
+  const hasDeliveryPeriodEnd = payload.deliveryPeriodEnd !== undefined;
+  if (hasDeliveryPeriodStart !== hasDeliveryPeriodEnd) {
+    errors.push("deliveryPeriodStart and deliveryPeriodEnd must be provided together");
+  }
+  if (payload.deliveryDate !== undefined && (hasDeliveryPeriodStart || hasDeliveryPeriodEnd)) {
+    errors.push("use either deliveryDate or deliveryPeriodStart/deliveryPeriodEnd, not both");
+  }
+  if (looksLikeIsoDate(payload.deliveryPeriodStart) && looksLikeIsoDate(payload.deliveryPeriodEnd) && payload.deliveryPeriodEnd < payload.deliveryPeriodStart) {
+    errors.push("deliveryPeriodEnd cannot be earlier than deliveryPeriodStart");
   }
   if (!hasText(payload.invoiceNumber)) errors.push("invoiceNumber is required");
   if (!hasText(payload.seller?.name)) errors.push("seller.name is required");
@@ -103,9 +150,9 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
   }
 
   if (vatTreatment === "domestic_reverse_charge" || vatTreatment === "foreign_reverse_charge") {
-    appliedRules.push(RULES.REVERSE_CHARGE);
-    if (!hasText(payload.reverseChargeNote)) {
-      errors.push("reverse-charge invoices must include reverseChargeNote");
+    appliedRules.push(RULES.REVERSE_CHARGE, RULES.REVERSE_CHARGE_BASIS);
+    if (!hasText(payload.reverseChargeBasis)) {
+      errors.push("reverse-charge invoices must include reverseChargeBasis");
     }
     if (payload.totals?.vatRate !== undefined) {
       errors.push("reverse-charge invoices must not include totals.vatRate");
@@ -113,8 +160,16 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
     if (payload.totals?.vatAmount !== undefined) {
       errors.push("reverse-charge invoices must not include totals.vatAmount");
     }
-    if (vatTreatment === "foreign_reverse_charge" && !hasText(payload.buyer?.vatOrCvr)) {
-      errors.push("foreign reverse-charge invoices must include buyer.vatOrCvr");
+    if (vatTreatment === "foreign_reverse_charge") {
+      if (!hasText(payload.buyer?.vatOrCvr)) {
+        errors.push("foreign reverse-charge invoices must include buyer.vatOrCvr");
+      }
+      if (hasText(payload.reverseChargeBasis) && !FOREIGN_REVERSE_CHARGE_BASES.includes(payload.reverseChargeBasis)) {
+        errors.push(`reverseChargeBasis ${payload.reverseChargeBasis} is not valid for foreign reverse-charge invoices`);
+      }
+    }
+    if (vatTreatment === "domestic_reverse_charge" && hasText(payload.reverseChargeBasis) && !DOMESTIC_REVERSE_CHARGE_BASES.includes(payload.reverseChargeBasis)) {
+      errors.push(`reverseChargeBasis ${payload.reverseChargeBasis} is not valid for domestic reverse-charge invoices`);
     }
   }
 

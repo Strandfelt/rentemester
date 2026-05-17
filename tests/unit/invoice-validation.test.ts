@@ -12,6 +12,7 @@ describe("invoice validator", () => {
       buyer: { name: "Kunde A/S", address: "Købervej 9, 8000 Aarhus C" },
       lines: [{ description: "Bogføring og momsopsætning", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
       totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      deliveryDate: "2026-04-30",
       currency: "DKK",
     });
 
@@ -90,22 +91,70 @@ describe("invoice validator", () => {
     expect(result.errors).toContain("dueDate cannot be earlier than issueDate");
   });
 
-  test("rejects reverse-charge invoice with VAT amount and missing note", () => {
+  test("rejects malformed delivery dates and delivery periods", () => {
     const result = validateInvoice({
       invoiceType: "full",
-      vatTreatment: "foreign_reverse_charge",
+      vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0045",
+      invoiceNumber: "2026-0047",
       seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
-      buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
-      lines: [{ description: "AI consulting" }],
-      totals: { netAmount: 8000, vatAmount: 2000, grossAmount: 8000 },
+      buyer: { name: "Kunde A/S", address: "Købervej 9, 8000 Aarhus C" },
+      lines: [{ description: "Maj 2026 drift", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      deliveryDate: "2026-02-30",
+      deliveryPeriodStart: "2026-05-01",
       currency: "DKK",
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain("reverse-charge invoices must include reverseChargeNote");
+    expect(result.errors).toContain("deliveryDate must be YYYY-MM-DD when present");
+    expect(result.errors).toContain("deliveryPeriodStart and deliveryPeriodEnd must be provided together");
+    expect(result.errors).toContain("use either deliveryDate or deliveryPeriodStart/deliveryPeriodEnd, not both");
+    expect(result.appliedRules).toContain("DK-INVOICE-DELIVERY-DATE-001");
+  });
+
+  test("rejects reverse-charge invoice with invalid legal basis for direction", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "foreign_reverse_charge",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0048",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      lines: [{ description: "AI consulting" }],
+      totals: { netAmount: 8000, vatAmount: 2000, grossAmount: 8000 },
+      reverseChargeBasis: "DK_MOMSLOVEN_§46_STK_1_NR_7",
+      reverseChargeNote: "Byggemoms",
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(false);
     expect(result.errors).toContain("reverse-charge invoices must not include totals.vatAmount");
+    expect(result.errors).toContain("reverseChargeBasis DK_MOMSLOVEN_§46_STK_1_NR_7 is not valid for foreign reverse-charge invoices");
     expect(result.appliedRules).toContain("DK-INVOICE-REVERSE-CHARGE-001");
+    expect(result.appliedRules).toContain("DK-INVOICE-REVERSE-CHARGE-BASIS-001");
+  });
+
+  test("accepts reverse-charge invoice with explicit legal basis", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "foreign_reverse_charge",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0049",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      lines: [{ description: "AI consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
+      totals: { netAmount: 8000, grossAmount: 8000 },
+      reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
+      reverseChargeNote: "VAT reverse charge — VAT to be accounted by the recipient",
+      deliveryPeriodStart: "2026-05-01",
+      deliveryPeriodEnd: "2026-05-15",
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.appliedRules).toContain("DK-INVOICE-REVERSE-CHARGE-BASIS-001");
+    expect(result.appliedRules).toContain("DK-INVOICE-DELIVERY-DATE-001");
   });
 });
