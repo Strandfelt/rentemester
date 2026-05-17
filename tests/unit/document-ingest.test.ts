@@ -17,7 +17,23 @@ describe("document ingest", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors).toContain("deliveryDescription is required");
-    expect(result.errors).toContain("paymentDetails is required");
+    expect(result.errors).not.toContain("paymentDetails is required");
+  });
+
+  test("accepts purchase/sale metadata without payment details", () => {
+    const result = validateDocumentMetadata({
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-1001",
+      deliveryDescription: "Kontorartikler",
+      amountIncVat: 125,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 25,
+    });
+
+    expect(result.ok).toBe(true);
   });
 
   test("accepts foreign-currency cash-register receipts with original currency preserved", () => {
@@ -94,7 +110,7 @@ describe("document ingest", () => {
     rmSync(inboxRoot, { recursive: true, force: true });
   });
 
-  test("ingests a compliant supporting document and stores it content-addressed", () => {
+  test("ingests a compliant supporting document and blocks duplicate logical supplier invoices unless forced", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-"));
     const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-"));
     const sourceFile = join(inboxRoot, "vendor-invoice.txt");
@@ -114,7 +130,6 @@ describe("document ingest", () => {
       sender: { name: "Leverandør ApS", address: "Sælgervej 1, 2100 København Ø", vatOrCvr: "DK11223344" },
       recipient: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
       vatAmount: 250,
-      paymentDetails: "Betalt via bankoverførsel 2026-05-17"
     });
 
     expect(result.ok).toBe(true);
@@ -126,21 +141,52 @@ describe("document ingest", () => {
     expect(row.invoice_no).toBe("INV-1001");
     expect(row.amount_inc_vat).toBe(1250);
     expect(row.vat_amount).toBe(250);
-    expect(row.payment_details).toContain("bankoverførsel");
+    expect(row.payment_details).toBeNull();
 
     const dup = ingestDocument(db, companyRoot, sourceFile, {
       source: "email",
       issueDate: "2026-05-16",
+      invoiceNo: "INV-1001",
       deliveryDescription: "Bogføring og momsafstemning",
       amountIncVat: 1250,
       currency: "DKK",
       sender: { name: "Leverandør ApS", address: "Sælgervej 1, 2100 København Ø", vatOrCvr: "DK11223344" },
       recipient: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
       vatAmount: 250,
-      paymentDetails: "Betalt via bankoverførsel 2026-05-17"
     });
     expect(dup.ok).toBe(false);
     expect(dup.errors?.[0]).toContain("duplicate document content already ingested");
+
+    const rescannedFile = join(inboxRoot, "vendor-invoice-rescan.txt");
+    writeFileSync(rescannedFile, "Invoice 1001\nAmount 1250 DKK\nrescanned\n");
+
+    const logicalDup = ingestDocument(db, companyRoot, rescannedFile, {
+      source: "email-forward",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-1001",
+      deliveryDescription: "Bogføring og momsafstemning",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1, 2100 København Ø", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+    expect(logicalDup.ok).toBe(false);
+    expect(logicalDup.errors?.[0]).toContain("already ingested as");
+
+    const forcedLogicalDup = ingestDocument(db, companyRoot, rescannedFile, {
+      source: "email-forward",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-1001",
+      deliveryDescription: "Bogføring og momsafstemning",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1, 2100 København Ø", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    }, { forceDuplicateLogicalIdentity: true });
+    expect(forcedLogicalDup.ok).toBe(true);
+    expect(forcedLogicalDup.documentId).toBeDefined();
 
     db.close();
     rmSync(companyRoot, { recursive: true, force: true });

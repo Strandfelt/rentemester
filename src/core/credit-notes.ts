@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
+import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 
 export type IssueCreditNoteInput = {
   originalInvoiceDocumentId: number;
@@ -94,7 +95,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
   const paths = companyPaths(companyRoot);
   mkdirSync(paths.invoicesIssued, { recursive: true });
   const storedPath = join(paths.invoicesIssued, `${creditNoteNumber}.json`);
-  writeFileSync(storedPath, serialized);
+  const tempPath = writeTempFileFor(storedPath, serialized);
 
   try {
     const result = db.transaction(() => {
@@ -151,6 +152,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
       return { docId: doc.id, journal };
     })();
 
+    promoteTempFile(tempPath, storedPath);
     return {
       ok: true,
       documentId: result.docId,
@@ -164,6 +166,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
       errors: [],
     };
   } catch (error) {
+    removeIfExists(tempPath);
     const parsed = typeof error === "object" && error && "message" in error ? (() => {
       try { return JSON.parse(String((error as any).message)); } catch { return null; }
     })() : null;

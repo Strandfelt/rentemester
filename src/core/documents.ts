@@ -37,6 +37,10 @@ export type IngestDocumentResult = {
   errors?: string[];
 };
 
+export type IngestDocumentOptions = {
+  forceDuplicateLogicalIdentity?: boolean;
+};
+
 const RULES = {
   STORAGE: "DK-DOCUMENT-STORAGE-001",
   CASH_RECEIPT: "DK-DOCUMENT-CASH-RECEIPT-001",
@@ -101,13 +105,12 @@ export function validateDocumentMetadata(metadata: DocumentMetadata): DocumentVa
     if (!hasText(metadata.recipient?.address)) errors.push("recipient.address is required");
     if (!hasText(metadata.recipient?.vatOrCvr)) errors.push("recipient.vatOrCvr is required");
     if (!hasNonNegativeNumber(metadata.vatAmount)) errors.push("vatAmount is required");
-    if (!hasText(metadata.paymentDetails)) errors.push("paymentDetails is required");
   }
 
   return { ok: errors.length === 0, appliedRules, errors };
 }
 
-export function ingestDocument(db: Database, companyRoot: string, filePath: string, metadata: DocumentMetadata): IngestDocumentResult {
+export function ingestDocument(db: Database, companyRoot: string, filePath: string, metadata: DocumentMetadata, options: IngestDocumentOptions = {}): IngestDocumentResult {
   const validation = validateDocumentMetadata(metadata);
   if (!validation.ok) return { ok: false, errors: validation.errors };
   if (!existsSync(filePath)) return { ok: false, errors: [`file does not exist: ${filePath}`] };
@@ -118,14 +121,30 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
     return { ok: false, errors: [`duplicate document content already ingested as ${existing.document_no}`] };
   }
 
+  const documentNo = nextDocumentNo(db);
+  const docType = metadata.documentType ?? "purchase_sale";
+  const senderVatOrCvr = metadata.sender?.vatOrCvr?.trim();
+  const invoiceNo = metadata.invoiceNo?.trim();
+  if (!options.forceDuplicateLogicalIdentity && docType === "purchase_sale" && senderVatOrCvr && invoiceNo) {
+    const existingLogical = db.query(
+      `SELECT id, document_no
+       FROM documents
+       WHERE document_type = 'purchase_sale'
+         AND sender_vat_cvr = ?
+         AND invoice_no = ?
+       LIMIT 1`
+    ).get(senderVatOrCvr, invoiceNo) as { id: number; document_no: string } | null;
+    if (existingLogical) {
+      return { ok: false, errors: [`a document from ${senderVatOrCvr} with invoice ${invoiceNo} is already ingested as ${existingLogical.document_no}. Use --force to add another scan.`] };
+    }
+  }
+
   const p = companyPaths(companyRoot);
   mkdirSync(p.documentsOriginals, { recursive: true });
   const ext = extname(filePath).toLowerCase() || ".bin";
   const storedPath = join(p.documentsOriginals, `${sha256}${ext}`);
   copyFileSync(filePath, storedPath);
 
-  const documentNo = nextDocumentNo(db);
-  const docType = metadata.documentType ?? "purchase_sale";
   const currency = (metadata.currency ?? "DKK").trim().toUpperCase();
   const result = db.query(
     `INSERT INTO documents (

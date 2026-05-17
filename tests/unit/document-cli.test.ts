@@ -64,7 +64,7 @@ describe("documents ingest CLI", () => {
     expect(parsed.documentNo).toContain("DOC-");
   });
 
-  test("returns exit code 0 for valid metadata and file", async () => {
+  test("accepts purchase/sale metadata without payment details", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-doccli-"));
     const company = join(root, "company");
     const file = join(root, "invoice.txt");
@@ -80,8 +80,7 @@ describe("documents ingest CLI", () => {
       currency: "DKK",
       sender: { name: "Leverandør ApS", address: "Sælgervej 1, 2100 København Ø", vatOrCvr: "DK11223344" },
       recipient: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
-      vatAmount: 250,
-      paymentDetails: "Bankoverførsel"
+      vatAmount: 250
     }, null, 2));
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
@@ -99,5 +98,52 @@ describe("documents ingest CLI", () => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(true);
     expect(parsed.documentNo).toContain("DOC-");
+  });
+
+  test("blocks duplicate logical supplier invoices unless --force is used", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-doccli-force-"));
+    const company = join(root, "company");
+    const fileA = join(root, "invoice-a.txt");
+    const fileB = join(root, "invoice-b.txt");
+    const metadata = join(root, "metadata.json");
+
+    writeFileSync(fileA, "Invoice INV-1003\n1250 DKK\n");
+    writeFileSync(fileB, "Invoice INV-1003\n1250 DKK\nrescanned\n");
+    writeFileSync(metadata, JSON.stringify({
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-1003",
+      deliveryDescription: "Bogføring og momsafstemning",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1, 2100 København Ø", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      vatAmount: 250
+    }, null, 2));
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file ${fileA} --metadata ${metadata}`.quiet();
+
+    const blocked = Bun.spawn(["bun", "run", "src/cli.ts", "documents", "ingest", "--company", company, "--file", fileB, "--metadata", metadata], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const blockedStdout = await new Response(blocked.stdout).text();
+    const blockedExitCode = await blocked.exited;
+
+    const forced = Bun.spawn(["bun", "run", "src/cli.ts", "documents", "ingest", "--company", company, "--file", fileB, "--metadata", metadata, "--force"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const forcedStdout = await new Response(forced.stdout).text();
+    const forcedExitCode = await forced.exited;
+
+    rmSync(root, { recursive: true, force: true });
+    expect(blockedExitCode).toBe(1);
+    expect(JSON.parse(blockedStdout).errors[0]).toContain("Use --force to add another scan");
+    expect(forcedExitCode).toBe(0);
+    expect(JSON.parse(forcedStdout).ok).toBe(true);
   });
 });

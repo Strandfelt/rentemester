@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { validateInvoice, type InvoicePayload } from "./invoice";
+import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 
 export type IssueInvoiceResult = {
   ok: boolean;
@@ -46,11 +47,12 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
   const serialized = JSON.stringify(issuedPayload, null, 2);
   const hash = sha256(serialized);
   const storedPath = join(paths.invoicesIssued, `${invoiceNumber}.json`);
-  writeFileSync(storedPath, serialized);
+  const tempPath = writeTempFileFor(storedPath, serialized);
 
-  const grossAmount = payload.totals?.grossAmount ?? null;
-  const vatAmount = payload.totals?.vatAmount ?? null;
-  const result = db.query(
+  try {
+    const grossAmount = payload.totals?.grossAmount ?? null;
+    const vatAmount = payload.totals?.vatAmount ?? null;
+    const result = db.query(
     `INSERT INTO documents (
       document_no, source, original_filename, stored_path, mime_type, sha256_hash,
       supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
@@ -80,11 +82,16 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
     serialized,
   ) as { id: number };
 
-  db.run(
-    "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_issue', 'document', ?, ?)",
-    String(result.id),
-    `Issued invoice ${invoiceNumber}`
-  );
+    db.run(
+      "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_issue', 'document', ?, ?)",
+      String(result.id),
+      `Issued invoice ${invoiceNumber}`
+    );
 
-  return { ok: true, documentId: result.id, invoiceNumber, storedPath, sha256: hash, appliedRules, errors: [] };
+    promoteTempFile(tempPath, storedPath);
+    return { ok: true, documentId: result.id, invoiceNumber, storedPath, sha256: hash, appliedRules, errors: [] };
+  } catch (error) {
+    removeIfExists(tempPath);
+    throw error;
+  }
 }

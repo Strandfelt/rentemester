@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS documents (
   payload_json TEXT
 );
 
+CREATE INDEX IF NOT EXISTS idx_documents_purchase_sale_logical_identity
+ON documents(sender_vat_cvr, invoice_no, invoice_date)
+WHERE document_type = 'purchase_sale';
+
 CREATE TABLE IF NOT EXISTS bank_transactions (
   id INTEGER PRIMARY KEY,
   transaction_date TEXT NOT NULL,
