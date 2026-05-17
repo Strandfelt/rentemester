@@ -305,6 +305,22 @@ BEGIN
   SELECT RAISE(ABORT, 'document is linked to a journal entry and cannot be deleted; reverse the entry first');
 END;
 
+CREATE TRIGGER IF NOT EXISTS bank_transactions_no_update_when_referenced
+BEFORE UPDATE ON bank_transactions
+WHEN EXISTS(SELECT 1 FROM journal_entries WHERE source_bank_transaction_id = OLD.id)
+   OR EXISTS(SELECT 1 FROM invoice_payments WHERE bank_transaction_id = OLD.id)
+   OR EXISTS(SELECT 1 FROM invoice_refunds WHERE bank_transaction_id = OLD.id)
+   OR EXISTS(SELECT 1 FROM invoice_claim_payments WHERE bank_transaction_id = OLD.id)
+BEGIN
+  SELECT RAISE(ABORT, 'bank transaction is referenced by ledger or payment records and cannot be modified');
+END;
+
+CREATE TRIGGER IF NOT EXISTS bank_transactions_no_delete
+BEFORE DELETE ON bank_transactions
+BEGIN
+  SELECT RAISE(ABORT, 'bank transactions are append-only; correct via journal reversal or new import');
+END;
+
 CREATE TRIGGER IF NOT EXISTS invoice_payments_no_update
 BEFORE UPDATE ON invoice_payments
 BEGIN

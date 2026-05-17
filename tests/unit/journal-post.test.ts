@@ -269,6 +269,36 @@ describe("ledger hardening", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("prevents mutation or deletion of referenced bank transactions", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-append-only-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = db.query(
+      `INSERT INTO bank_transactions (transaction_date, text, amount, transaction_hash)
+       VALUES ('2026-05-16', 'Customer payment', 1000, 'bank-append-only-test')
+       RETURNING id`
+    ).get() as { id: number };
+
+    const posted = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Bank-linked posting",
+      sourceBankTransactionId: bank.id,
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(posted.ok).toBe(true);
+
+    expect(() => db.run("UPDATE bank_transactions SET amount = 9999 WHERE id = ?", bank.id)).toThrow("bank transaction is referenced by ledger or payment records and cannot be modified");
+    expect(() => db.run("DELETE FROM bank_transactions WHERE id = ?", bank.id)).toThrow("bank transactions are append-only");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("audit verify detects structural ledger corruption beyond hash mismatch", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-audit-corrupt-"));
     const db = openDb(ensureCompanyDirs(root).db);
