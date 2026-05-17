@@ -86,15 +86,41 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
         appliedRules.add(COMBINED_RULE_ID);
       }
 
+      let journalEntryId: number | undefined;
+
+      if (claimAmount > 0) {
+        const journal = postJournalEntry(db, {
+          transactionDate: paymentDate,
+          text: `Customer payment incl. claims for invoice ${invoice.invoice_no}`,
+          sourceBankTransactionId: bank.id,
+          documentId: input.invoiceDocumentId,
+          createdBy: input.createdBy,
+          createdByProgram: input.createdByProgram,
+          lines: [
+            { accountNo: input.bankAccountNo ?? "2000", debitAmount: amount, text: `Bank receipt ${invoice.invoice_no}` },
+            { accountNo: input.receivableAccountNo ?? "1100", creditAmount: amount, text: `Principal and claim settlement ${invoice.invoice_no}` },
+          ],
+        });
+        if (!journal.ok || journal.entryId == null) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
+        journalEntryId = journal.entryId;
+        for (const rule of journal.appliedRules ?? []) appliedRules.add(rule);
+      }
+
       const payment = applyInvoicePayment(db, {
         invoiceDocumentId: input.invoiceDocumentId,
         bankTransactionId: bank.id,
+        journalEntryId,
         paymentDate,
         amount: principalAmount,
+        bankAccountNo: input.bankAccountNo,
+        receivableAccountNo: input.receivableAccountNo,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
         note: `Bank settlement from transaction ${bank.id}`,
       });
       if (!payment.ok) throw new Error(JSON.stringify({ appliedRules: payment.appliedRules, errors: payment.errors }));
       paymentId = payment.paymentId;
+      journalEntryId = payment.journalEntryId;
       for (const rule of payment.appliedRules ?? []) appliedRules.add(rule);
 
       if (claimAmount > 0) {
@@ -111,26 +137,12 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
         );
       }
 
-      const journal = postJournalEntry(db, {
-        transactionDate: paymentDate,
-        text: claimAmount > 0 ? `Customer payment incl. claims for invoice ${invoice.invoice_no}` : `Customer payment for invoice ${invoice.invoice_no}`,
-        sourceBankTransactionId: bank.id,
-        documentId: input.invoiceDocumentId,
-        createdBy: input.createdBy,
-        createdByProgram: input.createdByProgram,
-        lines: [
-          { accountNo: input.bankAccountNo ?? "2000", debitAmount: amount, text: `Bank receipt ${invoice.invoice_no}` },
-          { accountNo: input.receivableAccountNo ?? "1100", creditAmount: amount, text: claimAmount > 0 ? `Principal and claim settlement ${invoice.invoice_no}` : `Receivable settlement ${invoice.invoice_no}` },
-        ],
-      });
-      if (!journal.ok) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
-      for (const rule of journal.appliedRules ?? []) appliedRules.add(rule);
-
       const after = getInvoiceStatus(db, input.invoiceDocumentId);
       if (!after.ok) throw new Error(JSON.stringify({ errors: after.errors }));
 
       return {
-        ...journal,
+        ok: true,
+        entryId: journalEntryId,
         paymentId,
         claimPaymentId,
         principalAmount,
@@ -139,6 +151,7 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
         openBalance: after.openBalance,
         claimOpenBalance: after.claimOpenBalance,
         appliedRules: [...appliedRules],
+        errors: [],
       };
     })();
     return result;

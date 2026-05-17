@@ -14,6 +14,7 @@ describe("invoice late compensation", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-comp-"));
     const db = openDb(ensureCompanyDirs(root).db);
     migrate(db);
+    seedAccounts(db);
 
     const issued = issueInvoice(db, root, {
       invoiceType: "full",
@@ -114,6 +115,7 @@ describe("invoice late compensation", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-comp-register-"));
     const db = openDb(ensureCompanyDirs(root).db);
     migrate(db);
+    seedAccounts(db);
 
     const issued = issueInvoice(db, root, {
       invoiceType: "full",

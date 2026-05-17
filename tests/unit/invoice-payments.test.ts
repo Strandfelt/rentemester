@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
-import { seedAccounts } from "../../src/core/ledger";
+import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { applyInvoicePayment, getInvoiceStatus } from "../../src/core/invoice-payments";
 import { issueCreditNote } from "../../src/core/credit-notes";
@@ -14,6 +14,7 @@ describe("invoice payments", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoicepay-"));
     const db = openDb(ensureCompanyDirs(root).db);
     migrate(db);
+    seedAccounts(db);
 
     const issued = issueInvoice(db, root, {
       invoiceType: "full",
@@ -71,6 +72,60 @@ describe("invoice payments", () => {
     expect(status2.paidAmount).toBe(1250);
     expect(status2.openBalance).toBe(0);
     expect(status2.payments).toHaveLength(2);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects direct invoice payment inserts without journal evidence and ignores orphaned rows in status", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoicepay-proof-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0700B",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK",
+      dueDate: "2026-06-15"
+    });
+    expect(issued.ok).toBe(true);
+
+    expect(() => db.run(
+      `INSERT INTO invoice_payments (invoice_document_id, payment_date, amount, currency, note)
+       VALUES (?, ?, ?, 'DKK', ?)`,
+      issued.documentId!,
+      "2026-05-20",
+      1000,
+      "Manual entry"
+    )).toThrow("invoice payments must reference a journal entry");
+
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.run(
+      `INSERT INTO invoice_payments (invoice_document_id, payment_date, amount, currency, journal_entry_id, note)
+       VALUES (?, ?, ?, 'DKK', ?, ?)`,
+      issued.documentId!,
+      "2026-05-20",
+      1000,
+      999999,
+      "Broken legacy import"
+    );
+    db.exec("PRAGMA foreign_keys = ON");
+
+    const status = getInvoiceStatus(db, issued.documentId!);
+    expect(status.ok).toBe(true);
+    expect(status.paidAmount).toBe(0);
+    expect(status.openBalance).toBe(1250);
+
+    const chain = verifyAuditChain(db);
+    expect(chain.ok).toBe(false);
+    expect(chain.errors.some((error) => error.includes("invoice payment") && error.includes("missing journal evidence"))).toBe(true);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

@@ -1,16 +1,23 @@
 import type { Database } from "bun:sqlite";
+import { postJournalEntry } from "./ledger";
 
 export type ApplyInvoicePaymentInput = {
   invoiceDocumentId: number;
   paymentDate: string;
   amount: number;
   bankTransactionId?: number;
+  journalEntryId?: number;
+  bankAccountNo?: string;
+  receivableAccountNo?: string;
+  createdBy?: string;
+  createdByProgram?: string;
   note?: string;
 };
 
 export type ApplyInvoicePaymentResult = {
   ok: boolean;
   paymentId?: number;
+  journalEntryId?: number;
   invoiceDocumentId?: number;
   invoiceNumber?: string;
   openBalance?: number;
@@ -37,6 +44,7 @@ export type InvoiceStatusResult = {
     paymentDate: string;
     amount: number;
     bankTransactionId: number | null;
+    journalEntryId: number | null;
     note: string | null;
   }>;
   creditNotes?: Array<{
@@ -135,9 +143,12 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
   const payload = invoice.payload_json ? JSON.parse(invoice.payload_json) : null;
 
   const payments = db.query(
-    `SELECT id, payment_date, amount, bank_transaction_id, note
-     FROM invoice_payments WHERE invoice_document_id = ? ORDER BY id ASC`
-  ).all(invoiceDocumentId) as Array<{ id: number; payment_date: string; amount: number; bank_transaction_id: number | null; note: string | null }>;
+    `SELECT p.id, p.payment_date, p.amount, p.bank_transaction_id, p.journal_entry_id, p.note
+     FROM invoice_payments p
+     JOIN journal_entries j ON j.id = p.journal_entry_id
+     WHERE p.invoice_document_id = ?
+     ORDER BY p.id ASC`
+  ).all(invoiceDocumentId) as Array<{ id: number; payment_date: string; amount: number; bank_transaction_id: number | null; journal_entry_id: number | null; note: string | null }>;
 
   const creditNotes = db.query(
     `SELECT id, invoice_no, amount_inc_vat, invoice_date
@@ -224,7 +235,7 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
     isOverdue,
     overdueDays,
     status,
-    payments: payments.map((p) => ({ paymentId: p.id, paymentDate: p.payment_date, amount: round2(Number(p.amount)), bankTransactionId: p.bank_transaction_id, note: p.note })),
+    payments: payments.map((p) => ({ paymentId: p.id, paymentDate: p.payment_date, amount: round2(Number(p.amount)), bankTransactionId: p.bank_transaction_id, journalEntryId: p.journal_entry_id == null ? null : Number(p.journal_entry_id), note: p.note })),
     creditNotes: creditNotes.map((c) => ({ documentId: c.id, creditNoteNumber: c.invoice_no, amount: round2(Number(c.amount_inc_vat ?? 0)), issueDate: c.invoice_date })),
     refunds: refunds.map((r) => ({ refundId: r.id, refundDate: r.refund_date, amount: round2(Number(r.amount)), bankTransactionId: r.bank_transaction_id, note: r.note })),
     claimPayments: claimPayments.map((p) => ({ claimPaymentId: p.id, paymentDate: p.payment_date, amount: round2(Number(p.amount)), bankTransactionId: p.bank_transaction_id, note: p.note })),
@@ -247,6 +258,7 @@ export function applyInvoicePayment(db: Database, input: ApplyInvoicePaymentInpu
   if (!looksLikeIsoDate(input.paymentDate)) errors.push("paymentDate must be YYYY-MM-DD");
   if (!Number.isFinite(input.amount) || input.amount <= 0) errors.push("amount must be a positive number");
   if (input.bankTransactionId !== undefined && (!Number.isInteger(input.bankTransactionId) || input.bankTransactionId <= 0)) errors.push("bankTransactionId must be a positive integer when present");
+  if (input.journalEntryId !== undefined && (!Number.isInteger(input.journalEntryId) || input.journalEntryId <= 0)) errors.push("journalEntryId must be a positive integer when present");
   if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
 
   const invoice = getIssuedInvoice(db, input.invoiceDocumentId);
@@ -269,26 +281,75 @@ export function applyInvoicePayment(db: Database, input: ApplyInvoicePaymentInpu
     return { ok: false, appliedRules: [RULE_ID, CORRECTION_BALANCE_RULE_ID], errors: [`payment amount ${amount} exceeds open invoice balance ${openBalance}`] };
   }
 
-  const paymentId = db.query(
-    `INSERT INTO invoice_payments (invoice_document_id, bank_transaction_id, payment_date, amount, currency, note)
-     VALUES (?, ?, ?, ?, 'DKK', ?)
-     RETURNING id`
-  ).get(input.invoiceDocumentId, input.bankTransactionId ?? null, input.paymentDate, amount, input.note ?? null) as { id: number };
+  try {
+    const result = db.transaction(() => {
+      let journalEntryId = input.journalEntryId;
 
-  db.run(
-    "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_payment_apply', 'invoice_payment', ?, ?)",
-    String(paymentId.id),
-    `Applied payment ${amount} to invoice ${invoice.invoice_no}`
-  );
+      if (journalEntryId === undefined) {
+        const journal = postJournalEntry(db, {
+          transactionDate: input.paymentDate,
+          text: input.bankTransactionId !== undefined ? `Customer payment for invoice ${invoice.invoice_no}` : `Manual invoice payment for invoice ${invoice.invoice_no}`,
+          sourceBankTransactionId: input.bankTransactionId,
+          documentId: input.invoiceDocumentId,
+          createdBy: input.createdBy,
+          createdByProgram: input.createdByProgram,
+          lines: [
+            { accountNo: input.bankAccountNo ?? "2000", debitAmount: amount, text: `Payment receipt ${invoice.invoice_no}` },
+            { accountNo: input.receivableAccountNo ?? "1100", creditAmount: amount, text: `Receivable settlement ${invoice.invoice_no}` },
+          ],
+        });
+        if (!journal.ok || journal.entryId == null) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
+        journalEntryId = journal.entryId;
+      } else {
+        const journal = db.query(
+          `SELECT id, document_id, source_bank_transaction_id FROM journal_entries WHERE id = ?`
+        ).get(journalEntryId) as { id: number; document_id: number | null; source_bank_transaction_id: number | null } | null;
+        if (!journal) {
+          throw new Error(JSON.stringify({ appliedRules: [RULE_ID], errors: [`journal entry ${journalEntryId} does not exist`] }));
+        }
+        if (journal.document_id !== input.invoiceDocumentId) {
+          throw new Error(JSON.stringify({ appliedRules: [RULE_ID], errors: [`journal entry ${journalEntryId} is not linked to invoice document ${input.invoiceDocumentId}`] }));
+        }
+        if ((input.bankTransactionId ?? null) !== (journal.source_bank_transaction_id ?? null)) {
+          throw new Error(JSON.stringify({ appliedRules: [RULE_ID], errors: [`journal entry ${journalEntryId} bank link does not match invoice payment bank transaction`] }));
+        }
+      }
 
-  const after = getInvoiceStatus(db, input.invoiceDocumentId);
-  return {
-    ok: true,
-    paymentId: paymentId.id,
-    invoiceDocumentId: input.invoiceDocumentId,
-    invoiceNumber: invoice.invoice_no,
-    openBalance: after.openBalance,
-    appliedRules: [RULE_ID, CORRECTION_BALANCE_RULE_ID],
-    errors: [],
-  };
+      const paymentId = db.query(
+        `INSERT INTO invoice_payments (invoice_document_id, bank_transaction_id, journal_entry_id, payment_date, amount, currency, note)
+         VALUES (?, ?, ?, ?, ?, 'DKK', ?)
+         RETURNING id`
+      ).get(input.invoiceDocumentId, input.bankTransactionId ?? null, journalEntryId, input.paymentDate, amount, input.note ?? null) as { id: number };
+
+      db.run(
+        "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_payment_apply', 'invoice_payment', ?, ?)",
+        String(paymentId.id),
+        `Applied payment ${amount} to invoice ${invoice.invoice_no}`
+      );
+
+      const after = getInvoiceStatus(db, input.invoiceDocumentId);
+      if (!after.ok) throw new Error(JSON.stringify({ appliedRules: [RULE_ID], errors: after.errors }));
+
+      return {
+        ok: true,
+        paymentId: paymentId.id,
+        journalEntryId,
+        invoiceDocumentId: input.invoiceDocumentId,
+        invoiceNumber: invoice.invoice_no,
+        openBalance: after.openBalance,
+        appliedRules: [RULE_ID, CORRECTION_BALANCE_RULE_ID],
+        errors: [],
+      } satisfies ApplyInvoicePaymentResult;
+    })();
+    return result;
+  } catch (error) {
+    const parsed = typeof error === "object" && error && "message" in error ? (() => {
+      try { return JSON.parse(String((error as any).message)); } catch { return null; }
+    })() : null;
+    return {
+      ok: false,
+      appliedRules: [...new Set([RULE_ID, ...((parsed?.appliedRules as string[] | undefined) ?? [])])],
+      errors: (parsed?.errors as string[] | undefined) ?? [String(error)],
+    };
+  }
 }

@@ -124,13 +124,15 @@ CREATE TABLE IF NOT EXISTS invoice_payments (
   id INTEGER PRIMARY KEY,
   invoice_document_id INTEGER NOT NULL,
   bank_transaction_id INTEGER,
+  journal_entry_id INTEGER NOT NULL UNIQUE,
   payment_date TEXT NOT NULL,
   amount NUMERIC NOT NULL CHECK(amount > 0),
   currency TEXT NOT NULL DEFAULT 'DKK',
   note TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(invoice_document_id) REFERENCES documents(id),
-  FOREIGN KEY(bank_transaction_id) REFERENCES bank_transactions(id)
+  FOREIGN KEY(bank_transaction_id) REFERENCES bank_transactions(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
 );
 
 CREATE TABLE IF NOT EXISTS invoice_refunds (
@@ -319,6 +321,13 @@ CREATE TRIGGER IF NOT EXISTS bank_transactions_no_delete
 BEFORE DELETE ON bank_transactions
 BEGIN
   SELECT RAISE(ABORT, 'bank transactions are append-only; correct via journal reversal or new import');
+END;
+
+CREATE TRIGGER IF NOT EXISTS invoice_payments_require_journal
+BEFORE INSERT ON invoice_payments
+WHEN NEW.journal_entry_id IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'invoice payments must reference a journal entry');
 END;
 
 CREATE TRIGGER IF NOT EXISTS invoice_payments_no_update
