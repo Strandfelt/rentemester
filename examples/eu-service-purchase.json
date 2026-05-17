@@ -1,7 +1,7 @@
 {
   "transactionDate": "2026-05-16",
   "text": "EU service purchase",
-  "documentId": 1,
+  "invoiceNo": "EU-INV-1",
   "netAmount": 1000,
   "expenseAccountNo": "3010"
 }

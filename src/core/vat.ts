@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { requireCachedViesValidation } from "./vies";
 
 export type VatPeriodReport = {
   ok: boolean;
@@ -66,6 +67,11 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
   if (!Number.isFinite(input.netAmount) || input.netAmount <= 0) errors.push("netAmount must be a positive number");
   if (typeof input.expenseAccountNo !== "string" || input.expenseAccountNo.trim().length === 0) errors.push("expenseAccountNo is required");
   if (errors.length > 0) return { ok: false, appliedRules: [REVERSE_CHARGE_RULE_ID], errors };
+
+  const documentRow = db.query(`SELECT sender_vat_cvr FROM documents WHERE id = ?`).get(input.documentId) as { sender_vat_cvr: string | null } | null;
+  if (!documentRow) return { ok: false, appliedRules: [REVERSE_CHARGE_RULE_ID], errors: [`documentId ${input.documentId} does not exist`] };
+  const viesCheck = requireCachedViesValidation(db, documentRow.sender_vat_cvr, "document sender_vat_cvr");
+  if (!viesCheck.ok) return { ok: false, appliedRules: [...new Set([REVERSE_CHARGE_RULE_ID, ...viesCheck.appliedRules])], errors: viesCheck.errors };
 
   const vatAmount = round2(input.netAmount * 0.25);
   const result = postJournalEntry(db, {

@@ -29,6 +29,7 @@ import { resolveOutputFormat, printStructuredResult } from "./cli-format";
 import { getCommandSpec, renderCommandHelp, renderGlobalUsage, validateCommandFlags } from "./cli-meta";
 import { normalizeCvr, normalizeFiscalYearLabelStrategy, normalizeFiscalYearStartMonth } from "./core/company";
 import { buildRetentionStatusReport } from "./core/retention";
+import { validateVatAgainstVies } from "./core/vies";
 
 const parsedArgs = parseCliArgs(Bun.argv);
 
@@ -206,6 +207,18 @@ else if (cmd === "accounts" && sub === "list") {
   const rows = db.query("SELECT account_no, name, type, default_vat_code FROM accounts ORDER BY account_no").all();
   console.table(rows);
   db.close();
+}
+else if (cmd === "customer" && sub === "validate-vat") {
+  const cvr = arg("--cvr");
+  if (!cvr) {
+    console.error("Missing required --cvr <EU-VAT>");
+    process.exit(2);
+  }
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = await validateVatAgainstVies(db, cvr);
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+  if (!result.ok) process.exit(1);
 }
 else if (cmd === "exceptions" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -551,6 +564,15 @@ else if (cmd === "vat" && sub === "post-eu-service-purchase") {
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
+  const invoiceNo = typeof payload.invoiceNo === "string" ? payload.invoiceNo.trim() : "";
+  if (invoiceNo) {
+    const row = db.query(`SELECT id FROM documents WHERE invoice_no = ? ORDER BY id DESC LIMIT 1`).get(invoiceNo) as { id: number } | null;
+    if (!row) {
+      console.error(`Could not resolve document for invoiceNo ${invoiceNo}`);
+      process.exit(2);
+    }
+    payload.documentId = row.id;
+  }
   const result = postEuServiceReverseChargePurchase(db, payload);
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();

@@ -8,6 +8,7 @@ import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file
 import { insertAuditLog } from "./actor";
 import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue, reserveSequenceValue } from "./sequences";
 import { retainUntilForDate } from "./retention";
+import { requireCachedViesValidation } from "./vies";
 
 export type IssueInvoiceResult = {
   ok: boolean;
@@ -70,6 +71,13 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
   const appliedRules = [...new Set([...(validation.appliedRules ?? []), RULE_ID, LOCK_RULE_ID])];
   if (!validation.ok) return { ok: false, appliedRules, errors: validation.errors };
 
+  let viesValidation: ReturnType<typeof requireCachedViesValidation>["validation"] | undefined;
+  if (payload.vatTreatment === "foreign_reverse_charge") {
+    const viesCheck = requireCachedViesValidation(db, payload.buyer?.vatOrCvr, "buyer.vatOrCvr");
+    if (!viesCheck.ok) return { ok: false, appliedRules: [...new Set([...appliedRules, ...viesCheck.appliedRules])], errors: viesCheck.errors };
+    viesValidation = viesCheck.validation;
+  }
+
   const explicitInvoiceNumber = payload.invoiceNumber?.trim();
   if (explicitInvoiceNumber) {
     const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, explicitInvoiceNumber);
@@ -85,6 +93,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
     invoiceNumber,
     issuedAt,
     status: "issued",
+    ...(viesValidation ? { viesValidation } : {}),
   };
   const serialized = JSON.stringify(issuedPayload, null, 2);
   const hash = sha256(serialized);

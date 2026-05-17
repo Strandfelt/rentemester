@@ -7,8 +7,66 @@ import { openDb, migrate } from "../../src/core/db";
 import { ingestDocument } from "../../src/core/documents";
 import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { buildVatReport, postEuServiceReverseChargePurchase } from "../../src/core/vat";
+import { storeViesValidation } from "../../src/core/vies";
 
 describe("EU service reverse-charge VAT", () => {
+  test("requires cached VIES validation before posting reverse-charge purchase", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-rc-missing-vies-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-rc-missing-vies-inbox-"));
+    const sourceFile = join(inbox, "eu-service.txt");
+    writeFileSync(sourceFile, "EU service invoice\n1000 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "EU-INV-1",
+      deliveryDescription: "EU software service",
+      amountIncVat: 1000,
+      currency: "DKK",
+      sender: { name: "EU Supplier GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 0,
+      paymentDetails: "Bank transfer"
+    });
+    expect(doc.ok).toBe(true);
+
+    const missing = postEuServiceReverseChargePurchase(db, {
+      transactionDate: "2026-05-16",
+      text: "EU service purchase",
+      documentId: doc.documentId!,
+      netAmount: 1000,
+      expenseAccountNo: "3010"
+    });
+    expect(missing.ok).toBe(false);
+    expect(missing.errors[0]).toContain("VIES lookup not yet performed");
+
+    storeViesValidation(db, {
+      vatOrCvr: "DE123456789",
+      valid: true,
+      validatedAt: "2026-05-15T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      rawResponse: JSON.stringify({ valid: true })
+    });
+
+    const posted = postEuServiceReverseChargePurchase(db, {
+      transactionDate: "2026-05-16",
+      text: "EU service purchase",
+      documentId: doc.documentId!,
+      netAmount: 1000,
+      expenseAccountNo: "3010"
+    });
+
+    expect(posted.ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
   test("posts a compliant reverse-charge purchase and reports equal output/input VAT", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-rc-"));
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-rc-inbox-"));
@@ -32,6 +90,14 @@ describe("EU service reverse-charge VAT", () => {
       paymentDetails: "Bank transfer"
     });
     expect(doc.ok).toBe(true);
+
+    storeViesValidation(db, {
+      vatOrCvr: "DE123456789",
+      valid: true,
+      validatedAt: "2026-05-15T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      rawResponse: JSON.stringify({ valid: true })
+    });
 
     const posted = postEuServiceReverseChargePurchase(db, {
       transactionDate: "2026-05-16",

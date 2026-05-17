@@ -6,6 +6,7 @@ import { ensureCompanyDirs, companyPaths } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { issueCreditNote } from "../../src/core/credit-notes";
+import { storeViesValidation } from "../../src/core/vies";
 
 function failingDocumentInsertDb(realDb: any) {
   return new Proxy(realDb, {
@@ -65,10 +66,76 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("requires cached VIES validation for foreign reverse-charge invoices", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-vies-required-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const missing = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "foreign_reverse_charge",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0500-RC-MISSING",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      lines: [{ description: "EU consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
+      totals: { netAmount: 8000, grossAmount: 8000 },
+      reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
+      reverseChargeNote: "VAT reverse charge — VAT to be accounted by the recipient",
+      currency: "DKK"
+    });
+    expect(missing.ok).toBe(false);
+    expect(missing.errors[0]).toContain("VIES lookup not yet performed");
+
+    storeViesValidation(db, {
+      vatOrCvr: "DE123456789",
+      valid: true,
+      name: "EU Kunde GmbH",
+      address: "Berlin",
+      validatedAt: "2026-05-15T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      rawResponse: JSON.stringify({ valid: true })
+    });
+
+    const result = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "foreign_reverse_charge",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0500-RC",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      lines: [{ description: "EU consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
+      totals: { netAmount: 8000, grossAmount: 8000 },
+      reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
+      reverseChargeNote: "VAT reverse charge — VAT to be accounted by the recipient",
+      deliveryPeriodStart: "2026-05-01",
+      deliveryPeriodEnd: "2026-05-15",
+      currency: "DKK"
+    });
+
+    expect(result.ok).toBe(true);
+
+    const row = db.query("SELECT delivery_description, exemption_code, payload_json FROM documents WHERE id = ?").get(result.documentId!) as any;
+    expect(row.delivery_description).toBe("Delivery period 2026-05-01..2026-05-15");
+    expect(row.exemption_code).toBe("EU_MOMSDIREKTIV_ART_196");
+    expect(JSON.parse(row.payload_json).deliveryPeriodEnd).toBe("2026-05-15");
+    expect(JSON.parse(row.payload_json).viesValidation.normalized).toBe("DE123456789");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("stores structured delivery and reverse-charge basis fields on issued invoices", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-structured-"));
     const db = openDb(ensureCompanyDirs(root).db);
     migrate(db);
+    storeViesValidation(db, {
+      vatOrCvr: "DE123456789",
+      valid: true,
+      validatedAt: "2026-05-15T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      rawResponse: JSON.stringify({ valid: true })
+    });
 
     const result = issueInvoice(db, root, {
       invoiceType: "full",

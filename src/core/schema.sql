@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS sequences (
   PRIMARY KEY (kind, scope)
 );
 
+CREATE TABLE IF NOT EXISTS vies_validations (
+  country_code TEXT NOT NULL,
+  vat_number TEXT NOT NULL,
+  valid INTEGER NOT NULL,
+  name TEXT,
+  address TEXT,
+  validated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  raw_response TEXT,
+  PRIMARY KEY (country_code, vat_number)
+);
+
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY,
   document_no TEXT UNIQUE,
