@@ -414,6 +414,11 @@ export function verifyAuditChain(db: Database) {
     const expected = hashEntry(canonicalEntryData(e, lines), prev);
     if (e.previous_hash !== prev) errors.push(`${e.entry_no}: previous_hash mismatch`);
     if (e.entry_hash !== expected) errors.push(`${e.entry_no}: entry_hash mismatch`);
+
+    const debitSum = normalizeAmount(lines.reduce((sum, line) => sum + Number(line.debit_amount ?? 0), 0));
+    const creditSum = normalizeAmount(lines.reduce((sum, line) => sum + Number(line.credit_amount ?? 0), 0));
+    if (debitSum !== creditSum) errors.push(`${e.entry_no}: entry is unbalanced (${debitSum} != ${creditSum})`);
+
     prev = e.entry_hash;
   }
   return { ok: errors.length === 0, entries: entries.length, errors };
