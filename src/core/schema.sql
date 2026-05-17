@@ -92,6 +92,10 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   FOREIGN KEY(document_id) REFERENCES documents(id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_bank_source_posted
+ON journal_entries(source_bank_transaction_id)
+WHERE source_bank_transaction_id IS NOT NULL AND status = 'posted';
+
 CREATE TABLE IF NOT EXISTS journal_lines (
   id INTEGER PRIMARY KEY,
   journal_entry_id INTEGER NOT NULL,
@@ -259,6 +263,18 @@ BEGIN
   SELECT RAISE(ABORT, 'journal_entries are append-only; create reversal instead');
 END;
 
+CREATE TRIGGER IF NOT EXISTS journal_lines_no_update
+BEFORE UPDATE ON journal_lines
+BEGIN
+  SELECT RAISE(ABORT, 'journal_lines are append-only; reverse the parent entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS journal_lines_no_delete
+BEFORE DELETE ON journal_lines
+BEGIN
+  SELECT RAISE(ABORT, 'journal_lines are append-only; reverse the parent entry instead');
+END;
+
 CREATE TRIGGER IF NOT EXISTS documents_no_update_issued_invoice
 BEFORE UPDATE ON documents
 WHEN OLD.document_type IN ('issued_invoice','credit_note')
@@ -271,6 +287,22 @@ BEFORE DELETE ON documents
 WHEN OLD.document_type IN ('issued_invoice','credit_note')
 BEGIN
   SELECT RAISE(ABORT, 'issued invoice documents are append-only; create credit note instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS documents_no_update_when_linked
+BEFORE UPDATE ON documents
+WHEN OLD.document_type IN ('purchase_sale','cash_register_receipt')
+  AND EXISTS(SELECT 1 FROM journal_entries WHERE document_id = OLD.id)
+BEGIN
+  SELECT RAISE(ABORT, 'document is linked to a journal entry and cannot be modified; reverse the entry first');
+END;
+
+CREATE TRIGGER IF NOT EXISTS documents_no_delete_when_linked
+BEFORE DELETE ON documents
+WHEN OLD.document_type IN ('purchase_sale','cash_register_receipt')
+  AND EXISTS(SELECT 1 FROM journal_entries WHERE document_id = OLD.id)
+BEGIN
+  SELECT RAISE(ABORT, 'document is linked to a journal entry and cannot be deleted; reverse the entry first');
 END;
 
 CREATE TRIGGER IF NOT EXISTS invoice_payments_no_update

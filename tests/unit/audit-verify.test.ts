@@ -133,8 +133,9 @@ describe("audit verify", () => {
       entryNo: "2026-00002",
       previousHash: first.entryHash,
       transactionDate: "2026-05-16",
-      text: "Duplicate settlement",
+      text: "Duplicate settlement marked reversed without reversal link",
       sourceBankTransactionId: bankTransaction.id,
+      status: "reversed",
       lines: [
         { account_no: "2000", debit_amount: 1250, credit_amount: 0, vat_code: null, text: "Bank again" },
         { account_no: "1100", debit_amount: 0, credit_amount: 1250, vat_code: null, text: "Receivable again" },

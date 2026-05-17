@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
+import { getInvoiceStatus } from "./invoice-payments";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -403,21 +404,63 @@ export function verifyAuditChain(db: Database) {
   const entries = db.query("SELECT id, entry_no, transaction_date, text, source_bank_transaction_id, document_id, currency, amount_foreign, amount_dkk, fx_rate_to_dkk, rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash FROM journal_entries ORDER BY id ASC").all() as any[];
   let prev = "GENESIS";
   const errors: string[] = [];
+
+  const foreignKeyErrors = db.query("PRAGMA foreign_key_check").all() as Array<{ table: string; rowid: number; parent: string; fkid: number }>;
+  for (const fk of foreignKeyErrors) {
+    errors.push(`foreign key violation: ${fk.table} row ${fk.rowid} references missing ${fk.parent}`);
+  }
+
+  const orphanLines = db.query(
+    `SELECT jl.id, jl.journal_entry_id
+     FROM journal_lines jl
+     LEFT JOIN journal_entries je ON je.id = jl.journal_entry_id
+     WHERE je.id IS NULL
+     ORDER BY jl.id ASC`
+  ).all() as Array<{ id: number; journal_entry_id: number }>;
+  for (const line of orphanLines) {
+    errors.push(`journal_line ${line.id}: orphan journal_entry_id ${line.journal_entry_id}`);
+  }
+
+  const brokenAccountLines = db.query(
+    `SELECT jl.id, jl.account_id
+     FROM journal_lines jl
+     LEFT JOIN accounts a ON a.id = jl.account_id
+     WHERE a.id IS NULL
+     ORDER BY jl.id ASC`
+  ).all() as Array<{ id: number; account_id: number }>;
+  for (const line of brokenAccountLines) {
+    errors.push(`journal_line ${line.id}: missing account_id ${line.account_id}`);
+  }
+
   for (const e of entries) {
     const lines = db.query(
-      `SELECT a.account_no, jl.debit_amount, jl.credit_amount, jl.vat_code, jl.text
+      `SELECT a.account_no, a.type AS account_type, jl.debit_amount, jl.credit_amount, jl.vat_code, jl.text
        FROM journal_lines jl
        JOIN accounts a ON a.id = jl.account_id
        WHERE jl.journal_entry_id = ?
        ORDER BY jl.id ASC`
     ).all(e.id) as any[];
-    const expected = hashEntry(canonicalEntryData(e, lines), prev);
+    if (lines.length === 0) errors.push(`${e.entry_no}: entry has no journal lines`);
+
+    const canonicalLines = lines.map(({ account_type, ...line }) => line);
+    const expected = hashEntry(canonicalEntryData(e, canonicalLines), prev);
     if (e.previous_hash !== prev) errors.push(`${e.entry_no}: previous_hash mismatch`);
     if (e.entry_hash !== expected) errors.push(`${e.entry_no}: entry_hash mismatch`);
 
     const debitSum = normalizeAmount(lines.reduce((sum, line) => sum + Number(line.debit_amount ?? 0), 0));
     const creditSum = normalizeAmount(lines.reduce((sum, line) => sum + Number(line.credit_amount ?? 0), 0));
     if (debitSum !== creditSum) errors.push(`${e.entry_no}: entry is unbalanced (${debitSum} != ${creditSum})`);
+
+    const requiresDocument = lines.some((line) => line.account_type === "expense" || line.account_type === "income");
+    if (requiresDocument) {
+      if (e.document_id == null) {
+        errors.push(`${e.entry_no}: income/expense entry is missing document evidence`);
+      } else {
+        const document = db.query("SELECT id, sha256_hash, stored_path FROM documents WHERE id = ?").get(e.document_id) as { id: number; sha256_hash: string; stored_path: string | null } | null;
+        if (!document) errors.push(`${e.entry_no}: document_id ${e.document_id} is missing`);
+        if (document && (!document.sha256_hash || document.sha256_hash.trim().length === 0)) errors.push(`${e.entry_no}: document_id ${e.document_id} has no sha256_hash`);
+      }
+    }
 
     prev = e.entry_hash;
   }
@@ -447,6 +490,29 @@ export function verifyAuditChain(db: Database) {
     const remaining = group.filter((entry) => !cancelled.has(entry.id));
     if (remaining.length > 1) {
       errors.push(`duplicate source_bank_transaction_id ${bankTransactionId}: used by ${remaining.length} active entries (${remaining.map((entry) => entry.entry_no).join(', ')})`);
+    }
+  }
+
+  const issuedInvoices = db.query("SELECT id, invoice_no, status FROM documents WHERE document_type = 'issued_invoice' ORDER BY id ASC").all() as Array<{ id: number; invoice_no: string | null; status: string | null }>;
+  const allowedStoredStatus: Record<string, string[]> = {
+    open: ["issued", "open"],
+    paid: ["paid", "settled"],
+    credited: ["credited"],
+    refunded: ["refunded"],
+    overpaid: ["overpaid"],
+    written_off: ["written_off"],
+  };
+  for (const invoice of issuedInvoices) {
+    const status = getInvoiceStatus(db, invoice.id);
+    if (!status.ok) {
+      errors.push(`invoice ${invoice.invoice_no ?? invoice.id}: status cross-check failed (${status.errors.join('; ')})`);
+      continue;
+    }
+    const stored = invoice.status ?? "";
+    if (stored === "issued") continue;
+    const allowed = allowedStoredStatus[status.status ?? ""] ?? [status.status ?? ""];
+    if (!allowed.includes(stored)) {
+      errors.push(`invoice ${invoice.invoice_no ?? invoice.id}: stored status ${stored} does not match ledger status ${status.status} (open balance ${status.openBalance})`);
     }
   }
 
