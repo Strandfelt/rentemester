@@ -27,6 +27,19 @@ function round2(value: number) {
   return Number(value.toFixed(2));
 }
 
+function getOutgoingRefundBankTransaction(db: Database, input: RefundInvoiceToBankInput) {
+  if (input.bankTransactionId === undefined && !input.bankTransactionReference) {
+    return { error: "bankTransactionId or bankTransactionReference is required" };
+  }
+  const bank = (input.bankTransactionId !== undefined
+    ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
+    : db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)) as { id: number; transaction_date: string; amount: number; text: string; reference: string | null } | null;
+  if (!bank) {
+    return { error: input.bankTransactionId !== undefined ? `bank transaction ${input.bankTransactionId} does not exist` : `no bank transaction found with reference ${input.bankTransactionReference}` };
+  }
+  return { bank };
+}
+
 export function refundInvoiceToBank(db: Database, input: RefundInvoiceToBankInput): RefundInvoiceToBankResult {
   if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) {
     return { ok: false, appliedRules: [RULE_ID], errors: ["invoiceDocumentId must be a positive integer"] };
@@ -35,12 +48,9 @@ export function refundInvoiceToBank(db: Database, input: RefundInvoiceToBankInpu
     return { ok: false, appliedRules: [RULE_ID], errors: ["bankTransactionId must be a positive integer when present"] };
   }
 
-  const bank = (input.bankTransactionId !== undefined
-    ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
-    : input.bankTransactionReference
-      ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)
-      : db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE amount < 0 ORDER BY id DESC LIMIT 1`).get()) as { id: number; transaction_date: string; amount: number; text: string; reference: string | null } | null;
-  if (!bank) return { ok: false, appliedRules: [RULE_ID], errors: [input.bankTransactionId !== undefined ? `bank transaction ${input.bankTransactionId} does not exist` : input.bankTransactionReference ? `no bank transaction found with reference ${input.bankTransactionReference}` : "no outgoing bank transaction available for refund"] };
+  const selected = getOutgoingRefundBankTransaction(db, input);
+  if (selected.error) return { ok: false, appliedRules: [RULE_ID], errors: [selected.error] };
+  const bank = selected.bank!;
   if (Number(bank.amount) >= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is not an outgoing customer refund`] };
 
   const invoice = db.query(`SELECT id, invoice_no, document_type FROM documents WHERE id = ?`).get(input.invoiceDocumentId) as { id: number; invoice_no: string; document_type: string } | null;

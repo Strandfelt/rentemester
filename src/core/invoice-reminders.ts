@@ -172,45 +172,60 @@ export function postInvoiceReminderToLedger(db: Database, input: PostInvoiceRemi
   }
 
   const amount = round2(Number(reminder.fee_amount));
-  const journal = postJournalEntry(db, {
-    transactionDate: input.transactionDate ?? reminder.reminder_date,
-    text: `Reminder fee ${reminder.invoice_no}`,
-    documentId: reminder.invoice_document_id,
-    createdBy: input.createdBy,
-    createdByProgram: input.createdByProgram,
-    lines: [
-      { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Reminder receivable ${reminder.invoice_no}` },
-      { accountNo: input.reminderIncomeAccountNo ?? "1010", creditAmount: amount, text: `Reminder income ${reminder.invoice_no}` },
-    ],
-  });
-  if (!journal.ok) {
-    return { ...journal, reminderId: reminder.id, invoiceDocumentId: reminder.invoice_document_id, invoiceNumber: reminder.invoice_no, reminderDate: reminder.reminder_date, feeAmount: amount, appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])] };
+  try {
+    return db.transaction(() => {
+      const journal = postJournalEntry(db, {
+        transactionDate: input.transactionDate ?? reminder.reminder_date,
+        text: `Reminder fee ${reminder.invoice_no}`,
+        documentId: reminder.invoice_document_id,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
+        lines: [
+          { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Reminder receivable ${reminder.invoice_no}` },
+          { accountNo: input.reminderIncomeAccountNo ?? "1010", creditAmount: amount, text: `Reminder income ${reminder.invoice_no}` },
+        ],
+      });
+      if (!journal.ok) {
+        return { ...journal, reminderId: reminder.id, invoiceDocumentId: reminder.invoice_document_id, invoiceNumber: reminder.invoice_no, reminderDate: reminder.reminder_date, feeAmount: amount, appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])] };
+      }
+
+      db.run(
+        `INSERT INTO invoice_reminder_postings (reminder_id, journal_entry_id) VALUES (?, ?)`,
+        reminder.id,
+        journal.entryId,
+      );
+
+      insertAuditLog(db, {
+        eventType: "invoice_reminder_post",
+        entityType: "invoice_reminder",
+        entityId: reminder.id,
+        message: `Posted reminder fee ${amount} for invoice ${reminder.invoice_no} in journal entry ${journal.entryNo}`,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
+      });
+
+      const statusAfter = getInvoiceStatus(db, reminder.invoice_document_id, input.transactionDate ?? reminder.reminder_date);
+      return {
+        ...journal,
+        reminderId: reminder.id,
+        invoiceDocumentId: reminder.invoice_document_id,
+        invoiceNumber: reminder.invoice_no,
+        reminderDate: reminder.reminder_date,
+        feeAmount: amount,
+        claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
+        appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])],
+      };
+    })();
+  } catch (error) {
+    return {
+      ok: false,
+      reminderId: reminder.id,
+      invoiceDocumentId: reminder.invoice_document_id,
+      invoiceNumber: reminder.invoice_no,
+      reminderDate: reminder.reminder_date,
+      feeAmount: amount,
+      appliedRules: [BOOKKEEPING_RULE_ID],
+      errors: [String(error)],
+    };
   }
-
-  db.run(
-    `INSERT INTO invoice_reminder_postings (reminder_id, journal_entry_id) VALUES (?, ?)`,
-    reminder.id,
-    journal.entryId,
-  );
-
-  insertAuditLog(db, {
-    eventType: "invoice_reminder_post",
-    entityType: "invoice_reminder",
-    entityId: reminder.id,
-    message: `Posted reminder fee ${amount} for invoice ${reminder.invoice_no} in journal entry ${journal.entryNo}`,
-    createdBy: input.createdBy,
-    createdByProgram: input.createdByProgram,
-  });
-
-  const statusAfter = getInvoiceStatus(db, reminder.invoice_document_id, input.transactionDate ?? reminder.reminder_date);
-  return {
-    ...journal,
-    reminderId: reminder.id,
-    invoiceDocumentId: reminder.invoice_document_id,
-    invoiceNumber: reminder.invoice_no,
-    reminderDate: reminder.reminder_date,
-    feeAmount: amount,
-    claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
-    appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])],
-  };
 }

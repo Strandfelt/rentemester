@@ -32,6 +32,41 @@ function round2(value: number) {
   return Number(value.toFixed(2));
 }
 
+function getIncomingBankTransaction(db: Database, input: SettleInvoiceFromBankInput) {
+  if (input.bankTransactionId === undefined && !input.bankTransactionReference) {
+    return { error: "bankTransactionId or bankTransactionReference is required" };
+  }
+  const bank = (input.bankTransactionId !== undefined
+    ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
+    : db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)) as { id: number; transaction_date: string; amount: number; text: string; reference: string | null } | null;
+  if (!bank) {
+    return { error: input.bankTransactionId !== undefined ? `bank transaction ${input.bankTransactionId} does not exist` : `no bank transaction found with reference ${input.bankTransactionReference}` };
+  }
+  return { bank };
+}
+
+function countUnpostedClaims(db: Database, invoiceDocumentId: number) {
+  const reminders = db.query(
+    `SELECT COUNT(*) AS n
+     FROM invoice_reminders r
+     LEFT JOIN invoice_reminder_postings p ON p.reminder_id = r.id
+     WHERE r.invoice_document_id = ? AND p.id IS NULL`
+  ).get(invoiceDocumentId) as { n: number };
+  const interestClaims = db.query(
+    `SELECT COUNT(*) AS n
+     FROM invoice_interest_claims c
+     LEFT JOIN invoice_interest_postings p ON p.interest_claim_id = c.id
+     WHERE c.invoice_document_id = ? AND p.id IS NULL`
+  ).get(invoiceDocumentId) as { n: number };
+  const compensationClaims = db.query(
+    `SELECT COUNT(*) AS n
+     FROM invoice_compensation_claims c
+     LEFT JOIN invoice_compensation_postings p ON p.compensation_claim_id = c.id
+     WHERE c.invoice_document_id = ? AND p.id IS NULL`
+  ).get(invoiceDocumentId) as { n: number };
+  return (reminders.n ?? 0) + (interestClaims.n ?? 0) + (compensationClaims.n ?? 0);
+}
+
 export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBankInput): SettleInvoiceFromBankResult {
   if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) {
     return { ok: false, appliedRules: [RULE_ID], errors: ["invoiceDocumentId must be a positive integer"] };
@@ -40,12 +75,9 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
     return { ok: false, appliedRules: [RULE_ID], errors: ["bankTransactionId must be a positive integer when present"] };
   }
 
-  const bank = (input.bankTransactionId !== undefined
-    ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
-    : input.bankTransactionReference
-      ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)
-      : db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE amount > 0 ORDER BY id DESC LIMIT 1`).get()) as { id: number; transaction_date: string; amount: number; text: string; reference: string | null } | null;
-  if (!bank) return { ok: false, appliedRules: [RULE_ID], errors: [input.bankTransactionId !== undefined ? `bank transaction ${input.bankTransactionId} does not exist` : input.bankTransactionReference ? `no bank transaction found with reference ${input.bankTransactionReference}` : "no incoming bank transaction available for settlement"] };
+  const selected = getIncomingBankTransaction(db, input);
+  if (selected.error) return { ok: false, appliedRules: [RULE_ID], errors: [selected.error] };
+  const bank = selected.bank!;
   if (Number(bank.amount) <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${input.bankTransactionId} is not an incoming customer receipt`] };
 
   const invoice = db.query(
@@ -70,6 +102,9 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
       const isCombined = amount > principalOpenBalance && principalOpenBalance > 0;
       if (amount > claimOpenBalance) {
         throw new Error(JSON.stringify({ appliedRules: [isCombined ? COMBINED_RULE_ID : RULE_ID], errors: [`settlement amount ${amount} exceeds invoice claim open balance ${claimOpenBalance}`] }));
+      }
+      if (isCombined && countUnpostedClaims(db, input.invoiceDocumentId) > 0) {
+        throw new Error(JSON.stringify({ appliedRules: [COMBINED_RULE_ID], errors: ["combined settlement requires all included claims to be ledger-posted first"] }));
       }
 
       let paymentId: number | undefined;

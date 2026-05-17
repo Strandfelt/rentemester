@@ -70,6 +70,45 @@ describe("invoice bank settlement", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("blocks combined settlement until included claims are ledger-posted", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-settle-combined-unposted-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-06-15",
+      invoiceNumber: "2026-0900B",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+    expect(registerInvoiceReminder(db, { invoiceDocumentId: issued.documentId!, reminderDate: "2026-06-26" }).ok).toBe(true);
+
+    const csvPath = join(root, "bank-combined-unposted.csv");
+    writeFileSync(csvPath, "transaction_date,booking_date,text,amount,currency,reference\n2026-06-28,2026-06-28,Customer payment incl claims,1350,DKK,INV-0900B-COMBINED\n");
+    expect(importBankCsv(db, root, csvPath).ok).toBe(true);
+
+    const bankTx = db.query("SELECT id FROM bank_transactions WHERE reference = 'INV-0900B-COMBINED'").get() as { id: number };
+    const settled = settleInvoiceFromBank(db, {
+      invoiceDocumentId: issued.documentId!,
+      bankTransactionId: bankTx.id,
+    });
+    expect(settled.ok).toBe(false);
+    expect(settled.errors[0]).toContain("combined settlement requires all included claims to be ledger-posted first");
+    expect(db.query("SELECT COUNT(*) AS n FROM invoice_claim_payments").get()).toEqual({ n: 0 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("settles principal and booked claim balance from one combined bank receipt", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-settle-combined-"));
     const db = openDb(ensureCompanyDirs(root).db);
@@ -130,6 +169,38 @@ describe("invoice bank settlement", () => {
       { account_no: "2000", debit_amount: 1661.75, credit_amount: 0 },
       { account_no: "1100", debit_amount: 0, credit_amount: 1661.75 },
     ]);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("requires explicit bank transaction selection for settlement", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-settle-explicit-bank-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0902",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    const csvPath = join(root, "bank.csv");
+    writeFileSync(csvPath, "transaction_date,booking_date,text,amount,currency,reference\n2026-05-20,2026-05-20,Wrong payment,1250,DKK,OTHER-INVOICE\n");
+    expect(importBankCsv(db, root, csvPath).ok).toBe(true);
+
+    const settled = settleInvoiceFromBank(db, { invoiceDocumentId: issued.documentId! });
+    expect(settled.ok).toBe(false);
+    expect(settled.errors[0]).toBe("bankTransactionId or bankTransactionReference is required");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

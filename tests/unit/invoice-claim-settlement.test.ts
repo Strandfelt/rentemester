@@ -87,6 +87,47 @@ describe("invoice claim settlement", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("requires explicit bank transaction selection for claim settlement", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-claim-settle-explicit-bank-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-06-15",
+      invoiceNumber: "2026-0990B",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+    expect(registerInvoiceReminder(db, { invoiceDocumentId: issued.documentId!, reminderDate: "2026-06-26" }).ok).toBe(true);
+    expect(postInvoiceReminderToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    const principalCsv = join(root, "bank-principal.csv");
+    writeFileSync(principalCsv, "transaction_date,booking_date,text,amount,currency,reference\n2026-05-20,2026-05-20,Customer payment,1250,DKK,INV-0990B\n");
+    expect(importBankCsv(db, root, principalCsv).ok).toBe(true);
+    const principalTx = db.query("SELECT id FROM bank_transactions WHERE reference = 'INV-0990B'").get() as { id: number };
+    expect(settleInvoiceFromBank(db, { invoiceDocumentId: issued.documentId!, bankTransactionId: principalTx.id }).ok).toBe(true);
+
+    const strayClaimCsv = join(root, "bank-claim.csv");
+    writeFileSync(strayClaimCsv, "transaction_date,booking_date,text,amount,currency,reference\n2026-06-28,2026-06-28,Unrelated claim payment,100,DKK,OTHER-CLAIM\n");
+    expect(importBankCsv(db, root, strayClaimCsv).ok).toBe(true);
+
+    const settled = settleInvoiceClaimsFromBank(db, { invoiceDocumentId: issued.documentId! });
+    expect(settled.ok).toBe(false);
+    expect(settled.errors[0]).toBe("bankTransactionId or bankTransactionReference is required");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("blocks claim settlement before principal is cleared", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-claim-settle-blocked-"));
     const db = openDb(ensureCompanyDirs(root).db);

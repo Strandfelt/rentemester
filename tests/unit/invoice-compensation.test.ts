@@ -9,6 +9,25 @@ import { applyInvoicePayment, getInvoiceStatus } from "../../src/core/invoice-pa
 import { calculateInvoiceLateCompensation, postInvoiceLateCompensationToLedger, registerInvoiceLateCompensation } from "../../src/core/invoice-compensation";
 import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 
+function failingCompensationPostingDb(realDb: any) {
+  let failed = false;
+  return new Proxy(realDb, {
+    get(target, prop, receiver) {
+      if (prop === "run") {
+        return (sql: string, ...args: any[]) => {
+          if (!failed && typeof sql === "string" && sql.includes("INSERT INTO invoice_compensation_postings")) {
+            failed = true;
+            throw new Error("simulated compensation posting link failure");
+          }
+          return target.run(sql, ...args);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as any;
+}
+
 describe("invoice late compensation", () => {
   test("marks overdue commercial invoice as eligible for statutory fixed compensation", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-comp-"));
@@ -108,6 +127,53 @@ describe("invoice late compensation", () => {
     expect(chain.ok).toBe(true);
 
     db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rolls back the journal entry if compensation posting link creation fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-comp-atomic-"));
+    const realDb = openDb(ensureCompanyDirs(root).db);
+    migrate(realDb);
+    seedAccounts(realDb);
+    const db = failingCompensationPostingDb(realDb);
+
+    const issued = issueInvoice(realDb, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-06-15",
+      invoiceNumber: "2026-0950D",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(applyInvoicePayment(realDb, {
+      invoiceDocumentId: issued.documentId!,
+      paymentDate: "2026-05-20",
+      amount: 1000,
+      note: "Partial payment"
+    }).ok).toBe(true);
+    expect(registerInvoiceLateCompensation(realDb, {
+      invoiceDocumentId: issued.documentId!,
+      asOfDate: "2026-06-20",
+      note: "Statutory fixed compensation"
+    }).ok).toBe(true);
+
+    const failed = postInvoiceLateCompensationToLedger(db, { invoiceDocumentId: issued.documentId! });
+    expect(failed.ok).toBe(false);
+    expect(failed.errors[0]).toContain("simulated compensation posting link failure");
+    expect(realDb.query("SELECT COUNT(*) AS n FROM journal_entries").get()).toEqual({ n: 1 });
+    expect(realDb.query("SELECT COUNT(*) AS n FROM invoice_compensation_postings").get()).toEqual({ n: 0 });
+
+    const retry = postInvoiceLateCompensationToLedger(realDb, { invoiceDocumentId: issued.documentId! });
+    expect(retry.ok).toBe(true);
+    expect(realDb.query("SELECT COUNT(*) AS n FROM journal_entries").get()).toEqual({ n: 2 });
+    expect(realDb.query("SELECT COUNT(*) AS n FROM invoice_compensation_postings").get()).toEqual({ n: 1 });
+
+    realDb.close();
     rmSync(root, { recursive: true, force: true });
   });
 

@@ -218,44 +218,58 @@ export function postInvoiceLateCompensationToLedger(db: Database, input: PostInv
   }
 
   const amount = round2(Number(claim.amount_dkk));
-  const journal = postJournalEntry(db, {
-    transactionDate: input.transactionDate ?? claim.claim_date,
-    text: `Compensation claim ${claim.invoice_no}`,
-    documentId: claim.invoice_document_id,
-    createdBy: input.createdBy,
-    createdByProgram: input.createdByProgram,
-    lines: [
-      { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Compensation receivable ${claim.invoice_no}` },
-      { accountNo: input.compensationIncomeAccountNo ?? "1010", creditAmount: amount, text: `Compensation income ${claim.invoice_no}` },
-    ],
-  });
-  if (!journal.ok) {
-    return { ...journal, claimId: claim.id, invoiceDocumentId: claim.invoice_document_id, invoiceNumber: claim.invoice_no, compensationAmountDkk: amount, appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])] };
+  try {
+    return db.transaction(() => {
+      const journal = postJournalEntry(db, {
+        transactionDate: input.transactionDate ?? claim.claim_date,
+        text: `Compensation claim ${claim.invoice_no}`,
+        documentId: claim.invoice_document_id,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
+        lines: [
+          { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Compensation receivable ${claim.invoice_no}` },
+          { accountNo: input.compensationIncomeAccountNo ?? "1010", creditAmount: amount, text: `Compensation income ${claim.invoice_no}` },
+        ],
+      });
+      if (!journal.ok) {
+        return { ...journal, claimId: claim.id, invoiceDocumentId: claim.invoice_document_id, invoiceNumber: claim.invoice_no, compensationAmountDkk: amount, appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])] };
+      }
+
+      db.run(
+        `INSERT INTO invoice_compensation_postings (compensation_claim_id, journal_entry_id) VALUES (?, ?)`,
+        claim.id,
+        journal.entryId,
+      );
+
+      insertAuditLog(db, {
+        eventType: "invoice_compensation_post",
+        entityType: "invoice_compensation_claim",
+        entityId: claim.id,
+        message: `Posted compensation claim ${amount} for invoice ${claim.invoice_no} in journal entry ${journal.entryNo}`,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
+      });
+
+      const statusAfter = getInvoiceStatus(db, claim.invoice_document_id, input.transactionDate ?? claim.claim_date);
+      return {
+        ...journal,
+        claimId: claim.id,
+        invoiceDocumentId: claim.invoice_document_id,
+        invoiceNumber: claim.invoice_no,
+        compensationAmountDkk: amount,
+        claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
+        appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])],
+      };
+    })();
+  } catch (error) {
+    return {
+      ok: false,
+      claimId: claim.id,
+      invoiceDocumentId: claim.invoice_document_id,
+      invoiceNumber: claim.invoice_no,
+      compensationAmountDkk: amount,
+      appliedRules: [BOOKKEEPING_RULE_ID],
+      errors: [String(error)],
+    };
   }
-
-  db.run(
-    `INSERT INTO invoice_compensation_postings (compensation_claim_id, journal_entry_id) VALUES (?, ?)`,
-    claim.id,
-    journal.entryId,
-  );
-
-  insertAuditLog(db, {
-    eventType: "invoice_compensation_post",
-    entityType: "invoice_compensation_claim",
-    entityId: claim.id,
-    message: `Posted compensation claim ${amount} for invoice ${claim.invoice_no} in journal entry ${journal.entryNo}`,
-    createdBy: input.createdBy,
-    createdByProgram: input.createdByProgram,
-  });
-
-  const statusAfter = getInvoiceStatus(db, claim.invoice_document_id, input.transactionDate ?? claim.claim_date);
-  return {
-    ...journal,
-    claimId: claim.id,
-    invoiceDocumentId: claim.invoice_document_id,
-    invoiceNumber: claim.invoice_no,
-    compensationAmountDkk: amount,
-    claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
-    appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])],
-  };
 }

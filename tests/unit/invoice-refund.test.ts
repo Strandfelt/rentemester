@@ -14,6 +14,53 @@ import { refundInvoiceToBank } from "../../src/core/invoice-refunds";
 import { getInvoiceStatus } from "../../src/core/invoice-payments";
 
 describe("invoice refunds", () => {
+  test("requires explicit bank transaction selection for refunds", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-refund-explicit-bank-"));
+    const paths = ensureCompanyDirs(root);
+    const db = openDb(paths.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0800B",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    const paymentCsv = join(root, "payment.csv");
+    writeFileSync(paymentCsv, "transaction_date,booking_date,text,amount,currency,reference\n2026-05-20,2026-05-20,Customer payment,1250,DKK,INV-0800B\n");
+    expect(importBankCsv(db, root, paymentCsv).ok).toBe(true);
+    expect(settleInvoiceFromBank(db, { invoiceDocumentId: issued.documentId!, bankTransactionReference: "INV-0800B" }).ok).toBe(true);
+
+    const credit = issueCreditNote(db, root, {
+      originalInvoiceDocumentId: issued.documentId!,
+      issueDate: "2026-05-21",
+      reason: "Work cancelled"
+    });
+    expect(credit.ok).toBe(true);
+
+    const refundCsv = join(root, "refund.csv");
+    writeFileSync(refundCsv, "transaction_date,booking_date,text,amount,currency,reference\n2026-05-22,2026-05-22,Other customer refund,-1250,DKK,RFND-OTHER\n");
+    expect(importBankCsv(db, root, refundCsv).ok).toBe(true);
+
+    const refund = refundInvoiceToBank(db, {
+      invoiceDocumentId: issued.documentId!,
+    });
+    expect(refund.ok).toBe(false);
+    expect(refund.errors[0]).toBe("bankTransactionId or bankTransactionReference is required");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("refunds a paid-and-credited invoice from an outgoing bank transaction", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-refund-"));
     const paths = ensureCompanyDirs(root);
