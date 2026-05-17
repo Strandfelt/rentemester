@@ -40,6 +40,37 @@ Every loop starts with one narrow hypothesis and ends with a pushed commit or an
    - Push only green work.
    - If a loop is not green, park it on a branch or named stash with notes.
 
+## Claude Code issue intake
+
+Claude Code may review the repository and create GitHub issues. Treat those issues as the primary external review queue for the build loop.
+
+At the start of every automated or manual Rentemester loop:
+
+1. Fetch open GitHub issues from `mikkelkrogsholm/rentemester`:
+
+   ```bash
+   gh issue list --repo mikkelkrogsholm/rentemester --state open --limit 30
+   ```
+
+2. Filter out PRs, duplicates, already-fixed reports, and speculative suggestions that need Mikkel's product decision.
+3. Prioritize one narrow issue using this order:
+   - ledger/audit integrity bugs
+   - data loss or append-only violations
+   - duplicate posting / bank-link bugs
+   - deterministic reproducibility bugs
+   - real-world import/parser bugs
+   - VAT/accounting rule correctness
+   - developer experience/refactor issues
+4. Convert the issue into a failing test or fixture before patching.
+5. Fix only that issue unless another issue is mechanically inseparable.
+6. After green gates and push, close the issue with a comment containing:
+   - commit hash
+   - tests run
+   - any follow-up issue created or remaining limitation
+7. If an issue is invalid, duplicate, already fixed, or needs human decision, comment clearly and close or label/leave open as appropriate.
+
+Do not let Claude Code issues create feature drift. Issues are sensors, not orders. The ledger invariants and green gates still decide what can land.
+
 ## Priority queue
 
 Work the queue in this order unless Mikkel explicitly reprioritizes:
@@ -148,6 +179,17 @@ v0.1-ledger-core
 v0.2-invoice-lifecycle
 v0.3-audit-export
 ```
+
+## Issue closeout checklist
+
+When a loop started from a GitHub issue, close it only after the fix is pushed. Use:
+
+```bash
+gh issue comment <number> --repo mikkelkrogsholm/rentemester --body "Fixed in <commit>. Gates: <focused test>, bun test, bun run smoke."
+gh issue close <number> --repo mikkelkrogsholm/rentemester --comment "Closed after green gates and push."
+```
+
+If smoke is intentionally skipped for docs-only work, say so explicitly. Never close an accounting/runtime issue without a regression test.
 
 ## Definition of done
 
