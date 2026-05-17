@@ -39,6 +39,7 @@ export type ReverseChargePurchaseInput = {
   netAmount: number;
   expenseAccountNo: string;
   paymentAccountNo?: string;
+  sourceBankTransactionId?: number;
   createdBy?: string;
   createdByProgram?: string;
 };
@@ -50,6 +51,7 @@ export type RepresentationPurchaseInput = {
   netAmount: number;
   expenseAccountNo?: string;
   paymentAccountNo?: string;
+  sourceBankTransactionId?: number;
   createdBy?: string;
   createdByProgram?: string;
 };
@@ -78,6 +80,7 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
     transactionDate: input.transactionDate,
     text: input.text.trim(),
     documentId: input.documentId,
+    sourceBankTransactionId: input.sourceBankTransactionId,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
     lines: [
@@ -111,6 +114,7 @@ export function postRepresentationPurchase(db: Database, input: RepresentationPu
     transactionDate: input.transactionDate,
     text: input.text.trim(),
     documentId: input.documentId,
+    sourceBankTransactionId: input.sourceBankTransactionId,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
     lines: [

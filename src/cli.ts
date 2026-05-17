@@ -8,6 +8,7 @@ import { validateInvoice } from "./core/invoice";
 import { ingestDocument } from "./core/documents";
 import { importBankCsv } from "./core/bank";
 import { buildVatReport, postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./core/vat";
+import { bookExpenseFromBank } from "./core/expense-booking";
 import { buildBankReconciliationReport, listBankTransactions } from "./core/reconciliation";
 import { issueInvoice } from "./core/issued-invoices";
 import { applyInvoicePayment, getInvoiceStatus } from "./core/invoice-payments";
@@ -612,6 +613,29 @@ else if (cmd === "period" && sub === "close") {
   });
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
+}
+else if (cmd === "expense" && sub === "book") {
+  const documentId = Number(arg("--document-id"));
+  const bankTransactionId = Number(arg("--bank-transaction-id"));
+  const expenseAccountNo = arg("--expense-account");
+  const vatTreatment = arg("--vat-treatment") as "standard" | "reverse_charge" | "representation" | "exempt" | undefined;
+  if (!Number.isInteger(documentId) || documentId <= 0 || !Number.isInteger(bankTransactionId) || bankTransactionId <= 0 || !expenseAccountNo) {
+    console.error("Missing required --document-id <n>, --bank-transaction-id <n>, or --expense-account <account>");
+    process.exit(2);
+  }
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = bookExpenseFromBank(db, {
+    documentId,
+    bankTransactionId,
+    expenseAccountNo,
+    vatTreatment,
+    paymentAccountNo: arg("--payment-account") ?? undefined,
+    transactionDate: arg("--date") ?? undefined,
+    text: arg("--text") ?? undefined,
+  });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+  if (!result.ok) process.exit(1);
 }
 else if (cmd === "journal" && sub === "post") {
   const input = arg("--input");
