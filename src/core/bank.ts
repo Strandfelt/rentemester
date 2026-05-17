@@ -39,30 +39,147 @@ function normalizeAmount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : NaN;
 }
 
-function parseCsv(content: string) {
+const HEADER_ALIASES: Record<string, string[]> = {
+  transaction_date: ["transaction_date", "bogføringsdato", "bogforingsdato", "dato", "date"],
+  booking_date: ["booking_date", "rentedato", "valørdato", "valordato", "posteringsdato"],
+  text: ["text", "tekst", "description", "beskrivelse"],
+  amount: ["amount", "beløb", "belob"],
+  currency: ["currency", "valuta"],
+  reference: ["reference", "ref", "bilagsnummer"],
+  amount_dkk: ["amount_dkk", "beløb_dkk", "belob_dkk"],
+  fx_rate_to_dkk: ["fx_rate_to_dkk", "kurs", "valutakurs"],
+};
+
+const REQUIRED_COLUMNS = ["transaction_date", "text", "amount"] as const;
+
+type CsvParseResult = {
+  rows: Record<string, string>[];
+  errors: string[];
+};
+
+function normalizeHeader(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+function canonicalHeader(value: string) {
+  const normalized = normalizeHeader(value);
+  for (const [canonical, aliases] of Object.entries(HEADER_ALIASES)) {
+    if (aliases.map(normalizeHeader).includes(normalized)) return canonical;
+  }
+  return normalized;
+}
+
+function countDelimiterOutsideQuotes(line: string, delimiter: string) {
+  let count = 0;
+  let inQuotes = false;
+  for (let idx = 0; idx < line.length; idx += 1) {
+    const char = line[idx];
+    if (char === '"') {
+      if (inQuotes && line[idx + 1] === '"') idx += 1;
+      else inQuotes = !inQuotes;
+    } else if (!inQuotes && char === delimiter) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function detectDelimiter(headerLine: string) {
+  const candidates = [",", ";", "\t"];
+  return candidates
+    .map((delimiter) => ({ delimiter, count: countDelimiterOutsideQuotes(headerLine, delimiter) }))
+    .sort((a, b) => b.count - a.count)[0]?.delimiter ?? ",";
+}
+
+function parseCsvLine(line: string, delimiter: string) {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let idx = 0; idx < line.length; idx += 1) {
+    const char = line[idx];
+    if (char === '"') {
+      if (inQuotes && line[idx + 1] === '"') {
+        current += '"';
+        idx += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (!inQuotes && char === delimiter) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  values.push(current.trim());
+  return { values, unterminatedQuote: inQuotes };
+}
+
+function parseCsv(content: string): CsvParseResult {
   const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) return [];
-  const header = lines[0].split(",").map((s) => s.trim());
+  if (lines.length < 2) return { rows: [], errors: [] };
+
+  const delimiter = detectDelimiter(lines[0]);
+  const headerParsed = parseCsvLine(lines[0], delimiter);
+  const header = headerParsed.values.map(canonicalHeader);
+  const errors: string[] = [];
+  if (headerParsed.unterminatedQuote) errors.push("CSV header has unterminated quoted field");
+  for (const required of REQUIRED_COLUMNS) {
+    if (!header.includes(required)) {
+      errors.push(`CSV header missing required column: ${required} (accepted: ${HEADER_ALIASES[required].join(", ")})`);
+    }
+  }
+
   const rows: Record<string, string>[] = [];
-  for (const line of lines.slice(1)) {
-    const values = line.split(",").map((s) => s.trim());
+  for (const [lineOffset, line] of lines.slice(1).entries()) {
+    const lineNumber = lineOffset + 2;
+    const parsed = parseCsvLine(line, delimiter);
+    if (parsed.unterminatedQuote) errors.push(`CSV row ${lineNumber} has unterminated quoted field`);
+    if (parsed.values.length !== header.length) {
+      errors.push(`CSV row ${lineNumber} has ${parsed.values.length} fields, header has ${header.length}`);
+      continue;
+    }
     const row: Record<string, string> = {};
-    header.forEach((key, idx) => row[key] = values[idx] ?? "");
+    header.forEach((key, idx) => row[key] = parsed.values[idx] ?? "");
     rows.push(row);
   }
-  return rows;
+  return { rows, errors };
+}
+
+function parseLocalizedNumber(value: string | undefined) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const normalized = trimmed.includes(",")
+    ? trimmed.replace(/\./g, "").replace(",", ".")
+    : trimmed;
+  return Number(normalized.replace(/\s/g, ""));
+}
+
+function normalizeDateText(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const match = /^(\d{2})[-/.](\d{2})[-/.](\d{4})$/.exec(trimmed);
+  if (!match) return trimmed;
+  return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
 function toRow(input: Record<string, string>): BankImportRow {
   return {
-    transactionDate: input.transaction_date,
-    bookingDate: input.booking_date || undefined,
+    transactionDate: normalizeDateText(input.transaction_date) ?? "",
+    bookingDate: normalizeDateText(input.booking_date),
     text: input.text,
-    amount: Number(input.amount),
+    amount: parseLocalizedNumber(input.amount) ?? NaN,
     currency: input.currency || "DKK",
     reference: input.reference || undefined,
-    amountDkk: input.amount_dkk ? Number(input.amount_dkk) : undefined,
-    fxRateToDkk: input.fx_rate_to_dkk ? Number(input.fx_rate_to_dkk) : undefined,
+    amountDkk: parseLocalizedNumber(input.amount_dkk),
+    fxRateToDkk: parseLocalizedNumber(input.fx_rate_to_dkk),
   };
 }
 
@@ -111,7 +228,9 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
   const fileBytes = readFileSync(csvPath);
   const sourceFileHash = sha256Bytes(fileBytes);
   const importBatchId = `BANK-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}-${sourceFileHash.slice(0, 8)}`;
-  const rows = parseCsv(fileBytes.toString("utf8")).map(toRow);
+  const parsedCsv = parseCsv(fileBytes.toString("utf8"));
+  if (parsedCsv.errors.length > 0) return { ok: false, errors: parsedCsv.errors };
+  const rows = parsedCsv.rows.map(toRow);
   const validation = validateBankImportRows(rows);
   if (!validation.ok) return { ok: false, errors: validation.errors };
 

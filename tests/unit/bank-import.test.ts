@@ -79,12 +79,71 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("imports quoted fields with commas and escaped quotes", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-quotes-"));
+    const csv = join(root, "quoted.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-17,\"Nordea, faktura \"\"A-42\"\"\",-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    expect(result.imported).toBe(1);
+    const row = db.query("SELECT text, amount FROM bank_transactions ORDER BY id ASC LIMIT 1").get() as any;
+    expect(row).toEqual({ text: "Nordea, faktura \"A-42\"", amount: -1250 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("imports Danish bank headers with semicolon delimiter and European amounts", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-danish-"));
+    const csv = join(root, "nordea.csv");
+    writeFileSync(csv, [
+      "Bogføringsdato;Rentedato;Tekst;Beløb;Valuta;Reference",
+      "17-05-2026;16-05-2026;\"Kunde, faktura 100\";\"1.234,56\";DKK;N-100"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    expect(result.imported).toBe(1);
+    const row = db.query("SELECT transaction_date, booking_date, text, amount, reference FROM bank_transactions ORDER BY id ASC LIMIT 1").get() as any;
+    expect(row).toEqual({ transaction_date: "2026-05-17", booking_date: "2026-05-16", text: "Kunde, faktura 100", amount: 1234.56, reference: "N-100" });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("returns header and row-shape errors close to the CSV root cause", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-header-"));
+    const csv = join(root, "bad-header.csv");
+    writeFileSync(csv, [
+      "Dato,Tekst,Saldo",
+      "2026-05-16,Payment,999,EXTRA"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("CSV header missing required column: amount (accepted: amount, beløb, belob)");
+    expect(result.errors).toContain("CSV row 2 has 4 fields, header has 3");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");
     writeFileSync(csv, [
       "transaction_date,booking_date,text,amount,currency,amount_dkk,fx_rate_to_dkk,reference",
-      "16-05-2026,,,-abc,EUR,,,REF-1"
+      "32-05-2026,,,-abc,EUR,,,REF-1"
     ].join("\n"));
 
     const db = openDb(ensureCompanyDirs(root).db);
