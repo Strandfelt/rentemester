@@ -68,6 +68,49 @@ describe("invoice ledger posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("posts non-DKK issued invoices to the ledger with stored FX basis and DKK line amounts", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoicebook-fx-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0800-EUR",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde GmbH", address: "Berlin" },
+      lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
+      totals: { netAmount: 100, vatRate: 0.25, vatAmount: 25, grossAmount: 125, fxRateToDkk: 7.46, netAmountDkk: 746, vatAmountDkk: 186.5, grossAmountDkk: 932.5 },
+      currency: "EUR"
+    });
+    expect(issued.ok).toBe(true);
+
+    const posted = postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! });
+    expect(posted.ok).toBe(true);
+
+    const entry = db.query("SELECT currency, amount_foreign, amount_dkk, fx_rate_to_dkk FROM journal_entries WHERE id = ?").get(posted.entryId!) as any;
+    expect(entry).toEqual({ currency: "EUR", amount_foreign: 125, amount_dkk: 932.5, fx_rate_to_dkk: 7.46 });
+
+    const lines = db.query(
+      `SELECT a.account_no, jl.debit_amount, jl.credit_amount, jl.vat_code
+       FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+       WHERE jl.journal_entry_id = ? ORDER BY jl.id ASC`
+    ).all(posted.entryId!) as any[];
+    expect(lines).toEqual([
+      { account_no: "1100", debit_amount: 932.5, credit_amount: 0, vat_code: null },
+      { account_no: "1000", debit_amount: 0, credit_amount: 746, vat_code: "DK_SALE_25" },
+      { account_no: "1200", debit_amount: 0, credit_amount: 186.5, vat_code: null },
+    ]);
+
+    const chain = verifyAuditChain(db);
+    expect(chain.ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("posts issued invoice once to receivables, revenue, and output VAT", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoicebook-"));
     const db = openDb(ensureCompanyDirs(root).db);

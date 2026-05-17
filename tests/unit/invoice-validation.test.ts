@@ -176,4 +176,40 @@ describe("invoice validator", () => {
     expect(result.appliedRules).toContain("DK-INVOICE-REVERSE-CHARGE-BASIS-001");
     expect(result.appliedRules).toContain("DK-INVOICE-DELIVERY-DATE-001");
   });
+
+  test("accepts non-DKK invoices when deterministic DKK totals are supplied", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0050",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde GmbH", address: "Berlin" },
+      lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
+      totals: { netAmount: 100, vatRate: 0.25, vatAmount: 25, grossAmount: 125, fxRateToDkk: 7.46, netAmountDkk: 746, vatAmountDkk: 186.5, grossAmountDkk: 932.5 },
+      currency: "EUR",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  test("rejects non-DKK invoices without deterministic DKK conversion totals", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0051",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde GmbH", address: "Berlin" },
+      lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
+      totals: { netAmount: 100, vatRate: 0.25, vatAmount: 25, grossAmount: 125 },
+      currency: "EUR",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("non-DKK invoices must include totals.fxRateToDkk");
+    expect(result.errors).toContain("non-DKK invoices must include totals.netAmountDkk");
+    expect(result.errors).toContain("non-DKK invoices must include totals.grossAmountDkk");
+  });
 });

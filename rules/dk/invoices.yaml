@@ -92,7 +92,7 @@ rules:
         - reverse_charge_gross_equals_net
       forbid:
         - inconsistent_invoice_totals
-    explanation: Rentemester must reject invoices whose line amounts or VAT totals do not add up, so issued invoices remain legally and financially coherent.
+    explanation: Rentemester must reject invoices whose line amounts or VAT totals do not add up, and for non-DKK invoices the issued snapshot must also carry deterministic DKK mirror totals plus an explicit FX rate so later bookkeeping stays auditable.
   - rule_id: DK-INVOICE-ISSUE-001
     name: Issued invoices must be stored immutably with sequential invoice numbers
     category: invoice_integrity
@@ -105,7 +105,7 @@ rules:
         - persisted_issue_timestamp
       forbid:
         - issue_without_validation
-    explanation: Rentemester must only issue invoices after deterministic validation and must persist an immutable issued snapshot tied to a sequential invoice number.
+    explanation: Rentemester must only issue invoices after deterministic validation and must persist an immutable issued snapshot tied to a sequential invoice number; when the invoice currency is not DKK, the snapshot must include the chosen FX rate and DKK totals fixed at issue time.
   - rule_id: DK-INVOICE-DUE-DATE-001
     name: Customer invoices must expose a deterministic due date and overdue classification
     category: invoice_lifecycle
@@ -245,7 +245,7 @@ rules:
         - output_vat_line_for_vat_amount
       forbid:
         - second_sales_posting_for_same_invoice
-    explanation: Rentemester must be able to deterministically book an issued invoice into the ledger so open receivables, revenue, and output VAT are traceable to the invoice.
+    explanation: Rentemester must be able to deterministically book an issued invoice into the ledger so open receivables, revenue, and output VAT are traceable to the invoice; non-DKK invoices must book on DKK ledger amounts while preserving foreign amount and FX basis on the journal entry.
   - rule_id: DK-INVOICE-BOOKKEEPING-REVERSE-002
     name: Reverse-charge sales invoices and fallback credit notes must post without an output-VAT line
     category: invoice_accounting
@@ -273,7 +273,7 @@ rules:
         - immutable_payment_application
       forbid:
         - settlement_without_open_invoice_balance
-    explanation: Rentemester must deterministically settle customer receipts against issued invoices so the receivable is cleared and the bank receipt is traceable in both ledger and invoice lifecycle.
+    explanation: Rentemester must deterministically settle customer receipts against issued invoices so the receivable is cleared and the bank receipt is traceable in both ledger and invoice lifecycle; for non-DKK invoices the receipt currency must match the invoice currency and carry deterministic DKK conversion metadata.
   - rule_id: DK-INVOICE-CLAIM-SETTLEMENT-001
     name: Bank-settled invoice claim receipts must clear booked claim receivables with traceable invoice and bank links
     category: invoice_lifecycle
@@ -382,7 +382,7 @@ rules:
       forbid:
         - bad_debt_writeoff_without_open_principal_balance
         - bad_debt_writeoff_above_open_principal_balance
-    explanation: When a customer invoice loss is established, Rentemester must write off only the remaining principal receivable through an append-only invoice-linked correction entry so the audit trail remains deterministic.
+    explanation: When a customer invoice loss is established, Rentemester must write off only the remaining principal receivable through an append-only invoice-linked correction entry so the audit trail remains deterministic; non-DKK write-offs must reuse the invoice’s fixed FX basis for the DKK ledger relief.
   - rule_id: DK-INVOICE-LOCK-001
     name: Issued invoices cannot be modified
     category: invoice_integrity

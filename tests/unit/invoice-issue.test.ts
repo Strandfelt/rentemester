@@ -66,6 +66,34 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("persists non-DKK issued invoices with deterministic DKK totals in the snapshot payload", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-fx-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0500-EUR",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde GmbH", address: "Berlin" },
+      lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
+      totals: { netAmount: 100, vatRate: 0.25, vatAmount: 25, grossAmount: 125, fxRateToDkk: 7.46, netAmountDkk: 746, vatAmountDkk: 186.5, grossAmountDkk: 932.5 },
+      currency: "EUR"
+    });
+
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT amount_inc_vat, currency, vat_amount, payload_json FROM documents WHERE id = ?").get(result.documentId!) as any;
+    expect(row.amount_inc_vat).toBe(125);
+    expect(row.currency).toBe("EUR");
+    expect(row.vat_amount).toBe(25);
+    expect(JSON.parse(row.payload_json).totals.grossAmountDkk).toBe(932.5);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("requires cached VIES validation for foreign reverse-charge invoices", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-vies-required-"));
     const db = openDb(ensureCompanyDirs(root).db);

@@ -1,0 +1,36 @@
+{
+  "invoiceType": "full",
+  "vatTreatment": "standard",
+  "issueDate": "2026-05-16",
+  "invoiceNumber": "2026-0900-EUR",
+  "seller": {
+    "name": "Rentemester ApS",
+    "address": "Testvej 1, 2100 København Ø",
+    "vatOrCvr": "DK12345678"
+  },
+  "buyer": {
+    "name": "Kunde GmbH",
+    "address": "Alexanderplatz 1, 10178 Berlin",
+    "vatOrCvr": "DE123456789"
+  },
+  "lines": [
+    {
+      "description": "International consulting",
+      "quantity": 1,
+      "unitPriceExVat": 100,
+      "lineTotalExVat": 100
+    }
+  ],
+  "totals": {
+    "netAmount": 100,
+    "vatRate": 0.25,
+    "vatAmount": 25,
+    "grossAmount": 125,
+    "fxRateToDkk": 7.46,
+    "netAmountDkk": 746,
+    "vatAmountDkk": 186.5,
+    "grossAmountDkk": 932.5
+  },
+  "currency": "EUR",
+  "dueDate": "2026-06-15"
+}

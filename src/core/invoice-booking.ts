@@ -55,7 +55,6 @@ export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoice
 
   if (!doc) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice document ${input.invoiceDocumentId} does not exist`] };
   if (doc.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID], errors: [`document ${input.invoiceDocumentId} is not an issued invoice`] };
-  if ((doc.currency ?? "DKK") !== "DKK") return { ok: false, appliedRules: [RULE_ID], errors: ["only DKK issued invoices are supported in the current sales posting flow"] };
 
   const existing = db.query("SELECT id, entry_no FROM journal_entries WHERE document_id = ? AND reversal_of_entry_id IS NULL LIMIT 1").get(input.invoiceDocumentId) as { id: number; entry_no: string } | null;
   if (existing) {
@@ -63,18 +62,36 @@ export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoice
   }
 
   const payload = doc.payload_json ? JSON.parse(doc.payload_json) : null;
+  const currency = (doc.currency ?? payload?.currency ?? "DKK").trim().toUpperCase();
   const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? payload?.totals?.grossAmount ?? 0));
   const vatAmount = roundDkk(Number(doc.vat_amount ?? payload?.totals?.vatAmount ?? 0));
   const netAmount = roundDkk(grossAmount - vatAmount);
+  const fxRateToDkk = payload?.totals?.fxRateToDkk == null ? null : Number(payload.totals.fxRateToDkk);
+  const grossAmountDkk = currency === "DKK"
+    ? grossAmount
+    : roundDkk(Number(payload?.totals?.grossAmountDkk ?? 0));
+  const vatAmountDkk = currency === "DKK"
+    ? vatAmount
+    : roundDkk(Number(payload?.totals?.vatAmountDkk ?? 0));
+  const netAmountDkk = currency === "DKK"
+    ? netAmount
+    : roundDkk(Number(payload?.totals?.netAmountDkk ?? 0));
 
   if (!(grossAmount > 0)) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} is missing gross amount`] };
   if (netAmount <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} produced invalid net amount`] };
+  if (currency !== "DKK" && !(grossAmountDkk > 0 && netAmountDkk > 0 && Number.isFinite(fxRateToDkk) && fxRateToDkk! > 0)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} is missing deterministic DKK conversion totals`] };
+  }
 
-  const posting = issuedInvoiceJournalLines(doc, payload, grossAmount, netAmount, vatAmount, input);
+  const posting = issuedInvoiceJournalLines(doc, payload, grossAmountDkk, netAmountDkk, vatAmountDkk, input);
   const journal = postJournalEntry(db, {
     transactionDate: input.transactionDate ?? doc.invoice_date ?? payload?.issueDate,
     text: `Issued invoice ${doc.invoice_no}`,
     documentId: input.invoiceDocumentId,
+    currency: currency === "DKK" ? undefined : currency,
+    amountForeign: currency === "DKK" ? undefined : grossAmount,
+    amountDkk: currency === "DKK" ? undefined : grossAmountDkk,
+    fxRateToDkk: currency === "DKK" ? undefined : fxRateToDkk ?? undefined,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
     lines: posting.lines,

@@ -268,13 +268,27 @@ export function applyInvoicePayment(db: Database, input: ApplyInvoicePaymentInpu
   const invoice = getIssuedInvoice(db, input.invoiceDocumentId);
   if (!invoice) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice document ${input.invoiceDocumentId} does not exist`] };
   if (invoice.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID], errors: [`document ${input.invoiceDocumentId} is not an issued invoice`] };
-  if ((invoice.currency ?? "DKK") !== "DKK") return { ok: false, appliedRules: [RULE_ID], errors: ["only DKK issued invoices are supported in the current payment application flow"] };
+
+  const invoiceCurrency = (invoice.currency ?? "DKK").trim().toUpperCase();
+  const bank = input.bankTransactionId !== undefined
+    ? db.query("SELECT id, amount, currency, amount_dkk, fx_rate_to_dkk FROM bank_transactions WHERE id = ?").get(input.bankTransactionId) as { id: number; amount: number; currency: string | null; amount_dkk: number | null; fx_rate_to_dkk: number | null } | null
+    : null;
 
   if (input.bankTransactionId !== undefined) {
-    const bank = db.query("SELECT id FROM bank_transactions WHERE id = ?").get(input.bankTransactionId) as { id: number } | null;
     if (!bank) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${input.bankTransactionId} does not exist`] };
+    const bankCurrency = (bank.currency ?? "DKK").trim().toUpperCase();
+    if (bankCurrency !== invoiceCurrency) {
+      return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${input.bankTransactionId} currency ${bankCurrency} does not match invoice currency ${invoiceCurrency}`] };
+    }
+    if (invoiceCurrency !== "DKK" && (!(Number(bank.fx_rate_to_dkk) > 0) || !(Number(bank.amount_dkk) > 0))) {
+      return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${input.bankTransactionId} is missing deterministic DKK conversion metadata`] };
+    }
     const alreadyLinked = db.query("SELECT id FROM invoice_payments WHERE bank_transaction_id = ? LIMIT 1").get(input.bankTransactionId) as { id: number } | null;
     if (alreadyLinked) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${input.bankTransactionId} is already applied to an invoice payment`] };
+  }
+
+  if (invoiceCurrency !== "DKK" && input.journalEntryId === undefined && !bank) {
+    return { ok: false, appliedRules: [RULE_ID], errors: ["non-DKK invoice payments require a bankTransactionId or existing journalEntryId"] };
   }
 
   const status = getInvoiceStatus(db, input.invoiceDocumentId);
@@ -290,16 +304,23 @@ export function applyInvoicePayment(db: Database, input: ApplyInvoicePaymentInpu
       let journalEntryId = input.journalEntryId;
 
       if (journalEntryId === undefined) {
+        const paymentAmountDkk = invoiceCurrency === "DKK"
+          ? amount
+          : roundDkk(amount * Number(bank?.fx_rate_to_dkk ?? 0));
         const journal = postJournalEntry(db, {
           transactionDate: input.paymentDate,
           text: input.bankTransactionId !== undefined ? `Customer payment for invoice ${invoice.invoice_no}` : `Manual invoice payment for invoice ${invoice.invoice_no}`,
           sourceBankTransactionId: input.bankTransactionId,
           documentId: input.invoiceDocumentId,
+          currency: invoiceCurrency === "DKK" ? undefined : invoiceCurrency,
+          amountForeign: invoiceCurrency === "DKK" ? undefined : amount,
+          amountDkk: invoiceCurrency === "DKK" ? undefined : paymentAmountDkk,
+          fxRateToDkk: invoiceCurrency === "DKK" ? undefined : Number(bank?.fx_rate_to_dkk ?? undefined),
           createdBy: input.createdBy,
           createdByProgram: input.createdByProgram,
           lines: [
-            { accountNo: input.bankAccountNo ?? "2000", debitAmount: amount, text: `Payment receipt ${invoice.invoice_no}` },
-            { accountNo: input.receivableAccountNo ?? "1100", creditAmount: amount, text: `Receivable settlement ${invoice.invoice_no}` },
+            { accountNo: input.bankAccountNo ?? "2000", debitAmount: paymentAmountDkk, text: `Payment receipt ${invoice.invoice_no}` },
+            { accountNo: input.receivableAccountNo ?? "1100", creditAmount: paymentAmountDkk, text: `Receivable settlement ${invoice.invoice_no}` },
           ],
         });
         if (!journal.ok || journal.entryId == null) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
@@ -321,9 +342,9 @@ export function applyInvoicePayment(db: Database, input: ApplyInvoicePaymentInpu
 
       const paymentId = db.query(
         `INSERT INTO invoice_payments (invoice_document_id, bank_transaction_id, journal_entry_id, payment_date, amount, currency, note)
-         VALUES (?, ?, ?, ?, ?, 'DKK', ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          RETURNING id`
-      ).get(input.invoiceDocumentId, input.bankTransactionId ?? null, journalEntryId, input.paymentDate, amount, input.note ?? null) as { id: number };
+      ).get(input.invoiceDocumentId, input.bankTransactionId ?? null, journalEntryId, input.paymentDate, amount, invoiceCurrency, input.note ?? null) as { id: number };
 
       insertAuditLog(db, {
         eventType: "invoice_payment_apply",

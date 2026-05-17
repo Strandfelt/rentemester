@@ -70,6 +70,58 @@ describe("invoice bank settlement", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("settles a non-DKK issued invoice from an imported FX bank receipt using DKK ledger amounts", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-settle-fx-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0900-EUR",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde GmbH", address: "Berlin" },
+      lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
+      totals: { netAmount: 100, vatRate: 0.25, vatAmount: 25, grossAmount: 125, fxRateToDkk: 7.46, netAmountDkk: 746, vatAmountDkk: 186.5, grossAmountDkk: 932.5 },
+      currency: "EUR"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    const csvPath = join(root, "bank-fx.csv");
+    writeFileSync(csvPath, "transaction_date,booking_date,text,amount,currency,amount_dkk,fx_rate_to_dkk,reference\n2026-05-20,2026-05-20,Customer payment,125,EUR,932.5,7.46,INV-0900-EUR\n");
+    expect(importBankCsv(db, root, csvPath).ok).toBe(true);
+
+    const bankTx = db.query("SELECT id FROM bank_transactions LIMIT 1").get() as { id: number };
+    const settled = settleInvoiceFromBank(db, {
+      invoiceDocumentId: issued.documentId!,
+      bankTransactionId: bankTx.id,
+    });
+    expect(settled.ok).toBe(true);
+    expect(settled.openBalance).toBe(0);
+
+    const status = getInvoiceStatus(db, issued.documentId!);
+    expect(status.status).toBe("paid");
+
+    const entry = db.query("SELECT currency, amount_foreign, amount_dkk, fx_rate_to_dkk FROM journal_entries WHERE id = ?").get(settled.entryId!) as any;
+    expect(entry).toEqual({ currency: "EUR", amount_foreign: 125, amount_dkk: 932.5, fx_rate_to_dkk: 7.46 });
+
+    const lines = db.query(
+      `SELECT a.account_no, jl.debit_amount, jl.credit_amount
+       FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+       WHERE jl.journal_entry_id = ? ORDER BY jl.id ASC`
+    ).all(settled.entryId!) as any[];
+    expect(lines).toEqual([
+      { account_no: "2000", debit_amount: 932.5, credit_amount: 0 },
+      { account_no: "1100", debit_amount: 0, credit_amount: 932.5 },
+    ]);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("blocks combined settlement until included claims are ledger-posted", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-settle-combined-unposted-"));
     const db = openDb(ensureCompanyDirs(root).db);

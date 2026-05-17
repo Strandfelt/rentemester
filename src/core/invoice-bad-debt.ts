@@ -52,17 +52,23 @@ export function writeOffInvoiceBadDebt(db: Database, input: WriteOffInvoiceBadDe
   } | null;
   if (!invoice) return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: [`invoice document ${input.invoiceDocumentId} does not exist`] };
   if (invoice.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: [`document ${input.invoiceDocumentId} is not an issued invoice`] };
-  if ((invoice.currency ?? "DKK") !== "DKK") return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: ["only DKK standard-rated issued invoices are supported in the current bad-debt flow"] };
 
   const payload = invoice.payload_json ? JSON.parse(invoice.payload_json) : null;
+  const currency = (invoice.currency ?? payload?.currency ?? "DKK").trim().toUpperCase();
   if (payload?.vatTreatment !== "standard") {
     return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: ["bad-debt VAT relief currently requires a standard-rated issued invoice"] };
   }
 
   const grossInvoiceAmount = roundDkk(Number(invoice.amount_inc_vat ?? 0));
   const originalVatAmount = roundDkk(Number(invoice.vat_amount ?? 0));
+  const fxRateToDkk = currency === "DKK" ? null : Number(payload?.totals?.fxRateToDkk ?? 0);
+  const grossInvoiceAmountDkk = currency === "DKK" ? grossInvoiceAmount : roundDkk(Number(payload?.totals?.grossAmountDkk ?? 0));
+  const originalVatAmountDkk = currency === "DKK" ? originalVatAmount : roundDkk(Number(payload?.totals?.vatAmountDkk ?? 0));
   if (!(grossInvoiceAmount > 0) || !(originalVatAmount > 0)) {
     return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: ["bad-debt VAT relief requires a positive gross invoice amount and VAT amount"] };
+  }
+  if (currency !== "DKK" && !(grossInvoiceAmountDkk > 0 && originalVatAmountDkk > 0 && Number.isFinite(fxRateToDkk) && fxRateToDkk! > 0)) {
+    return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: ["non-DKK bad-debt write-offs require deterministic DKK invoice totals"] };
   }
 
   const status = getInvoiceStatus(db, input.invoiceDocumentId, input.writeOffDate);
@@ -78,6 +84,10 @@ export function writeOffInvoiceBadDebt(db: Database, input: WriteOffInvoiceBadDe
   const vatRatio = originalVatAmount / grossInvoiceAmount;
   const vatAmount = roundDkk(grossAmount * vatRatio);
   const netAmount = roundDkk(grossAmount - vatAmount);
+  const grossAmountDkk = currency === "DKK" ? grossAmount : roundDkk(grossAmount * (fxRateToDkk ?? 0));
+  const vatRatioDkk = originalVatAmountDkk / grossInvoiceAmountDkk;
+  const vatAmountDkk = currency === "DKK" ? vatAmount : roundDkk(grossAmountDkk * vatRatioDkk);
+  const netAmountDkk = currency === "DKK" ? netAmount : roundDkk(grossAmountDkk - vatAmountDkk);
 
   try {
     const result = db.transaction(() => {
@@ -85,12 +95,16 @@ export function writeOffInvoiceBadDebt(db: Database, input: WriteOffInvoiceBadDe
         transactionDate: input.writeOffDate,
         text: `Bad debt write-off for invoice ${invoice.invoice_no}`,
         documentId: input.invoiceDocumentId,
+        currency: currency === "DKK" ? undefined : currency,
+        amountForeign: currency === "DKK" ? undefined : grossAmount,
+        amountDkk: currency === "DKK" ? undefined : grossAmountDkk,
+        fxRateToDkk: currency === "DKK" ? undefined : fxRateToDkk ?? undefined,
         createdBy: input.createdBy,
         createdByProgram: input.createdByProgram,
         lines: [
-          { accountNo: input.expenseAccountNo ?? "3080", debitAmount: netAmount, vatCode: "DK_BAD_DEBT_25", text: `Bad debt loss basis ${invoice.invoice_no}` },
-          { accountNo: input.vatAccountNo ?? "1200", debitAmount: vatAmount, text: `Output VAT relief ${invoice.invoice_no}` },
-          { accountNo: input.receivableAccountNo ?? "1100", creditAmount: grossAmount, text: `Write off receivable ${invoice.invoice_no}` },
+          { accountNo: input.expenseAccountNo ?? "3080", debitAmount: netAmountDkk, vatCode: "DK_BAD_DEBT_25", text: `Bad debt loss basis ${invoice.invoice_no}` },
+          { accountNo: input.vatAccountNo ?? "1200", debitAmount: vatAmountDkk, text: `Output VAT relief ${invoice.invoice_no}` },
+          { accountNo: input.receivableAccountNo ?? "1100", creditAmount: grossAmountDkk, text: `Write off receivable ${invoice.invoice_no}` },
         ],
       });
       if (!journal.ok) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));

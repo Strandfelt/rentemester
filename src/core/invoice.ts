@@ -1,5 +1,5 @@
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
-import { roundDkk } from "./money";
+import { roundDkk, roundRate6 } from "./money";
 export type InvoiceType = "full" | "simplified";
 export type VatTreatment = "standard" | "domestic_reverse_charge" | "foreign_reverse_charge";
 export type ReverseChargeBasis =
@@ -22,6 +22,10 @@ export type InvoicePayload = {
     vatRate?: number;
     vatAmount?: number;
     grossAmount?: number;
+    fxRateToDkk?: number;
+    netAmountDkk?: number;
+    vatAmountDkk?: number;
+    grossAmountDkk?: number;
     vatComputationBasis?: "VAT_20_OF_GROSS" | string;
   };
   reverseChargeBasis?: ReverseChargeBasis;
@@ -74,11 +78,15 @@ function hasLineDescriptions(lines: InvoicePayload["lines"]) {
   return Array.isArray(lines) && lines.length > 0 && lines.every((line) => hasText(line.description));
 }
 
+function normalizedCurrency(payload: InvoicePayload) {
+  return (payload.currency ?? "DKK").trim().toUpperCase();
+}
 
 export function validateInvoice(payload: InvoicePayload): InvoiceValidationResult {
   const errors: string[] = [];
   const invoiceType = payload.invoiceType;
   const vatTreatment = payload.vatTreatment ?? "standard";
+  const currency = normalizedCurrency(payload);
   const appliedRules = [invoiceType === "simplified" ? RULES.SIMPLIFIED : RULES.FULL, RULES.ARITHMETIC];
 
   if (!looksLikeIsoDate(payload.issueDate)) errors.push("issueDate must be present in YYYY-MM-DD format");
@@ -185,6 +193,10 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
   const netAmount = roundDkk(Number(payload.totals?.netAmount ?? 0));
   const vatAmount = roundDkk(Number(payload.totals?.vatAmount ?? 0));
   const grossAmount = roundDkk(Number(payload.totals?.grossAmount ?? 0));
+  const fxRateToDkk = roundRate6(Number(payload.totals?.fxRateToDkk ?? 0));
+  const netAmountDkk = roundDkk(Number(payload.totals?.netAmountDkk ?? 0));
+  const vatAmountDkk = roundDkk(Number(payload.totals?.vatAmountDkk ?? 0));
+  const grossAmountDkk = roundDkk(Number(payload.totals?.grossAmountDkk ?? 0));
 
   if (invoiceType === "full" && Array.isArray(payload.lines) && payload.lines.every((line) => typeof line.lineTotalExVat === "number")) {
     if (netAmount !== lineSum) errors.push(`totals.netAmount must equal sum of lineTotalExVat (${lineSum})`);
@@ -203,8 +215,43 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
     }
   }
 
-  if ((payload.currency ?? "DKK") !== "DKK") {
-    errors.push("only DKK invoices are supported in the current deterministic validator");
+  if (currency.length !== 3) {
+    errors.push("currency must be a 3-letter ISO code when present");
+  }
+
+  if (currency !== "DKK") {
+    if (!(fxRateToDkk > 0)) errors.push("non-DKK invoices must include totals.fxRateToDkk");
+    if (!hasPositiveNumber(payload.totals?.netAmountDkk)) errors.push("non-DKK invoices must include totals.netAmountDkk");
+    if (vatTreatment === "standard" && !hasPositiveNumber(payload.totals?.vatAmountDkk)) errors.push("non-DKK invoices must include totals.vatAmountDkk for standard VAT");
+    if (!hasPositiveNumber(payload.totals?.grossAmountDkk)) errors.push("non-DKK invoices must include totals.grossAmountDkk");
+
+    if (fxRateToDkk > 0) {
+      if (payload.totals?.netAmountDkk !== undefined) {
+        const expectedNetDkk = roundDkk(netAmount * fxRateToDkk);
+        if (netAmountDkk !== expectedNetDkk) errors.push(`totals.netAmountDkk must equal totals.netAmount * totals.fxRateToDkk (${expectedNetDkk})`);
+      }
+      if (payload.totals?.vatAmountDkk !== undefined) {
+        const expectedVatDkk = roundDkk(vatAmount * fxRateToDkk);
+        if (vatAmountDkk !== expectedVatDkk) errors.push(`totals.vatAmountDkk must equal totals.vatAmount * totals.fxRateToDkk (${expectedVatDkk})`);
+      }
+      if (payload.totals?.grossAmountDkk !== undefined) {
+        const expectedGrossDkk = roundDkk(grossAmount * fxRateToDkk);
+        if (grossAmountDkk !== expectedGrossDkk) errors.push(`totals.grossAmountDkk must equal totals.grossAmount * totals.fxRateToDkk (${expectedGrossDkk})`);
+      }
+    }
+
+    if (vatTreatment === "standard" && (payload.totals?.netAmountDkk !== undefined || payload.totals?.vatAmountDkk !== undefined || payload.totals?.grossAmountDkk !== undefined)) {
+      const expectedGrossDkk = roundDkk(netAmountDkk + vatAmountDkk);
+      if (grossAmountDkk !== expectedGrossDkk) {
+        errors.push(`totals.grossAmountDkk must equal totals.netAmountDkk + totals.vatAmountDkk (${expectedGrossDkk})`);
+      }
+    }
+
+    if ((vatTreatment === "domestic_reverse_charge" || vatTreatment === "foreign_reverse_charge") && payload.totals?.netAmountDkk !== undefined) {
+      if (grossAmountDkk !== netAmountDkk) {
+        errors.push(`reverse-charge invoices must have totals.grossAmountDkk equal totals.netAmountDkk (${netAmountDkk})`);
+      }
+    }
   }
 
   return {

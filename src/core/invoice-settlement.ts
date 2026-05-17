@@ -35,8 +35,8 @@ function getIncomingBankTransaction(db: Database, input: SettleInvoiceFromBankIn
     return { error: "bankTransactionId or bankTransactionReference is required" };
   }
   const bank = (input.bankTransactionId !== undefined
-    ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
-    : db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)) as { id: number; transaction_date: string; amount: number; text: string; reference: string | null } | null;
+    ? db.query(`SELECT id, transaction_date, amount, currency, amount_dkk, fx_rate_to_dkk, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
+    : db.query(`SELECT id, transaction_date, amount, currency, amount_dkk, fx_rate_to_dkk, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)) as { id: number; transaction_date: string; amount: number; currency: string | null; amount_dkk: number | null; fx_rate_to_dkk: number | null; text: string; reference: string | null } | null;
   if (!bank) {
     return { error: input.bankTransactionId !== undefined ? `bank transaction ${input.bankTransactionId} does not exist` : `no bank transaction found with reference ${input.bankTransactionReference}` };
   }
@@ -79,14 +79,23 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
   if (Number(bank.amount) <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${input.bankTransactionId} is not an incoming customer receipt`] };
 
   const invoice = db.query(
-    `SELECT id, invoice_no FROM documents WHERE id = ? AND document_type = 'issued_invoice'`
-  ).get(input.invoiceDocumentId) as { id: number; invoice_no: string } | null;
+    `SELECT id, invoice_no, currency FROM documents WHERE id = ? AND document_type = 'issued_invoice'`
+  ).get(input.invoiceDocumentId) as { id: number; invoice_no: string; currency: string | null } | null;
   if (!invoice) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice document ${input.invoiceDocumentId} is not an issued invoice`] };
 
   const existingJournal = db.query(
     `SELECT id FROM journal_entries WHERE source_bank_transaction_id = ? LIMIT 1`
   ).get(bank.id) as { id: number } | null;
   if (existingJournal) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is already linked to journal entry ${existingJournal.id}`] };
+
+  const invoiceCurrency = (invoice.currency ?? "DKK").trim().toUpperCase();
+  const bankCurrency = (bank.currency ?? "DKK").trim().toUpperCase();
+  if (invoiceCurrency !== bankCurrency) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} currency ${bankCurrency} does not match invoice currency ${invoiceCurrency}`] };
+  }
+  if (invoiceCurrency !== "DKK" && (!(Number(bank.fx_rate_to_dkk) > 0) || !(Number(bank.amount_dkk) > 0))) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is missing deterministic DKK conversion metadata`] };
+  }
 
   const amount = roundDkk(input.amount ?? Number(bank.amount));
   const paymentDate = input.paymentDate ?? bank.transaction_date;
@@ -123,16 +132,21 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
       let journalEntryId: number | undefined;
 
       if (claimAmount > 0) {
+        const journalAmountDkk = invoiceCurrency === "DKK" ? amount : roundDkk(Number(bank.amount_dkk ?? 0));
         const journal = postJournalEntry(db, {
           transactionDate: paymentDate,
           text: `Customer payment incl. claims for invoice ${invoice.invoice_no}`,
           sourceBankTransactionId: bank.id,
           documentId: input.invoiceDocumentId,
+          currency: invoiceCurrency === "DKK" ? undefined : invoiceCurrency,
+          amountForeign: invoiceCurrency === "DKK" ? undefined : amount,
+          amountDkk: invoiceCurrency === "DKK" ? undefined : journalAmountDkk,
+          fxRateToDkk: invoiceCurrency === "DKK" ? undefined : Number(bank.fx_rate_to_dkk ?? undefined),
           createdBy: input.createdBy,
           createdByProgram: input.createdByProgram,
           lines: [
-            { accountNo: input.bankAccountNo ?? "2000", debitAmount: amount, text: `Bank receipt ${invoice.invoice_no}` },
-            { accountNo: input.receivableAccountNo ?? "1100", creditAmount: amount, text: `Principal and claim settlement ${invoice.invoice_no}` },
+            { accountNo: input.bankAccountNo ?? "2000", debitAmount: journalAmountDkk, text: `Bank receipt ${invoice.invoice_no}` },
+            { accountNo: input.receivableAccountNo ?? "1100", creditAmount: journalAmountDkk, text: `Principal and claim settlement ${invoice.invoice_no}` },
           ],
         });
         if (!journal.ok || journal.entryId == null) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
@@ -160,9 +174,9 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
       if (claimAmount > 0) {
         const claimPayment = db.query(
           `INSERT INTO invoice_claim_payments (invoice_document_id, bank_transaction_id, payment_date, amount, currency, note)
-           VALUES (?, ?, ?, ?, 'DKK', ?)
+           VALUES (?, ?, ?, ?, ?, ?)
            RETURNING id`
-        ).get(input.invoiceDocumentId, bank.id, paymentDate, claimAmount, `Combined settlement claim component from transaction ${bank.id}`) as { id: number };
+        ).get(input.invoiceDocumentId, bank.id, paymentDate, claimAmount, invoiceCurrency, `Combined settlement claim component from transaction ${bank.id}`) as { id: number };
         claimPaymentId = claimPayment.id;
         insertAuditLog(db, {
           eventType: "invoice_claim_payment_apply",
