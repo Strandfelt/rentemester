@@ -36,11 +36,14 @@ describe("authority export CLI", () => {
     expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(true);
+    expect(parsed.generatedAt).toBe("2026-05-17T02:24:00.000Z");
     expect(parsed.deadlineAt).toBe("2026-06-14T02:24:00.000Z");
     expect(existsSync(parsed.manifestPath)).toBe(true);
 
     const manifest = JSON.parse(readFileSync(parsed.manifestPath, "utf8"));
     expect(manifest.counts.journalEntries).toBe(2);
+    expect(manifest.counts.accounts).toBeGreaterThanOrEqual(10);
+    expect(manifest.files.auditLog).toBe("machine-readable/audit-log.json");
     expect(manifest.appliedRules).toContain("DK-BOOKKEEPING-AUTHORITY-EXPORT-001");
 
     rmSync(root, { recursive: true, force: true });
