@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openDb, migrate } from "../../src/core/db";
@@ -29,11 +29,40 @@ describe("journal post CLI", () => {
     expect(parsed.entryNo).toContain("2026-");
   });
 
+  test("rejects explicit actor overrides that are not allowlisted", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journalcli-actor-deny-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
+
+    const proc = Bun.spawn([
+      "bun", "run", "src/cli.ts", "journal", "post",
+      "--company", company,
+      "--input", "examples/journal-entry.expense.json",
+      "--actor", "agent:freja",
+      "--actor-via", "openclaw",
+    ], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    rmSync(root, { recursive: true, force: true });
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("actor 'agent:freja' is not in config/policy.yaml actor_allowlist");
+  });
+
   test("threads explicit actor attribution into journal entries and audit log", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journalcli-actor-"));
     const company = join(root, "company");
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    writeFileSync(join(companyPaths(company).config, "policy.yaml"), `company_policy:\n  country: DK\n  currency: DKK\n  allow_direct_sql_write: false\n  block_if_uncertain: true\nactor_allowlist:\n  agents:\n    - freja\n`);
     await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
 
     const proc = Bun.spawn([
@@ -60,5 +89,41 @@ describe("journal post CLI", () => {
     expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
     expect(entry).toEqual({ created_by: "agent:freja", created_by_program: "openclaw" });
     expect(audit.actor).toBe("agent:freja via openclaw");
+  });
+
+  test("fails closed for mutating commands when no actor can be inferred", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journalcli-actor-missing-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
+
+    const proc = Bun.spawn([
+      "bun", "run", "src/cli.ts", "journal", "post",
+      "--company", company,
+      "--input", "examples/journal-entry.expense.json",
+    ], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...process.env,
+        USER: "",
+        LOGNAME: "",
+        OPENCLAW_AGENT: "",
+        RENTEMESTER_AGENT: "",
+        RENTEMESTER_USER: "",
+        RENTEMESTER_ACTOR: "",
+        RENTEMESTER_ACTOR_VIA: "",
+      },
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    rmSync(root, { recursive: true, force: true });
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("actor required for mutations");
   });
 });

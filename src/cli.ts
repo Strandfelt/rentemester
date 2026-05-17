@@ -78,12 +78,101 @@ function withResolvedInvoicePayload<T extends Record<string, unknown>>(
   if (!resolved) return payload;
   return { ...payload, [idKey]: resolved };
 }
-const cliActor = arg("--actor");
-if (cliActor) process.env.RENTEMESTER_ACTOR = cliActor;
-const cliActorVia = arg("--actor-via");
-if (cliActorVia) process.env.RENTEMESTER_ACTOR_VIA = cliActorVia;
-else if (cliActor && !process.env.RENTEMESTER_ACTOR_VIA) process.env.RENTEMESTER_ACTOR_VIA = "rentemester-cli";
+function trimToNull(value: string | null | undefined) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 function companyRoot() { return arg("--company", process.env.RENTEMESTER_COMPANY ?? "/company")!; }
+const cliActor = trimToNull(arg("--actor"));
+const cliActorVia = trimToNull(arg("--actor-via"));
+const MUTATING_COMMANDS = new Set([
+  "customer validate-vat",
+  "system backup",
+  "system restore-backup",
+  "system export-authority",
+  "invoice issue",
+  "invoice credit-note",
+  "invoice post",
+  "invoice settle-bank",
+  "invoice settle-claim-bank",
+  "invoice write-off-bad-debt",
+  "invoice refund-bank",
+  "invoice apply-payment",
+  "invoice remind",
+  "invoice post-reminder",
+  "invoice claim-interest",
+  "invoice post-interest",
+  "invoice claim-compensation",
+  "invoice post-compensation",
+  "documents ingest",
+  "bank import",
+  "expense book",
+  "vat post-eu-service-purchase",
+  "vat post-representation-purchase",
+  "period close",
+  "journal post",
+  "journal reverse",
+]);
+function isCanonicalActorId(value: string) {
+  return /^(user|agent|system):\S.+$/.test(value);
+}
+function loadActorAllowlist(root: string) {
+  const policyPath = join(companyPaths(root).config, "policy.yaml");
+  if (!existsSync(policyPath)) return new Set<string>();
+  const allowlist = new Set<string>();
+  let inActorAllowlist = false;
+  let section: string | null = null;
+  for (const rawLine of readFileSync(policyPath, "utf8").split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const indent = rawLine.match(/^\s*/)?.[0].length ?? 0;
+    if (!inActorAllowlist) {
+      if (trimmed === "actor_allowlist:") inActorAllowlist = true;
+      continue;
+    }
+    if (indent === 0) break;
+    if (indent === 2 && trimmed.endsWith(":")) {
+      section = trimmed.slice(0, -1);
+      continue;
+    }
+    const item = rawLine.match(/^\s*-\s*(.+?)\s*$/)?.[1]?.trim();
+    if (!item) continue;
+    const value = item.replace(/^['"]|['"]$/g, "");
+    if (section === "users") allowlist.add(value.startsWith("user:") ? value : `user:${value}`);
+    else if (section === "agents") allowlist.add(value.startsWith("agent:") ? value : `agent:${value}`);
+    else if (section === "systems") allowlist.add(value.startsWith("system:") ? value : `system:${value}`);
+    else allowlist.add(value);
+  }
+  return allowlist;
+}
+function inferredMutationActor() {
+  return trimToNull(process.env.OPENCLAW_AGENT ? `agent:${process.env.OPENCLAW_AGENT}` : null)
+    ?? trimToNull(process.env.RENTEMESTER_AGENT ? `agent:${process.env.RENTEMESTER_AGENT}` : null)
+    ?? trimToNull(process.env.RENTEMESTER_USER ? `user:${process.env.RENTEMESTER_USER}` : null)
+    ?? trimToNull(process.env.USER ? `user:${process.env.USER}` : null)
+    ?? trimToNull(process.env.LOGNAME ? `user:${process.env.LOGNAME}` : null);
+}
+function enforceMutationActorPolicy(commandKey: string) {
+  if (!MUTATING_COMMANDS.has(commandKey)) return;
+  const explicitActor = cliActor ?? trimToNull(process.env.RENTEMESTER_ACTOR);
+  if (explicitActor) {
+    if (!isCanonicalActorId(explicitActor)) {
+      fatal("explicit actor must use canonical format user:<id>, agent:<id>, or system:<id>");
+    }
+    const allowlist = loadActorAllowlist(companyRoot());
+    if (!allowlist.has(explicitActor)) {
+      fatal(`actor '${explicitActor}' is not in config/policy.yaml actor_allowlist; add it or run without --actor`);
+    }
+    process.env.RENTEMESTER_ACTOR = explicitActor;
+    if (cliActorVia) process.env.RENTEMESTER_ACTOR_VIA = cliActorVia;
+    else if (!trimToNull(process.env.RENTEMESTER_ACTOR_VIA)) process.env.RENTEMESTER_ACTOR_VIA = "rentemester-cli";
+    return;
+  }
+  if (!inferredMutationActor()) {
+    fatal("actor required for mutations: pass --actor <user:...|agent:...|system:...> or run with USER/LOGNAME/OPENCLAW_AGENT set");
+  }
+}
 function usage() {
   console.log(renderGlobalUsage());
 }
@@ -99,6 +188,7 @@ function emitResult(commandLabel: string, result: Record<string, unknown>, outpu
 const [cmd, sub] = parsedArgs.positionals;
 const commandSpec = getCommandSpec(cmd, sub);
 const outputFormat = resolveOutputFormat(parsedArgs.flags);
+const commandKey = [cmd, sub].filter(Boolean).join(" ");
 
 if (parsedArgs.errors.length > 0) {
   fatal(parsedArgs.errors.join("\n"));
@@ -111,6 +201,8 @@ if (hasFlag("--example")) {
   process.stdout.write(readFileSync(commandSpec.examplePath, "utf8"));
   process.exit(0);
 }
+
+enforceMutationActorPolicy(commandKey);
 
 if (!cmd || cmd === "help") usage();
 else if (hasFlag("--help")) {
