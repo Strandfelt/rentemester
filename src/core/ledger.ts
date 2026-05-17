@@ -4,6 +4,7 @@ import { getInvoiceStatus } from "./invoice-payments";
 import { currentRuleBundleVersion } from "./rules-metadata";
 import { insertAuditLog, resolveActor } from "./actor";
 import { validateJournalTransactionDate } from "./periods";
+import { nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -73,9 +74,11 @@ export function seedAccounts(db: Database) {
   db.transaction(() => rows.forEach((r) => insert.run(...r)))();
 }
 
-export function nextEntryNo(db: Database) {
-  const row = db.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number };
-  return `${new Date().getFullYear()}-${String(row.n + 1).padStart(5, "0")}`;
+export function nextEntryNo(db: Database, transactionDate: string) {
+  const scope = yearScopeFromIsoDate(transactionDate);
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(entry_no, 6) AS INTEGER)), 0) AS n FROM journal_entries WHERE entry_no LIKE ?`).get(`${scope}-%`) as { n: number };
+  const value = nextSequenceValue(db, "journal_entry", scope, Number(row.n ?? 0));
+  return `${scope}-${String(value).padStart(5, "0")}`;
 }
 
 export function previousHash(db: Database) {
@@ -204,7 +207,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
   if (!validation.ok) return { ok: false, appliedRules: validation.appliedRules, errors: validation.errors };
 
   const accounts = accountMap(db);
-  const entryNo = nextEntryNo(db);
+  const entryNo = nextEntryNo(db, payload.transactionDate);
   const prevHash = previousHash(db);
   const actor = resolveActor({ createdBy: payload.createdBy, createdByProgram: payload.createdByProgram });
 
@@ -341,7 +344,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
   if (!validation.ok) return { ok: false, appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: validation.errors };
 
   const accounts = accountMap(db);
-  const entryNo = nextEntryNo(db);
+  const entryNo = nextEntryNo(db, reversalPayload.transactionDate);
   const prevHash = previousHash(db);
   const actor = resolveActor({ createdBy: reversalPayload.createdBy, createdByProgram: reversalPayload.createdByProgram });
 

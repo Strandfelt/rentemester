@@ -35,6 +35,7 @@ export type InvoiceStatusResult = {
   paidAmount?: number;
   openBalance?: number;
   claimOpenBalance?: number;
+  asOfDate?: string;
   dueDate?: string;
   effectiveDueDate?: string;
   isOverdue?: boolean;
@@ -118,6 +119,9 @@ function looksLikeIsoDate(value: unknown) {
 }
 function round2(value: number) { return Number(value.toFixed(2)); }
 function isoDate(value: Date) { return value.toISOString().slice(0, 10); }
+function defaultComparisonDate(invoiceDate?: string, effectiveDueDate?: string) {
+  return effectiveDueDate ?? invoiceDate ?? "1970-01-01";
+}
 function addDays(dateText: string, days: number) {
   const date = new Date(`${dateText}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -207,7 +211,7 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
   const claimOpenBalance = round2(openBalance + totalReminderFees + totalCompensationClaims + totalInterestClaims - totalClaimPayments);
   const dueDate = typeof payload?.dueDate === "string" ? payload.dueDate : undefined;
   const effectiveDueDate = dueDate ?? (invoice.invoice_date ? addDays(invoice.invoice_date, 30) : undefined);
-  const comparisonDate = asOfDate ?? isoDate(new Date());
+  const comparisonDate = asOfDate ?? defaultComparisonDate(invoice.invoice_date ?? undefined, effectiveDueDate);
   const overdueDays = effectiveDueDate && openBalance > 0 ? Math.max(0, diffDays(effectiveDueDate, comparisonDate)) : 0;
   const isOverdue = overdueDays > 0;
   const status = openBalance > 0
@@ -231,6 +235,7 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
     paidAmount,
     openBalance,
     claimOpenBalance,
+    asOfDate: comparisonDate,
     dueDate,
     effectiveDueDate,
     isOverdue,

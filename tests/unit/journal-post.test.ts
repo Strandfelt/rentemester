@@ -33,6 +33,45 @@ describe("journal posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("numbers journal entries from transaction year and resets per year", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-entryno-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const first2024 = postJournalEntry(db, {
+      transactionDate: "2024-12-31",
+      text: "Year-end entry",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    const second2024 = postJournalEntry(db, {
+      transactionDate: "2024-01-01",
+      text: "Opening correction",
+      lines: [
+        { accountNo: "2000", debitAmount: 500 },
+        { accountNo: "5000", creditAmount: 500 }
+      ]
+    });
+    const first2025 = postJournalEntry(db, {
+      transactionDate: "2025-01-01",
+      text: "New year entry",
+      lines: [
+        { accountNo: "2000", debitAmount: 750 },
+        { accountNo: "5000", creditAmount: 750 }
+      ]
+    });
+
+    expect(first2024.entryNo).toBe("2024-00001");
+    expect(second2024.entryNo).toBe("2024-00002");
+    expect(first2025.entryNo).toBe("2025-00001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("supports foreign-currency journal entries with stored FX basis", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journal-fx-"));
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-inbox-fx-"));

@@ -6,6 +6,7 @@ import { companyPaths } from "./paths";
 import { validateInvoice, type InvoicePayload } from "./invoice";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
+import { nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
 
 export type IssueInvoiceResult = {
   ok: boolean;
@@ -32,9 +33,11 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function nextIssuedInvoiceNumber(db: Database) {
-  const row = db.query("SELECT COUNT(*) AS n FROM documents WHERE document_type = 'issued_invoice'").get() as { n: number };
-  return `${new Date().getFullYear()}-${String(row.n + 1).padStart(5, "0")}`;
+function nextIssuedInvoiceNumber(db: Database, issueDate: string) {
+  const scope = yearScopeFromIsoDate(issueDate);
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, 6) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no LIKE ?`).get(`${scope}-%`) as { n: number };
+  const value = nextSequenceValue(db, "issued_invoice", scope, Number(row.n ?? 0));
+  return `${scope}-${String(value).padStart(5, "0")}`;
 }
 
 export function issueInvoice(db: Database, companyRoot: string, payload: InvoicePayload): IssueInvoiceResult {
@@ -42,7 +45,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
   const appliedRules = [...new Set([...(validation.appliedRules ?? []), RULE_ID, LOCK_RULE_ID])];
   if (!validation.ok) return { ok: false, appliedRules, errors: validation.errors };
 
-  const invoiceNumber = payload.invoiceNumber?.trim() || nextIssuedInvoiceNumber(db);
+  const invoiceNumber = payload.invoiceNumber?.trim() || nextIssuedInvoiceNumber(db, payload.issueDate!);
   const paths = companyPaths(companyRoot);
   mkdirSync(paths.invoicesIssued, { recursive: true });
 

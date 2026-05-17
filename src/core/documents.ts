@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
+import { currentUtcYearScope, nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
 
 export type DocumentType = "purchase_sale" | "cash_register_receipt";
 export type DocumentExemptionCode = "FOREIGN_PHYSICAL_ONLY" | null;
@@ -75,9 +76,11 @@ function detectMimeType(path: string) {
   return "application/octet-stream";
 }
 
-function nextDocumentNo(db: Database) {
-  const row = db.query("SELECT COUNT(*) AS n FROM documents").get() as { n: number };
-  return `DOC-${new Date().getFullYear()}-${String(row.n + 1).padStart(6, "0")}`;
+function nextDocumentNo(db: Database, issueDate?: string) {
+  const scope = issueDate ? yearScopeFromIsoDate(issueDate) : currentUtcYearScope(db);
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(document_no, 10) AS INTEGER)), 0) AS n FROM documents WHERE document_no LIKE ?`).get(`DOC-${scope}-%`) as { n: number };
+  const value = nextSequenceValue(db, "document", scope, Number(row.n ?? 0));
+  return `DOC-${scope}-${String(value).padStart(6, "0")}`;
 }
 
 export function validateDocumentMetadata(metadata: DocumentMetadata): DocumentValidationResult {
@@ -122,7 +125,7 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
     return { ok: false, errors: [`duplicate document content already ingested as ${existing.document_no}`] };
   }
 
-  const documentNo = nextDocumentNo(db);
+  const documentNo = nextDocumentNo(db, metadata.issueDate);
   const docType = metadata.documentType ?? "purchase_sale";
   const senderVatOrCvr = metadata.sender?.vatOrCvr?.trim();
   const invoiceNo = metadata.invoiceNo?.trim();

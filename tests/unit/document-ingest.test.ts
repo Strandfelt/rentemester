@@ -110,6 +110,48 @@ describe("document ingest", () => {
     rmSync(inboxRoot, { recursive: true, force: true });
   });
 
+  test("numbers ingested documents by metadata year and resets per year", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-docyear-"));
+    const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-docyear-"));
+    const firstFile = join(inboxRoot, "vendor-2024.txt");
+    const secondFile = join(inboxRoot, "vendor-2025.txt");
+    writeFileSync(firstFile, "Invoice 2024\nAmount 1250 DKK\n");
+    writeFileSync(secondFile, "Invoice 2025\nAmount 1250 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(companyRoot).db);
+    migrate(db);
+
+    const first = ingestDocument(db, companyRoot, firstFile, {
+      source: "email",
+      issueDate: "2024-12-31",
+      invoiceNo: "INV-2024-1",
+      deliveryDescription: "Bogføring",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+    const second = ingestDocument(db, companyRoot, secondFile, {
+      source: "email",
+      issueDate: "2025-01-01",
+      invoiceNo: "INV-2025-1",
+      deliveryDescription: "Bogføring",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+
+    expect(first.documentNo).toBe("DOC-2024-000001");
+    expect(second.documentNo).toBe("DOC-2025-000001");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(inboxRoot, { recursive: true, force: true });
+  });
+
   test("ingests a compliant supporting document and blocks duplicate logical supplier invoices unless forced", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-"));
     const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-"));

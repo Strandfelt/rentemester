@@ -23,6 +23,13 @@ CREATE TABLE IF NOT EXISTS accounts (
   allow_direct_posting INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS sequences (
+  kind TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  value INTEGER NOT NULL CHECK(value >= 0),
+  PRIMARY KEY (kind, scope)
+);
+
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY,
   document_no TEXT UNIQUE,

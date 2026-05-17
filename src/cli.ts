@@ -32,6 +32,43 @@ function arg(name: string, fallback?: string) {
 function hasFlag(name: string) {
   return Bun.argv.includes(name);
 }
+function resolveInvoiceDocumentId(db: ReturnType<typeof openDb>) {
+  const documentId = Number(arg("--document-id"));
+  if (Number.isInteger(documentId) && documentId > 0) return documentId;
+  const invoiceNumber = arg("--invoice-number")?.trim();
+  if (invoiceNumber) {
+    const row = db.query(`SELECT id FROM documents WHERE document_type = 'issued_invoice' AND invoice_no = ? LIMIT 1`).get(invoiceNumber) as { id: number } | null;
+    return row?.id ?? null;
+  }
+  return null;
+}
+function resolveJournalEntryId(db: ReturnType<typeof openDb>) {
+  const entryId = Number(arg("--entry-id"));
+  if (Number.isInteger(entryId) && entryId > 0) return entryId;
+  const entryNo = arg("--entry-no")?.trim();
+  if (entryNo) {
+    const row = db.query(`SELECT id FROM journal_entries WHERE entry_no = ? LIMIT 1`).get(entryNo) as { id: number } | null;
+    return row?.id ?? null;
+  }
+  return null;
+}
+function findInvoiceDocumentIdByNumber(db: ReturnType<typeof openDb>, invoiceNumber?: string | null) {
+  const value = invoiceNumber?.trim();
+  if (!value) return null;
+  const row = db.query(`SELECT id FROM documents WHERE document_type = 'issued_invoice' AND invoice_no = ? LIMIT 1`).get(value) as { id: number } | null;
+  return row?.id ?? null;
+}
+function withResolvedInvoicePayload<T extends Record<string, unknown>>(
+  db: ReturnType<typeof openDb>,
+  payload: T,
+  idKey: keyof T,
+  numberKey: keyof T,
+) {
+  if (Number.isInteger(payload[idKey] as number) && Number(payload[idKey]) > 0) return payload;
+  const resolved = findInvoiceDocumentIdByNumber(db, payload[numberKey] as string | undefined);
+  if (!resolved) return payload;
+  return { ...payload, [idKey]: resolved };
+}
 const cliActor = arg("--actor");
 if (cliActor) process.env.RENTEMESTER_ACTOR = cliActor;
 const cliActorVia = arg("--actor-via");
@@ -39,7 +76,7 @@ if (cliActorVia) process.env.RENTEMESTER_ACTOR_VIA = cliActorVia;
 else if (cliActor && !process.env.RENTEMESTER_ACTOR_VIA) process.env.RENTEMESTER_ACTOR_VIA = "rentemester-cli";
 function companyRoot() { return arg("--company", process.env.RENTEMESTER_COMPANY ?? "/company")!; }
 function usage() {
-  console.log(`Rentemester v0.0.1\n\nCommands:\n  init --company <path>\n  system healthcheck --company <path>\n  system backup --company <path> [--at <ISO-8601>]\n  system backup-status --company <path> [--as-of <ISO-8601>]\n  system restore-backup --backup-dir <dir> --target-company <path> [--verify-key <path>]\n  system export-authority --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--requested-at <ISO-8601>] [--requester <name>]\n  audit verify --company <path>\n  accounts list --company <path>\n  exceptions list --company <path>\n  invoice validate --input <file.json>\n  invoice issue --company <path> --input <file.json>\n  invoice credit-note --company <path> --input <file.json>\n  invoice post --company <path> --document-id <n>\n  invoice settle-bank --company <path> --input <file.json>\n  invoice settle-claim-bank --company <path> --input <file.json>\n  invoice write-off-bad-debt --company <path> --input <file.json>\n  invoice refund-bank --company <path> --input <file.json>\n  invoice apply-payment --company <path> --input <file.json>\n  invoice remind --company <path> --document-id <n> --date <YYYY-MM-DD> [--fee <n>] [--note <text>]\n  invoice post-reminder --company <path> --document-id <n> [--reminder-id <n>] [--date <YYYY-MM-DD>]\n  invoice status --company <path> --document-id <n> [--as-of <YYYY-MM-DD>]\n  invoice interest --company <path> --document-id <n> --as-of <YYYY-MM-DD> --reference-rate <pct>\n  invoice claim-interest --company <path> --document-id <n> --as-of <YYYY-MM-DD> --reference-rate <pct> [--note <text>]\n  invoice post-interest --company <path> --document-id <n> [--claim-id <n>] [--date <YYYY-MM-DD>]\n  invoice compensation --company <path> --document-id <n> --as-of <YYYY-MM-DD> [--amount-dkk <n>]\n  invoice claim-compensation --company <path> --document-id <n> --as-of <YYYY-MM-DD> [--amount-dkk <n>] [--note <text>]\n  invoice post-compensation --company <path> --document-id <n> [--date <YYYY-MM-DD>]\n  documents ingest --company <path> --file <path> --metadata <file.json> [--force]\n  documents list --company <path>\n  bank import --company <path> --file <transactions.csv>\n  bank list --company <path>\n  reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat post-eu-service-purchase --company <path> --input <file.json>\n  vat post-representation-purchase --company <path> --input <file.json>\n  period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]\n  journal post --company <path> --input <file.json>\n  journal reverse --company <path> --entry-id <n> --date <YYYY-MM-DD> --reason <text>\n  journal list --company <path>`);
+  console.log(`Rentemester v0.0.1\n\nCommands:\n  init --company <path>\n  system healthcheck --company <path>\n  system backup --company <path> [--at <ISO-8601>]\n  system backup-status --company <path> [--as-of <ISO-8601>]\n  system restore-backup --backup-dir <dir> --target-company <path> [--verify-key <path>]\n  system export-authority --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--requested-at <ISO-8601>] [--requester <name>]\n  audit verify --company <path>\n  accounts list --company <path>\n  exceptions list --company <path>\n  invoice validate --input <file.json>\n  invoice issue --company <path> --input <file.json>\n  invoice credit-note --company <path> --input <file.json>\n  invoice post --company <path> (--document-id <n> | --invoice-number <no>)\n  invoice settle-bank --company <path> --input <file.json>\n  invoice settle-claim-bank --company <path> --input <file.json>\n  invoice write-off-bad-debt --company <path> --input <file.json>\n  invoice refund-bank --company <path> --input <file.json>\n  invoice apply-payment --company <path> --input <file.json>\n  invoice remind --company <path> (--document-id <n> | --invoice-number <no>) --date <YYYY-MM-DD> [--fee <n>] [--note <text>]\n  invoice post-reminder --company <path> (--document-id <n> | --invoice-number <no>) [--reminder-id <n>] [--date <YYYY-MM-DD>]\n  invoice status --company <path> (--document-id <n> | --invoice-number <no>) [--as-of <YYYY-MM-DD>]\n  invoice interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct>\n  invoice claim-interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct> [--note <text>]\n  invoice post-interest --company <path> (--document-id <n> | --invoice-number <no>) [--claim-id <n>] [--date <YYYY-MM-DD>]\n  invoice compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>]\n  invoice claim-compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>] [--note <text>]\n  invoice post-compensation --company <path> (--document-id <n> | --invoice-number <no>) [--date <YYYY-MM-DD>]\n  documents ingest --company <path> --file <path> --metadata <file.json> [--force]\n  documents list --company <path>\n  bank import --company <path> --file <transactions.csv>\n  bank list --company <path>\n  reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat post-eu-service-purchase --company <path> --input <file.json>\n  vat post-representation-purchase --company <path> --input <file.json>\n  period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]\n  journal post --company <path> --input <file.json>\n  journal reverse --company <path> (--entry-id <n> | --entry-no <no>) --date <YYYY-MM-DD> --reason <text>\n  journal list --company <path>`);
 }
 
 const [cmd, sub] = Bun.argv.slice(2).filter(a => !a.startsWith("--") && !Bun.argv[Bun.argv.indexOf(a)-1]?.startsWith("--"));
@@ -163,19 +200,19 @@ else if (cmd === "invoice" && sub === "credit-note") {
   }
   const root = companyRoot();
   const db = openDb(companyPaths(root).db); migrate(db);
-  const payload = JSON.parse(readFileSync(input, "utf8"));
+  const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "originalInvoiceDocumentId", "originalInvoiceNumber");
   const result = issueCreditNote(db, root, payload);
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post") {
-  const documentId = Number(arg("--document-id"));
-  if (!Number.isInteger(documentId) || documentId <= 0) {
-    console.error("Missing required --document-id <n>");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = postIssuedInvoiceToLedger(db, { invoiceDocumentId: documentId });
   console.log(JSON.stringify(result, null, 2));
   db.close();
@@ -188,7 +225,7 @@ else if (cmd === "invoice" && sub === "settle-bank") {
     process.exit(2);
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const payload = JSON.parse(readFileSync(input, "utf8"));
+  const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = settleInvoiceFromBank(db, payload);
   console.log(JSON.stringify(result, null, 2));
   db.close();
@@ -201,7 +238,7 @@ else if (cmd === "invoice" && sub === "settle-claim-bank") {
     process.exit(2);
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const payload = JSON.parse(readFileSync(input, "utf8"));
+  const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = settleInvoiceClaimsFromBank(db, payload);
   console.log(JSON.stringify(result, null, 2));
   db.close();
@@ -214,7 +251,7 @@ else if (cmd === "invoice" && sub === "write-off-bad-debt") {
     process.exit(2);
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const payload = JSON.parse(readFileSync(input, "utf8"));
+  const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = writeOffInvoiceBadDebt(db, payload);
   console.log(JSON.stringify(result, null, 2));
   db.close();
@@ -240,139 +277,139 @@ else if (cmd === "invoice" && sub === "refund-bank") {
     process.exit(2);
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const payload = JSON.parse(readFileSync(input, "utf8"));
+  const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = refundInvoiceToBank(db, payload);
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "remind") {
-  const documentId = Number(arg("--document-id"));
   const reminderDate = arg("--date");
   const feeArg = arg("--fee");
   const feeAmount = feeArg === undefined ? undefined : Number(feeArg);
   const note = arg("--note");
-  if (!Number.isInteger(documentId) || documentId <= 0 || !reminderDate || (feeArg !== undefined && Number.isNaN(feeAmount))) {
-    console.error("Missing required --document-id <n> or --date <YYYY-MM-DD>; optional --fee <n> must be numeric when present");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || !reminderDate || (feeArg !== undefined && Number.isNaN(feeAmount))) {
+    console.error("Missing required --document-id <n> or --invoice-number <no> or --date <YYYY-MM-DD>; optional --fee <n> must be numeric when present");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = registerInvoiceReminder(db, { invoiceDocumentId: documentId, reminderDate, feeAmount, note: note ?? undefined });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post-reminder") {
-  const documentId = Number(arg("--document-id"));
   const reminderIdArg = arg("--reminder-id");
   const reminderId = reminderIdArg === undefined ? undefined : Number(reminderIdArg);
   const transactionDate = arg("--date");
-  if (!Number.isInteger(documentId) || documentId <= 0 || (reminderIdArg !== undefined && (!Number.isInteger(reminderId) || reminderId <= 0))) {
-    console.error("Missing required --document-id <n>; optional --reminder-id <n> must be a positive integer when present");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || (reminderIdArg !== undefined && (!Number.isInteger(reminderId) || reminderId <= 0))) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>; optional --reminder-id <n> must be a positive integer when present");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = postInvoiceReminderToLedger(db, { invoiceDocumentId: documentId, reminderId, transactionDate: transactionDate ?? undefined });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "status") {
-  const documentId = Number(arg("--document-id"));
-  if (!Number.isInteger(documentId) || documentId <= 0) {
-    console.error("Missing required --document-id <n>");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = getInvoiceStatus(db, documentId, arg("--as-of"));
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "interest") {
-  const documentId = Number(arg("--document-id"));
   const asOfDate = arg("--as-of");
   const referenceRatePercent = Number(arg("--reference-rate"));
-  if (!Number.isInteger(documentId) || documentId <= 0 || !asOfDate || Number.isNaN(referenceRatePercent)) {
-    console.error("Missing required --document-id <n>, --as-of <YYYY-MM-DD>, or --reference-rate <pct>");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || !asOfDate || Number.isNaN(referenceRatePercent)) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>, --as-of <YYYY-MM-DD>, or --reference-rate <pct>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = calculateInvoiceLateInterest(db, { invoiceDocumentId: documentId, asOfDate, referenceRatePercent });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "claim-interest") {
-  const documentId = Number(arg("--document-id"));
   const asOfDate = arg("--as-of");
   const rateArg = arg("--reference-rate");
   const note = arg("--note");
   const referenceRatePercent = rateArg === undefined ? NaN : Number(rateArg);
-  if (!Number.isInteger(documentId) || documentId <= 0 || !asOfDate || Number.isNaN(referenceRatePercent)) {
-    console.error("Missing required --document-id <n>, --as-of <YYYY-MM-DD>, or --reference-rate <pct>");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || !asOfDate || Number.isNaN(referenceRatePercent)) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>, --as-of <YYYY-MM-DD>, or --reference-rate <pct>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = registerInvoiceLateInterest(db, { invoiceDocumentId: documentId, asOfDate, referenceRatePercent, note: note ?? undefined });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post-interest") {
-  const documentId = Number(arg("--document-id"));
   const claimIdArg = arg("--claim-id");
   const claimId = claimIdArg === undefined ? undefined : Number(claimIdArg);
   const transactionDate = arg("--date");
-  if (!Number.isInteger(documentId) || documentId <= 0 || (claimIdArg !== undefined && (!Number.isInteger(claimId) || claimId <= 0))) {
-    console.error("Missing required --document-id <n>; optional --claim-id <n> must be a positive integer when present");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || (claimIdArg !== undefined && (!Number.isInteger(claimId) || claimId <= 0))) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>; optional --claim-id <n> must be a positive integer when present");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = postInvoiceLateInterestToLedger(db, { invoiceDocumentId: documentId, claimId, transactionDate: transactionDate ?? undefined });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "compensation") {
-  const documentId = Number(arg("--document-id"));
   const asOfDate = arg("--as-of");
   const amountArg = arg("--amount-dkk");
   const compensationAmountDkk = amountArg === undefined ? undefined : Number(amountArg);
-  if (!Number.isInteger(documentId) || documentId <= 0 || !asOfDate || (amountArg !== undefined && Number.isNaN(compensationAmountDkk))) {
-    console.error("Missing required --document-id <n> or --as-of <YYYY-MM-DD>; optional --amount-dkk <n> must be numeric when present");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || !asOfDate || (amountArg !== undefined && Number.isNaN(compensationAmountDkk))) {
+    console.error("Missing required --document-id <n> or --invoice-number <no> or --as-of <YYYY-MM-DD>; optional --amount-dkk <n> must be numeric when present");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = calculateInvoiceLateCompensation(db, { invoiceDocumentId: documentId, asOfDate, compensationAmountDkk });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "claim-compensation") {
-  const documentId = Number(arg("--document-id"));
   const asOfDate = arg("--as-of");
   const amountArg = arg("--amount-dkk");
   const note = arg("--note");
   const compensationAmountDkk = amountArg === undefined ? undefined : Number(amountArg);
-  if (!Number.isInteger(documentId) || documentId <= 0 || !asOfDate || (amountArg !== undefined && Number.isNaN(compensationAmountDkk))) {
-    console.error("Missing required --document-id <n> or --as-of <YYYY-MM-DD>; optional --amount-dkk must be numeric when present");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId || !asOfDate || (amountArg !== undefined && Number.isNaN(compensationAmountDkk))) {
+    console.error("Missing required --document-id <n> or --invoice-number <no> or --as-of <YYYY-MM-DD>; optional --amount-dkk must be numeric when present");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = registerInvoiceLateCompensation(db, { invoiceDocumentId: documentId, asOfDate, compensationAmountDkk, note: note ?? undefined });
   console.log(JSON.stringify(result, null, 2));
   db.close();
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post-compensation") {
-  const documentId = Number(arg("--document-id"));
   const transactionDate = arg("--date");
-  if (!Number.isInteger(documentId) || documentId <= 0) {
-    console.error("Missing required --document-id <n>");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = postInvoiceLateCompensationToLedger(db, { invoiceDocumentId: documentId, transactionDate: transactionDate ?? undefined });
   console.log(JSON.stringify(result, null, 2));
   db.close();
@@ -503,14 +540,14 @@ else if (cmd === "journal" && sub === "post") {
   if (!result.ok) process.exit(1);
 }
 else if (cmd === "journal" && sub === "reverse") {
-  const entryId = Number(arg("--entry-id"));
   const date = arg("--date");
   const reason = arg("--reason");
-  if (!Number.isInteger(entryId) || !date || !reason) {
-    console.error("Missing required --entry-id <n>, --date <YYYY-MM-DD>, or --reason <text>");
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const entryId = resolveJournalEntryId(db);
+  if (!entryId || !date || !reason) {
+    console.error("Missing required --entry-id <n> or --entry-no <no>, --date <YYYY-MM-DD>, or --reason <text>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = reverseJournalEntry(db, { entryId, transactionDate: date, reason });
   console.log(JSON.stringify(result, null, 2));
   db.close();

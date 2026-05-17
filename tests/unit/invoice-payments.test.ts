@@ -68,10 +68,41 @@ describe("invoice payments", () => {
     expect(second.openBalance).toBe(0);
 
     const status2 = getInvoiceStatus(db, issued.documentId!);
+    expect(status2.asOfDate).toBe("2026-06-15");
     expect(status2.status).toBe("paid");
     expect(status2.paidAmount).toBe(1250);
     expect(status2.openBalance).toBe(0);
     expect(status2.payments).toHaveLength(2);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("defaults invoice status comparisons to persisted invoice dates instead of wall-clock time", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-status-deterministic-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0700C",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK",
+      dueDate: "2026-06-15"
+    });
+    expect(issued.ok).toBe(true);
+
+    const status = getInvoiceStatus(db, issued.documentId!);
+    expect(status.ok).toBe(true);
+    expect(status.asOfDate).toBe("2026-06-15");
+    expect(status.isOverdue).toBe(false);
+    expect(status.overdueDays).toBe(0);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

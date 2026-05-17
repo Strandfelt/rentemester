@@ -12,7 +12,7 @@ describe("journal reverse CLI", () => {
     await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
     await Bun.$`bun run src/cli.ts journal post --company ${company} --input examples/journal-entry.expense.json`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "journal", "reverse", "--company", company, "--entry-id", "1", "--date", "2026-05-17", "--reason", "Wrong period"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "journal", "reverse", "--company", company, "--entry-no", "2026-00001", "--date", "2026-05-17", "--reason", "Wrong period"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

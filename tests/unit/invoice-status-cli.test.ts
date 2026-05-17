@@ -11,7 +11,7 @@ describe("invoice status CLI", () => {
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "status", "--company", company, "--document-id", "1", "--as-of", "2026-06-20"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "status", "--company", company, "--invoice-number", "2026-0001", "--as-of", "2026-06-20"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

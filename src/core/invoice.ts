@@ -115,7 +115,7 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
   if (looksLikeIsoDate(payload.deliveryPeriodStart) && looksLikeIsoDate(payload.deliveryPeriodEnd) && payload.deliveryPeriodEnd < payload.deliveryPeriodStart) {
     errors.push("deliveryPeriodEnd cannot be earlier than deliveryPeriodStart");
   }
-  if (!hasText(payload.invoiceNumber)) errors.push("invoiceNumber is required");
+  if (payload.invoiceNumber !== undefined && !hasText(payload.invoiceNumber)) errors.push("invoiceNumber must not be blank when present");
   if (!hasText(payload.seller?.name)) errors.push("seller.name is required");
   if (!hasText(payload.seller?.address)) errors.push("seller.address is required");
   if (!hasText(payload.seller?.vatOrCvr)) errors.push("seller.vatOrCvr is required");

@@ -97,6 +97,50 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("auto-generates invoice numbers from issue year and resets per year", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-auto-no-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const first2024 = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2024-12-31",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    const second2024 = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2024-01-02",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde B ApS", address: "Købervej 10" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 500, lineTotalExVat: 500 }],
+      totals: { netAmount: 500, vatRate: 0.25, vatAmount: 125, grossAmount: 625 },
+      currency: "DKK"
+    });
+    const first2025 = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2025-01-03",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde C ApS", address: "Købervej 11" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 400, lineTotalExVat: 400 }],
+      totals: { netAmount: 400, vatRate: 0.25, vatAmount: 100, grossAmount: 500 },
+      currency: "DKK"
+    });
+
+    expect(first2024.invoiceNumber).toBe("2024-00001");
+    expect(second2024.invoiceNumber).toBe("2024-00002");
+    expect(first2025.invoiceNumber).toBe("2025-00001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("does not leave an orphan invoice file when document insert fails", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-fail-"));
     const realDb = openDb(ensureCompanyDirs(root).db);
