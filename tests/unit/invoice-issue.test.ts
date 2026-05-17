@@ -316,6 +316,68 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects canonical manual invoice numbers from the wrong fiscal scope", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-scope-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2099-00001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]).toContain("does not match current fiscal scope 2026");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("does not burn an auto-numbered invoice sequence when insert fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-auto-rollback-"));
+    const realDb = openDb(ensureCompanyDirs(root).db);
+    migrate(realDb);
+    const failingDb = failingDocumentInsertDb(realDb);
+
+    expect(() => issueInvoice(failingDb, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    })).toThrow("simulated insert failure");
+
+    const sequence = realDb.query("SELECT value FROM sequences WHERE kind = 'issued_invoice' AND scope = 'company-1:2026'").get() as { value: number } | null;
+    expect(sequence).toBeNull();
+
+    const retried = issueInvoice(realDb, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+
+    expect(retried.ok).toBe(true);
+    expect(retried.invoiceNumber).toBe("2026-00001");
+
+    realDb.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("does not leave an orphan invoice file when document insert fails", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-fail-"));
     const realDb = openDb(ensureCompanyDirs(root).db);

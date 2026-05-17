@@ -206,11 +206,11 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
   if (!validation.ok) return { ok: false, appliedRules: validation.appliedRules, errors: validation.errors };
 
   const accounts = accountMap(db);
-  const entryNo = nextEntryNo(db, payload.transactionDate);
-  const prevHash = previousHash(db);
-  const actor = resolveActor({ createdBy: payload.createdBy, createdByProgram: payload.createdByProgram });
 
   const result = db.transaction(() => {
+    const entryNo = nextEntryNo(db, payload.transactionDate);
+    const prevHash = previousHash(db);
+    const actor = resolveActor({ createdBy: payload.createdBy, createdByProgram: payload.createdByProgram });
     const canonicalLines = payload.lines.map((line) => ({
       account_no: line.accountNo,
       debit_amount: normalizeAmount(line.debitAmount),
@@ -283,7 +283,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
     });
 
     return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
-  })();
+  }, { immediate: true })();
 
   return { ok: true, appliedRules: validation.appliedRules, errors: [], ...result };
 }
@@ -344,11 +344,11 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
   if (!validation.ok) return { ok: false, appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: validation.errors };
 
   const accounts = accountMap(db);
-  const entryNo = nextEntryNo(db, reversalPayload.transactionDate);
-  const prevHash = previousHash(db);
-  const actor = resolveActor({ createdBy: reversalPayload.createdBy, createdByProgram: reversalPayload.createdByProgram });
 
   const result = db.transaction(() => {
+    const entryNo = nextEntryNo(db, reversalPayload.transactionDate);
+    const prevHash = previousHash(db);
+    const actor = resolveActor({ createdBy: reversalPayload.createdBy, createdByProgram: reversalPayload.createdByProgram });
     const canonicalLines = reversalPayload.lines.map((line) => ({
       account_no: line.accountNo,
       debit_amount: normalizeAmount(line.debitAmount),
@@ -419,7 +419,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
     });
 
     return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
-  })();
+  }, { immediate: true })();
 
   return { ok: true, originalEntryId: original.id, appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: [], ...result };
 }

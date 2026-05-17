@@ -12,7 +12,10 @@ export function nextSequenceValue(db: Database, kind: string, scope: string, cur
   const row = db.query(
     `INSERT INTO sequences (kind, scope, value)
      VALUES (?, ?, ?)
-     ON CONFLICT(kind, scope) DO UPDATE SET value = value + 1
+     ON CONFLICT(kind, scope) DO UPDATE SET value = CASE
+       WHEN sequences.value + 1 < excluded.value THEN excluded.value
+       ELSE sequences.value + 1
+     END
      RETURNING value`
   ).get(kind, scope, currentFloor + 1) as { value: number };
   return Number(row.value);
@@ -20,7 +23,7 @@ export function nextSequenceValue(db: Database, kind: string, scope: string, cur
 
 export function currentSequenceValue(db: Database, kind: string, scope: string, currentFloor = 0) {
   const row = db.query(`SELECT value FROM sequences WHERE kind = ? AND scope = ?`).get(kind, scope) as { value: number } | null;
-  return Number(row?.value ?? currentFloor);
+  return Math.max(Number(row?.value ?? 0), currentFloor);
 }
 
 export function reserveSequenceValue(db: Database, kind: string, scope: string, requestedValue: number, currentFloor = 0) {

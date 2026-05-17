@@ -52,6 +52,15 @@ function nextCreditNoteNumber(db: Database, issueDate: string) {
   return `CN-${scope}-${String(nextValue).padStart(4, "0")}`;
 }
 
+function validateManualCreditNoteNumberScope(db: Database, issueDate: string, creditNoteNumber: string) {
+  const { scope } = creditNoteSequenceState(db, issueDate);
+  const genericCanonical = /^CN-(\d{4})-(\d{4})$/.exec(creditNoteNumber);
+  if (genericCanonical && genericCanonical[1] !== scope) {
+    return `manual creditNoteNumber ${creditNoteNumber} does not match current fiscal scope ${scope}`;
+  }
+  return null;
+}
+
 function reserveManualCreditNoteNumber(db: Database, issueDate: string, creditNoteNumber: string) {
   const { scope, currentFloor, sequenceScope } = creditNoteSequenceState(db, issueDate);
   const match = new RegExp(`^CN-${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([0-9]{4})$`).exec(creditNoteNumber);
@@ -142,34 +151,44 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
   const netAmount = round2(grossAmount - vatAmount);
   const explicitCreditNoteNumber = input.creditNoteNumber?.trim();
   if (explicitCreditNoteNumber) {
-    const reserved = reserveManualCreditNoteNumber(db, input.issueDate, explicitCreditNoteNumber);
-    if (!reserved.ok) return { ok: false, appliedRules: [RULE_ID], errors: [reserved.error] };
+    const scopeError = validateManualCreditNoteNumberScope(db, input.issueDate, explicitCreditNoteNumber);
+    if (scopeError) return { ok: false, appliedRules: [RULE_ID], errors: [scopeError] };
   }
-  const creditNoteNumber = explicitCreditNoteNumber || nextCreditNoteNumber(db, input.issueDate);
 
-  const creditPayload = {
-    type: "credit_note",
-    creditNoteNumber,
-    originalInvoiceNumber: original.invoice_no,
-    originalInvoiceDocumentId: original.id,
-    issueDate: input.issueDate,
-    reason: input.reason.trim(),
-    grossAmount,
-    vatAmount,
-    netAmount,
-    creditedSoFar,
-    remainingAfterThisCredit: round2(remainingGrossAmount - grossAmount),
-    issuedAt: new Date().toISOString(),
-  };
-  const serialized = JSON.stringify(creditPayload, null, 2);
-  const hash = sha256(serialized);
   const paths = companyPaths(companyRoot);
   mkdirSync(paths.invoicesIssued, { recursive: true });
-  const storedPath = join(paths.invoicesIssued, `${creditNoteNumber}.json`);
-  const tempPath = writeTempFileFor(storedPath, serialized);
+  let tempPath: string | undefined;
+  let storedPath: string | undefined;
 
   try {
     const result = db.transaction(() => {
+      let creditNoteNumber = explicitCreditNoteNumber;
+      if (creditNoteNumber) {
+        const reserved = reserveManualCreditNoteNumber(db, input.issueDate, creditNoteNumber);
+        if (!reserved.ok) return { ok: false as const, error: reserved.error };
+      } else {
+        creditNoteNumber = nextCreditNoteNumber(db, input.issueDate);
+      }
+
+      const creditPayload = {
+        type: "credit_note",
+        creditNoteNumber,
+        originalInvoiceNumber: original.invoice_no,
+        originalInvoiceDocumentId: original.id,
+        issueDate: input.issueDate,
+        reason: input.reason.trim(),
+        grossAmount,
+        vatAmount,
+        netAmount,
+        creditedSoFar,
+        remainingAfterThisCredit: round2(remainingGrossAmount - grossAmount),
+        issuedAt: new Date().toISOString(),
+      };
+      const serialized = JSON.stringify(creditPayload, null, 2);
+      const hash = sha256(serialized);
+      storedPath = join(paths.invoicesIssued, `${creditNoteNumber}.json`);
+      tempPath = writeTempFileFor(storedPath, serialized);
+
       const doc = db.query(
         `INSERT INTO documents (
           document_no, source, original_filename, stored_path, mime_type, sha256_hash,
@@ -224,24 +243,25 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
         createdByProgram: input.createdByProgram,
       });
 
-      return { docId: doc.id, journal };
-    })();
+      return { ok: true as const, docId: doc.id, creditNoteNumber, sha256: hash, journal };
+    }, { immediate: true })();
 
-    promoteTempFile(tempPath, storedPath);
+    if (!result.ok) return { ok: false, appliedRules: [RULE_ID], errors: [result.error] };
+    promoteTempFile(tempPath!, storedPath!);
     return {
       ok: true,
       documentId: result.docId,
-      creditNoteNumber,
+      creditNoteNumber: result.creditNoteNumber,
       originalInvoiceNumber: original.invoice_no,
       storedPath,
-      sha256: hash,
+      sha256: result.sha256,
       journalEntryId: result.journal.entryId,
       journalEntryNo: result.journal.entryNo,
       appliedRules: [...new Set([RULE_ID, ...(result.journal.appliedRules ?? [])])],
       errors: [],
     };
   } catch (error) {
-    removeIfExists(tempPath);
+    if (tempPath) removeIfExists(tempPath);
     const parsed = typeof error === "object" && error && "message" in error ? (() => {
       try { return JSON.parse(String((error as any).message)); } catch { return null; }
     })() : null;

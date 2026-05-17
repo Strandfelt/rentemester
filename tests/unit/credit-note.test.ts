@@ -9,6 +9,24 @@ import { issueCreditNote } from "../../src/core/credit-notes";
 import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { postIssuedInvoiceToLedger } from "../../src/core/invoice-booking";
 
+function failingDocumentInsertDb(realDb: any) {
+  return new Proxy(realDb, {
+    get(target, prop, receiver) {
+      if (prop === "query") {
+        return (sql: string) => {
+          const statement = target.query(sql);
+          if (sql.includes("INSERT INTO documents")) {
+            return { get() { throw new Error("simulated insert failure"); } };
+          }
+          return statement;
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as any;
+}
+
 describe("credit notes", () => {
   test("mirrors original invoice posting accounts when crediting a custom-booked invoice", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-credit-custom-"));
@@ -61,6 +79,84 @@ describe("credit notes", () => {
     expect(chain.ok).toBe(true);
 
     db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects canonical manual credit-note numbers from the wrong fiscal scope", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-credit-scope-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0950",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+
+    const credit = issueCreditNote(db, root, {
+      originalInvoiceDocumentId: issued.documentId!,
+      issueDate: "2026-05-17",
+      creditNoteNumber: "CN-2099-0001",
+      reason: "Wrong fiscal scope",
+      grossAmount: 625
+    });
+    expect(credit.ok).toBe(false);
+    expect(credit.errors[0]).toContain("does not match current fiscal scope 2026");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("does not burn an auto-numbered credit-note sequence when insert fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-credit-rollback-"));
+    const realDb = openDb(ensureCompanyDirs(root).db);
+    migrate(realDb);
+    seedAccounts(realDb);
+
+    const issued = issueInvoice(realDb, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0950",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+
+    const failingDb = failingDocumentInsertDb(realDb);
+    const failed = issueCreditNote(failingDb, root, {
+      originalInvoiceDocumentId: issued.documentId!,
+      issueDate: "2026-05-17",
+      reason: "Should roll back sequence",
+      grossAmount: 625
+    });
+    expect(failed.ok).toBe(false);
+    expect(failed.errors[0]).toContain("simulated insert failure");
+
+    const sequence = realDb.query("SELECT value FROM sequences WHERE kind = 'credit_note' AND scope = 'company-1:2026'").get() as { value: number } | null;
+    expect(sequence).toBeNull();
+
+    const retried = issueCreditNote(realDb, root, {
+      originalInvoiceDocumentId: issued.documentId!,
+      issueDate: "2026-05-17",
+      reason: "Retry succeeds",
+      grossAmount: 625
+    });
+    expect(retried.ok).toBe(true);
+    expect(retried.creditNoteNumber).toBe("CN-2026-0001");
+
+    realDb.close();
     rmSync(root, { recursive: true, force: true });
   });
 

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
@@ -124,7 +124,6 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
     return { ok: false, errors: [`duplicate document content already ingested as ${existing.document_no}`] };
   }
 
-  const documentNo = nextDocumentNo(db, metadata.issueDate);
   const docType = metadata.documentType ?? "purchase_sale";
   const senderVatOrCvr = metadata.sender?.vatOrCvr?.trim();
   const invoiceNo = metadata.invoiceNo?.trim();
@@ -146,50 +145,66 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
   mkdirSync(p.documentsOriginals, { recursive: true });
   const ext = extname(filePath).toLowerCase() || ".bin";
   const storedPath = join(p.documentsOriginals, `${sha256}${ext}`);
-  copyFileSync(filePath, storedPath);
 
   const currency = (metadata.currency ?? "DKK").trim().toUpperCase();
   const retentionBasisDate = metadata.issueDate ?? currentUtcIsoDate(db);
-  const result = db.query(
-    `INSERT INTO documents (
-      document_no, source, original_filename, stored_path, mime_type, sha256_hash,
-      supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
-      document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
-      recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, retain_until
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ingested', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id`
-  ).get(
-    documentNo,
-    metadata.source,
-    basename(filePath),
-    storedPath,
-    detectMimeType(filePath),
-    sha256,
-    metadata.sender?.name ?? null,
-    metadata.invoiceNo ?? null,
-    metadata.issueDate ?? null,
-    metadata.amountIncVat ?? null,
-    currency,
-    docType,
-    metadata.deliveryDescription ?? null,
-    metadata.sender?.name ?? null,
-    metadata.sender?.address ?? null,
-    metadata.sender?.vatOrCvr ?? null,
-    metadata.recipient?.name ?? null,
-    metadata.recipient?.address ?? null,
-    metadata.recipient?.vatOrCvr ?? null,
-    metadata.vatAmount ?? null,
-    metadata.paymentDetails ?? null,
-    metadata.exemptionCode ?? null,
-    retainUntilForDate(db, retentionBasisDate),
-  ) as { id: number };
+  let copied = false;
 
-  insertAuditLog(db, {
-    eventType: "document_ingest",
-    entityType: "document",
-    entityId: result.id,
-    message: `Ingested supporting document ${documentNo} (${sha256})`,
-  });
+  try {
+    const result = db.transaction(() => {
+      const documentNo = nextDocumentNo(db, metadata.issueDate);
+      copyFileSync(filePath, storedPath);
+      copied = true;
 
-  return { ok: true, documentId: result.id, documentNo, sha256, storedPath };
+      const inserted = db.query(
+        `INSERT INTO documents (
+          document_no, source, original_filename, stored_path, mime_type, sha256_hash,
+          supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
+          document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
+          recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, retain_until
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ingested', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING id`
+      ).get(
+        documentNo,
+        metadata.source,
+        basename(filePath),
+        storedPath,
+        detectMimeType(filePath),
+        sha256,
+        metadata.sender?.name ?? null,
+        metadata.invoiceNo ?? null,
+        metadata.issueDate ?? null,
+        metadata.amountIncVat ?? null,
+        currency,
+        docType,
+        metadata.deliveryDescription ?? null,
+        metadata.sender?.name ?? null,
+        metadata.sender?.address ?? null,
+        metadata.sender?.vatOrCvr ?? null,
+        metadata.recipient?.name ?? null,
+        metadata.recipient?.address ?? null,
+        metadata.recipient?.vatOrCvr ?? null,
+        metadata.vatAmount ?? null,
+        metadata.paymentDetails ?? null,
+        metadata.exemptionCode ?? null,
+        retainUntilForDate(db, retentionBasisDate),
+      ) as { id: number };
+
+      insertAuditLog(db, {
+        eventType: "document_ingest",
+        entityType: "document",
+        entityId: inserted.id,
+        message: `Ingested supporting document ${documentNo} (${sha256})`,
+      });
+
+      return { id: inserted.id, documentNo };
+    }, { immediate: true })();
+
+    return { ok: true, documentId: result.id, documentNo: result.documentNo, sha256, storedPath };
+  } catch (error) {
+    if (copied) {
+      try { unlinkSync(storedPath); } catch {}
+    }
+    throw error;
+  }
 }

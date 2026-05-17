@@ -5,10 +5,28 @@ import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { ingestDocument } from "../../src/core/documents";
-import { postJournalEntry, seedAccounts, verifyAuditChain } from "../../src/core/ledger";
+import { postJournalEntry, reverseJournalEntry, seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { postIssuedInvoiceToLedger } from "../../src/core/invoice-booking";
 import { closeAccountingPeriod } from "../../src/core/periods";
+
+function failingJournalInsertDb(realDb: any) {
+  return new Proxy(realDb, {
+    get(target, prop, receiver) {
+      if (prop === "query") {
+        return (sql: string) => {
+          const statement = target.query(sql);
+          if (sql.includes("INSERT INTO journal_entries")) {
+            return { get() { throw new Error("simulated journal insert failure"); } };
+          }
+          return statement;
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as any;
+}
 
 describe("journal posting", () => {
   test("rejects unbalanced journal entries", () => {
@@ -110,6 +128,115 @@ describe("journal posting", () => {
     expect(first.entryNo).toBe("2025-00001");
     expect(second.entryNo).toBe("2025-00002");
     expect(next.entryNo).toBe("2026-00001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("respects the highest existing journal number when a stale sequence row lags behind", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-stale-seq-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = db.query("SELECT id FROM accounts WHERE account_no = '2000'").get() as { id: number };
+    const equity = db.query("SELECT id FROM accounts WHERE account_no = '5000'").get() as { id: number };
+    db.run(
+      `INSERT INTO journal_entries (
+        id, entry_no, transaction_date, text, rule_version, created_by, created_by_program, status, previous_hash, entry_hash, retain_until
+      ) VALUES (1, '2026-00005', '2026-05-15', 'Legacy imported entry', 'legacy-import', 'legacy', 'restore', 'posted', 'GENESIS', 'legacy-hash', '2031-12-31')`
+    );
+    db.run(`INSERT INTO journal_lines (journal_entry_id, account_id, debit_amount, credit_amount, currency, text) VALUES (1, ?, 1000, 0, 'DKK', 'legacy debit')`, bank.id);
+    db.run(`INSERT INTO journal_lines (journal_entry_id, account_id, debit_amount, credit_amount, currency, text) VALUES (1, ?, 0, 1000, 'DKK', 'legacy credit')`, equity.id);
+    db.run(`INSERT INTO sequences (kind, scope, value) VALUES ('journal_entry', 'company-1:2026', 1)`);
+
+    const posted = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Entry after stale restore sequence",
+      lines: [
+        { accountNo: "2000", debitAmount: 500 },
+        { accountNo: "5000", creditAmount: 500 }
+      ]
+    });
+
+    expect(posted.ok).toBe(true);
+    expect(posted.entryNo).toBe("2026-00006");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("does not burn a journal number when insert fails after allocation", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-rollback-seq-"));
+    const realDb = openDb(ensureCompanyDirs(root).db);
+    migrate(realDb);
+    seedAccounts(realDb);
+    const failingDb = failingJournalInsertDb(realDb);
+
+    expect(() => postJournalEntry(failingDb, {
+      transactionDate: "2026-05-16",
+      text: "Should roll back sequence",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    })).toThrow("simulated journal insert failure");
+
+    const sequence = realDb.query("SELECT value FROM sequences WHERE kind = 'journal_entry' AND scope = 'company-1:2026'").get() as { value: number } | null;
+    expect(sequence).toBeNull();
+
+    const posted = postJournalEntry(realDb, {
+      transactionDate: "2026-05-16",
+      text: "First surviving entry",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(posted.ok).toBe(true);
+    expect(posted.entryNo).toBe("2026-00001");
+
+    realDb.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("uses immediate transactions for journal writes and reversals", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-immediate-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const seenOptions: any[] = [];
+    const instrumentedDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === "transaction") {
+          return (fn: (...args: any[]) => any, options?: any) => {
+            seenOptions.push(options ?? null);
+            return target.transaction(fn, options);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as any;
+
+    const posted = postJournalEntry(instrumentedDb, {
+      transactionDate: "2026-05-16",
+      text: "Immediate transaction proof",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(posted.ok).toBe(true);
+
+    const reversed = reverseJournalEntry(instrumentedDb, {
+      entryId: posted.entryId!,
+      transactionDate: "2026-05-17",
+      reason: "Proof"
+    });
+    expect(reversed.ok).toBe(true);
+    expect(seenOptions.filter((options) => options?.immediate === true)).toHaveLength(2);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

@@ -6,7 +6,7 @@ import { companyPaths } from "./paths";
 import { validateInvoice, type InvoicePayload } from "./invoice";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
-import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue, reserveSequenceValue } from "./sequences";
+import { companySequenceScope, fiscalYearLabelFromDate, reserveSequenceValue, nextSequenceValue } from "./sequences";
 import { retainUntilForDate } from "./retention";
 import { requireCachedViesValidation } from "./vies";
 
@@ -45,6 +45,15 @@ function invoiceSequenceState(db: Database, issueDate: string) {
   return { scope, currentFloor: Number(row.n ?? 0), sequenceScope: companySequenceScope(db, scope) };
 }
 
+function validateManualInvoiceNumberScope(db: Database, issueDate: string, invoiceNumber: string) {
+  const { scope } = invoiceSequenceState(db, issueDate);
+  const genericCanonical = /^(\d{4})-(\d{5})$/.exec(invoiceNumber);
+  if (genericCanonical && genericCanonical[1] !== scope) {
+    return `manual invoiceNumber ${invoiceNumber} does not match current fiscal scope ${scope}`;
+  }
+  return null;
+}
+
 function reserveManualInvoiceNumber(db: Database, issueDate: string, invoiceNumber: string) {
   const { scope, currentFloor, sequenceScope } = invoiceSequenceState(db, issueDate);
   const match = new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([0-9]{5})$`).exec(invoiceNumber);
@@ -80,71 +89,86 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
 
   const explicitInvoiceNumber = payload.invoiceNumber?.trim();
   if (explicitInvoiceNumber) {
-    const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, explicitInvoiceNumber);
-    if (!reserved.ok) return { ok: false, appliedRules, errors: [reserved.error] };
+    const scopeError = validateManualInvoiceNumberScope(db, payload.issueDate!, explicitInvoiceNumber);
+    if (scopeError) return { ok: false, appliedRules, errors: [scopeError] };
   }
-  const invoiceNumber = explicitInvoiceNumber || nextIssuedInvoiceNumber(db, payload.issueDate!);
   const paths = companyPaths(companyRoot);
   mkdirSync(paths.invoicesIssued, { recursive: true });
 
-  const issuedAt = new Date().toISOString();
-  const issuedPayload = {
-    ...payload,
-    invoiceNumber,
-    issuedAt,
-    status: "issued",
-    ...(viesValidation ? { viesValidation } : {}),
-  };
-  const serialized = JSON.stringify(issuedPayload, null, 2);
-  const hash = sha256(serialized);
-  const storedPath = join(paths.invoicesIssued, `${invoiceNumber}.json`);
-  const tempPath = writeTempFileFor(storedPath, serialized);
+  let tempPath: string | undefined;
+  let storedPath: string | undefined;
 
   try {
-    const grossAmount = payload.totals?.grossAmount ?? null;
-    const vatAmount = payload.totals?.vatAmount ?? null;
-    const result = db.query(
-    `INSERT INTO documents (
-      document_no, source, original_filename, stored_path, mime_type, sha256_hash,
-      supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
-      document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
-      recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json, retain_until
-    ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-    RETURNING id`
-  ).get(
-    invoiceNumber,
-    `${invoiceNumber}.json`,
-    storedPath,
-    hash,
-    payload.seller?.name ?? null,
-    invoiceNumber,
-    payload.issueDate ?? null,
-    grossAmount,
-    payload.currency ?? 'DKK',
-    deliveryDescription(payload),
-    payload.seller?.name ?? null,
-    payload.seller?.address ?? null,
-    payload.seller?.vatOrCvr ?? null,
-    payload.buyer?.name ?? null,
-    payload.buyer?.address ?? null,
-    payload.buyer?.vatOrCvr ?? null,
-    vatAmount,
-    payload.reverseChargeBasis ?? null,
-    serialized,
-    retainUntilForDate(db, payload.issueDate),
-  ) as { id: number };
+    const result = db.transaction(() => {
+      let invoiceNumber = explicitInvoiceNumber;
+      if (invoiceNumber) {
+        const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, invoiceNumber);
+        if (!reserved.ok) return { ok: false as const, error: reserved.error };
+      } else {
+        invoiceNumber = nextIssuedInvoiceNumber(db, payload.issueDate!);
+      }
 
-    insertAuditLog(db, {
-      eventType: "invoice_issue",
-      entityType: "document",
-      entityId: result.id,
-      message: `Issued invoice ${invoiceNumber}`,
-    });
+      const issuedAt = new Date().toISOString();
+      const issuedPayload = {
+        ...payload,
+        invoiceNumber,
+        issuedAt,
+        status: "issued",
+        ...(viesValidation ? { viesValidation } : {}),
+      };
+      const serialized = JSON.stringify(issuedPayload, null, 2);
+      const hash = sha256(serialized);
+      storedPath = join(paths.invoicesIssued, `${invoiceNumber}.json`);
+      tempPath = writeTempFileFor(storedPath, serialized);
 
-    promoteTempFile(tempPath, storedPath);
-    return { ok: true, documentId: result.id, invoiceNumber, storedPath, sha256: hash, appliedRules, errors: [] };
+      const grossAmount = payload.totals?.grossAmount ?? null;
+      const vatAmount = payload.totals?.vatAmount ?? null;
+      const inserted = db.query(
+      `INSERT INTO documents (
+        document_no, source, original_filename, stored_path, mime_type, sha256_hash,
+        supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
+        document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
+        recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json, retain_until
+      ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+      RETURNING id`
+    ).get(
+      invoiceNumber,
+      `${invoiceNumber}.json`,
+      storedPath,
+      hash,
+      payload.seller?.name ?? null,
+      invoiceNumber,
+      payload.issueDate ?? null,
+      grossAmount,
+      payload.currency ?? 'DKK',
+      deliveryDescription(payload),
+      payload.seller?.name ?? null,
+      payload.seller?.address ?? null,
+      payload.seller?.vatOrCvr ?? null,
+      payload.buyer?.name ?? null,
+      payload.buyer?.address ?? null,
+      payload.buyer?.vatOrCvr ?? null,
+      vatAmount,
+      payload.reverseChargeBasis ?? null,
+      serialized,
+      retainUntilForDate(db, payload.issueDate),
+    ) as { id: number };
+
+      insertAuditLog(db, {
+        eventType: "invoice_issue",
+        entityType: "document",
+        entityId: inserted.id,
+        message: `Issued invoice ${invoiceNumber}`,
+      });
+
+      return { ok: true as const, documentId: inserted.id, invoiceNumber, sha256: hash };
+    }, { immediate: true })();
+
+    if (!result.ok) return { ok: false, appliedRules, errors: [result.error] };
+    promoteTempFile(tempPath!, storedPath!);
+    return { ok: true, documentId: result.documentId, invoiceNumber: result.invoiceNumber, storedPath, sha256: result.sha256, appliedRules, errors: [] };
   } catch (error) {
-    removeIfExists(tempPath);
+    if (tempPath) removeIfExists(tempPath);
     throw error;
   }
 }
