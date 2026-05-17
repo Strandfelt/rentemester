@@ -65,6 +65,7 @@ type JournalEntryRecord = {
   reversalOfEntryId: number | null;
   createdBy: string;
   createdByProgram: string;
+  retainUntil: string | null;
   lines: JournalLineRecord[];
 };
 
@@ -81,6 +82,7 @@ type DocumentRecord = {
   amountIncVat: number | null;
   vatAmount: number | null;
   status: string;
+  retainUntil: string | null;
 };
 
 type BankTransactionRecord = {
@@ -95,6 +97,7 @@ type BankTransactionRecord = {
   reference: string | null;
   importBatchId: string | null;
   status: string;
+  retainUntil: string | null;
 };
 
 type AuditLogRecord = {
@@ -229,7 +232,7 @@ function fetchJournalEntries(db: Database, periodStart: string, periodEnd: strin
   const entries = db.query(
     `SELECT id, entry_no, transaction_date, registration_datetime, text, document_id, source_bank_transaction_id,
             currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
-            status, reversal_of_entry_id, created_by, created_by_program
+            status, reversal_of_entry_id, created_by, created_by_program, retain_until
      FROM journal_entries
      WHERE transaction_date BETWEEN ? AND ?
      ORDER BY transaction_date ASC, id ASC`
@@ -259,6 +262,7 @@ function fetchJournalEntries(db: Database, periodStart: string, periodEnd: strin
     reversalOfEntryId: entry.reversal_of_entry_id ?? null,
     createdBy: entry.created_by,
     createdByProgram: entry.created_by_program,
+    retainUntil: entry.retain_until ?? null,
     lines: (linesStmt.all(entry.id) as any[]).map((line) => ({
       accountNo: line.account_no,
       accountName: line.account_name,
@@ -274,13 +278,13 @@ function fetchDocuments(db: Database, journalEntries: JournalEntryRecord[], peri
   const linkedIds = uniqueIds(journalEntries.map((entry) => entry.documentId));
   const linkedDocuments = linkedIds.length === 0 ? [] : db.query(
     `SELECT id, document_no, document_type, invoice_no, invoice_date, original_filename, stored_path, mime_type, source,
-            amount_inc_vat, vat_amount, status
+            amount_inc_vat, vat_amount, status, retain_until
      FROM documents WHERE id IN (${linkedIds.map(() => "?").join(",")})`
   ).all(...linkedIds) as any[];
 
   const issuedInPeriod = db.query(
     `SELECT id, document_no, document_type, invoice_no, invoice_date, original_filename, stored_path, mime_type, source,
-            amount_inc_vat, vat_amount, status
+            amount_inc_vat, vat_amount, status, retain_until
      FROM documents
      WHERE invoice_date BETWEEN ? AND ?
      ORDER BY id ASC`
@@ -301,6 +305,7 @@ function fetchDocuments(db: Database, journalEntries: JournalEntryRecord[], peri
       amountIncVat: row.amount_inc_vat == null ? null : Number(row.amount_inc_vat),
       vatAmount: row.vat_amount == null ? null : Number(row.vat_amount),
       status: row.status,
+      retainUntil: row.retain_until ?? null,
     });
   }
   return [...dedup.values()].sort((a, b) => a.id - b.id);
@@ -309,11 +314,11 @@ function fetchDocuments(db: Database, journalEntries: JournalEntryRecord[], peri
 function fetchBankTransactions(db: Database, journalEntries: JournalEntryRecord[], periodStart: string, periodEnd: string): BankTransactionRecord[] {
   const linkedIds = uniqueIds(journalEntries.map((entry) => entry.sourceBankTransactionId));
   const linked = linkedIds.length === 0 ? [] : db.query(
-    `SELECT id, transaction_date, booking_date, text, amount, currency, amount_dkk, fx_rate_to_dkk, reference, import_batch_id, status
+    `SELECT id, transaction_date, booking_date, text, amount, currency, amount_dkk, fx_rate_to_dkk, reference, import_batch_id, status, retain_until
      FROM bank_transactions WHERE id IN (${linkedIds.map(() => "?").join(",")})`
   ).all(...linkedIds) as any[];
   const inPeriod = db.query(
-    `SELECT id, transaction_date, booking_date, text, amount, currency, amount_dkk, fx_rate_to_dkk, reference, import_batch_id, status
+    `SELECT id, transaction_date, booking_date, text, amount, currency, amount_dkk, fx_rate_to_dkk, reference, import_batch_id, status, retain_until
      FROM bank_transactions
      WHERE COALESCE(booking_date, transaction_date) BETWEEN ? AND ?
      ORDER BY COALESCE(booking_date, transaction_date) ASC, id ASC`
@@ -333,6 +338,7 @@ function fetchBankTransactions(db: Database, journalEntries: JournalEntryRecord[
       reference: row.reference ?? null,
       importBatchId: row.import_batch_id ?? null,
       status: row.status,
+      retainUntil: row.retain_until ?? null,
     });
   }
   return [...dedup.values()].sort((a, b) => a.id - b.id);

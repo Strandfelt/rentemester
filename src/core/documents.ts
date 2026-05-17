@@ -6,6 +6,7 @@ import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { currentUtcIsoDate, fiscalYearLabelFromDate } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { retainUntilForDate } from "./retention";
 
 export type DocumentType = "purchase_sale" | "cash_register_receipt";
 export type DocumentExemptionCode = "FOREIGN_PHYSICAL_ONLY" | null;
@@ -147,13 +148,14 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
   copyFileSync(filePath, storedPath);
 
   const currency = (metadata.currency ?? "DKK").trim().toUpperCase();
+  const retentionBasisDate = metadata.issueDate ?? currentUtcIsoDate(db);
   const result = db.query(
     `INSERT INTO documents (
       document_no, source, original_filename, stored_path, mime_type, sha256_hash,
       supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
       document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
-      recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ingested', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, retain_until
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ingested', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`
   ).get(
     documentNo,
@@ -178,6 +180,7 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
     metadata.vatAmount ?? null,
     metadata.paymentDetails ?? null,
     metadata.exemptionCode ?? null,
+    retainUntilForDate(db, retentionBasisDate),
   ) as { id: number };
 
   insertAuditLog(db, {

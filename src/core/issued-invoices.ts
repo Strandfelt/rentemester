@@ -7,6 +7,7 @@ import { validateInvoice, type InvoicePayload } from "./invoice";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
 import { fiscalYearLabelFromDate } from "./sequences";
+import { retainUntilForDate } from "./retention";
 
 export type IssueInvoiceResult = {
   ok: boolean;
@@ -68,8 +69,8 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
       document_no, source, original_filename, stored_path, mime_type, sha256_hash,
       supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
       document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
-      recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json
-    ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+      recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json, retain_until
+    ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
     RETURNING id`
   ).get(
     invoiceNumber,
@@ -91,6 +92,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
     vatAmount,
     payload.reverseChargeBasis ?? null,
     serialized,
+    retainUntilForDate(db, payload.issueDate),
   ) as { id: number };
 
     insertAuditLog(db, {

@@ -108,6 +108,13 @@ describe("authority export", () => {
     expect(exportedDocs.some((doc: any) => doc.documentType === "purchase_sale")).toBe(true);
     expect(exportedDocs.every((doc: any) => doc.exportedReadablePath === null || doc.exportedReadablePath.startsWith("documents-readable/"))).toBe(true);
     expect(exportedDocs.every((doc: any) => doc.storedPathRelativeToCompany === null || !doc.storedPathRelativeToCompany.startsWith("/"))).toBe(true);
+    expect(exportedDocs.every((doc: any) => typeof doc.retainUntil === "string")).toBe(true);
+
+    const exportedJournal = JSON.parse(readFileSync(join(first.exportDir!, "machine-readable", "journal-entries.json"), "utf8"));
+    expect(exportedJournal.every((entry: any) => typeof entry.retainUntil === "string")).toBe(true);
+
+    const exportedBank = JSON.parse(readFileSync(join(first.exportDir!, "machine-readable", "bank-transactions.json"), "utf8"));
+    expect(exportedBank.every((row: any) => typeof row.retainUntil === "string")).toBe(true);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

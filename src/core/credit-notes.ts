@@ -8,6 +8,7 @@ import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { fiscalYearLabelFromDate } from "./sequences";
+import { retainUntilForDate } from "./retention";
 
 export type IssueCreditNoteInput = {
   originalInvoiceDocumentId: number;
@@ -151,8 +152,8 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
           document_no, source, original_filename, stored_path, mime_type, sha256_hash,
           supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
           document_type, delivery_description, sender_name, sender_address, sender_vat_cvr,
-          recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json
-        ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'credit_note', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+          recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payment_details, exemption_code, payload_json, retain_until
+        ) VALUES (?, 'rentemester', ?, ?, 'application/json', ?, ?, ?, ?, ?, ?, 'issued', 'credit_note', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
         RETURNING id`
       ).get(
         creditNoteNumber,
@@ -174,6 +175,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
         vatAmount,
         original.invoice_no,
         serialized,
+        retainUntilForDate(db, input.issueDate),
       ) as { id: number };
 
       const journal = postJournalEntry(db, {

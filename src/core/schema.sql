@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS documents (
   vat_amount NUMERIC,
   payment_details TEXT,
   exemption_code TEXT,
-  payload_json TEXT
+  payload_json TEXT,
+  retain_until TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_documents_purchase_sale_logical_identity
@@ -79,7 +80,8 @@ CREATE TABLE IF NOT EXISTS bank_transactions (
   source_file_hash TEXT,
   import_batch_id TEXT,
   transaction_hash TEXT UNIQUE,
-  status TEXT NOT NULL DEFAULT 'imported'
+  status TEXT NOT NULL DEFAULT 'imported',
+  retain_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS journal_entries (
@@ -102,6 +104,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   previous_hash TEXT,
   entry_hash TEXT NOT NULL,
   locked INTEGER NOT NULL DEFAULT 1,
+  retain_until TEXT,
   FOREIGN KEY(source_bank_transaction_id) REFERENCES bank_transactions(id),
   FOREIGN KEY(document_id) REFERENCES documents(id)
 );

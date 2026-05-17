@@ -6,6 +6,7 @@ import { insertAuditLog, resolveActor } from "./actor";
 import { validateJournalTransactionDate } from "./periods";
 import { fiscalYearLabelFromDate } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { retainUntilForDate } from "./retention";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -238,8 +239,8 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       `INSERT INTO journal_entries (
         entry_no, transaction_date, text, source_bank_transaction_id, document_id,
         currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
-        rule_version, created_by, created_by_program, status, previous_hash, entry_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?)
+        rule_version, created_by, created_by_program, status, previous_hash, entry_hash, retain_until
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?)
       RETURNING id, entry_no`
     );
 
@@ -258,6 +259,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       actor.createdByProgram,
       prevHash,
       entryHash,
+      retainUntilForDate(db, payload.transactionDate),
     ) as any;
 
     const insertLine = db.prepare(
@@ -375,8 +377,8 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       `INSERT INTO journal_entries (
         entry_no, transaction_date, text, source_bank_transaction_id, document_id,
         currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
-        rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reversed', ?, ?, ?)
+        rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash, retain_until
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reversed', ?, ?, ?, ?)
       RETURNING id, entry_no`
     ).get(
       entryNo,
@@ -394,6 +396,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       original.id,
       prevHash,
       entryHash,
+      retainUntilForDate(db, reversalPayload.transactionDate),
     ) as any;
 
     const insertLine = db.prepare(

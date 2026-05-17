@@ -139,3 +139,17 @@ rules:
         - mutation_inside_closed_period
         - future_dated_journal_posting
     explanation: Rentemester must block postings whose transaction date falls inside a closed or reported accounting period, and must also reject future-dated journal entries so historical VAT and bookkeeping periods stay stable.
+  - rule_id: DK-BOOKKEEPING-RETENTION-001
+    name: Supporting material must carry a retention deadline from the end of the fiscal year plus five years
+    category: retention_control
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - retain_until_on_documents
+        - retain_until_on_journal_entries
+        - retain_until_on_bank_transactions
+        - retention_status_report_by_as_of_date
+      forbid:
+        - silent_missing_retention_deadline
+    explanation: Rentemester must track a deterministic retention deadline for bookkeeping material based on the end of the fiscal year the material relates to, and surface overdue material without deleting it automatically.

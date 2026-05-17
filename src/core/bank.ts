@@ -5,6 +5,7 @@ import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { retainUntilForDate } from "./retention";
 
 export type BankImportRow = {
   transactionDate: string;
@@ -122,8 +123,8 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
   let skippedDuplicates = 0;
   const insert = db.prepare(
     `INSERT INTO bank_transactions (
-      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')`
+      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status, retain_until
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', ?)`
   );
 
   db.transaction(() => {
@@ -146,6 +147,7 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
         sourceFileHash,
         importBatchId,
         hash,
+        retainUntilForDate(db, row.bookingDate ?? row.transactionDate),
       );
       imported += 1;
     }
