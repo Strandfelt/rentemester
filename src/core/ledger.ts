@@ -421,5 +421,34 @@ export function verifyAuditChain(db: Database) {
 
     prev = e.entry_hash;
   }
+
+  const bankLinkedEntries = db.query(
+    `SELECT id, entry_no, source_bank_transaction_id, status, reversal_of_entry_id
+     FROM journal_entries
+     WHERE source_bank_transaction_id IS NOT NULL
+     ORDER BY id ASC`
+  ).all() as { id: number; entry_no: string; source_bank_transaction_id: number; status: string; reversal_of_entry_id: number | null }[];
+  const byBankTransaction = new Map<number, typeof bankLinkedEntries>();
+  for (const entry of bankLinkedEntries) {
+    const existing = byBankTransaction.get(entry.source_bank_transaction_id) ?? [];
+    existing.push(entry);
+    byBankTransaction.set(entry.source_bank_transaction_id, existing);
+  }
+  for (const [bankTransactionId, group] of byBankTransaction.entries()) {
+    if (group.length <= 1) continue;
+    const cancelled = new Set<number>();
+    const idsInGroup = new Set(group.map((entry) => entry.id));
+    for (const entry of group) {
+      if (entry.reversal_of_entry_id != null && idsInGroup.has(entry.reversal_of_entry_id)) {
+        cancelled.add(entry.id);
+        cancelled.add(entry.reversal_of_entry_id);
+      }
+    }
+    const remaining = group.filter((entry) => !cancelled.has(entry.id));
+    if (remaining.length > 1) {
+      errors.push(`duplicate source_bank_transaction_id ${bankTransactionId}: used by ${remaining.length} active entries (${remaining.map((entry) => entry.entry_no).join(', ')})`);
+    }
+  }
+
   return { ok: errors.length === 0, entries: entries.length, errors };
 }
