@@ -8,7 +8,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2022/700/xml",
     "notes": "Core bookkeeping law; source for digital bookkeeping, retention, append-only/audit requirements.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-BOGFORINGSLOVEN-2022-700.xml",
+    "localPath": "sources/downloaded/DK-BOGFORINGSLOVEN-2022-700.xml",
     "bytes": 89130,
     "sha256": "182f07c898580e9c57da7dff8cabbc9c714dea1886b4d2497d5e7b45a7f9327a"
   },
@@ -21,7 +21,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2024/205/xml",
     "notes": "Important for Rentemester if used as a non-registered digital bookkeeping system.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205.xml",
+    "localPath": "sources/downloaded/DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205.xml",
     "bytes": 22671,
     "sha256": "d68b7b2732235bba5eb425e9659102567376974f2e66b1feb885361cbae14d71"
   },
@@ -34,7 +34,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2023/97/xml",
     "notes": "Useful benchmark even if Rentemester starts as non-registered/local-first.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-DIGITAL-STANDARD-BOGFORING-2023-97.xml",
+    "localPath": "sources/downloaded/DK-DIGITAL-STANDARD-BOGFORING-2023-97.xml",
     "bytes": 61814,
     "sha256": "feb485ee9ae735037448252b8bb8d05f032b1053c3273dfeee19506d699293fa"
   },
@@ -47,7 +47,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2024/209/xml",
     "notes": "Core VAT law.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-MOMSLOVEN-2024-209.xml",
+    "localPath": "sources/downloaded/DK-MOMSLOVEN-2024-209.xml",
     "bytes": 600895,
     "sha256": "97e20639d4064900f025ea135b217273b77404b7138e26a7f05072d90a2e1e29"
   },
@@ -60,7 +60,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2023/1435/xml",
     "notes": "Invoice content, invoice storage, simplified invoice and VAT documentation rules.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-MOMSBEKENDTGORELSEN-2023-1435.xml",
+    "localPath": "sources/downloaded/DK-MOMSBEKENDTGORELSEN-2023-1435.xml",
     "bytes": 423368,
     "sha256": "edc4537ec0667bd28bbb19751a91d1c26420a05d514e1c062d763b8db33637b1"
   },
@@ -73,7 +73,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2023/1383/xml",
     "notes": "Minimum fields that purchase/sale supporting documents must contain when stored digitally.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-BILAG-OPBEVARING-2023-1383.xml",
+    "localPath": "sources/downloaded/DK-BILAG-OPBEVARING-2023-1383.xml",
     "bytes": 9197,
     "sha256": "b22f856a6012144137d78a535d5b683acb6e912f15ecbfd2c39caab72416b982"
   },
@@ -86,7 +86,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2025/302/xml",
     "notes": "Amends the voucher-storage order and removes prior applicability carve-outs from 2026-01-01.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-BILAG-OPBEVARING-AMEND-2025-302.xml",
+    "localPath": "sources/downloaded/DK-BILAG-OPBEVARING-AMEND-2025-302.xml",
     "bytes": 3541,
     "sha256": "cd51ad2dc05e181880b3592af1b48d44eff8583693d0184e0fc78dd7a2357e10"
   },
@@ -99,7 +99,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2014/459/xml",
     "notes": "Renteloven; used for deterministic due-date fallback and overdue classification when customer invoices remain unpaid after the statutory period.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-RENTELOVEN-2014-459.xml",
+    "localPath": "sources/downloaded/DK-RENTELOVEN-2014-459.xml",
     "bytes": 36117,
     "sha256": "6c887571027854733f31b4fe388e1d4e5ea8a6f07c5ac6a06be6290e7c0bc03f"
   },
@@ -112,7 +112,7 @@
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2013/105/xml",
     "notes": "Introduces the fixed DKK 310 compensation amount for late commercial payment claims from 2013-03-01.",
     "downloadedAt": "2026-05-17T01:40:21.543Z",
-    "localPath": "/home/admin/rentemester/sources/downloaded/DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105.xml",
+    "localPath": "sources/downloaded/DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105.xml",
     "bytes": 6205,
     "sha256": "525778b12fe2d28e8028cee2c9168ef2e0c18b7022173d7960ec9c501b21fa21"
   }

@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   amount_foreign NUMERIC,
   amount_dkk NUMERIC,
   fx_rate_to_dkk NUMERIC,
-  rule_version TEXT NOT NULL DEFAULT 'dk-v0.0.1',
+  rule_version TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT 'system',
   created_by_program TEXT NOT NULL DEFAULT 'rentemester',
   status TEXT NOT NULL CHECK(status IN ('posted','reversed')) DEFAULT 'posted',

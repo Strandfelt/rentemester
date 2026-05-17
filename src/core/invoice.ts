@@ -34,6 +34,7 @@ const RULES = {
   SIMPLIFIED: "DK-INVOICE-SIMPLIFIED-001",
   REVERSE_CHARGE: "DK-INVOICE-REVERSE-CHARGE-001",
   ARITHMETIC: "DK-INVOICE-ARITHMETIC-001",
+  VAT_SEPARATE_AMOUNT: "DK-VAT-SEPARATE-AMOUNT-001",
 } as const;
 
 function hasText(value: unknown): value is string {
@@ -92,6 +93,7 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
   }
 
   if (vatTreatment === "standard") {
+    appliedRules.push(RULES.VAT_SEPARATE_AMOUNT);
     if (!hasPositiveNumber(payload.totals?.vatRate) || (payload.totals?.vatRate ?? 0) <= 0) {
       errors.push("standard VAT invoices must include totals.vatRate");
     }

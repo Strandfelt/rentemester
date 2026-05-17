@@ -28,11 +28,6 @@ vat_codes:
     rate: 0.25
     reverse_charge: false
     deductible_percentage: 1.0
-  - code: NO_VAT
-    type: none
-    rate: 0
-    reverse_charge: false
-    deductible_percentage: 0
 rules:
   - rule_id: DK-VAT-SEPARATE-AMOUNT-001
     name: Danish VAT deduction requires stated VAT amount

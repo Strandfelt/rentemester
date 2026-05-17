@@ -307,8 +307,8 @@ describe("ledger hardening", () => {
 
     db.exec("PRAGMA foreign_keys = OFF");
     db.run(
-      `INSERT INTO journal_entries (entry_no, transaction_date, text, status, previous_hash, entry_hash)
-       VALUES ('2026-99999', '2026-05-16', 'Corrupt entry without lines', 'posted', 'GENESIS', 'bad-hash')`
+      `INSERT INTO journal_entries (entry_no, transaction_date, text, rule_version, status, previous_hash, entry_hash)
+       VALUES ('2026-99999', '2026-05-16', 'Corrupt entry without lines', 'corrupt-fixture', 'posted', 'GENESIS', 'bad-hash')`
     );
     db.run(
       `INSERT INTO journal_lines (journal_entry_id, account_id, debit_amount, credit_amount, text)

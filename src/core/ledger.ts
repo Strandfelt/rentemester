@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
+import { currentRuleBundleVersion } from "./rules-metadata";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -44,6 +45,8 @@ const LEDGER_RULES = {
   DOCUMENT: "DK-BOOKKEEPING-DOCUMENT-001",
   FX: "DK-BOOKKEEPING-FX-001",
 } as const;
+
+const RULE_VERSION = currentRuleBundleVersion();
 
 export function seedAccounts(db: Database) {
   const rows = [
@@ -215,7 +218,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       amount_foreign: payload.amountForeign ?? null,
       amount_dkk: payload.amountDkk ?? null,
       fx_rate_to_dkk: payload.fxRateToDkk ?? null,
-      rule_version: 'dk-v0.0.1',
+      rule_version: RULE_VERSION,
       created_by: payload.createdBy ?? 'system',
       created_by_program: payload.createdByProgram ?? 'rentemester',
       status: 'posted',
@@ -228,7 +231,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
         entry_no, transaction_date, text, source_bank_transaction_id, document_id,
         currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
         rule_version, created_by, created_by_program, status, previous_hash, entry_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dk-v0.0.1', ?, ?, 'posted', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?)
       RETURNING id, entry_no`
     );
 
@@ -242,6 +245,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       payload.amountForeign ?? null,
       payload.amountDkk ?? null,
       payload.fxRateToDkk ?? null,
+      RULE_VERSION,
       payload.createdBy ?? 'system',
       payload.createdByProgram ?? 'rentemester',
       prevHash,
@@ -347,7 +351,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       amount_foreign: reversalPayload.amountForeign ?? null,
       amount_dkk: reversalPayload.amountDkk ?? null,
       fx_rate_to_dkk: reversalPayload.fxRateToDkk ?? null,
-      rule_version: 'dk-v0.0.1',
+      rule_version: RULE_VERSION,
       created_by: reversalPayload.createdBy ?? 'system',
       created_by_program: reversalPayload.createdByProgram ?? 'rentemester',
       status: 'reversed',
@@ -360,7 +364,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
         entry_no, transaction_date, text, source_bank_transaction_id, document_id,
         currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
         rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dk-v0.0.1', ?, ?, 'reversed', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reversed', ?, ?, ?)
       RETURNING id, entry_no`
     ).get(
       entryNo,
@@ -372,6 +376,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       reversalPayload.amountForeign ?? null,
       reversalPayload.amountDkk ?? null,
       reversalPayload.fxRateToDkk ?? null,
+      RULE_VERSION,
       reversalPayload.createdBy ?? 'system',
       reversalPayload.createdByProgram ?? 'rentemester',
       original.id,

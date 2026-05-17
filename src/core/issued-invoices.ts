@@ -16,6 +16,7 @@ export type IssueInvoiceResult = {
 };
 
 const RULE_ID = "DK-INVOICE-ISSUE-001";
+const LOCK_RULE_ID = "DK-INVOICE-LOCK-001";
 
 function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
@@ -28,7 +29,7 @@ function nextIssuedInvoiceNumber(db: Database) {
 
 export function issueInvoice(db: Database, companyRoot: string, payload: InvoicePayload): IssueInvoiceResult {
   const validation = validateInvoice(payload);
-  const appliedRules = [...new Set([...(validation.appliedRules ?? []), RULE_ID])];
+  const appliedRules = [...new Set([...(validation.appliedRules ?? []), RULE_ID, LOCK_RULE_ID])];
   if (!validation.ok) return { ok: false, appliedRules, errors: validation.errors };
 
   const invoiceNumber = payload.invoiceNumber?.trim() || nextIssuedInvoiceNumber(db);

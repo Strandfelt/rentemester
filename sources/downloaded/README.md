@@ -1,6 +1,6 @@
 # Downloaded legal sources
 
-Downloaded at 2026-05-17T01:40:21.543Z.
+Source count: 9
 
 - DK-BOGFORINGSLOVEN-2022-700: Lov om bogføring (182f07c898580e9c57da7dff8cabbc9c714dea1886b4d2497d5e7b45a7f9327a)
 - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205: Bekendtgørelse om krav til virksomheders digitale bogføringssystemer der ikke er registreret efter bogføringsloven (d68b7b2732235bba5eb425e9659102567376974f2e66b1feb885361cbae14d71)
