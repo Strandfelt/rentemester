@@ -1,6 +1,34 @@
 import type { Database } from "bun:sqlite";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
+export type ReconciliationStatus = "all" | "matched" | "unmatched";
+
+export type BankReconciliationFilters = {
+  status?: ReconciliationStatus;
+  textMatch?: string;
+  amount?: number;
+};
+
+export type BankTransactionListResult = {
+  ok: boolean;
+  count: number;
+  rows: Array<{
+    id: number;
+    transactionDate: string;
+    bookingDate: string | null;
+    text: string;
+    amount: number;
+    currency: string;
+    reference: string | null;
+    importBatchId: string | null;
+    ledgerStatus: string;
+    reconciliationStatus: Exclude<ReconciliationStatus, "all">;
+    journalEntryId: number | null;
+    journalEntryNo: string | null;
+  }>;
+  errors: string[];
+};
+
 export type BankReconciliationReport = {
   ok: boolean;
   appliedRules: string[];
@@ -35,10 +63,91 @@ function round2(value: number) {
   return Number(value.toFixed(2));
 }
 
-export function buildBankReconciliationReport(db: Database, periodStart: string, periodEnd: string): BankReconciliationReport {
+function normalizedStatus(status?: string): ReconciliationStatus {
+  return status === "matched" || status === "unmatched" || status === "all" ? status : "all";
+}
+
+function validateStatus(status?: string) {
+  if (!status || status === "all" || status === "matched" || status === "unmatched") return null;
+  return "status must be one of all, matched, unmatched when present";
+}
+
+function normalizeTextMatch(textMatch?: string) {
+  const value = textMatch?.trim().toLowerCase();
+  return value ? value : null;
+}
+
+function matchesFilters(row: {
+  amount: number;
+  text: string;
+  reconciliation_status: "matched" | "unmatched";
+}, filters: BankReconciliationFilters = {}) {
+  const status = normalizedStatus(filters.status);
+  const textMatch = normalizeTextMatch(filters.textMatch);
+  if (status !== "all" && row.reconciliation_status !== status) return false;
+  if (typeof filters.amount === "number" && Number.isFinite(filters.amount) && round2(row.amount) !== round2(filters.amount)) return false;
+  if (textMatch && !row.text.toLowerCase().includes(textMatch)) return false;
+  return true;
+}
+
+export function listBankTransactions(db: Database, filters: BankReconciliationFilters & { from?: string; to?: string } = {}): BankTransactionListResult {
+  const errors: string[] = [];
+  if (filters.from && !looksLikeIsoDate(filters.from)) errors.push("from must be YYYY-MM-DD when present");
+  if (filters.to && !looksLikeIsoDate(filters.to)) errors.push("to must be YYYY-MM-DD when present");
+  const statusError = validateStatus(filters.status);
+  if (statusError) errors.push(statusError);
+  if (errors.length > 0) return { ok: false, count: 0, rows: [], errors };
+
+  const rows = db.query(
+    `SELECT bt.id, bt.transaction_date, bt.booking_date, bt.text, bt.amount, bt.currency, bt.reference, bt.import_batch_id, bt.status,
+            je.id as journal_entry_id, je.entry_no,
+            CASE WHEN je.id IS NULL THEN 'unmatched' ELSE 'matched' END as reconciliation_status
+     FROM bank_transactions bt
+     LEFT JOIN journal_entries je
+       ON je.source_bank_transaction_id = bt.id
+      AND je.status = 'posted'
+     WHERE (? IS NULL OR bt.transaction_date >= ?)
+       AND (? IS NULL OR bt.transaction_date <= ?)
+     ORDER BY bt.transaction_date DESC, bt.id DESC`
+  ).all(filters.from ?? null, filters.from ?? null, filters.to ?? null, filters.to ?? null) as Array<{
+    id: number;
+    transaction_date: string;
+    booking_date: string | null;
+    text: string;
+    amount: number;
+    currency: string;
+    reference: string | null;
+    import_batch_id: string | null;
+    status: string;
+    journal_entry_id: number | null;
+    entry_no: string | null;
+    reconciliation_status: "matched" | "unmatched";
+  }>;
+
+  const filtered = rows.filter((row) => matchesFilters(row, filters)).map((row) => ({
+    id: row.id,
+    transactionDate: row.transaction_date,
+    bookingDate: row.booking_date,
+    text: row.text,
+    amount: round2(Number(row.amount)),
+    currency: row.currency,
+    reference: row.reference,
+    importBatchId: row.import_batch_id,
+    ledgerStatus: row.status,
+    reconciliationStatus: row.reconciliation_status,
+    journalEntryId: row.journal_entry_id,
+    journalEntryNo: row.entry_no,
+  }));
+
+  return { ok: true, count: filtered.length, rows: filtered, errors: [] };
+}
+
+export function buildBankReconciliationReport(db: Database, periodStart: string, periodEnd: string, filters: BankReconciliationFilters = {}): BankReconciliationReport {
   const errors: string[] = [];
   if (!looksLikeIsoDate(periodStart)) errors.push("periodStart must be YYYY-MM-DD");
   if (!looksLikeIsoDate(periodEnd)) errors.push("periodEnd must be YYYY-MM-DD");
+  const statusError = validateStatus(filters.status);
+  if (statusError) errors.push(statusError);
   if (errors.length === 0 && periodStart > periodEnd) errors.push("periodStart must be before or equal to periodEnd");
   if (errors.length > 0) {
     return {
@@ -58,9 +167,10 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
 
   const rows = db.query(
     `SELECT bt.id as bank_transaction_id, bt.transaction_date, bt.text, bt.amount, bt.import_batch_id,
-            je.id as journal_entry_id, je.entry_no
+            je.id as journal_entry_id, je.entry_no,
+            CASE WHEN je.id IS NULL THEN 'unmatched' ELSE 'matched' END as reconciliation_status
      FROM bank_transactions bt
-     LEFT JOIN journal_entries je ON je.source_bank_transaction_id = bt.id
+     LEFT JOIN journal_entries je ON je.source_bank_transaction_id = bt.id AND je.status = 'posted'
      WHERE bt.transaction_date >= ? AND bt.transaction_date <= ?
      ORDER BY bt.transaction_date ASC, bt.id ASC`
   ).all(periodStart, periodEnd) as Array<{
@@ -71,6 +181,7 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
     import_batch_id: string | null;
     journal_entry_id: number | null;
     entry_no: string | null;
+    reconciliation_status: "matched" | "unmatched";
   }>;
 
   const matched: BankReconciliationReport["matched"] = [];
@@ -79,6 +190,7 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
   let unmatchedAmountTotal = 0;
 
   for (const row of rows) {
+    if (!matchesFilters({ amount: Number(row.amount), text: row.text, reconciliation_status: row.reconciliation_status }, filters)) continue;
     const amount = round2(Number(row.amount));
     if (row.journal_entry_id) {
       matched.push({

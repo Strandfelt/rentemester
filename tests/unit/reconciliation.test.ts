@@ -6,7 +6,7 @@ import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { importBankCsv } from "../../src/core/bank";
 import { ingestDocument } from "../../src/core/documents";
-import { buildBankReconciliationReport } from "../../src/core/reconciliation";
+import { buildBankReconciliationReport, listBankTransactions } from "../../src/core/reconciliation";
 import { postJournalEntry, seedAccounts } from "../../src/core/ledger";
 
 describe("bank reconciliation", () => {
@@ -65,6 +65,17 @@ describe("bank reconciliation", () => {
     expect(report.unmatched[0].text).toBe("Customer payment");
     expect(report.matchedAmountTotal).toBe(-1250);
     expect(report.unmatchedAmountTotal).toBe(2500);
+
+    const unmatchedOnly = buildBankReconciliationReport(db, "2026-05-01", "2026-05-31", { status: "unmatched", textMatch: "customer" });
+    expect(unmatchedOnly.ok).toBe(true);
+    expect(unmatchedOnly.matchedCount).toBe(0);
+    expect(unmatchedOnly.unmatchedCount).toBe(1);
+    expect(unmatchedOnly.unmatched[0].text).toBe("Customer payment");
+
+    const matchedOnly = listBankTransactions(db, { status: "matched", from: "2026-05-01", to: "2026-05-31", textMatch: "software" });
+    expect(matchedOnly.ok).toBe(true);
+    expect(matchedOnly.rows).toHaveLength(1);
+    expect(matchedOnly.rows[0]).toMatchObject({ text: "Software payment", reconciliationStatus: "matched" });
 
     db.close();
     rmSync(root, { recursive: true, force: true });

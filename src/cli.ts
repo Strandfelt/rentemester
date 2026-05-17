@@ -8,7 +8,7 @@ import { validateInvoice } from "./core/invoice";
 import { ingestDocument } from "./core/documents";
 import { importBankCsv } from "./core/bank";
 import { buildVatReport, postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./core/vat";
-import { buildBankReconciliationReport } from "./core/reconciliation";
+import { buildBankReconciliationReport, listBankTransactions } from "./core/reconciliation";
 import { issueInvoice } from "./core/issued-invoices";
 import { applyInvoicePayment, getInvoiceStatus } from "./core/invoice-payments";
 import { postIssuedInvoiceToLedger } from "./core/invoice-booking";
@@ -476,22 +476,60 @@ else if (cmd === "bank" && sub === "import") {
   db.close();
 }
 else if (cmd === "bank" && sub === "list") {
+  const amountArg = arg("--amount");
+  const amount = amountArg === undefined ? undefined : Number(amountArg);
+  if (amountArg !== undefined && Number.isNaN(amount)) {
+    console.error("--amount must be numeric when present");
+    process.exit(2);
+  }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const rows = db.query("SELECT id, transaction_date, booking_date, text, amount, currency, amount_dkk, fx_rate_to_dkk, reference, import_batch_id, status FROM bank_transactions ORDER BY id DESC").all();
-  console.table(rows);
+  const result = listBankTransactions(db, {
+    status: arg("--status") as any,
+    from: arg("--from") ?? undefined,
+    to: arg("--to") ?? undefined,
+    textMatch: arg("--text-match") ?? undefined,
+    amount,
+  });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else if (result.ok) console.table(result.rows);
+  else console.error(result.errors.join("\n"));
   db.close();
+  if (!result.ok) process.exit(1);
 }
 else if (cmd === "reconcile" && sub === "bank") {
   const from = arg("--from");
   const to = arg("--to");
+  const amountArg = arg("--amount");
+  const amount = amountArg === undefined ? undefined : Number(amountArg);
   if (!from || !to) {
     console.error("Missing required --from <YYYY-MM-DD> or --to <YYYY-MM-DD>");
     process.exit(2);
   }
+  if (amountArg !== undefined && Number.isNaN(amount)) {
+    console.error("--amount must be numeric when present");
+    process.exit(2);
+  }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const result = buildBankReconciliationReport(db, from, to);
-  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  const result = buildBankReconciliationReport(db, from, to, {
+    status: arg("--status") as any,
+    textMatch: arg("--text-match") ?? undefined,
+    amount,
+  });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else if (result.ok) {
+    console.log(`Matched: ${result.matchedCount} | Unmatched: ${result.unmatchedCount} | Period: ${result.periodStart}..${result.periodEnd}`);
+    if (result.matched.length > 0) {
+      console.log("\nMatched");
+      console.table(result.matched);
+    }
+    if (result.unmatched.length > 0) {
+      console.log("\nUnmatched");
+      console.table(result.unmatched);
+    }
+    if (result.matched.length === 0 && result.unmatched.length === 0) console.log("No rows for current filter.");
+  } else console.error(result.errors.join("\n"));
   db.close();
+  if (!result.ok) process.exit(1);
 }
 else if (cmd === "vat" && sub === "report") {
   const from = arg("--from");
