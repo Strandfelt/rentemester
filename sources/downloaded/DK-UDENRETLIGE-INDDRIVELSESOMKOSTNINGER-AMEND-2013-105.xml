@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Dokument SchemaLocation="https://www.retsinformation.dk/offentlig/xml/schemas/2012/09/21/BEKC.Retsinfo.LexDania_2.1.xsd">
+  <Meta>
+    <DocumentType>BEK Æ#LOKDOK05</DocumentType>
+    <Rank>B</Rank>
+    <AccessionNumber>B20130010505</AccessionNumber>
+    <DocumentId>AA006920</DocumentId>
+    <UniqueDocumentId>145155</UniqueDocumentId>
+    <DocumentTitle>Bekendtgørelse om ændring af bekendtgørelse om udenretlige inddrivelsesomkostninger i anledning af forsinket betaling</DocumentTitle>
+    <Year>2013</Year>
+    <DiesSigni>2013-01-31</DiesSigni>
+    <DateOfSubmit id="submit_1" />
+    <StartDate REFid="submit_1">2013-02-02</StartDate>
+    <EndDate REFid="submit_1">2013-02-02</EndDate>
+    <Status>Valid</Status>
+    <Number>105</Number>
+    <AnnouncedIn>Lovtidende A</AnnouncedIn>
+    <DiesEdicti>2013-02-02</DiesEdicti>
+    <Republished>Nej</Republished>
+    <Sign id="sign" />
+    <Signature REFid="sign">Morten Bødskov</Signature>
+    <Sub-Sign id="subsign" />
+    <Signature REFid="subsign">Rikke-Louise Ørum Petersen</Signature>
+    <PlaceOfSignature>Justitsministeriet</PlaceOfSignature>
+    <JournalNumber>Justitsmin., j.nr. 2012-7004-0011</JournalNumber>
+    <Ministry>Justitsministeriet</Ministry>
+  </Meta>
+  <TitelGruppe>
+    <Titel>
+      <Linea>
+        <Char>Bekendtgørelse om ændring af bekendtgørelse om udenretlige inddrivelsesomkostninger i anledning af forsinket betaling</Char>
+      </Linea>
+    </Titel>
+  </TitelGruppe>
+  <DokumentIndhold>
+    <AendringCentreretParagraf id="a6504884-697b-44ec-8912-22faf1072a78" localId="1">
+      <Explicatus>§ 1</Explicatus>
+      <Exitus>
+        <Linea>
+          <Char>I bekendtgørelse nr. 601 af 12. juli 2002 om udenretlige inddrivelsesomkostninger i anledning af forsinket betaling, som ændret ved bekendtgørelse nr. 423 af 28. maj 2009, foretages følgende ændringer:</Char>
+        </Linea>
+      </Exitus>
+      <AendringsNummer>
+        <Explicatus>1.</Explicatus>
+        <Aendring>
+          <AendringDefinition>
+            <Exitus>
+              <Linea>
+                <Char>I </Char>
+                <Char formaChar="Italic" signiChar="AendringURN">indledningen</Char>
+                <Char> ændres »stk. 3« til: »stk. 4«.</Char>
+              </Linea>
+            </Exitus>
+          </AendringDefinition>
+          <AendringAktion punktumEfterSlutcitationstegn="False">
+            <AendringNyTekst />
+          </AendringAktion>
+        </Aendring>
+      </AendringsNummer>
+      <AendringsNummer>
+        <Explicatus>2.</Explicatus>
+        <Aendring>
+          <AendringDefinition>
+            <Exitus>
+              <Linea>
+                <Char>I </Char>
+                <Char formaChar="Italic" signiChar="AendringURN">§ 2</Char>
+                <Char> indsættes efter stk. 1 som nye stykker:</Char>
+              </Linea>
+            </Exitus>
+          </AendringDefinition>
+          <AendringAktion punktumEfterSlutcitationstegn="False">
+            <AendringNyTekst>
+              <Stk>
+                <Explicatus>Stk. 2.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Ved forsinket betaling har fordringshaver ret til uden fremsendelse af rykkerskrivelse at kræve et fast kompensationsbeløb på 310 kr. til dækning af inddrivelsesomkostninger, uden at det påvirker fordringshavers eventuelle øvrige betalingskrav efter stk. 1 og 4.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+              <Stk>
+                <Explicatus>Stk. 3.</Explicatus>
+                <Exitus>
+                  <Linea>
+                    <Char>Stk. 2 finder ikke anvendelse i forhold til en aftale som nævnt i rentelovens § 7, stk. 1.</Char>
+                  </Linea>
+                </Exitus>
+              </Stk>
+            </AendringNyTekst>
+          </AendringAktion>
+        </Aendring>
+        <Rykningsklausul>
+          <Exitus>
+            <Linea>
+              <Char>Stk. 2 bliver herefter stk. 4.</Char>
+            </Linea>
+          </Exitus>
+        </Rykningsklausul>
+      </AendringsNummer>
+      <AendringsNummer>
+        <Explicatus>3.</Explicatus>
+        <Aendring>
+          <AendringDefinition>
+            <Exitus>
+              <Linea>
+                <Char>I </Char>
+                <Char formaChar="Italic" signiChar="AendringURN">§ 3, stk. 2,</Char>
+                <Char> og </Char>
+                <Char formaChar="Italic" signiChar="AendringURN">§ 4, stk. 2,</Char>
+                <Char> indsættes som </Char>
+                <Char formaChar="Italic" signiChar="AendringURN">2.</Char>
+                <Char> og </Char>
+                <Char formaChar="Italic" signiChar="AendringURN">3. pkt.:</Char>
+              </Linea>
+            </Exitus>
+          </AendringDefinition>
+          <AendringAktion punktumEfterSlutcitationstegn="False">
+            <AendringNyTekst>
+              <Exitus>
+                <Linea>
+                  <Char>Dette gælder dog ikke, hvis fordringshavers rimelige og relevante omkostninger faktisk overstiger dette beløb.</Char>
+                </Linea>
+                <Linea>
+                  <Char>2. pkt. finder ikke anvendelse i forhold til en aftale som nævnt i rentelovens § 7, stk. 1.</Char>
+                </Linea>
+              </Exitus>
+            </AendringNyTekst>
+          </AendringAktion>
+        </Aendring>
+      </AendringsNummer>
+    </AendringCentreretParagraf>
+    <IkraftCentreretParagraf id="3545d3fd-dcae-4ae8-be79-c220dc113e32" localId="2">
+      <Explicatus>§ 2</Explicatus>
+      <Stk>
+        <Exitus>
+          <Linea>
+            <Char>Bekendtgørelsen træder i kraft den 1. marts 2013 og gælder for inddrivelsesomkostninger, hvor det pågældende betalingskrav opstår efter bekendtgørelsens ikrafttræden.</Char>
+          </Linea>
+        </Exitus>
+      </Stk>
+    </IkraftCentreretParagraf>
+  </DokumentIndhold>
+  <UnderskriftGruppe>
+    <UnderskriftStedDato />
+    <Underskriver />
+  </UnderskriftGruppe>
+</Dokument>

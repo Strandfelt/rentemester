@@ -14,6 +14,10 @@ export type JournalEntryInput = {
   text: string;
   documentId?: number;
   sourceBankTransactionId?: number;
+  currency?: string;
+  amountForeign?: number;
+  amountDkk?: number;
+  fxRateToDkk?: number;
   createdBy?: string;
   createdByProgram?: string;
   lines: JournalLineInput[];
@@ -37,11 +41,14 @@ const LEDGER_RULES = {
   APPEND_ONLY: "DK-BOOKKEEPING-APPEND-ONLY-001",
   REVERSAL: "DK-BOOKKEEPING-REVERSAL-001",
   DOCUMENT: "DK-BOOKKEEPING-DOCUMENT-001",
+  FX: "DK-BOOKKEEPING-FX-001",
 } as const;
 
 export function seedAccounts(db: Database) {
   const rows = [
     ["1000", "Omsætning, ydelser", "income", "credit", null],
+    ["1010", "Gebyr- og kompensationsindtægter", "income", "credit", null],
+    ["1100", "Debitorer", "asset", "debit", null],
     ["1200", "Salgsmoms", "vat", "credit", null],
     ["2000", "Bank", "asset", "debit", null],
     ["3000", "Software og SaaS", "expense", "debit", "DK_PURCHASE_25"],
@@ -49,6 +56,7 @@ export function seedAccounts(db: Database) {
     ["3020", "Hosting og cloud", "expense", "debit", "EU_SERVICE_REVERSE_CHARGE"],
     ["3050", "Rejse og transport", "expense", "debit", "DK_PURCHASE_25"],
     ["3070", "Repræsentation", "expense", "debit", "REPRESENTATION_SPECIAL"],
+    ["3080", "Tab på debitorer", "expense", "debit", "DK_BAD_DEBT_25"],
     ["3120", "Hardware og udstyr", "expense", "debit", "DK_PURCHASE_25"],
     ["4000", "Købsmoms", "vat", "debit", null],
     ["4500", "Momsafregning", "liability", "credit", null],
@@ -87,6 +95,10 @@ function canonicalEntryData(entry: any, lines: any[]) {
     text: entry.text,
     source_bank_transaction_id: entry.source_bank_transaction_id ?? null,
     document_id: entry.document_id ?? null,
+    currency: entry.currency ?? 'DKK',
+    amount_foreign: entry.amount_foreign ?? null,
+    amount_dkk: entry.amount_dkk ?? null,
+    fx_rate_to_dkk: entry.fx_rate_to_dkk ?? null,
     rule_version: entry.rule_version,
     created_by: entry.created_by,
     created_by_program: entry.created_by_program,
@@ -111,10 +123,12 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
   const errors: string[] = [];
   const appliedRules = [LEDGER_RULES.BALANCED, LEDGER_RULES.APPEND_ONLY];
   const lines = payload.lines ?? [];
+  const currency = (payload.currency ?? 'DKK').trim().toUpperCase();
 
   if (!looksLikeIsoDate(payload.transactionDate)) errors.push("transactionDate must be present in YYYY-MM-DD format");
   if (typeof payload.text !== "string" || payload.text.trim().length === 0) errors.push("text is required");
   if (!Array.isArray(lines) || lines.length < 2) errors.push("at least two journal lines are required");
+  if (currency.length !== 3) errors.push("currency must be a 3-letter ISO code when present");
 
   const accounts = accountMap(db);
   let debitSum = 0;
@@ -140,6 +154,20 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
 
   if (normalizeAmount(debitSum) !== normalizeAmount(creditSum)) {
     errors.push(`journal entry must balance: debit ${normalizeAmount(debitSum)} != credit ${normalizeAmount(creditSum)}`);
+  }
+
+  if (currency !== 'DKK') {
+    appliedRules.push(LEDGER_RULES.FX);
+    const amountForeign = normalizeAmount(payload.amountForeign);
+    const amountDkk = normalizeAmount(payload.amountDkk);
+    const fxRateToDkk = typeof payload.fxRateToDkk === 'number' && Number.isFinite(payload.fxRateToDkk) ? Number(payload.fxRateToDkk.toFixed(6)) : NaN;
+    if (!(amountForeign > 0)) errors.push("amountForeign must be positive for non-DKK journal entries");
+    if (!(amountDkk > 0)) errors.push("amountDkk must be positive for non-DKK journal entries");
+    if (!(fxRateToDkk > 0)) errors.push("fxRateToDkk must be positive for non-DKK journal entries");
+    if (amountForeign > 0 && fxRateToDkk > 0) {
+      const expectedAmountDkk = Number((amountForeign * fxRateToDkk).toFixed(2));
+      if (amountDkk !== expectedAmountDkk) errors.push(`amountDkk must equal amountForeign * fxRateToDkk (${expectedAmountDkk})`);
+    }
   }
 
   if (requiresDocument) {
@@ -182,6 +210,10 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       text: payload.text,
       source_bank_transaction_id: payload.sourceBankTransactionId ?? null,
       document_id: payload.documentId ?? null,
+      currency: (payload.currency ?? 'DKK').trim().toUpperCase(),
+      amount_foreign: payload.amountForeign ?? null,
+      amount_dkk: payload.amountDkk ?? null,
+      fx_rate_to_dkk: payload.fxRateToDkk ?? null,
       rule_version: 'dk-v0.0.1',
       created_by: payload.createdBy ?? 'system',
       created_by_program: payload.createdByProgram ?? 'rentemester',
@@ -193,8 +225,9 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
     const insertEntry = db.query(
       `INSERT INTO journal_entries (
         entry_no, transaction_date, text, source_bank_transaction_id, document_id,
+        currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
         rule_version, created_by, created_by_program, status, previous_hash, entry_hash
-      ) VALUES (?, ?, ?, ?, ?, 'dk-v0.0.1', ?, ?, 'posted', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dk-v0.0.1', ?, ?, 'posted', ?, ?)
       RETURNING id, entry_no`
     );
 
@@ -204,6 +237,10 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       payload.text,
       payload.sourceBankTransactionId ?? null,
       payload.documentId ?? null,
+      (payload.currency ?? 'DKK').trim().toUpperCase(),
+      payload.amountForeign ?? null,
+      payload.amountDkk ?? null,
+      payload.fxRateToDkk ?? null,
       payload.createdBy ?? 'system',
       payload.createdByProgram ?? 'rentemester',
       prevHash,
@@ -242,7 +279,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
   if (errors.length > 0) return { ok: false, appliedRules, errors };
 
   const original = db.query(
-    `SELECT id, entry_no, transaction_date, text, source_bank_transaction_id, document_id, rule_version, created_by, created_by_program, status, reversal_of_entry_id
+    `SELECT id, entry_no, transaction_date, text, source_bank_transaction_id, document_id, currency, amount_foreign, amount_dkk, fx_rate_to_dkk, rule_version, created_by, created_by_program, status, reversal_of_entry_id
      FROM journal_entries WHERE id = ?`
   ).get(input.entryId) as any | null;
   if (!original) return { ok: false, appliedRules, errors: [`journal entry ${input.entryId} does not exist`] };
@@ -269,6 +306,10 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
     text: `Reversal of ${original.entry_no}: ${input.reason.trim()}`,
     documentId: original.document_id ?? undefined,
     sourceBankTransactionId: original.source_bank_transaction_id ?? undefined,
+    currency: original.currency ?? 'DKK',
+    amountForeign: original.amount_foreign ?? undefined,
+    amountDkk: original.amount_dkk ?? undefined,
+    fxRateToDkk: original.fx_rate_to_dkk ?? undefined,
     createdBy: input.createdBy ?? 'system',
     createdByProgram: input.createdByProgram ?? 'rentemester',
     lines: originalLines.map((line) => ({
@@ -301,6 +342,10 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       text: reversalPayload.text,
       source_bank_transaction_id: reversalPayload.sourceBankTransactionId ?? null,
       document_id: reversalPayload.documentId ?? null,
+      currency: (reversalPayload.currency ?? 'DKK').trim().toUpperCase(),
+      amount_foreign: reversalPayload.amountForeign ?? null,
+      amount_dkk: reversalPayload.amountDkk ?? null,
+      fx_rate_to_dkk: reversalPayload.fxRateToDkk ?? null,
       rule_version: 'dk-v0.0.1',
       created_by: reversalPayload.createdBy ?? 'system',
       created_by_program: reversalPayload.createdByProgram ?? 'rentemester',
@@ -312,8 +357,9 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
     const entry = db.query(
       `INSERT INTO journal_entries (
         entry_no, transaction_date, text, source_bank_transaction_id, document_id,
+        currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
         rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash
-      ) VALUES (?, ?, ?, ?, ?, 'dk-v0.0.1', ?, ?, 'reversed', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dk-v0.0.1', ?, ?, 'reversed', ?, ?, ?)
       RETURNING id, entry_no`
     ).get(
       entryNo,
@@ -321,6 +367,10 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       reversalPayload.text,
       reversalPayload.sourceBankTransactionId ?? null,
       reversalPayload.documentId ?? null,
+      (reversalPayload.currency ?? 'DKK').trim().toUpperCase(),
+      reversalPayload.amountForeign ?? null,
+      reversalPayload.amountDkk ?? null,
+      reversalPayload.fxRateToDkk ?? null,
       reversalPayload.createdBy ?? 'system',
       reversalPayload.createdByProgram ?? 'rentemester',
       original.id,
@@ -350,7 +400,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
 }
 
 export function verifyAuditChain(db: Database) {
-  const entries = db.query("SELECT id, entry_no, transaction_date, text, source_bank_transaction_id, document_id, rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash FROM journal_entries ORDER BY id ASC").all() as any[];
+  const entries = db.query("SELECT id, entry_no, transaction_date, text, source_bank_transaction_id, document_id, currency, amount_foreign, amount_dkk, fx_rate_to_dkk, rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash FROM journal_entries ORDER BY id ASC").all() as any[];
   let prev = "GENESIS";
   const errors: string[] = [];
   for (const e of entries) {

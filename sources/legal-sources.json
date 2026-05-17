@@ -61,5 +61,23 @@
     "url": "https://www.retsinformation.dk/eli/lta/2025/302",
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2025/302/xml",
     "notes": "Amends the voucher-storage order and removes prior applicability carve-outs from 2026-01-01."
+  },
+  {
+    "id": "DK-RENTELOVEN-2014-459",
+    "title": "Bekendtgørelse af lov om renter og andre forhold ved forsinket betaling",
+    "authority": "Justitsministeriet",
+    "category": "late_payment",
+    "url": "https://www.retsinformation.dk/eli/lta/2014/459",
+    "xmlUrl": "https://www.retsinformation.dk/eli/lta/2014/459/xml",
+    "notes": "Renteloven; used for deterministic due-date fallback and overdue classification when customer invoices remain unpaid after the statutory period."
+  },
+  {
+    "id": "DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105",
+    "title": "Bekendtgørelse om ændring af bekendtgørelse om udenretlige inddrivelsesomkostninger i anledning af forsinket betaling",
+    "authority": "Justitsministeriet",
+    "category": "late_payment_compensation",
+    "url": "https://www.retsinformation.dk/eli/lta/2013/105",
+    "xmlUrl": "https://www.retsinformation.dk/eli/lta/2013/105/xml",
+    "notes": "Introduces the fixed DKK 310 compensation amount for late commercial payment claims from 2013-03-01."
   }
 ]

@@ -20,6 +20,80 @@ describe("document ingest", () => {
     expect(result.errors).toContain("paymentDetails is required");
   });
 
+  test("accepts foreign-currency cash-register receipts with original currency preserved", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-cash-"));
+    const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-cash-"));
+    const sourceFile = join(inboxRoot, "coffee-receipt.txt");
+    writeFileSync(sourceFile, "Coffee receipt\n12.00 EUR\n");
+
+    const validation = validateDocumentMetadata({
+      source: "photo-upload",
+      documentType: "cash_register_receipt",
+      currency: "EUR",
+    });
+    expect(validation.ok).toBe(true);
+    expect(validation.appliedRules).toContain("DK-DOCUMENT-CASH-RECEIPT-001");
+
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+
+    const result = ingestDocument(db, companyRoot, sourceFile, {
+      source: "photo-upload",
+      documentType: "cash_register_receipt",
+      currency: "EUR",
+    });
+
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT document_type, currency, exemption_code, invoice_date, vat_amount FROM documents WHERE id = ?").get(result.documentId!) as any;
+    expect(row.document_type).toBe("cash_register_receipt");
+    expect(row.currency).toBe("EUR");
+    expect(row.exemption_code).toBeNull();
+    expect(row.invoice_date).toBeNull();
+    expect(row.vat_amount).toBeNull();
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(inboxRoot, { recursive: true, force: true });
+  });
+
+  test("accepts foreign physical-only receipts outside Denmark with original EUR currency preserved", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-foreign-"));
+    const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-foreign-"));
+    const sourceFile = join(inboxRoot, "metro-ticket.txt");
+    writeFileSync(sourceFile, "Metro ticket\n8.50 EUR\n");
+
+    const validation = validateDocumentMetadata({
+      source: "mobile-scan",
+      currency: "EUR",
+      exemptionCode: "FOREIGN_PHYSICAL_ONLY",
+    });
+    expect(validation.ok).toBe(true);
+    expect(validation.appliedRules).toContain("DK-DOCUMENT-FOREIGN-PHYSICAL-001");
+
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+
+    const result = ingestDocument(db, companyRoot, sourceFile, {
+      source: "mobile-scan",
+      currency: "EUR",
+      exemptionCode: "FOREIGN_PHYSICAL_ONLY",
+    });
+
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT document_type, currency, exemption_code, invoice_date, vat_amount FROM documents WHERE id = ?").get(result.documentId!) as any;
+    expect(row.document_type).toBe("purchase_sale");
+    expect(row.currency).toBe("EUR");
+    expect(row.exemption_code).toBe("FOREIGN_PHYSICAL_ONLY");
+    expect(row.invoice_date).toBeNull();
+    expect(row.vat_amount).toBeNull();
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(inboxRoot, { recursive: true, force: true });
+  });
+
   test("ingests a compliant supporting document and stores it content-addressed", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-"));
     const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-"));

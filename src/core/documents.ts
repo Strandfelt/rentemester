@@ -39,6 +39,8 @@ export type IngestDocumentResult = {
 
 const RULES = {
   STORAGE: "DK-DOCUMENT-STORAGE-001",
+  CASH_RECEIPT: "DK-DOCUMENT-CASH-RECEIPT-001",
+  FOREIGN_PHYSICAL: "DK-DOCUMENT-FOREIGN-PHYSICAL-001",
   INTEGRITY: "DK-DOCUMENT-INTEGRITY-001",
 } as const;
 
@@ -77,10 +79,15 @@ export function validateDocumentMetadata(metadata: DocumentMetadata): DocumentVa
   const errors: string[] = [];
   const documentType = metadata.documentType ?? "purchase_sale";
   const exemptionCode = metadata.exemptionCode ?? null;
+  const currency = (metadata.currency ?? "DKK").trim().toUpperCase();
   const appliedRules = [RULES.STORAGE, RULES.INTEGRITY];
 
   if (!hasText(metadata.source)) errors.push("source is required");
-  if ((metadata.currency ?? "DKK") !== "DKK") errors.push("only DKK document metadata is supported in the current deterministic validator");
+  if (!/^[A-Z]{3}$/.test(currency)) errors.push("currency must be a 3-letter ISO code");
+  const allowsNonDkk = documentType === "cash_register_receipt" || exemptionCode === "FOREIGN_PHYSICAL_ONLY";
+  if (currency !== "DKK" && !allowsNonDkk) errors.push("only DKK document metadata is supported unless documentType is cash_register_receipt or exemptionCode is FOREIGN_PHYSICAL_ONLY");
+  if (documentType === "cash_register_receipt") appliedRules.splice(1, 0, RULES.CASH_RECEIPT);
+  if (exemptionCode === "FOREIGN_PHYSICAL_ONLY") appliedRules.splice(appliedRules.length - 1, 0, RULES.FOREIGN_PHYSICAL);
 
   const exemptFromMinimumFields = documentType === "cash_register_receipt" || exemptionCode === "FOREIGN_PHYSICAL_ONLY";
   if (!exemptFromMinimumFields) {
@@ -119,7 +126,7 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
 
   const documentNo = nextDocumentNo(db);
   const docType = metadata.documentType ?? "purchase_sale";
-  const currency = metadata.currency ?? "DKK";
+  const currency = (metadata.currency ?? "DKK").trim().toUpperCase();
   const result = db.query(
     `INSERT INTO documents (
       document_no, source, original_filename, stored_path, mime_type, sha256_hash,

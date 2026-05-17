@@ -1,0 +1,114 @@
+import type { Database } from "bun:sqlite";
+import { postJournalEntry, type JournalPostResult } from "./ledger";
+import { getInvoiceStatus } from "./invoice-payments";
+
+const RULE_ID = "DK-INVOICE-REFUND-001";
+
+export type RefundInvoiceToBankInput = {
+  invoiceDocumentId: number;
+  bankTransactionId?: number;
+  bankTransactionReference?: string;
+  refundDate?: string;
+  amount?: number;
+  bankAccountNo?: string;
+  receivableAccountNo?: string;
+  createdBy?: string;
+  createdByProgram?: string;
+};
+
+export type RefundInvoiceToBankResult = JournalPostResult & {
+  refundId?: number;
+  invoiceNumber?: string;
+  remainingCreditBalance?: number;
+};
+
+function round2(value: number) {
+  return Number(value.toFixed(2));
+}
+
+export function refundInvoiceToBank(db: Database, input: RefundInvoiceToBankInput): RefundInvoiceToBankResult {
+  if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) {
+    return { ok: false, appliedRules: [RULE_ID], errors: ["invoiceDocumentId must be a positive integer"] };
+  }
+  if (input.bankTransactionId !== undefined && (!Number.isInteger(input.bankTransactionId) || input.bankTransactionId <= 0)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: ["bankTransactionId must be a positive integer when present"] };
+  }
+
+  const bank = (input.bankTransactionId !== undefined
+    ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId)
+    : input.bankTransactionReference
+      ? db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE reference = ? ORDER BY id DESC LIMIT 1`).get(input.bankTransactionReference)
+      : db.query(`SELECT id, transaction_date, amount, text, reference FROM bank_transactions WHERE amount < 0 ORDER BY id DESC LIMIT 1`).get()) as { id: number; transaction_date: string; amount: number; text: string; reference: string | null } | null;
+  if (!bank) return { ok: false, appliedRules: [RULE_ID], errors: [input.bankTransactionId !== undefined ? `bank transaction ${input.bankTransactionId} does not exist` : input.bankTransactionReference ? `no bank transaction found with reference ${input.bankTransactionReference}` : "no outgoing bank transaction available for refund"] };
+  if (Number(bank.amount) >= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is not an outgoing customer refund`] };
+
+  const invoice = db.query(`SELECT id, invoice_no, document_type FROM documents WHERE id = ?`).get(input.invoiceDocumentId) as { id: number; invoice_no: string; document_type: string } | null;
+  if (!invoice) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice document ${input.invoiceDocumentId} does not exist`] };
+  if (invoice.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID], errors: [`document ${input.invoiceDocumentId} is not an issued invoice`] };
+
+  const existingJournal = db.query(`SELECT id FROM journal_entries WHERE source_bank_transaction_id = ? LIMIT 1`).get(bank.id) as { id: number } | null;
+  if (existingJournal) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is already linked to journal entry ${existingJournal.id}`] };
+
+  if (db.query(`SELECT id FROM invoice_refunds WHERE bank_transaction_id = ? LIMIT 1`).get(bank.id)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is already applied to an invoice refund`] };
+  }
+
+  const status = getInvoiceStatus(db, input.invoiceDocumentId);
+  if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
+  const creditBalance = round2(Math.max(0, -(status.openBalance ?? 0)));
+  if (creditBalance <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${invoice.invoice_no} has no refundable credit balance`] };
+
+  const amount = round2(input.amount ?? Math.abs(Number(bank.amount)));
+  if (amount > creditBalance) return { ok: false, appliedRules: [RULE_ID], errors: [`refund amount ${amount} exceeds refundable credit balance ${creditBalance}`] };
+  const refundDate = input.refundDate ?? bank.transaction_date;
+
+  try {
+    const result = db.transaction(() => {
+      const refund = db.query(
+        `INSERT INTO invoice_refunds (invoice_document_id, bank_transaction_id, refund_date, amount, currency, note)
+         VALUES (?, ?, ?, ?, 'DKK', ?)
+         RETURNING id`
+      ).get(input.invoiceDocumentId, bank.id, refundDate, amount, `Customer refund from transaction ${bank.id}`) as { id: number };
+
+      db.run(
+        "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_refund_apply', 'invoice_refund', ?, ?)",
+        String(refund.id),
+        `Applied refund ${amount} to invoice ${invoice.invoice_no}`
+      );
+
+      const journal = postJournalEntry(db, {
+        transactionDate: refundDate,
+        text: `Customer refund for invoice ${invoice.invoice_no}`,
+        sourceBankTransactionId: bank.id,
+        documentId: input.invoiceDocumentId,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
+        lines: [
+          { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Refund clearing ${invoice.invoice_no}` },
+          { accountNo: input.bankAccountNo ?? "2000", creditAmount: amount, text: `Bank refund ${invoice.invoice_no}` },
+        ],
+      });
+      if (!journal.ok) throw new Error(JSON.stringify({ appliedRules: journal.appliedRules, errors: journal.errors }));
+
+      const after = getInvoiceStatus(db, input.invoiceDocumentId);
+      if (!after.ok) throw new Error(JSON.stringify({ errors: after.errors }));
+      return {
+        ...journal,
+        refundId: refund.id,
+        invoiceNumber: invoice.invoice_no,
+        remainingCreditBalance: round2(Math.max(0, -(after.openBalance ?? 0))),
+        appliedRules: [...new Set([RULE_ID, ...(journal.appliedRules ?? [])])],
+      };
+    })();
+    return result;
+  } catch (error) {
+    const parsed = typeof error === "object" && error && "message" in error ? (() => {
+      try { return JSON.parse(String((error as any).message)); } catch { return null; }
+    })() : null;
+    return {
+      ok: false,
+      appliedRules: [...new Set([RULE_ID, ...((parsed?.appliedRules as string[] | undefined) ?? [])])],
+      errors: (parsed?.errors as string[] | undefined) ?? [String(error)],
+    };
+  }
+}

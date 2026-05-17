@@ -2,6 +2,7 @@ version: dk-bookkeeping-v0.0.2
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+  - DK-DIGITAL-STANDARD-BOGFORING-2023-97
 rules:
   - rule_id: DK-BOOKKEEPING-BALANCED-001
     name: Double-entry postings must balance
@@ -70,3 +71,58 @@ rules:
         - unmatched_bank_transactions
         - traceable_links_to_journal_entries
     explanation: Rentemester must be able to deterministically reconcile imported bank transactions against posted journal entries so reporting has an updated control basis.
+  - rule_id: DK-BOOKKEEPING-FX-001
+    name: Non-DKK transaction imports must record the transaction-day exchange factor and DKK amount
+    category: transaction_registration
+    source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    severity: hard_stop
+    machine_rule:
+      require:
+        - foreign_currency_code
+        - transaction_day_exchange_rate_or_conversion_factor
+        - dkk_converted_amount
+      forbid:
+        - non_dkk_registration_without_conversion_basis
+    explanation: When a transaction is registered in another currency than DKK, Rentemester must persist the currency, the conversion factor used on the transaction day, and the DKK amount used in the bookkeeping trail.
+  - rule_id: DK-BOOKKEEPING-BACKUP-001
+    name: The system must support weekly full backups of booked transactions and supporting documents
+    category: backup_compliance
+    source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    severity: hard_stop
+    machine_rule:
+      require:
+        - full_backup_of_ledger_snapshot
+        - full_backup_of_supporting_documents
+        - backup_manifest_with_timestamp_and_hashes
+        - compliance_status_for_latest_backup_age
+      forbid:
+        - silently_missing_backup_after_more_than_7_days_with_new_activity
+    explanation: Rentemester must be able to create a full backup of bookkeeping data and supporting documents and deterministically report when the weekly backup duty has become due because new activity happened after the last backup.
+  - rule_id: DK-BOOKKEEPING-AUTHORITY-EXPORT-001
+    name: Bookkeeping data and vouchers must be exportable by period in a structured machine-readable package
+    category: authority_access
+    source_id: DK-DIGITAL-STANDARD-BOGFORING-2023-97
+    severity: hard_stop
+    machine_rule:
+      require:
+        - period_bounded_export_request
+        - machine_readable_journal_export
+        - readable_document_copies
+        - export_manifest_with_request_timestamp_and_deadline
+      forbid:
+        - authority_export_without_period_filter
+    explanation: Rentemester must be able to assemble bookkeeping transactions and related vouchers for a requested period in a structured machine-readable format, alongside readable document files and a traceable deadline for a four-week authority handover flow.
+  - rule_id: DK-BOOKKEEPING-RESTORE-001
+    name: Backup material must be restorable into a readable company dataset
+    category: restore_compliance
+    source_id: DK-DIGITAL-STANDARD-BOGFORING-2023-97
+    severity: hard_stop
+    machine_rule:
+      require:
+        - backup_manifest_verification_before_restore
+        - restored_ledger_snapshot
+        - restored_supporting_documents
+        - restored_config_and_invoice_files
+      forbid:
+        - restore_from_hash_mismatched_backup_material
+    explanation: Rentemester must be able to restore backed-up bookkeeping material into a readable company dataset, validating the manifest and file hashes first so the regnskabsmateriale can actually be reconstructed.

@@ -1,0 +1,2 @@
+transaction_date,booking_date,text,amount,currency,reference
+2026-05-20,2026-05-20,Customer payment,1250,DKK,INV-0001

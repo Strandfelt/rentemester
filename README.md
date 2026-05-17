@@ -131,17 +131,32 @@ Rentemester er i en tidlig teknisk prototype. Den nuværende version har allered
 - append-only bogføringshistorik
 - audit/hash-kæde til integritetskontrol
 - dansk kontoplan-lite
-- import af bank-CSV
+- import af bank-CSV, inkl. udenlandske banktransaktioner med gemt omregningsfaktor og DKK-beløb
 - simpel bankafstemning
-- indlæsning og hashing af bilag
+- indlæsning og hashing af bilag, inkl. fysisk modtagne udenlandske bilag og kassestrimler med bevaret original valuta under lovlige metadata-undtagelser
 - validering af danske fakturaoplysninger
-- bogføring af journalposter med krav om balance
+- deterministisk udstedelse og låsning af udgående fakturaer
+- deterministisk registrering af betalinger på udstedte fakturaer
+- deterministisk bogføring af udstedte fakturaer til debitorer, omsætning og salgsmoms
+- deterministisk afregning af kundeindbetalinger mod debitorer og bank, inkl. separat bankafregning af bogførte rykker-, kompensations- og morarentekrav
+- deterministisk udstedelse af kreditnotaer, som korrigerer fejl via separat append-only dokument og modpostering
+- deterministisk bankafregning af kunderefunderinger efter kreditnotaer
+- deterministisk aritmetisk validering af linjer, netto, moms og brutto før fakturaudstedelse
+- deterministisk forfalds- og overfaldstracking for kundefakturaer med eksplicit dato eller lovbestemt 30-dages fallback
+- deterministisk beregning, registrering og bogføring af lovbestemt morarente på åbne overfaldne kundefakturaer ud fra referencesats + 8 pct.-point
+- deterministisk registrering og bogføring af rykkergebyrer med lovbestemt maksimum 100 kr., maks. 3 rykkere og mindst 10 dages mellemrum
+- deterministisk vurdering, registrering og bogføring af fast kompensationskrav ved forsinket betaling på overfaldne erhvervsfakturaer, inkl. lovbestemt standardbeløb 310 kr. fra 2013-03-01
+- deterministisk tabsafskrivning på uerholdelige standardmoms-fakturaer med momsregulering på den fradragsberettigede tabsbase
+- bogføring af journalposter med krav om balance, inkl. udenlandsk valuta med gemt omregningsfaktor og DKK-grundlag
 - tilbageførsel af posteringer via reversal — ikke sletning
 - momsrapport for periode
 - EU-køb af ydelser med reverse charge
+- repræsentationsudgifter med deterministisk 25 pct. fradragsberettiget købsmoms og 75 pct. ikke-fradragsberettiget moms i omkostningen
 - downloadede og hash-verificerede danske retskilder
 - automatiske tests
 - container-runtime til drift med monterede virksomhedsmappen
+- deterministiske fulde systemsnapshots af ledger, bilag og udstedte fakturaer med backup-manifest og backup-status mod ugentlig lovpligt
+- deterministisk myndigheds- og kuratorpakke pr. periode med maskinlæsbart eksportformat, læsbare bilag og 4-ugers deadline-spor
 
 Det er ikke færdigt, men fundamentet er lagt rigtigt: regler først, dokumentation først, audit først.
 
@@ -153,11 +168,10 @@ Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
 
 - bedre automatisk match mellem bank og bilag
 - egentlig opgaveliste for undtagelser
-- fakturaoprettelse og PDF-faktura
+- PDF-faktura og mere komplet fakturaflow
 - udsendelse af fakturaer via mail
 - indbetalinger matchet mod fakturaer
 - fuld bilagsmail-import
-- backup- og restore-test
 - eksportpakke til revisor
 - brugerflade eller enkel kontrolside
 - mere komplet dansk regelbibliotek

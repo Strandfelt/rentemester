@@ -18,6 +18,7 @@ describe("invoice validator", () => {
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.appliedRules).toContain("DK-INVOICE-FULL-001");
+    expect(result.appliedRules).toContain("DK-INVOICE-ARITHMETIC-001");
   });
 
   test("rejects simplified invoice above the DKK 3,000 limit", () => {
@@ -50,6 +51,43 @@ describe("invoice validator", () => {
 
     expect(result.ok).toBe(true);
     expect(result.appliedRules).toContain("DK-INVOICE-SIMPLIFIED-001");
+  });
+
+  test("rejects invoice with inconsistent line and gross totals", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0045",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9, 8000 Aarhus C" },
+      lines: [{ description: "Bogføring", quantity: 2, unitPriceExVat: 500, lineTotalExVat: 900 }],
+      totals: { netAmount: 900, vatRate: 0.25, vatAmount: 225, grossAmount: 1200 },
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("lines[0].lineTotalExVat must equal quantity * unitPriceExVat (1000)");
+    expect(result.errors).toContain("totals.grossAmount must equal totals.netAmount + totals.vatAmount (1125)");
+    expect(result.appliedRules).toContain("DK-INVOICE-ARITHMETIC-001");
+  });
+
+  test("rejects due date before issue date", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-05-15",
+      invoiceNumber: "2026-0046",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9, 8000 Aarhus C" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("dueDate cannot be earlier than issueDate");
   });
 
   test("rejects reverse-charge invoice with VAT amount and missing note", () => {

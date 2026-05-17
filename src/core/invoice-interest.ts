@@ -1,0 +1,240 @@
+import type { Database } from "bun:sqlite";
+import { postJournalEntry, type JournalPostResult } from "./ledger";
+import { getInvoiceStatus } from "./invoice-payments";
+
+const RULE_ID = "DK-INVOICE-LATE-INTEREST-001";
+const REGISTER_RULE_ID = "DK-INVOICE-LATE-INTEREST-REGISTER-001";
+const BOOKKEEPING_RULE_ID = "DK-INVOICE-LATE-INTEREST-BOOKKEEPING-001";
+
+export type CalculateInvoiceLateInterestInput = {
+  invoiceDocumentId: number;
+  asOfDate: string;
+  referenceRatePercent: number;
+};
+
+export type CalculateInvoiceLateInterestResult = {
+  ok: boolean;
+  invoiceDocumentId?: number;
+  invoiceNumber?: string;
+  asOfDate?: string;
+  effectiveDueDate?: string;
+  overdueDays?: number;
+  principalOpenBalance?: number;
+  referenceRatePercent?: number;
+  annualInterestRatePercent?: number;
+  accruedInterestAmount?: number;
+  appliedRules: string[];
+  errors: string[];
+};
+
+export type RegisterInvoiceLateInterestInput = CalculateInvoiceLateInterestInput & {
+  note?: string;
+};
+
+export type RegisterInvoiceLateInterestResult = CalculateInvoiceLateInterestResult & {
+  claimId?: number;
+  claimDate?: string;
+  claimOpenBalance?: number;
+};
+
+export type PostInvoiceLateInterestToLedgerInput = {
+  invoiceDocumentId: number;
+  claimId?: number;
+  transactionDate?: string;
+  receivableAccountNo?: string;
+  interestIncomeAccountNo?: string;
+  createdBy?: string;
+  createdByProgram?: string;
+};
+
+export type PostInvoiceLateInterestToLedgerResult = JournalPostResult & {
+  claimId?: number;
+  invoiceDocumentId?: number;
+  invoiceNumber?: string;
+  claimDate?: string;
+  accruedInterestAmount?: number;
+  claimOpenBalance?: number;
+};
+
+function looksLikeIsoDate(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+}
+function round2(value: number) { return Number(value.toFixed(2)); }
+
+export function calculateInvoiceLateInterest(db: Database, input: CalculateInvoiceLateInterestInput): CalculateInvoiceLateInterestResult {
+  const errors: string[] = [];
+  if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) errors.push("invoiceDocumentId must be a positive integer");
+  if (!looksLikeIsoDate(input.asOfDate)) errors.push("asOfDate must be YYYY-MM-DD");
+  if (!Number.isFinite(input.referenceRatePercent)) errors.push("referenceRatePercent must be a finite number");
+  if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
+
+  const status = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
+  if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
+
+  const principalOpenBalance = round2(Number(status.openBalance ?? 0));
+  const overdueDays = Number(status.overdueDays ?? 0);
+  const annualInterestRatePercent = round2(Number(input.referenceRatePercent) + 8);
+  const accruedInterestAmount = overdueDays > 0 && principalOpenBalance > 0
+    ? round2(principalOpenBalance * (annualInterestRatePercent / 100) * (overdueDays / 365))
+    : 0;
+
+  return {
+    ok: true,
+    invoiceDocumentId: input.invoiceDocumentId,
+    invoiceNumber: status.invoiceNumber,
+    asOfDate: input.asOfDate,
+    effectiveDueDate: status.effectiveDueDate,
+    overdueDays,
+    principalOpenBalance,
+    referenceRatePercent: round2(Number(input.referenceRatePercent)),
+    annualInterestRatePercent,
+    accruedInterestAmount,
+    appliedRules: [RULE_ID],
+    errors: [],
+  };
+}
+
+export function registerInvoiceLateInterest(db: Database, input: RegisterInvoiceLateInterestInput): RegisterInvoiceLateInterestResult {
+  const calculation = calculateInvoiceLateInterest(db, input);
+  if (!calculation.ok) return { ...calculation, appliedRules: [...new Set([...(calculation.appliedRules ?? []), REGISTER_RULE_ID])] };
+  if (!(Number(calculation.accruedInterestAmount ?? 0) > 0)) {
+    return {
+      ...calculation,
+      ok: false,
+      appliedRules: [...new Set([...(calculation.appliedRules ?? []), REGISTER_RULE_ID])],
+      errors: ["late interest must be positive before it can be registered"],
+    };
+  }
+
+  const existing = db.query(
+    `SELECT id FROM invoice_interest_claims WHERE invoice_document_id = ? AND claim_date = ? AND reference_rate_percent = ? LIMIT 1`
+  ).get(input.invoiceDocumentId, input.asOfDate, round2(Number(input.referenceRatePercent))) as { id: number } | null;
+  if (existing) {
+    return {
+      ...calculation,
+      ok: false,
+      appliedRules: [RULE_ID, REGISTER_RULE_ID],
+      errors: [`late interest for invoice ${input.invoiceDocumentId} is already registered for ${input.asOfDate} at reference rate ${round2(Number(input.referenceRatePercent))}`],
+    };
+  }
+
+  const inserted = db.query(
+    `INSERT INTO invoice_interest_claims (
+      invoice_document_id, claim_date, reference_rate_percent, annual_interest_rate_percent,
+      overdue_days, principal_open_balance, amount_dkk, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id`
+  ).get(
+    input.invoiceDocumentId,
+    input.asOfDate,
+    round2(Number(input.referenceRatePercent)),
+    round2(Number(calculation.annualInterestRatePercent)),
+    Number(calculation.overdueDays),
+    round2(Number(calculation.principalOpenBalance)),
+    round2(Number(calculation.accruedInterestAmount)),
+    input.note ?? null,
+  ) as { id: number };
+
+  db.run(
+    "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_interest_register', 'invoice_interest_claim', ?, ?)",
+    String(inserted.id),
+    `Registered late interest ${round2(Number(calculation.accruedInterestAmount))} on invoice ${calculation.invoiceNumber}`
+  );
+
+  const statusAfter = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
+  return {
+    ...calculation,
+    ok: true,
+    claimId: inserted.id,
+    claimDate: input.asOfDate,
+    claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
+    appliedRules: [RULE_ID, REGISTER_RULE_ID],
+    errors: [],
+  };
+}
+
+export function postInvoiceLateInterestToLedger(db: Database, input: PostInvoiceLateInterestToLedgerInput): PostInvoiceLateInterestToLedgerResult {
+  if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) {
+    return { ok: false, appliedRules: [BOOKKEEPING_RULE_ID], errors: ["invoiceDocumentId must be a positive integer"] };
+  }
+
+  const claim = db.query(
+    `SELECT c.id, c.invoice_document_id, c.claim_date, c.amount_dkk, d.invoice_no
+     FROM invoice_interest_claims c
+     JOIN documents d ON d.id = c.invoice_document_id
+     WHERE c.invoice_document_id = ?
+       AND (? IS NULL OR c.id = ?)
+     ORDER BY c.claim_date ASC, c.id ASC
+     LIMIT 1`
+  ).get(input.invoiceDocumentId, input.claimId ?? null, input.claimId ?? null) as {
+    id: number;
+    invoice_document_id: number;
+    claim_date: string;
+    amount_dkk: number;
+    invoice_no: string;
+  } | null;
+
+  if (!claim) {
+    return { ok: false, appliedRules: [BOOKKEEPING_RULE_ID], errors: [input.claimId ? `interest claim ${input.claimId} does not exist for invoice ${input.invoiceDocumentId}` : `invoice ${input.invoiceDocumentId} has no registered late-interest claim`] };
+  }
+
+  const existing = db.query(
+    `SELECT p.id, p.journal_entry_id, j.entry_no
+     FROM invoice_interest_postings p
+     JOIN journal_entries j ON j.id = p.journal_entry_id
+     WHERE p.interest_claim_id = ?`
+  ).get(claim.id) as { id: number; journal_entry_id: number; entry_no: string } | null;
+
+  if (existing) {
+    return {
+      ok: false,
+      claimId: claim.id,
+      invoiceDocumentId: claim.invoice_document_id,
+      invoiceNumber: claim.invoice_no,
+      claimDate: claim.claim_date,
+      accruedInterestAmount: round2(Number(claim.amount_dkk)),
+      appliedRules: [BOOKKEEPING_RULE_ID],
+      errors: [`interest claim ${claim.id} is already posted in journal entry ${existing.entry_no}`],
+    };
+  }
+
+  const amount = round2(Number(claim.amount_dkk));
+  const journal = postJournalEntry(db, {
+    transactionDate: input.transactionDate ?? claim.claim_date,
+    text: `Late interest ${claim.invoice_no}`,
+    documentId: claim.invoice_document_id,
+    createdBy: input.createdBy,
+    createdByProgram: input.createdByProgram,
+    lines: [
+      { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Late-interest receivable ${claim.invoice_no}` },
+      { accountNo: input.interestIncomeAccountNo ?? "1010", creditAmount: amount, text: `Late-interest income ${claim.invoice_no}` },
+    ],
+  });
+  if (!journal.ok) {
+    return { ...journal, claimId: claim.id, invoiceDocumentId: claim.invoice_document_id, invoiceNumber: claim.invoice_no, claimDate: claim.claim_date, accruedInterestAmount: amount, appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])] };
+  }
+
+  db.run(
+    `INSERT INTO invoice_interest_postings (interest_claim_id, journal_entry_id) VALUES (?, ?)`,
+    claim.id,
+    journal.entryId,
+  );
+
+  db.run(
+    "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_interest_post', 'invoice_interest_claim', ?, ?)",
+    String(claim.id),
+    `Posted late interest ${amount} for invoice ${claim.invoice_no} in journal entry ${journal.entryNo}`
+  );
+
+  const statusAfter = getInvoiceStatus(db, claim.invoice_document_id, input.transactionDate ?? claim.claim_date);
+  return {
+    ...journal,
+    claimId: claim.id,
+    invoiceDocumentId: claim.invoice_document_id,
+    invoiceNumber: claim.invoice_no,
+    claimDate: claim.claim_date,
+    accruedInterestAmount: amount,
+    claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
+    appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])],
+  };
+}

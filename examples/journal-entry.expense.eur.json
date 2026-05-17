@@ -1,0 +1,27 @@
+{
+  "transactionDate": "2026-05-19",
+  "text": "Foreign software expense booked from EUR vendor invoice",
+  "documentId": 1,
+  "currency": "EUR",
+  "amountForeign": 100,
+  "amountDkk": 746,
+  "fxRateToDkk": 7.46,
+  "lines": [
+    {
+      "accountNo": "3000",
+      "debitAmount": 596.8,
+      "vatCode": "DK_PURCHASE_25",
+      "text": "Software subscription EUR"
+    },
+    {
+      "accountNo": "4000",
+      "debitAmount": 149.2,
+      "text": "Input VAT EUR"
+    },
+    {
+      "accountNo": "2000",
+      "creditAmount": 746,
+      "text": "Bank payment DKK equivalent"
+    }
+  ]
+}

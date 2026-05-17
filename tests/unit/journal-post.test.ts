@@ -30,6 +30,69 @@ describe("journal posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("supports foreign-currency journal entries with stored FX basis", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-fx-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-inbox-fx-"));
+    const sourceFile = join(inbox, "vendor-eur.txt");
+    writeFileSync(sourceFile, "Vendor invoice\n100 EUR\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-19",
+      invoiceNo: "INV-EUR-1",
+      deliveryDescription: "Softwareabonnement EUR",
+      amountIncVat: 746,
+      currency: "DKK",
+      sender: { name: "Leverandør GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 149.2,
+      paymentDetails: "Kortbetaling"
+    });
+    expect(doc.ok).toBe(true);
+
+    const badFx = postJournalEntry(db, {
+      transactionDate: "2026-05-19",
+      text: "FX journal without conversion basis",
+      documentId: doc.documentId,
+      currency: "EUR",
+      lines: [
+        { accountNo: "3000", debitAmount: 596.8, vatCode: "DK_PURCHASE_25" },
+        { accountNo: "4000", debitAmount: 149.2 },
+        { accountNo: "2000", creditAmount: 746 }
+      ]
+    });
+    expect(badFx.ok).toBe(false);
+    expect(badFx.errors).toContain("amountForeign must be positive for non-DKK journal entries");
+
+    const posted = postJournalEntry(db, {
+      transactionDate: "2026-05-19",
+      text: "FX journal with conversion basis",
+      documentId: doc.documentId,
+      currency: "EUR",
+      amountForeign: 100,
+      amountDkk: 746,
+      fxRateToDkk: 7.46,
+      lines: [
+        { accountNo: "3000", debitAmount: 596.8, vatCode: "DK_PURCHASE_25" },
+        { accountNo: "4000", debitAmount: 149.2 },
+        { accountNo: "2000", creditAmount: 746 }
+      ]
+    });
+
+    expect(posted.ok).toBe(true);
+    expect(posted.appliedRules).toContain("DK-BOOKKEEPING-FX-001");
+    const entry = db.query("SELECT currency, amount_foreign, amount_dkk, fx_rate_to_dkk FROM journal_entries WHERE id = ?").get(posted.entryId!) as any;
+    expect(entry).toEqual({ currency: "EUR", amount_foreign: 100, amount_dkk: 746, fx_rate_to_dkk: 7.46 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
   test("requires document evidence for expense or income postings and hashes lines into the audit chain", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journal-"));
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-inbox-"));

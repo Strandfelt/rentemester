@@ -18,6 +18,16 @@ vat_codes:
     rate: 0.25
     reverse_charge: true
     deductible_percentage: 1.0
+  - code: REPRESENTATION_SPECIAL
+    type: purchase
+    rate: 0.25
+    reverse_charge: false
+    deductible_percentage: 0.25
+  - code: DK_BAD_DEBT_25
+    type: sale_adjustment
+    rate: 0.25
+    reverse_charge: false
+    deductible_percentage: 1.0
   - code: NO_VAT
     type: none
     rate: 0
@@ -60,3 +70,33 @@ rules:
         - identical_vat_amounts_when_fully_deductible
         - reverse_charge_purchase_base
     explanation: Rentemester must deterministically book reverse-charge VAT on EU service purchases so VAT reporting includes both the payment liability and the deductible input tax when applicable.
+  - rule_id: DK-VAT-REPRESENTATION-001
+    name: Representation purchases with limited VAT deduction must only book 25 percent of the VAT as deductible input tax
+    category: vat_posting
+    source_id: DK-MOMSLOVEN-2024-209
+    severity: hard_stop
+    machine_rule:
+      condition: vat_code == 'REPRESENTATION_SPECIAL'
+      require:
+        - representation_purchase_base
+        - deductible_input_vat_equals_25pct_of_full_vat
+        - non_deductible_vat_expensed
+      forbid:
+        - full_input_vat_deduction_for_representation_purchase
+    explanation: Rentemester must deterministically split representation purchases so only 25 percent of the full VAT is booked as deductible input VAT, while the remaining VAT is kept in the expense basis.
+  - rule_id: DK-VAT-BAD-DEBT-001
+    name: Established bad-debt losses on standard-rated sales must reduce output VAT from the deductible 80 percent loss basis
+    category: vat_posting
+    source_id: DK-MOMSLOVEN-2024-209
+    severity: hard_stop
+    machine_rule:
+      condition: vat_code == 'DK_BAD_DEBT_25'
+      require:
+        - established_uncollectible_invoice_loss
+        - bad_debt_relief_base_equals_80pct_of_gross_loss
+        - output_vat_reduction_matches_standard_rate
+        - receivable_credit_for_written_off_gross_amount
+      forbid:
+        - bad_debt_vat_relief_on_non_vat_or_nonstandard_invoice
+        - bad_debt_writeoff_above_open_principal_balance
+    explanation: When an issued Danish standard-rated invoice becomes an established bad debt, Rentemester must write off the gross receivable, expense the deductible loss basis, and reduce output VAT deterministically for the same loss amount.

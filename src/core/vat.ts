@@ -12,6 +12,8 @@ export type VatPeriodReport = {
   purchaseBase25: number;
   salesBase25: number;
   reverseChargePurchaseBase: number;
+  representationPurchaseBase: number;
+  badDebtReliefBase25: number;
   journalEntryCount: number;
   linesConsidered: number;
   errors: string[];
@@ -19,6 +21,7 @@ export type VatPeriodReport = {
 
 const RULE_ID = "DK-VAT-REPORT-001";
 const REVERSE_CHARGE_RULE_ID = "DK-VAT-REVERSE-CHARGE-001";
+const REPRESENTATION_RULE_ID = "DK-VAT-REPRESENTATION-001";
 
 export type ReverseChargePurchaseInput = {
   transactionDate: string;
@@ -26,6 +29,17 @@ export type ReverseChargePurchaseInput = {
   documentId: number;
   netAmount: number;
   expenseAccountNo: string;
+  paymentAccountNo?: string;
+  createdBy?: string;
+  createdByProgram?: string;
+};
+
+export type RepresentationPurchaseInput = {
+  transactionDate: string;
+  text: string;
+  documentId: number;
+  netAmount: number;
+  expenseAccountNo?: string;
   paymentAccountNo?: string;
   createdBy?: string;
   createdByProgram?: string;
@@ -69,6 +83,48 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
   };
 }
 
+export function postRepresentationPurchase(db: Database, input: RepresentationPurchaseInput): JournalPostResult {
+  const errors: string[] = [];
+  if (!looksLikeIsoDate(input.transactionDate)) errors.push("transactionDate must be YYYY-MM-DD");
+  if (typeof input.text !== "string" || input.text.trim().length === 0) errors.push("text is required");
+  if (!Number.isInteger(input.documentId) || input.documentId <= 0) errors.push("documentId must be a positive integer");
+  if (!Number.isFinite(input.netAmount) || input.netAmount <= 0) errors.push("netAmount must be a positive number");
+  if (errors.length > 0) return { ok: false, appliedRules: [REPRESENTATION_RULE_ID], errors };
+
+  const fullVatAmount = round2(input.netAmount * 0.25);
+  const deductibleVatAmount = round2(fullVatAmount * 0.25);
+  const nonDeductibleVatAmount = round2(fullVatAmount - deductibleVatAmount);
+  const grossAmount = round2(input.netAmount + fullVatAmount);
+
+  const result = postJournalEntry(db, {
+    transactionDate: input.transactionDate,
+    text: input.text.trim(),
+    documentId: input.documentId,
+    createdBy: input.createdBy,
+    createdByProgram: input.createdByProgram,
+    lines: [
+      {
+        accountNo: input.expenseAccountNo ?? "3070",
+        debitAmount: round2(input.netAmount),
+        vatCode: "REPRESENTATION_SPECIAL",
+        text: "Representation purchase base"
+      },
+      {
+        accountNo: input.expenseAccountNo ?? "3070",
+        debitAmount: nonDeductibleVatAmount,
+        text: "Non-deductible representation VAT (75%)"
+      },
+      { accountNo: "4000", debitAmount: deductibleVatAmount, text: "Deductible representation VAT (25%)" },
+      { accountNo: input.paymentAccountNo ?? "2000", creditAmount: grossAmount, text: "Payment / liability" },
+    ],
+  });
+
+  return {
+    ...result,
+    appliedRules: result.ok ? [...new Set([...(result.appliedRules ?? []), REPRESENTATION_RULE_ID])] : [...new Set([REPRESENTATION_RULE_ID, ...(result.appliedRules ?? [])])],
+  };
+}
+
 export function buildVatReport(db: Database, periodStart: string, periodEnd: string): VatPeriodReport {
   const errors: string[] = [];
   if (!looksLikeIsoDate(periodStart)) errors.push("periodStart must be YYYY-MM-DD");
@@ -86,6 +142,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
       purchaseBase25: 0,
       salesBase25: 0,
       reverseChargePurchaseBase: 0,
+      representationPurchaseBase: 0,
+      badDebtReliefBase25: 0,
       journalEntryCount: 0,
       linesConsidered: 0,
       errors,
@@ -113,6 +171,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   let purchaseBase25 = 0;
   let salesBase25 = 0;
   let reverseChargePurchaseBase = 0;
+  let representationPurchaseBase = 0;
+  let badDebtReliefBase25 = 0;
   const entryIds = new Set<number>();
 
   for (const row of rows) {
@@ -126,6 +186,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     if (row.vat_code === "DK_PURCHASE_25") purchaseBase25 += debit - credit;
     if (row.vat_code === "DK_SALE_25") salesBase25 += credit - debit;
     if (row.vat_code === "EU_SERVICE_REVERSE_CHARGE") reverseChargePurchaseBase += debit - credit;
+    if (row.vat_code === "REPRESENTATION_SPECIAL") representationPurchaseBase += debit - credit;
+    if (row.vat_code === "DK_BAD_DEBT_25") badDebtReliefBase25 += debit - credit;
   }
 
   outputVat = round2(outputVat);
@@ -133,6 +195,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   purchaseBase25 = round2(purchaseBase25);
   salesBase25 = round2(salesBase25);
   reverseChargePurchaseBase = round2(reverseChargePurchaseBase);
+  representationPurchaseBase = round2(representationPurchaseBase);
+  badDebtReliefBase25 = round2(badDebtReliefBase25);
 
   return {
     ok: true,
@@ -145,6 +209,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     purchaseBase25,
     salesBase25,
     reverseChargePurchaseBase,
+    representationPurchaseBase,
+    badDebtReliefBase25,
     journalEntryCount: entryIds.size,
     linesConsidered: rows.length,
     errors: [],

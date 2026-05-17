@@ -22,6 +22,32 @@ rules:
         - document_type == 'cash_register_receipt'
         - exemption_code == 'FOREIGN_PHYSICAL_ONLY'
     explanation: Rentemester must reject digitally stored purchase/sale supporting documents that lack the statutory minimum metadata unless an explicit legal exception applies.
+  - rule_id: DK-DOCUMENT-CASH-RECEIPT-001
+    name: Cash-register receipts may be stored without the full Danish minimum metadata set, but the original file and currency trail must be preserved
+    category: document_validation
+    source_id: DK-BILAG-OPBEVARING-2023-1383
+    severity: hard_stop
+    machine_rule:
+      condition: document_type == 'cash_register_receipt'
+      require:
+        - original_document_file
+        - original_currency_code_when_non_dkk
+      forbid:
+        - rejecting_cash_register_receipt_only_because_full_minimum_fields_are_missing
+    explanation: Kassestrimler from a sales registration system are exempt from the standard metadata minimum, but Rentemester must still preserve the original document and any original foreign currency on the receipt.
+  - rule_id: DK-DOCUMENT-FOREIGN-PHYSICAL-001
+    name: Foreign physical-only supporting documents may be stored without the Danish minimum metadata set, but the original currency trail must be preserved
+    category: document_validation
+    source_id: DK-BILAG-OPBEVARING-2023-1383
+    severity: hard_stop
+    machine_rule:
+      condition: exemption_code == 'FOREIGN_PHYSICAL_ONLY'
+      require:
+        - original_document_file
+        - original_currency_code_when_non_dkk
+      forbid:
+        - rejecting_foreign_physical_document_only_because_danish_minimum_fields_are_missing
+    explanation: When a purchase or sale document only exists in physical form and was received outside Denmark, Rentemester must still preserve the original file and currency trail even though the standard Danish metadata minimum does not apply.
   - rule_id: DK-DOCUMENT-INTEGRITY-001
     name: Original supporting documents must be preserved without silent overwrite or mutation
     category: document_integrity

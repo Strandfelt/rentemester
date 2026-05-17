@@ -1,6 +1,6 @@
 # Downloaded legal sources
 
-Downloaded at 2026-05-16T20:39:39.008Z.
+Downloaded at 2026-05-17T01:40:21.543Z.
 
 - DK-BOGFORINGSLOVEN-2022-700: Lov om bogføring (182f07c898580e9c57da7dff8cabbc9c714dea1886b4d2497d5e7b45a7f9327a)
 - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205: Bekendtgørelse om krav til virksomheders digitale bogføringssystemer der ikke er registreret efter bogføringsloven (d68b7b2732235bba5eb425e9659102567376974f2e66b1feb885361cbae14d71)
@@ -9,3 +9,5 @@ Downloaded at 2026-05-16T20:39:39.008Z.
 - DK-MOMSBEKENDTGORELSEN-2023-1435: Momsbekendtgørelsen (edc4537ec0667bd28bbb19751a91d1c26420a05d514e1c062d763b8db33637b1)
 - DK-BILAG-OPBEVARING-2023-1383: Bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem (b22f856a6012144137d78a535d5b683acb6e912f15ecbfd2c39caab72416b982)
 - DK-BILAG-OPBEVARING-AMEND-2025-302: Bekendtgørelse om ændring af bekendtgørelse om pligt til opbevaring af bilag i et digitalt bogføringssystem (cd51ad2dc05e181880b3592af1b48d44eff8583693d0184e0fc78dd7a2357e10)
+- DK-RENTELOVEN-2014-459: Bekendtgørelse af lov om renter og andre forhold ved forsinket betaling (6c887571027854733f31b4fe388e1d4e5ea8a6f07c5ac6a06be6290e7c0bc03f)
+- DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105: Bekendtgørelse om ændring af bekendtgørelse om udenretlige inddrivelsesomkostninger i anledning af forsinket betaling (525778b12fe2d28e8028cee2c9168ef2e0c18b7022173d7960ec9c501b21fa21)

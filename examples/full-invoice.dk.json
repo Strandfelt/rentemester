@@ -10,7 +10,8 @@
   },
   "buyer": {
     "name": "Kunde A/S",
-    "address": "Købervej 9, 8000 Aarhus C"
+    "address": "Købervej 9, 8000 Aarhus C",
+    "vatOrCvr": "DK87654321"
   },
   "lines": [
     {
@@ -26,5 +27,6 @@
     "vatAmount": 250,
     "grossAmount": 1250
   },
-  "currency": "DKK"
+  "currency": "DKK",
+  "dueDate": "2026-06-15"
 }

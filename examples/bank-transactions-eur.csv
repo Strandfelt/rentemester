@@ -1,0 +1,2 @@
+transaction_date,booking_date,text,amount,currency,amount_dkk,fx_rate_to_dkk,reference
+2026-05-19,2026-05-19,Stripe payout,100,EUR,746,7.46,EUR-REF-1

@@ -39,12 +39,33 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("imports non-DKK rows when DKK amount and FX rate are supplied", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-fx-"));
+    const csv = join(root, "fx.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,amount_dkk,fx_rate_to_dkk,reference",
+      "2026-05-19,2026-05-19,Stripe payout,100,EUR,746,7.46,EUR-REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    const rows = db.query("SELECT currency, amount, amount_dkk, fx_rate_to_dkk FROM bank_transactions ORDER BY id ASC").all() as any[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({ currency: "EUR", amount: 100, amount_dkk: 746, fx_rate_to_dkk: 7.46 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");
     writeFileSync(csv, [
-      "transaction_date,booking_date,text,amount,currency,reference",
-      "16-05-2026,,,-abc,EUR,REF-1"
+      "transaction_date,booking_date,text,amount,currency,amount_dkk,fx_rate_to_dkk,reference",
+      "16-05-2026,,,-abc,EUR,,,REF-1"
     ].join("\n"));
 
     const db = openDb(ensureCompanyDirs(root).db);
@@ -53,7 +74,8 @@ describe("bank import", () => {
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes("transactionDate"))).toBe(true);
     expect(result.errors.some((e) => e.includes("amount"))).toBe(true);
-    expect(result.errors.some((e) => e.includes("currency"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("amountDkk"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("fxRateToDkk"))).toBe(true);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

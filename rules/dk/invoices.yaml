@@ -1,6 +1,8 @@
 version: dk-invoices-v0.0.2
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
+  - DK-RENTELOVEN-2014-459
+  - DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105
 rules:
   - rule_id: DK-INVOICE-FULL-001
     name: Full invoice must contain core seller/buyer/date/number/content fields
@@ -50,6 +52,297 @@ rules:
         - vat_rate
         - vat_amount
     explanation: Reverse-charge invoices are issued without VAT rate/amount and must clearly state that the buyer settles the VAT.
+  - rule_id: DK-INVOICE-ARITHMETIC-001
+    name: Invoice line sums and totals must be arithmetically consistent before issue
+    category: invoice_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - line_total_equals_quantity_times_unit_price_when_present
+        - net_total_equals_sum_of_lines_for_full_invoice
+        - gross_total_equals_net_plus_vat_for_standard_vat
+        - reverse_charge_gross_equals_net
+      forbid:
+        - inconsistent_invoice_totals
+    explanation: Rentemester must reject invoices whose line amounts or VAT totals do not add up, so issued invoices remain legally and financially coherent.
+  - rule_id: DK-INVOICE-ISSUE-001
+    name: Issued invoices must be stored immutably with sequential invoice numbers
+    category: invoice_integrity
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - sequential_invoice_number
+        - immutable_issued_snapshot
+        - persisted_issue_timestamp
+      forbid:
+        - issue_without_validation
+    explanation: Rentemester must only issue invoices after deterministic validation and must persist an immutable issued snapshot tied to a sequential invoice number.
+  - rule_id: DK-INVOICE-DUE-DATE-001
+    name: Customer invoices must expose a deterministic due date and overdue classification
+    category: invoice_lifecycle
+    source_id: DK-RENTELOVEN-2014-459
+    severity: hard_stop
+    machine_rule:
+      require:
+        - explicit_due_date_or_statutory_30_day_fallback
+        - overdue_days_from_collectible_open_balance
+      forbid:
+        - overdue_flag_on_zero_or_negative_balance
+    explanation: Rentemester must deterministically identify when an issued invoice is due or overdue, using an explicit due date when present and otherwise the statutory 30-day fallback after the payment demand.
+  - rule_id: DK-INVOICE-LATE-INTEREST-001
+    name: Overdue customer invoices must support deterministic statutory late-interest calculation
+    category: invoice_lifecycle
+    source_id: DK-RENTELOVEN-2014-459
+    severity: hard_stop
+    machine_rule:
+      require:
+        - overdue_open_balance
+        - reference_rate_input
+        - annual_rate_equals_reference_rate_plus_8pct_points
+        - daily_interest_from_overdue_days
+      forbid:
+        - late_interest_on_non_overdue_or_nonpositive_balance
+    explanation: Rentemester must be able to calculate statutory delay interest on overdue collectible balances using the renteloven formula and an explicit reference rate for the relevant half-year.
+  - rule_id: DK-INVOICE-LATE-INTEREST-REGISTER-001
+    name: A late-interest claim may only be registered from a deterministic calculation and must remain traceable in the claim balance
+    category: invoice_lifecycle
+    source_id: DK-RENTELOVEN-2014-459
+    severity: hard_stop
+    machine_rule:
+      require:
+        - eligible_late_interest_calculation_before_registration
+        - immutable_interest_claim_record
+        - unique_interest_claim_per_invoice_date_and_reference_rate
+        - claim_balance_includes_registered_interest
+      forbid:
+        - interest_registration_without_positive_accrued_interest
+    explanation: Rentemester must only register late interest from a deterministic statutory calculation, keep each registered interest claim immutable and traceable, and surface the accumulated registered interest in the invoice claim balance.
+  - rule_id: DK-INVOICE-LATE-INTEREST-BOOKKEEPING-001
+    name: Registered late-interest claims must be bookable once to receivables and non-VAT claim income
+    category: invoice_accounting
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - registered_interest_claim_reference
+        - receivable_debit_for_interest_amount
+        - non_vat_claim_income_credit_for_interest_amount
+        - append_only_interest_posting_link
+      forbid:
+        - second_bookkeeping_of_same_interest_claim
+    explanation: Rentemester must be able to book each registered late-interest claim as its own append-only receivable and income entry exactly once, so statutory interest claims are traceable in the ledger without mutating the original invoice posting.
+  - rule_id: DK-INVOICE-REMINDER-FEE-001
+    name: Reminder fees must respect statutory max amount, max count, and spacing
+    category: invoice_lifecycle
+    source_id: DK-RENTELOVEN-2014-459
+    severity: hard_stop
+    machine_rule:
+      require:
+        - overdue_open_balance_on_reminder_date
+        - reminder_fee_not_above_100_dkk
+        - no_more_than_3_reminder_fees_per_same_claim
+        - at_least_10_days_between_reminder_letters
+      forbid:
+        - reminder_fee_on_non_overdue_or_fully_settled_invoice
+        - fourth_or_later_reminder_fee_for_same_claim
+        - reminder_fee_less_than_10_days_after_previous_reminder
+    explanation: Rentemester must only register rykkergebyrer when the invoice is still overdue, each fee is at most DKK 100, there are at most three for the same claim, and reminder letters are spaced by at least 10 days.
+  - rule_id: DK-INVOICE-REMINDER-FEE-BOOKKEEPING-001
+    name: Registered reminder fees must be bookable once to receivables and non-VAT claim income
+    category: invoice_accounting
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - registered_reminder_fee_reference
+        - receivable_debit_for_reminder_fee_amount
+        - non_vat_claim_income_credit_for_reminder_fee_amount
+        - append_only_reminder_posting_link
+      forbid:
+        - second_bookkeeping_of_same_reminder_fee
+    explanation: Rentemester must be able to book each registered reminder fee as its own append-only receivable and income entry exactly once, so reminder claims are traceable in the ledger without mutating the original invoice posting.
+  - rule_id: DK-INVOICE-LATE-COMPENSATION-001
+    name: Overdue commercial invoices must support deterministic assessment of the fixed compensation claim
+    category: invoice_lifecycle
+    source_id: DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105
+    severity: hard_stop
+    machine_rule:
+      require:
+        - overdue_open_balance
+        - commercial_transaction_indicator
+        - fixed_compensation_amount_310_dkk_from_2013_03_01
+      forbid:
+        - compensation_claim_on_non_overdue_or_noncommercial_invoice
+    explanation: Rentemester must be able to determine whether an overdue invoice qualifies for the fixed DKK 310 compensation claim introduced by the 2013 amendment on without-court collection costs.
+  - rule_id: DK-INVOICE-LATE-COMPENSATION-REGISTER-001
+    name: A fixed compensation claim may only be registered once per overdue commercial invoice and must stay traceable in the claim balance
+    category: invoice_lifecycle
+    source_id: DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105
+    severity: hard_stop
+    machine_rule:
+      require:
+        - eligible_compensation_assessment_before_registration
+        - immutable_compensation_claim_record
+        - single_registered_compensation_claim_per_invoice
+        - claim_balance_includes_registered_compensation
+      forbid:
+        - second_compensation_claim_for_same_invoice
+        - compensation_registration_when_invoice_is_not_eligible
+    explanation: Rentemester must only register the fixed compensation claim after a deterministic eligibility check, keep one immutable claim record per invoice, and surface the registered amount in the invoice claim balance.
+  - rule_id: DK-INVOICE-LATE-COMPENSATION-BOOKKEEPING-001
+    name: Registered fixed compensation claims must be bookable once to receivables and non-VAT claim income
+    category: invoice_accounting
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - registered_compensation_claim_reference
+        - receivable_debit_for_compensation_amount
+        - non_vat_claim_income_credit_for_compensation_amount
+        - append_only_compensation_posting_link
+      forbid:
+        - second_bookkeeping_of_same_compensation_claim
+    explanation: Rentemester must be able to book a registered fixed compensation claim as a separate append-only receivable and income entry exactly once, so the legal claim is reflected in the ledger without mutating the original invoice posting.
+  - rule_id: DK-INVOICE-BOOKKEEPING-001
+    name: Issued sales invoices must create one traceable receivable, revenue, and VAT journal entry
+    category: invoice_accounting
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_reference
+        - receivable_line_for_gross_amount
+        - revenue_line_for_net_amount
+        - output_vat_line_for_vat_amount
+      forbid:
+        - second_sales_posting_for_same_invoice
+    explanation: Rentemester must be able to deterministically book an issued invoice into the ledger so open receivables, revenue, and output VAT are traceable to the invoice.
+  - rule_id: DK-INVOICE-SETTLEMENT-001
+    name: Bank-settled customer payments must clear receivables with traceable invoice and bank links
+    category: invoice_lifecycle
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_reference
+        - bank_transaction_reference
+        - receivable_credit_for_paid_amount
+        - bank_debit_for_paid_amount
+        - immutable_payment_application
+      forbid:
+        - settlement_without_open_invoice_balance
+    explanation: Rentemester must deterministically settle customer receipts against issued invoices so the receivable is cleared and the bank receipt is traceable in both ledger and invoice lifecycle.
+  - rule_id: DK-INVOICE-CLAIM-SETTLEMENT-001
+    name: Bank-settled invoice claim receipts must clear booked claim receivables with traceable invoice and bank links
+    category: invoice_lifecycle
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_reference
+        - bank_transaction_reference
+        - settled_principal_before_claim_receipt
+        - positive_claim_open_balance
+        - receivable_credit_for_claim_amount
+        - bank_debit_for_claim_amount
+        - immutable_claim_payment_application
+      forbid:
+        - claim_settlement_without_outstanding_claim_balance
+        - claim_settlement_before_principal_is_cleared
+    explanation: Rentemester must deterministically settle incoming bank receipts for already-booked reminder, compensation, or interest claims only after the principal invoice receivable is cleared, so remaining claim balances stay traceable in both lifecycle data and ledger.
+  - rule_id: DK-INVOICE-COMBINED-SETTLEMENT-001
+    name: A single incoming bank receipt may settle principal and booked claims in one deterministic application
+    category: invoice_lifecycle
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_reference
+        - bank_transaction_reference
+        - principal_component_applied_first
+        - residual_component_limited_to_booked_claim_balance
+        - immutable_split_payment_application
+        - single_balanced_bank_receipt_journal
+      forbid:
+        - combined_receipt_exceeding_total_open_receivable
+        - claim_component_without_booked_claim_balance
+    explanation: Rentemester must handle a single incoming customer payment that covers both the outstanding invoice principal and already-booked reminder, compensation, or interest claims by splitting the application deterministically while preserving one traceable bank receipt journal.
+  - rule_id: DK-INVOICE-PAYMENT-001
+    name: Invoice payments must be traceably applied against issued invoices and bank transactions
+    category: invoice_lifecycle
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_reference
+        - payment_date
+        - paid_amount
+        - immutable_payment_application
+      forbid:
+        - payment_application_above_open_balance
+    explanation: Rentemester must track which issued invoice a payment settles, how much was applied, and whether any balance remains open.
+  - rule_id: DK-INVOICE-CORRECTION-BALANCE-001
+    name: Open invoice balance must reflect linked credit notes as well as payments
+    category: invoice_lifecycle
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - original_invoice_reference
+        - credited_amount_in_balance_calculation
+        - payment_application_against_net_open_balance
+      forbid:
+        - payment_application_above_corrected_open_balance
+    explanation: Once an invoice is corrected with a linked credit note, Rentemester must reduce the remaining receivable before accepting further customer payments.
+  - rule_id: DK-CREDIT-NOTE-001
+    name: Credit notes must reference the original issued invoice and mirror the corrected VAT effect
+    category: invoice_correction
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - original_invoice_reference
+        - credit_note_number
+        - immutable_credit_note_snapshot
+        - negative_revenue_and_vat_effect
+        - cumulative_credit_amount_lte_original_invoice
+      forbid:
+        - credit_note_without_original_invoice
+        - cumulative_credit_amount_above_original_invoice
+    explanation: Rentemester must issue credit notes as separate immutable correction documents tied to the original invoice, including partial credits, without ever crediting more than the original invoice amount.
+  - rule_id: DK-INVOICE-REFUND-001
+    name: Customer refunds after credit notes must be traceably settled against the bank and corrected invoice balance
+    category: invoice_lifecycle
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - original_invoice_reference
+        - outgoing_bank_transaction_reference
+        - refund_amount_within_credit_balance
+        - receivable_debit_for_refund
+        - bank_credit_for_refund
+        - immutable_refund_application
+      forbid:
+        - refund_without_credit_balance
+    explanation: When an issued invoice has been over-settled because of a linked credit note, Rentemester must settle the customer refund as a separate traceable bank-linked correction.
+  - rule_id: DK-INVOICE-BAD-DEBT-WRITEOFF-001
+    name: Uncollectible customer invoice receivables must be written off through an append-only, invoice-linked correction entry
+    category: invoice_lifecycle
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_reference
+        - positive_open_principal_balance
+        - append_only_bad_debt_record
+        - receivable_credit_for_written_off_gross_amount
+      forbid:
+        - bad_debt_writeoff_without_open_principal_balance
+        - bad_debt_writeoff_above_open_principal_balance
+    explanation: When a customer invoice loss is established, Rentemester must write off only the remaining principal receivable through an append-only invoice-linked correction entry so the audit trail remains deterministic.
   - rule_id: DK-INVOICE-LOCK-001
     name: Issued invoices cannot be modified
     category: invoice_integrity

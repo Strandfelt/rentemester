@@ -1,0 +1,258 @@
+import type { Database } from "bun:sqlite";
+import { postJournalEntry, type JournalPostResult } from "./ledger";
+import { getInvoiceStatus } from "./invoice-payments";
+
+const RULE_ID = "DK-INVOICE-LATE-COMPENSATION-001";
+const REGISTER_RULE_ID = "DK-INVOICE-LATE-COMPENSATION-REGISTER-001";
+const BOOKKEEPING_RULE_ID = "DK-INVOICE-LATE-COMPENSATION-BOOKKEEPING-001";
+
+export type CalculateInvoiceLateCompensationInput = {
+  invoiceDocumentId: number;
+  asOfDate: string;
+  compensationAmountDkk?: number;
+};
+
+export type CalculateInvoiceLateCompensationResult = {
+  ok: boolean;
+  invoiceDocumentId?: number;
+  invoiceNumber?: string;
+  asOfDate?: string;
+  effectiveDueDate?: string;
+  overdueDays?: number;
+  principalOpenBalance?: number;
+  isCommercialTransaction?: boolean;
+  eligible?: boolean;
+  compensationAmountDkk?: number;
+  reason?: string;
+  appliedRules: string[];
+  errors: string[];
+};
+
+export type RegisterInvoiceLateCompensationInput = {
+  invoiceDocumentId: number;
+  asOfDate: string;
+  compensationAmountDkk?: number;
+  note?: string;
+};
+
+export type RegisterInvoiceLateCompensationResult = CalculateInvoiceLateCompensationResult & {
+  claimId?: number;
+  claimDate?: string;
+  claimOpenBalance?: number;
+};
+
+export type PostInvoiceLateCompensationToLedgerInput = {
+  invoiceDocumentId: number;
+  transactionDate?: string;
+  receivableAccountNo?: string;
+  compensationIncomeAccountNo?: string;
+  createdBy?: string;
+  createdByProgram?: string;
+};
+
+export type PostInvoiceLateCompensationToLedgerResult = JournalPostResult & {
+  claimId?: number;
+  invoiceDocumentId?: number;
+  invoiceNumber?: string;
+  compensationAmountDkk?: number;
+  claimOpenBalance?: number;
+};
+
+function looksLikeIsoDate(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+}
+function round2(value: number) { return Number(value.toFixed(2)); }
+const STATUTORY_COMPENSATION_DKK = 310;
+const STATUTORY_COMPENSATION_START_DATE = "2013-03-01";
+
+export function calculateInvoiceLateCompensation(db: Database, input: CalculateInvoiceLateCompensationInput): CalculateInvoiceLateCompensationResult {
+  const errors: string[] = [];
+  if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) errors.push("invoiceDocumentId must be a positive integer");
+  if (!looksLikeIsoDate(input.asOfDate)) errors.push("asOfDate must be YYYY-MM-DD");
+  if (input.compensationAmountDkk !== undefined && (!Number.isFinite(input.compensationAmountDkk) || input.compensationAmountDkk < 0)) errors.push("compensationAmountDkk must be a non-negative number when present");
+  if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
+
+  const invoice = db.query(`SELECT invoice_no, payload_json, document_type, invoice_date FROM documents WHERE id = ?`).get(input.invoiceDocumentId) as { invoice_no: string; payload_json: string | null; document_type: string; invoice_date: string | null } | null;
+  if (!invoice) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice document ${input.invoiceDocumentId} does not exist`] };
+  if (invoice.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID], errors: [`document ${input.invoiceDocumentId} is not an issued invoice`] };
+
+  const status = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
+  if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
+
+  const payload = invoice.payload_json ? JSON.parse(invoice.payload_json) : null;
+  const isCommercialTransaction = typeof payload?.buyer?.vatOrCvr === "string" && payload.buyer.vatOrCvr.trim().length > 0;
+  const principalOpenBalance = round2(Number(status.openBalance ?? 0));
+  const overdueDays = Number(status.overdueDays ?? 0);
+  const compensationAmountDkk = round2(input.compensationAmountDkk ?? STATUTORY_COMPENSATION_DKK);
+  const coveredByStatutoryAmount = (invoice.invoice_date ?? input.asOfDate) >= STATUTORY_COMPENSATION_START_DATE;
+  const eligible = isCommercialTransaction && principalOpenBalance > 0 && overdueDays > 0 && coveredByStatutoryAmount;
+
+  let reason = "eligible";
+  if (!isCommercialTransaction) reason = "buyer.vatOrCvr missing; commercial transaction not proven";
+  else if (!(principalOpenBalance > 0)) reason = "invoice has no collectible open balance";
+  else if (!(overdueDays > 0)) reason = "invoice is not overdue as of the requested date";
+  else if (!coveredByStatutoryAmount) reason = `invoice predates statutory compensation start date ${STATUTORY_COMPENSATION_START_DATE}`;
+
+  return {
+    ok: true,
+    invoiceDocumentId: input.invoiceDocumentId,
+    invoiceNumber: status.invoiceNumber,
+    asOfDate: input.asOfDate,
+    effectiveDueDate: status.effectiveDueDate,
+    overdueDays,
+    principalOpenBalance,
+    isCommercialTransaction,
+    eligible,
+    compensationAmountDkk: eligible ? compensationAmountDkk : 0,
+    reason,
+    appliedRules: [RULE_ID],
+    errors: [],
+  };
+}
+
+export function registerInvoiceLateCompensation(db: Database, input: RegisterInvoiceLateCompensationInput): RegisterInvoiceLateCompensationResult {
+  const assessment = calculateInvoiceLateCompensation(db, input);
+  if (!assessment.ok) return { ...assessment, appliedRules: [...new Set([...(assessment.appliedRules ?? []), REGISTER_RULE_ID])] };
+  if (!assessment.eligible || !(Number(assessment.compensationAmountDkk ?? 0) > 0)) {
+    return {
+      ...assessment,
+      ok: false,
+      appliedRules: [...new Set([...(assessment.appliedRules ?? []), REGISTER_RULE_ID])],
+      errors: [assessment.reason ?? "invoice is not eligible for compensation registration"],
+    };
+  }
+
+  const existing = db.query(
+    `SELECT id, claim_date, amount_dkk FROM invoice_compensation_claims WHERE invoice_document_id = ? LIMIT 1`
+  ).get(input.invoiceDocumentId) as { id: number; claim_date: string; amount_dkk: number } | null;
+  if (existing) {
+    return {
+      ok: false,
+      invoiceDocumentId: input.invoiceDocumentId,
+      invoiceNumber: assessment.invoiceNumber,
+      asOfDate: input.asOfDate,
+      effectiveDueDate: assessment.effectiveDueDate,
+      overdueDays: assessment.overdueDays,
+      principalOpenBalance: assessment.principalOpenBalance,
+      isCommercialTransaction: assessment.isCommercialTransaction,
+      eligible: assessment.eligible,
+      compensationAmountDkk: round2(Number(existing.amount_dkk)),
+      reason: `compensation claim already registered on ${existing.claim_date}`,
+      appliedRules: [RULE_ID, REGISTER_RULE_ID],
+      errors: [`invoice ${input.invoiceDocumentId} already has a registered compensation claim`],
+    };
+  }
+
+  const inserted = db.query(
+    `INSERT INTO invoice_compensation_claims (invoice_document_id, claim_date, amount_dkk, note)
+     VALUES (?, ?, ?, ?)
+     RETURNING id`
+  ).get(input.invoiceDocumentId, input.asOfDate, round2(Number(assessment.compensationAmountDkk)), input.note ?? null) as { id: number };
+
+  db.run(
+    "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_compensation_register', 'invoice_compensation_claim', ?, ?)",
+    String(inserted.id),
+    `Registered compensation claim ${round2(Number(assessment.compensationAmountDkk))} on invoice ${assessment.invoiceNumber}`
+  );
+
+  const statusAfter = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
+  return {
+    ok: true,
+    claimId: inserted.id,
+    claimDate: input.asOfDate,
+    claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
+    invoiceDocumentId: input.invoiceDocumentId,
+    invoiceNumber: assessment.invoiceNumber,
+    asOfDate: input.asOfDate,
+    effectiveDueDate: assessment.effectiveDueDate,
+    overdueDays: assessment.overdueDays,
+    principalOpenBalance: assessment.principalOpenBalance,
+    isCommercialTransaction: assessment.isCommercialTransaction,
+    eligible: true,
+    compensationAmountDkk: round2(Number(assessment.compensationAmountDkk)),
+    reason: "registered",
+    appliedRules: [RULE_ID, REGISTER_RULE_ID],
+    errors: [],
+  };
+}
+
+export function postInvoiceLateCompensationToLedger(db: Database, input: PostInvoiceLateCompensationToLedgerInput): PostInvoiceLateCompensationToLedgerResult {
+  if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) {
+    return { ok: false, appliedRules: [BOOKKEEPING_RULE_ID], errors: ["invoiceDocumentId must be a positive integer"] };
+  }
+
+  const claim = db.query(
+    `SELECT c.id, c.invoice_document_id, c.claim_date, c.amount_dkk, d.invoice_no
+     FROM invoice_compensation_claims c
+     JOIN documents d ON d.id = c.invoice_document_id
+     WHERE c.invoice_document_id = ?`
+  ).get(input.invoiceDocumentId) as {
+    id: number;
+    invoice_document_id: number;
+    claim_date: string;
+    amount_dkk: number;
+    invoice_no: string;
+  } | null;
+
+  if (!claim) {
+    return { ok: false, appliedRules: [BOOKKEEPING_RULE_ID], errors: [`invoice ${input.invoiceDocumentId} has no registered compensation claim`] };
+  }
+
+  const existing = db.query(
+    `SELECT p.id, p.journal_entry_id, j.entry_no
+     FROM invoice_compensation_postings p
+     JOIN journal_entries j ON j.id = p.journal_entry_id
+     WHERE p.compensation_claim_id = ?`
+  ).get(claim.id) as { id: number; journal_entry_id: number; entry_no: string } | null;
+
+  if (existing) {
+    return {
+      ok: false,
+      claimId: claim.id,
+      invoiceDocumentId: claim.invoice_document_id,
+      invoiceNumber: claim.invoice_no,
+      compensationAmountDkk: round2(Number(claim.amount_dkk)),
+      appliedRules: [BOOKKEEPING_RULE_ID],
+      errors: [`compensation claim ${claim.id} is already posted in journal entry ${existing.entry_no}`],
+    };
+  }
+
+  const amount = round2(Number(claim.amount_dkk));
+  const journal = postJournalEntry(db, {
+    transactionDate: input.transactionDate ?? claim.claim_date,
+    text: `Compensation claim ${claim.invoice_no}`,
+    documentId: claim.invoice_document_id,
+    createdBy: input.createdBy,
+    createdByProgram: input.createdByProgram,
+    lines: [
+      { accountNo: input.receivableAccountNo ?? "1100", debitAmount: amount, text: `Compensation receivable ${claim.invoice_no}` },
+      { accountNo: input.compensationIncomeAccountNo ?? "1010", creditAmount: amount, text: `Compensation income ${claim.invoice_no}` },
+    ],
+  });
+  if (!journal.ok) {
+    return { ...journal, claimId: claim.id, invoiceDocumentId: claim.invoice_document_id, invoiceNumber: claim.invoice_no, compensationAmountDkk: amount, appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])] };
+  }
+
+  db.run(
+    `INSERT INTO invoice_compensation_postings (compensation_claim_id, journal_entry_id) VALUES (?, ?)`,
+    claim.id,
+    journal.entryId,
+  );
+
+  db.run(
+    "INSERT INTO audit_log (event_type, entity_type, entity_id, message) VALUES ('invoice_compensation_post', 'invoice_compensation_claim', ?, ?)",
+    String(claim.id),
+    `Posted compensation claim ${amount} for invoice ${claim.invoice_no} in journal entry ${journal.entryNo}`
+  );
+
+  const statusAfter = getInvoiceStatus(db, claim.invoice_document_id, input.transactionDate ?? claim.claim_date);
+  return {
+    ...journal,
+    claimId: claim.id,
+    invoiceDocumentId: claim.invoice_document_id,
+    invoiceNumber: claim.invoice_no,
+    compensationAmountDkk: amount,
+    claimOpenBalance: statusAfter.ok ? statusAfter.claimOpenBalance : undefined,
+    appliedRules: [...new Set([...(journal.appliedRules ?? []), BOOKKEEPING_RULE_ID])],
+  };
+}

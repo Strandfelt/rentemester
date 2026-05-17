@@ -11,6 +11,8 @@ export type BankImportRow = {
   amount: number;
   currency?: string;
   reference?: string;
+  amountDkk?: number;
+  fxRateToDkk?: number;
 };
 
 export type BankImportResult = {
@@ -23,6 +25,7 @@ export type BankImportResult = {
 };
 
 const RULE_ID = "DK-BOOKKEEPING-BANK-IMPORT-001";
+const FX_RULE_ID = "DK-BOOKKEEPING-FX-001";
 
 function sha256Bytes(data: Uint8Array | string) {
   return createHash("sha256").update(data).digest("hex");
@@ -58,19 +61,35 @@ function toRow(input: Record<string, string>): BankImportRow {
     amount: Number(input.amount),
     currency: input.currency || "DKK",
     reference: input.reference || undefined,
+    amountDkk: input.amount_dkk ? Number(input.amount_dkk) : undefined,
+    fxRateToDkk: input.fx_rate_to_dkk ? Number(input.fx_rate_to_dkk) : undefined,
   };
 }
 
 export function validateBankImportRows(rows: BankImportRow[]) {
   const errors: string[] = [];
+  let needsFxRule = false;
   rows.forEach((row, idx) => {
     if (!looksLikeIsoDate(row.transactionDate)) errors.push(`rows[${idx}].transactionDate must be YYYY-MM-DD`);
     if (row.bookingDate && !looksLikeIsoDate(row.bookingDate)) errors.push(`rows[${idx}].bookingDate must be YYYY-MM-DD when present`);
     if (typeof row.text !== "string" || row.text.trim().length === 0) errors.push(`rows[${idx}].text is required`);
     if (!Number.isFinite(normalizeAmount(row.amount))) errors.push(`rows[${idx}].amount must be numeric`);
-    if ((row.currency ?? "DKK") !== "DKK") errors.push(`rows[${idx}].currency must be DKK in the current deterministic importer`);
+
+    const currency = (row.currency ?? "DKK").trim().toUpperCase();
+    if (currency.length !== 3) errors.push(`rows[${idx}].currency must be a 3-letter ISO currency code`);
+    if (currency !== "DKK") {
+      needsFxRule = true;
+      if (!Number.isFinite(normalizeAmount(row.amountDkk))) errors.push(`rows[${idx}].amountDkk is required for non-DKK rows`);
+      if (!Number.isFinite(normalizeAmount(row.fxRateToDkk)) || (row.fxRateToDkk ?? 0) <= 0) errors.push(`rows[${idx}].fxRateToDkk must be positive for non-DKK rows`);
+      if (Number.isFinite(normalizeAmount(row.amountDkk)) && Number.isFinite(normalizeAmount(row.fxRateToDkk))) {
+        const expectedAmountDkk = normalizeAmount((row.amount ?? 0) * (row.fxRateToDkk ?? 0));
+        if (normalizeAmount(row.amountDkk) !== expectedAmountDkk) {
+          errors.push(`rows[${idx}].amountDkk must equal amount * fxRateToDkk (${expectedAmountDkk})`);
+        }
+      }
+    }
   });
-  return { ok: errors.length === 0, appliedRules: [RULE_ID], errors };
+  return { ok: errors.length === 0, appliedRules: needsFxRule ? [RULE_ID, FX_RULE_ID] : [RULE_ID], errors };
 }
 
 function transactionFingerprint(row: BankImportRow) {
@@ -81,6 +100,8 @@ function transactionFingerprint(row: BankImportRow) {
     amount: normalizeAmount(row.amount),
     currency: row.currency ?? "DKK",
     reference: row.reference ?? null,
+    amount_dkk: normalizeAmount(row.amountDkk),
+    fx_rate_to_dkk: normalizeAmount(row.fxRateToDkk),
   }));
 }
 
@@ -102,8 +123,8 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
   let skippedDuplicates = 0;
   const insert = db.prepare(
     `INSERT INTO bank_transactions (
-      transaction_date, booking_date, text, amount, currency, reference, source_file_hash, import_batch_id, transaction_hash, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')`
+      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')`
   );
 
   db.transaction(() => {
@@ -119,8 +140,10 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
         row.bookingDate ?? null,
         row.text.trim(),
         normalizeAmount(row.amount),
-        row.currency ?? "DKK",
+        (row.currency ?? "DKK").trim().toUpperCase(),
         row.reference ?? null,
+        normalizeAmount(row.amountDkk),
+        normalizeAmount(row.fxRateToDkk),
         sourceFileHash,
         importBatchId,
         hash,

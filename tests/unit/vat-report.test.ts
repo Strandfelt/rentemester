@@ -64,6 +64,7 @@ describe("vat report", () => {
     expect(may.netVatPayable).toBe(0);
     expect(may.salesBase25).toBe(1000);
     expect(may.purchaseBase25).toBe(1000);
+    expect(may.badDebtReliefBase25).toBe(0);
     expect(may.journalEntryCount).toBe(2);
 
     const reversed = reverseJournalEntry(db, {
