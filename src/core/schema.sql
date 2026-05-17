@@ -296,6 +296,80 @@ CREATE TABLE IF NOT EXISTS exceptions (
   resolution_note TEXT
 );
 
+CREATE TRIGGER IF NOT EXISTS audit_log_no_update
+BEFORE UPDATE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+BEFORE DELETE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS accounting_periods_guard_update
+BEFORE UPDATE ON accounting_periods
+WHEN OLD.period_start != NEW.period_start
+   OR OLD.period_end != NEW.period_end
+   OR OLD.kind != NEW.kind
+   OR OLD.created_at != NEW.created_at
+   OR OLD.status = 'reported'
+   OR (OLD.status = 'closed' AND NEW.status = 'open')
+   OR (OLD.status = 'open' AND NEW.status = 'reported')
+   OR NEW.status NOT IN ('open', 'closed', 'reported')
+BEGIN
+  SELECT RAISE(ABORT, 'accounting periods may only progress open -> closed -> reported; period bounds are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS accounting_periods_no_delete
+BEFORE DELETE ON accounting_periods
+BEGIN
+  SELECT RAISE(ABORT, 'accounting periods are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS sequences_monotone_update
+BEFORE UPDATE ON sequences
+WHEN OLD.kind != NEW.kind
+   OR OLD.scope != NEW.scope
+   OR NEW.value < OLD.value
+BEGIN
+  SELECT RAISE(ABORT, 'sequences are immutable identifiers and monotonically increasing');
+END;
+
+CREATE TRIGGER IF NOT EXISTS sequences_no_delete
+BEFORE DELETE ON sequences
+BEGIN
+  SELECT RAISE(ABORT, 'sequences are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS exceptions_guard_update
+BEFORE UPDATE ON exceptions
+WHEN OLD.type != NEW.type
+   OR OLD.severity != NEW.severity
+   OR OLD.related_bank_transaction_id IS NOT NEW.related_bank_transaction_id
+   OR OLD.related_document_id IS NOT NEW.related_document_id
+   OR OLD.created_at != NEW.created_at
+   OR (OLD.status = 'resolved' AND NEW.status = 'open')
+BEGIN
+  SELECT RAISE(ABORT, 'exceptions may only progress from open to resolved; identity is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS exceptions_no_delete
+BEFORE DELETE ON exceptions
+BEGIN
+  SELECT RAISE(ABORT, 'exceptions are append-only; resolve them instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS companies_fiscal_lock
+BEFORE UPDATE ON companies
+WHEN (OLD.fiscal_year_start_month != NEW.fiscal_year_start_month
+   OR OLD.fiscal_year_label_strategy != NEW.fiscal_year_label_strategy)
+ AND EXISTS(SELECT 1 FROM journal_entries LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, 'fiscal year configuration is locked after the first journal entry');
+END;
+
 CREATE TRIGGER IF NOT EXISTS journal_entries_no_update
 BEFORE UPDATE ON journal_entries
 BEGIN

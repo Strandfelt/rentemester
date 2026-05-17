@@ -466,6 +466,55 @@ describe("ledger hardening", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("protects compliance tables against destructive rewrites", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-compliance-append-only-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+    db.run(`INSERT INTO companies (id, name, cvr, fiscal_year_start_month, fiscal_year_label_strategy) VALUES (1, 'Rentemester ApS', 'DK12345678', 1, 'end-year')`);
+
+    const posted = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Compliance hardening proof",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(posted.ok).toBe(true);
+
+    const audit = db.query("SELECT id FROM audit_log WHERE event_type = 'journal_post' ORDER BY id DESC LIMIT 1").get() as { id: number };
+    expect(() => db.run("UPDATE audit_log SET actor = 'spoof@example.com' WHERE id = ?", audit.id)).toThrow("audit_log is append-only");
+    expect(() => db.run("DELETE FROM audit_log WHERE id = ?", audit.id)).toThrow("audit_log is append-only");
+
+    const period = closeAccountingPeriod(db, {
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      kind: "custom",
+      status: "closed"
+    });
+    expect(period.ok).toBe(true);
+    expect(() => db.run("UPDATE accounting_periods SET status = 'open' WHERE id = ?", period.periodId!)).toThrow("accounting periods may only progress open -> closed -> reported; period bounds are immutable");
+    expect(() => db.run("DELETE FROM accounting_periods WHERE id = ?", period.periodId!)).toThrow("accounting periods are append-only");
+
+    expect(() => db.run("UPDATE sequences SET value = value - 1 WHERE kind = 'journal_entry'")).toThrow("sequences are immutable identifiers and monotonically increasing");
+    expect(() => db.run("DELETE FROM sequences WHERE kind = 'journal_entry'")).toThrow("sequences are append-only");
+
+    const exception = db.query(
+      `INSERT INTO exceptions (type, severity, status, message, required_action)
+       VALUES ('UNMATCHED_BANK_TRANSACTION', 'high', 'open', 'Needs review', 'Match to document')
+       RETURNING id`
+    ).get() as { id: number };
+    db.run("UPDATE exceptions SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, resolved_by = 'tester', resolution_note = 'done' WHERE id = ?", exception.id);
+    expect(() => db.run("UPDATE exceptions SET status = 'open' WHERE id = ?", exception.id)).toThrow("exceptions may only progress from open to resolved; identity is immutable");
+    expect(() => db.run("DELETE FROM exceptions WHERE id = ?", exception.id)).toThrow("exceptions are append-only; resolve them instead");
+
+    expect(() => db.run("UPDATE companies SET fiscal_year_start_month = 7 WHERE id = 1")).toThrow("fiscal year configuration is locked after the first journal entry");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("audit verify detects structural ledger corruption beyond hash mismatch", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-audit-corrupt-"));
     const db = openDb(ensureCompanyDirs(root).db);
