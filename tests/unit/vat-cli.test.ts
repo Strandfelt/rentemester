@@ -27,5 +27,8 @@ describe("vat report CLI", () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.inputVat).toBe(250);
     expect(parsed.netVatPayable).toBe(-250);
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.journalEntryCount).toBe(1);
+    expect(parsed.totalJournalEntryCount).toBe(1);
   });
 });

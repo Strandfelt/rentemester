@@ -66,6 +66,8 @@ describe("vat report", () => {
     expect(may.purchaseBase25).toBe(1000);
     expect(may.badDebtReliefBase25).toBe(0);
     expect(may.journalEntryCount).toBe(2);
+    expect(may.totalJournalEntryCount).toBe(2);
+    expect(may.warnings).toEqual([]);
 
     const reversed = reverseJournalEntry(db, {
       entryId: sale.entryId!,
@@ -79,6 +81,88 @@ describe("vat report", () => {
     expect(june.outputVat).toBe(-250);
     expect(june.salesBase25).toBe(-1000);
     expect(june.netVatPayable).toBe(-250);
+    expect(june.journalEntryCount).toBe(0);
+    expect(june.reversalJournalEntryCount).toBe(1);
+    expect(june.reversedJournalEntryCount).toBe(0);
+    expect(june.totalJournalEntryCount).toBe(1);
+    expect(june.linesConsidered).toBe(0);
+    expect(june.reversalLinesConsidered).toBe(3);
+    expect(june.totalLinesConsidered).toBe(3);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("warns when VAT base and booked VAT do not reconcile and distinguishes reversed entries in-period", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-vat-warning-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-vat-warning-inbox-"));
+    const sourceFile = join(inbox, "invoice.txt");
+    writeFileSync(sourceFile, "Invoice\n1250 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-VAT-2",
+      deliveryDescription: "Softwareabonnement",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+      paymentDetails: "Bankoverførsel"
+    });
+    expect(doc.ok).toBe(true);
+
+    const brokenPurchase = postJournalEntry(db, {
+      transactionDate: "2026-05-12",
+      text: "Broken VAT booking",
+      documentId: doc.documentId,
+      lines: [
+        { accountNo: "3000", debitAmount: 1000, vatCode: "DK_PURCHASE_25" },
+        { accountNo: "2000", creditAmount: 1000 }
+      ]
+    });
+    expect(brokenPurchase.ok).toBe(true);
+
+    const reversibleSale = postJournalEntry(db, {
+      transactionDate: "2026-05-13",
+      text: "Sale booked then reversed",
+      documentId: doc.documentId,
+      lines: [
+        { accountNo: "2000", debitAmount: 1250 },
+        { accountNo: "1000", creditAmount: 1000, vatCode: "DK_SALE_25" },
+        { accountNo: "1200", creditAmount: 250 }
+      ]
+    });
+    expect(reversibleSale.ok).toBe(true);
+
+    const reversed = reverseJournalEntry(db, {
+      entryId: reversibleSale.entryId!,
+      transactionDate: "2026-05-20",
+      reason: "Booked in wrong month"
+    });
+    expect(reversed.ok).toBe(true);
+
+    const report = buildVatReport(db, "2026-05-01", "2026-05-31");
+    expect(report.ok).toBe(true);
+    expect(report.purchaseBase25).toBe(1000);
+    expect(report.inputVat).toBe(0);
+    expect(report.outputVat).toBe(0);
+    expect(report.netVatPayable).toBe(0);
+    expect(report.journalEntryCount).toBe(1);
+    expect(report.reversedJournalEntryCount).toBe(1);
+    expect(report.reversalJournalEntryCount).toBe(1);
+    expect(report.totalJournalEntryCount).toBe(3);
+    expect(report.linesConsidered).toBe(2);
+    expect(report.reversedLinesConsidered).toBe(3);
+    expect(report.reversalLinesConsidered).toBe(3);
+    expect(report.totalLinesConsidered).toBe(8);
+    expect(report.warnings).toContain("input VAT mismatch: booked 0, expected from base × rate 250");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

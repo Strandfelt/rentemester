@@ -15,7 +15,14 @@ export type VatPeriodReport = {
   representationPurchaseBase: number;
   badDebtReliefBase25: number;
   journalEntryCount: number;
+  reversedJournalEntryCount: number;
+  reversalJournalEntryCount: number;
+  totalJournalEntryCount: number;
   linesConsidered: number;
+  reversedLinesConsidered: number;
+  reversalLinesConsidered: number;
+  totalLinesConsidered: number;
+  warnings: string[];
   errors: string[];
 };
 
@@ -145,13 +152,20 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
       representationPurchaseBase: 0,
       badDebtReliefBase25: 0,
       journalEntryCount: 0,
+      reversedJournalEntryCount: 0,
+      reversalJournalEntryCount: 0,
+      totalJournalEntryCount: 0,
       linesConsidered: 0,
+      reversedLinesConsidered: 0,
+      reversalLinesConsidered: 0,
+      totalLinesConsidered: 0,
+      warnings: [],
       errors,
     };
   }
 
   const rows = db.query(
-    `SELECT je.id as entry_id, a.account_no, a.type as account_type, jl.debit_amount, jl.credit_amount, jl.vat_code
+    `SELECT je.id as entry_id, je.status, je.reversal_of_entry_id, a.account_no, a.type as account_type, jl.debit_amount, jl.credit_amount, jl.vat_code
      FROM journal_entries je
      JOIN journal_lines jl ON jl.journal_entry_id = je.id
      JOIN accounts a ON a.id = jl.account_id
@@ -159,6 +173,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
      ORDER BY je.id ASC, jl.id ASC`
   ).all(periodStart, periodEnd) as Array<{
     entry_id: number;
+    status: string;
+    reversal_of_entry_id: number | null;
     account_no: string;
     account_type: string;
     debit_amount: number;
@@ -173,10 +189,29 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   let reverseChargePurchaseBase = 0;
   let representationPurchaseBase = 0;
   let badDebtReliefBase25 = 0;
-  const entryIds = new Set<number>();
+  const activeEntryIds = new Set<number>();
+  const reversedEntryIds = new Set<number>();
+  const reversalEntryIds = new Set<number>();
+  let activeLinesConsidered = 0;
+  let reversedLinesConsidered = 0;
+  let reversalLinesConsidered = 0;
+  const reversedByInPeriodReversal = new Set(rows.filter((row) => row.reversal_of_entry_id != null).map((row) => row.reversal_of_entry_id as number));
 
   for (const row of rows) {
-    entryIds.add(row.entry_id);
+    const isReversalEntry = row.reversal_of_entry_id != null;
+    const isReversedEntry = !isReversalEntry && reversedByInPeriodReversal.has(row.entry_id);
+
+    if (isReversalEntry) {
+      reversalEntryIds.add(row.entry_id);
+      reversalLinesConsidered += 1;
+    } else if (isReversedEntry) {
+      reversedEntryIds.add(row.entry_id);
+      reversedLinesConsidered += 1;
+    } else {
+      activeEntryIds.add(row.entry_id);
+      activeLinesConsidered += 1;
+    }
+
     const debit = round2(Number(row.debit_amount ?? 0));
     const credit = round2(Number(row.credit_amount ?? 0));
 
@@ -198,6 +233,16 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   representationPurchaseBase = round2(representationPurchaseBase);
   badDebtReliefBase25 = round2(badDebtReliefBase25);
 
+  const expectedOutputVat = round2(salesBase25 * 0.25 + reverseChargePurchaseBase * 0.25 - badDebtReliefBase25 * 0.25);
+  const expectedInputVat = round2(purchaseBase25 * 0.25 + reverseChargePurchaseBase * 0.25 + representationPurchaseBase * 0.25 * 0.25);
+  const warnings: string[] = [];
+  if (Math.abs(outputVat - expectedOutputVat) > 0.5) {
+    warnings.push(`output VAT mismatch: booked ${outputVat}, expected from base × rate ${expectedOutputVat}`);
+  }
+  if (Math.abs(inputVat - expectedInputVat) > 0.5) {
+    warnings.push(`input VAT mismatch: booked ${inputVat}, expected from base × rate ${expectedInputVat}`);
+  }
+
   return {
     ok: true,
     appliedRules: [RULE_ID],
@@ -211,8 +256,15 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     reverseChargePurchaseBase,
     representationPurchaseBase,
     badDebtReliefBase25,
-    journalEntryCount: entryIds.size,
-    linesConsidered: rows.length,
+    journalEntryCount: activeEntryIds.size,
+    reversedJournalEntryCount: reversedEntryIds.size,
+    reversalJournalEntryCount: reversalEntryIds.size,
+    totalJournalEntryCount: activeEntryIds.size + reversedEntryIds.size + reversalEntryIds.size,
+    linesConsidered: activeLinesConsidered,
+    reversedLinesConsidered,
+    reversalLinesConsidered,
+    totalLinesConsidered: rows.length,
+    warnings,
     errors: [],
   };
 }
