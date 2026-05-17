@@ -48,7 +48,13 @@ describe("system restore", () => {
     const movedBackupDir = join(movedBackupsRoot, "portable-backup");
     renameSync(backup.backupDir!, movedBackupDir);
 
+    const prevActor = process.env.RENTEMESTER_ACTOR;
+    const prevVia = process.env.RENTEMESTER_ACTOR_VIA;
+    process.env.RENTEMESTER_ACTOR = "user:mikkel";
+    process.env.RENTEMESTER_ACTOR_VIA = "restore-cli";
     const restored = restoreSystemBackup({ backupDir: movedBackupDir, targetCompanyRoot: restoredRoot, verificationKeyPath: backupManifestKeyPath(companyRoot) });
+    if (prevActor === undefined) delete process.env.RENTEMESTER_ACTOR; else process.env.RENTEMESTER_ACTOR = prevActor;
+    if (prevVia === undefined) delete process.env.RENTEMESTER_ACTOR_VIA; else process.env.RENTEMESTER_ACTOR_VIA = prevVia;
     expect(restored.ok).toBe(true);
     expect(existsSync(restored.restoredDbPath!)).toBe(true);
     expect(restored.restoredFiles?.documentsOriginals).toBe(1);
@@ -65,7 +71,7 @@ describe("system restore", () => {
     expect(documentCount).toBe(1);
     expect(journalCount).toBe(1);
     expect(restoreEvent?.event_type).toBe("system_restore");
-    expect(restoreEvent?.actor).toBe("system");
+    expect(restoreEvent?.actor).toBe("user:mikkel via restore-cli");
     expect(restoreEvent?.message).toContain("backup-20260517T023900Z");
 
     rmSync(root, { recursive: true, force: true });
