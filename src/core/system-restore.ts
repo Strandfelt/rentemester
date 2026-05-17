@@ -1,9 +1,10 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, isAbsolute, join, normalize, resolve } from "node:path";
-import { createHash } from "node:crypto";
+import { basename, dirname, isAbsolute, join, normalize, resolve } from "node:path";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { openDb } from "./db";
 import { verifyAuditChain } from "./ledger";
 import { companyPaths, ensureCompanyDirs } from "./paths";
+import { backupManifestKeyPath, backupManifestSignaturePath } from "./system-backups";
 import type { BackupManifest, ManifestFile } from "./system-backups";
 
 const RULE_ID = "DK-BOOKKEEPING-RESTORE-001";
@@ -11,6 +12,7 @@ const RULE_ID = "DK-BOOKKEEPING-RESTORE-001";
 export type RestoreSystemBackupInput = {
   backupDir: string;
   targetCompanyRoot: string;
+  verificationKeyPath?: string;
 };
 
 export type RestoreSystemBackupResult = {
@@ -32,11 +34,21 @@ function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function readManifest(backupDir: string): BackupManifest | null {
+function readManifestText(backupDir: string) {
   const manifestPath = join(backupDir, "manifest.json");
   if (!existsSync(manifestPath)) return null;
   try {
-    return JSON.parse(readFileSync(manifestPath, "utf8")) as BackupManifest;
+    return readFileSync(manifestPath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function readManifest(backupDir: string): BackupManifest | null {
+  const manifestText = readManifestText(backupDir);
+  if (!manifestText) return null;
+  try {
+    return JSON.parse(manifestText) as BackupManifest;
   } catch {
     return null;
   }
@@ -59,6 +71,35 @@ function ensureMatches(backupDir: string, file: ManifestFile) {
   if (actualSize !== file.sizeBytes) return `size mismatch for ${file.path}`;
   const actualHash = sha256File(resolvedPath);
   if (actualHash !== file.sha256) return `sha256 mismatch for ${file.path}`;
+  return null;
+}
+
+function inferVerificationKeyPath(backupDir: string) {
+  const resolvedBackupDir = resolve(backupDir);
+  const backupsDir = dirname(resolvedBackupDir);
+  if (basename(backupsDir) !== "backups") return null;
+  return backupManifestKeyPath(dirname(backupsDir));
+}
+
+function manifestHmac(manifestText: string, keyHex: string) {
+  return createHmac("sha256", Buffer.from(keyHex, "hex")).update(manifestText).digest("hex");
+}
+
+function verifyManifestAuthenticity(backupDir: string, manifestText: string, verificationKeyPath?: string) {
+  const signaturePath = backupManifestSignaturePath(backupDir);
+  if (!existsSync(signaturePath)) return "missing backup manifest signature: manifest.json.hmac";
+  const signature = readFileSync(signaturePath, "utf8").trim();
+  if (!/^[0-9a-f]{64}$/i.test(signature)) return "invalid backup manifest signature format";
+
+  const keyPath = verificationKeyPath ?? inferVerificationKeyPath(backupDir);
+  if (!keyPath) return "backup authenticity key not found; pass verificationKeyPath or restore from the original company backups directory";
+  if (!existsSync(keyPath)) return `backup authenticity key not found: ${keyPath}`;
+  const keyHex = readFileSync(keyPath, "utf8").trim();
+  if (!/^[0-9a-f]{64}$/i.test(keyHex)) return `backup authenticity key is invalid: ${keyPath}`;
+
+  const expected = Buffer.from(manifestHmac(manifestText, keyHex), "hex");
+  const actual = Buffer.from(signature, "hex");
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return "backup manifest authenticity check failed";
   return null;
 }
 
@@ -116,6 +157,10 @@ export function restoreSystemBackup(input: RestoreSystemBackupInput): RestoreSys
   if (!input.targetCompanyRoot) errors.push("targetCompanyRoot is required");
   if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
 
+  const manifestText = readManifestText(input.backupDir);
+  if (!manifestText) return { ok: false, appliedRules: [RULE_ID], errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
+  const authenticityError = verifyManifestAuthenticity(input.backupDir, manifestText, input.verificationKeyPath);
+  if (authenticityError) return { ok: false, appliedRules: [RULE_ID], errors: [authenticityError] };
   const manifest = readManifest(input.backupDir);
   if (!manifest) return { ok: false, appliedRules: [RULE_ID], errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
 

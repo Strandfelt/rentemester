@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 
@@ -47,6 +47,11 @@ export type BackupManifest = {
   backupId: string;
   createdAt: string;
   ruleIds: string[];
+  manifestSignature: {
+    algorithm: "hmac-sha256";
+    keyHint: string;
+    signaturePath: string;
+  };
   dbSnapshot: ManifestFile;
   copiedFiles: {
     documentsOriginals: ManifestFile[];
@@ -62,6 +67,38 @@ export type BackupManifest = {
 
 function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+export function backupManifestKeyPath(companyRoot: string) {
+  return join(companyRoot, ".backup-manifest.key");
+}
+
+export function backupManifestSignaturePath(backupDir: string) {
+  return join(backupDir, "manifest.json.hmac");
+}
+
+function readBackupManifestKey(companyRoot: string) {
+  const path = backupManifestKeyPath(companyRoot);
+  if (!existsSync(path)) return null;
+  const hex = readFileSync(path, "utf8").trim();
+  if (!/^[0-9a-f]{64}$/i.test(hex)) return null;
+  return Buffer.from(hex, "hex");
+}
+
+function ensureBackupManifestKey(companyRoot: string) {
+  const existing = readBackupManifestKey(companyRoot);
+  if (existing) return existing;
+  const key = randomBytes(32);
+  writeFileSync(backupManifestKeyPath(companyRoot), `${key.toString("hex")}\n`, { mode: 0o600 });
+  return key;
+}
+
+function backupManifestKeyHint(key: Buffer) {
+  return createHash("sha256").update(key).digest("hex").slice(0, 16);
+}
+
+function signManifestText(manifestText: string, key: Buffer) {
+  return createHmac("sha256", key).update(manifestText).digest("hex");
 }
 
 function relativeBackupPath(backupDir: string, filePath: string) {
@@ -187,10 +224,16 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
   };
   snapshotDb.close();
 
+  const manifestKey = ensureBackupManifestKey(companyRoot);
   const manifest: BackupManifest = {
     backupId,
     createdAt,
     ruleIds: [BACKUP_RULE_ID],
+    manifestSignature: {
+      algorithm: "hmac-sha256",
+      keyHint: backupManifestKeyHint(manifestKey),
+      signaturePath: relativeBackupPath(backupDir, backupManifestSignaturePath(backupDir)),
+    },
     dbSnapshot: {
       path: relativeBackupPath(backupDir, dbSnapshotPath),
       sha256: sha256File(dbSnapshotPath),
@@ -205,7 +248,9 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
   };
 
   const manifestPath = join(backupDir, "manifest.json");
-  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
+  writeFileSync(manifestPath, manifestText);
+  writeFileSync(backupManifestSignaturePath(backupDir), `${signManifestText(manifestText, manifestKey)}\n`);
 
   db.run(
     "INSERT INTO audit_log (event_type, entity_type, entity_id, message, actor) VALUES ('system_backup', 'company', '1', ?, 'system')",

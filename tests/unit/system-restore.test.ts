@@ -2,16 +2,26 @@ import { describe, expect, test } from "bun:test";
 import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { seedAccounts, postJournalEntry } from "../../src/core/ledger";
 import { ingestDocument } from "../../src/core/documents";
-import { createSystemBackup } from "../../src/core/system-backups";
+import { backupManifestKeyPath, createSystemBackup } from "../../src/core/system-backups";
 import { restoreSystemBackup } from "../../src/core/system-restore";
 
 function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function rewriteSignedManifest(companyRoot: string, backupDir: string, manifest: Record<string, any>) {
+  const manifestPath = join(backupDir, "manifest.json");
+  const signaturePath = join(backupDir, "manifest.json.hmac");
+  const keyHex = readFileSync(backupManifestKeyPath(companyRoot), "utf8").trim();
+  const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
+  const signature = createHmac("sha256", Buffer.from(keyHex, "hex")).update(manifestText).digest("hex");
+  writeFileSync(manifestPath, manifestText);
+  writeFileSync(signaturePath, `${signature}\n`);
 }
 
 describe("system restore", () => {
@@ -38,7 +48,7 @@ describe("system restore", () => {
     const movedBackupDir = join(movedBackupsRoot, "portable-backup");
     renameSync(backup.backupDir!, movedBackupDir);
 
-    const restored = restoreSystemBackup({ backupDir: movedBackupDir, targetCompanyRoot: restoredRoot });
+    const restored = restoreSystemBackup({ backupDir: movedBackupDir, targetCompanyRoot: restoredRoot, verificationKeyPath: backupManifestKeyPath(companyRoot) });
     expect(restored.ok).toBe(true);
     expect(existsSync(restored.restoredDbPath!)).toBe(true);
     expect(restored.restoredFiles?.documentsOriginals).toBe(1);
@@ -87,11 +97,47 @@ describe("system restore", () => {
     manifest.dbSnapshot.path = outsideDb;
     manifest.dbSnapshot.sha256 = sha256File(outsideDb);
     manifest.dbSnapshot.sizeBytes = readFileSync(outsideDb).byteLength;
-    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    rewriteSignedManifest(companyRoot, backup.backupDir!, manifest);
 
     const restored = restoreSystemBackup({ backupDir: backup.backupDir!, targetCompanyRoot: restoredRoot });
     expect(restored.ok).toBe(false);
     expect(restored.errors[0]).toContain("manifest path escapes backup dir");
+
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects a backup whose files and manifest are rewritten without a valid manifest signature", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-restore-tampered-"));
+    const companyRoot = join(root, "company");
+    const restoredRoot = join(root, "restored-company");
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const ingested = ingestDocument(db, companyRoot, join(process.cwd(), "examples/vendor-invoice.txt"), JSON.parse(readFileSync(join(process.cwd(), "examples/vendor-invoice.metadata.json"), "utf8")));
+    expect(ingested.ok).toBe(true);
+
+    const backup = createSystemBackup(db, companyRoot, { createdAt: "2026-05-17T02:39:00.000Z" });
+    expect(backup.ok).toBe(true);
+    db.close();
+
+    const snapshotPath = join(backup.backupDir!, "ledger.sqlite");
+    const snapshotDb = openDb(snapshotPath);
+    snapshotDb.exec("PRAGMA foreign_keys = OFF");
+    snapshotDb.exec("DROP TRIGGER IF EXISTS documents_no_update");
+    snapshotDb.run("UPDATE documents SET original_filename = 'tampered.txt' WHERE id = 1");
+    snapshotDb.close();
+
+    const manifestPath = join(backup.backupDir!, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.dbSnapshot.sha256 = sha256File(snapshotPath);
+    manifest.dbSnapshot.sizeBytes = readFileSync(snapshotPath).byteLength;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const restored = restoreSystemBackup({ backupDir: backup.backupDir!, targetCompanyRoot: restoredRoot });
+    expect(restored.ok).toBe(false);
+    expect(restored.errors[0]).toContain("authenticity");
 
     rmSync(root, { recursive: true, force: true });
   });
@@ -124,7 +170,7 @@ describe("system restore", () => {
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     manifest.dbSnapshot.sha256 = sha256File(join(backup.backupDir!, "ledger.sqlite"));
     manifest.dbSnapshot.sizeBytes = readFileSync(join(backup.backupDir!, "ledger.sqlite")).byteLength;
-    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    rewriteSignedManifest(companyRoot, backup.backupDir!, manifest);
 
     const restored = restoreSystemBackup({ backupDir: backup.backupDir!, targetCompanyRoot: restoredRoot });
     expect(restored.ok).toBe(false);

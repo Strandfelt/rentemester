@@ -34,10 +34,14 @@ describe("system backups", () => {
     expect(result.ok).toBe(true);
     expect(existsSync(result.dbSnapshotPath!)).toBe(true);
     expect(existsSync(result.manifestPath!)).toBe(true);
+    expect(existsSync(join(result.backupDir!, "manifest.json.hmac"))).toBe(true);
+    expect(existsSync(join(companyRoot, ".backup-manifest.key"))).toBe(true);
 
     const manifest = JSON.parse(readFileSync(result.manifestPath!, "utf8"));
     expect(manifest.backupId).toBe("backup-20260517T020900Z");
     expect(manifest.dbSnapshot.path).toBe("ledger.sqlite");
+    expect(manifest.manifestSignature.algorithm).toBe("hmac-sha256");
+    expect(manifest.manifestSignature.signaturePath).toBe("manifest.json.hmac");
     expect(manifest.copiedFiles.documentsOriginals[0].path).toStartWith("documents-originals/");
     expect(manifest.copiedFiles.documentsOriginals.length).toBe(1);
     expect(manifest.ledgerStats.documents).toBe(1);
