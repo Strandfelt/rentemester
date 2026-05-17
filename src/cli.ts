@@ -7,6 +7,7 @@ import { postJournalEntry, reverseJournalEntry, seedAccounts, verifyAuditChain }
 import { validateInvoice } from "./core/invoice";
 import { ingestDocument } from "./core/documents";
 import { importBankCsv } from "./core/bank";
+import { suggestBankMatches } from "./core/bank-suggest-matches";
 import { buildVatReport, postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./core/vat";
 import { bookExpenseFromBank } from "./core/expense-booking";
 import { buildBankReconciliationReport, listBankTransactions } from "./core/reconciliation";
@@ -208,6 +209,28 @@ function renderInvoiceRowsHuman(title: string, rows: any[], emptyMessage: string
     status: row.status,
     overdueDays: row.overdueDays,
   })));
+}
+function renderBankSuggestionsHuman(rows: any[]) {
+  if (rows.length === 0) {
+    console.log("No unmatched bank transactions for current filter.");
+    return;
+  }
+  for (const row of rows) {
+    console.log(`Bank transaction ${row.bankTransactionId} | ${row.date} | ${row.amount} ${row.currency} | ${row.text}`);
+    if (row.suggestions.length === 0) {
+      console.log("  No deterministic suggestions.");
+      continue;
+    }
+    console.table(row.suggestions.map((suggestion: any) => ({
+      kind: suggestion.kind,
+      documentId: suggestion.documentId,
+      invoiceNo: suggestion.invoiceNo,
+      supplierName: suggestion.supplierName ?? null,
+      customerName: suggestion.customerName ?? null,
+      confidence: suggestion.confidence,
+      reasons: suggestion.reasons.join("; "),
+    })));
+  }
 }
 
 const [cmd, sub] = parsedArgs.positionals;
@@ -672,6 +695,22 @@ else if (cmd === "bank" && sub === "list") {
   });
   if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   else if (result.ok) console.table(result.rows);
+  else console.error(result.errors.join("\n"));
+  db.close();
+  if (!result.ok) process.exit(1);
+}
+else if (cmd === "bank" && sub === "suggest-matches") {
+  const bankTransactionId = parseOptionalNumber("--bank-transaction-id");
+  const max = parseOptionalNumber("--max");
+  if (!bankTransactionId.ok) fatal(bankTransactionId.error);
+  if (!max.ok) fatal(max.error);
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = suggestBankMatches(db, {
+    bankTransactionId: bankTransactionId.value === undefined ? undefined : Number(bankTransactionId.value),
+    max: max.value === undefined ? undefined : Number(max.value),
+  });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else if (result.ok) renderBankSuggestionsHuman(result.rows);
   else console.error(result.errors.join("\n"));
   db.close();
   if (!result.ok) process.exit(1);
