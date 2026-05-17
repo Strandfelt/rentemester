@@ -7,6 +7,7 @@ import { validateJournalTransactionDate } from "./periods";
 import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
+import { resolveOpenExceptionsForBankTransaction } from "./exceptions";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -281,6 +282,15 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       createdBy: actor.createdBy,
       createdByProgram: actor.createdByProgram,
     });
+
+    if (payload.sourceBankTransactionId) {
+      resolveOpenExceptionsForBankTransaction(
+        db,
+        payload.sourceBankTransactionId,
+        `Resolved automatically by posted journal entry ${entry.entry_no}`,
+        actor.createdBy,
+      );
+    }
 
     return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
   }, { immediate: true })();

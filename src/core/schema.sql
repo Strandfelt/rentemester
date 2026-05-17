@@ -290,6 +290,8 @@ CREATE TABLE IF NOT EXISTS exceptions (
   related_document_id INTEGER,
   message TEXT NOT NULL,
   required_action TEXT,
+  source_evidence TEXT,
+  posting_preview TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   resolved_at TEXT,
   resolved_by TEXT,

@@ -25,7 +25,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "audit verify", usage: "audit verify --company <path>", description: "Verificerer audit-kæde og bogføringsintegritet.", allowedFlags: ["--company"] },
   { key: "accounts list", usage: "accounts list --company <path>", description: "Lister kontoplanen.", allowedFlags: ["--company"] },
   { key: "customer validate-vat", usage: "customer validate-vat --company <path> --cvr <EU-VAT>", description: "Validerer et EU-VAT-nummer via VIES og cacher resultatet.", allowedFlags: ["--company", "--cvr"] },
-  { key: "exceptions list", usage: "exceptions list --company <path>", description: "Lister exceptions-køen.", allowedFlags: ["--company"] },
+  { key: "exceptions list", usage: "exceptions list --company <path> [--status open|resolved|all]", description: "Lister exceptions-køen.", allowedFlags: ["--company", "--status"] },
+  { key: "exceptions resolve", usage: "exceptions resolve --company <path> --id <n> [--note <text>]", description: "Markerer en exception som løst.", allowedFlags: ["--company", "--id", "--note"] },
   {
     key: "invoice validate",
     usage: "invoice validate --input <file.json>",

@@ -33,6 +33,7 @@ import { getCommandSpec, renderCommandHelp, renderGlobalUsage, validateCommandFl
 import { normalizeCvr, normalizeFiscalYearLabelStrategy, normalizeFiscalYearStartMonth } from "./core/company";
 import { buildRetentionStatusReport } from "./core/retention";
 import { validateVatAgainstVies } from "./core/vies";
+import { listExceptions, recordException, resolveException, syncUnmatchedBankTransactionExceptions } from "./core/exceptions";
 
 const parsedArgs = parseCliArgs(Bun.argv);
 
@@ -115,6 +116,7 @@ const MUTATING_COMMANDS = new Set([
   "period close",
   "journal post",
   "journal reverse",
+  "exceptions resolve",
 ]);
 function isCanonicalActorId(value: string) {
   return /^(user|agent|system):\S.+$/.test(value);
@@ -363,9 +365,39 @@ else if (cmd === "customer" && sub === "validate-vat") {
 }
 else if (cmd === "exceptions" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const rows = db.query("SELECT id, type, severity, status, message, required_action, created_at FROM exceptions ORDER BY id DESC").all();
-  console.table(rows);
+  const result = listExceptions(db, { status: (arg("--status") as any) ?? undefined });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else if (result.ok) console.table(result.rows.map((row: any) => ({
+    id: row.id,
+    type: row.type,
+    severity: row.severity,
+    status: row.status,
+    relatedBankTransactionId: row.relatedBankTransactionId,
+    relatedDocumentId: row.relatedDocumentId,
+    message: row.message,
+    requiredAction: row.requiredAction,
+    createdAt: row.createdAt,
+    resolvedAt: row.resolvedAt,
+  })));
+  else console.error(result.errors.join("\n"));
   db.close();
+  if (!result.ok) process.exit(1);
+}
+else if (cmd === "exceptions" && sub === "resolve") {
+  const id = Number(arg("--id"));
+  if (!Number.isInteger(id) || id <= 0) {
+    console.error("Missing required --id <n>");
+    process.exit(2);
+  }
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = resolveException(db, {
+    id,
+    note: arg("--note") ?? undefined,
+    resolvedBy: cliActor ?? process.env.RENTEMESTER_ACTOR ?? inferredMutationActor() ?? null,
+  });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "validate") {
   const input = arg("--input");
@@ -657,6 +689,22 @@ else if (cmd === "documents" && sub === "ingest") {
   const db = openDb(companyPaths(root).db); migrate(db);
   const metadata = JSON.parse(readFileSync(metadataFile, "utf8"));
   const result = ingestDocument(db, root, file, metadata, { forceDuplicateLogicalIdentity: hasFlag("--force") });
+  if (!result.ok) {
+    recordException(db, {
+      type: "DOCUMENT_INGEST_BLOCKED",
+      severity: "medium",
+      message: `Document ingest blocked for ${file}`,
+      requiredAction: "Fix document metadata or duplicate handling, then retry ingest.",
+      sourceEvidence: {
+        file,
+        metadataFile,
+        errors: result.errors ?? [],
+      },
+      postingPreview: {
+        retryCommand: "documents ingest --company <path> --file <file> --metadata <file.json>",
+      },
+    });
+  }
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
 }
@@ -675,7 +723,11 @@ else if (cmd === "bank" && sub === "import") {
   const root = companyRoot();
   const db = openDb(companyPaths(root).db); migrate(db);
   const result = importBankCsv(db, root, file);
-  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  const sync = result.ok ? syncUnmatchedBankTransactionExceptions(db) : { ok: true, created: 0, errors: [] };
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), {
+    ...(result as Record<string, unknown>),
+    exceptionsCreated: sync.created,
+  }, outputFormat);
   db.close();
 }
 else if (cmd === "bank" && sub === "list") {
