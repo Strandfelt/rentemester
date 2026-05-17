@@ -12,6 +12,7 @@ import { bookExpenseFromBank } from "./core/expense-booking";
 import { buildBankReconciliationReport, listBankTransactions } from "./core/reconciliation";
 import { issueInvoice } from "./core/issued-invoices";
 import { applyInvoicePayment, getInvoiceStatus } from "./core/invoice-payments";
+import { buildInvoiceList, buildOverdueInvoiceList, findInvoices } from "./core/invoice-list";
 import { postIssuedInvoiceToLedger } from "./core/invoice-booking";
 import { settleInvoiceFromBank } from "./core/invoice-settlement";
 import { settleInvoiceClaimsFromBank } from "./core/invoice-claim-settlement";
@@ -183,6 +184,30 @@ function fatal(message: string): never {
 function emitResult(commandLabel: string, result: Record<string, unknown>, outputFormat: "json" | "human") {
   printStructuredResult(commandLabel, result, outputFormat);
   if (result.ok === false) process.exitCode = 1;
+}
+function parseOptionalNumber(flagName: string) {
+  const value = arg(flagName);
+  if (value === undefined) return { ok: true as const, value: undefined };
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return { ok: false as const, error: `${flagName} must be numeric when present` };
+  return { ok: true as const, value: parsed };
+}
+function renderInvoiceRowsHuman(title: string, rows: any[], emptyMessage: string) {
+  console.log(title);
+  if (rows.length === 0) {
+    console.log(emptyMessage);
+    return;
+  }
+  console.table(rows.map((row) => ({
+    invoiceNumber: row.invoiceNumber,
+    customerName: row.customerName,
+    invoiceDate: row.invoiceDate,
+    effectiveDueDate: row.effectiveDueDate,
+    grossAmount: row.grossAmount,
+    openBalance: row.openBalance,
+    status: row.status,
+    overdueDays: row.overdueDays,
+  })));
 }
 
 const [cmd, sub] = parsedArgs.positionals;
@@ -464,6 +489,55 @@ else if (cmd === "invoice" && sub === "status") {
   }
   const result = getInvoiceStatus(db, documentId, arg("--as-of"));
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+}
+else if (cmd === "invoice" && sub === "list") {
+  const minAmount = parseOptionalNumber("--min-amount");
+  const maxAmount = parseOptionalNumber("--max-amount");
+  if (!minAmount.ok) fatal(minAmount.error);
+  if (!maxAmount.ok) fatal(maxAmount.error);
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = buildInvoiceList(db, {
+    status: (arg("--status") as any) ?? "all",
+    from: arg("--from") ?? undefined,
+    to: arg("--to") ?? undefined,
+    customerCvr: arg("--customer-cvr") ?? undefined,
+    customer: arg("--customer") ?? undefined,
+    invoiceNumber: arg("--invoice-number") ?? undefined,
+    minAmount: minAmount.value,
+    maxAmount: maxAmount.value,
+    asOfDate: arg("--as-of") ?? undefined,
+  });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else renderInvoiceRowsHuman(`Invoices (${result.count})`, result.rows, "No invoices for current filter.");
+  db.close();
+}
+else if (cmd === "invoice" && sub === "find") {
+  const amount = parseOptionalNumber("--amount");
+  if (!amount.ok) fatal(amount.error);
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = findInvoices(db, {
+    query: parsedArgs.positionals.slice(2).join(" ") || undefined,
+    customer: arg("--customer") ?? undefined,
+    invoiceNumber: arg("--invoice-number") ?? undefined,
+    minAmount: amount.value,
+    maxAmount: amount.value,
+    asOfDate: arg("--as-of") ?? undefined,
+  });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else renderInvoiceRowsHuman(`Invoice matches (${result.count})`, result.rows, "No invoices matched the query.");
+  db.close();
+}
+else if (cmd === "invoice" && sub === "overdue") {
+  const minDays = parseOptionalNumber("--min-days");
+  if (!minDays.ok) fatal(minDays.error);
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = buildOverdueInvoiceList(db, {
+    asOfDate: arg("--as-of") ?? undefined,
+    minDays: minDays.value,
+  });
+  if (outputFormat === "json") emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  else renderInvoiceRowsHuman(`Overdue invoices as of ${result.asOfDate ?? "today"} (${result.count})`, result.rows, "No overdue invoices for current filter.");
   db.close();
 }
 else if (cmd === "invoice" && sub === "interest") {
