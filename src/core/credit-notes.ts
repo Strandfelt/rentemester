@@ -47,6 +47,52 @@ function nextCreditNoteNumber(db: Database) {
 
 function round2(value: number) { return Number(value.toFixed(2)); }
 
+function scaledJournalAmount(amount: number, factor: number) {
+  return round2(amount * factor);
+}
+
+function creditNoteLinesFromOriginalJournal(db: Database, originalInvoiceDocumentId: number, originalGrossAmount: number, grossAmount: number) {
+  if (!(originalGrossAmount > 0)) return null;
+
+  const originalEntry = db.query(
+    `SELECT id, entry_no
+       FROM journal_entries
+      WHERE document_id = ?
+        AND reversal_of_entry_id IS NULL
+      ORDER BY id ASC
+      LIMIT 1`
+  ).get(originalInvoiceDocumentId) as { id: number; entry_no: string } | null;
+  if (!originalEntry) return null;
+
+  const originalLines = db.query(
+    `SELECT a.account_no, jl.debit_amount, jl.credit_amount, jl.vat_code, jl.text
+       FROM journal_lines jl
+       JOIN accounts a ON a.id = jl.account_id
+      WHERE jl.journal_entry_id = ?
+      ORDER BY jl.id ASC`
+  ).all(originalEntry.id) as Array<{
+    account_no: string;
+    debit_amount: number;
+    credit_amount: number;
+    vat_code: string | null;
+    text: string | null;
+  }>;
+  if (originalLines.length === 0) return null;
+
+  const factor = grossAmount / originalGrossAmount;
+  const reversedLines = originalLines
+    .map((line) => ({
+      accountNo: line.account_no,
+      debitAmount: line.credit_amount > 0 ? scaledJournalAmount(line.credit_amount, factor) : undefined,
+      creditAmount: line.debit_amount > 0 ? scaledJournalAmount(line.debit_amount, factor) : undefined,
+      vatCode: line.vat_code ?? undefined,
+      text: line.text ?? undefined,
+    }))
+    .filter((line) => (line.debitAmount ?? 0) > 0 || (line.creditAmount ?? 0) > 0);
+
+  return reversedLines.length > 0 ? reversedLines : null;
+}
+
 export function issueCreditNote(db: Database, companyRoot: string, input: IssueCreditNoteInput): IssueCreditNoteResult {
   const errors: string[] = [];
   if (!Number.isInteger(input.originalInvoiceDocumentId) || input.originalInvoiceDocumentId <= 0) errors.push("originalInvoiceDocumentId must be a positive integer");
@@ -136,7 +182,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
         documentId: doc.id,
         createdBy: input.createdBy,
         createdByProgram: input.createdByProgram,
-        lines: [
+        lines: creditNoteLinesFromOriginalJournal(db, original.id, originalGrossAmount, grossAmount) ?? [
           { accountNo: "1000", debitAmount: netAmount, vatCode: "DK_SALE_25", text: `Revenue reversal ${creditNoteNumber}` },
           { accountNo: "1200", debitAmount: vatAmount, text: `VAT reversal ${creditNoteNumber}` },
           { accountNo: "1100", creditAmount: grossAmount, text: `Receivable reversal ${creditNoteNumber}` },
