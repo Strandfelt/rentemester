@@ -1,4 +1,6 @@
 import type { Database } from "bun:sqlite";
+import { getCompanySettings } from "./company";
+import { fiscalYearForDate } from "./fiscal-year";
 
 export function nextSequenceValue(db: Database, kind: string, scope: string, currentFloor = 0) {
   const row = db.query(
@@ -10,11 +12,12 @@ export function nextSequenceValue(db: Database, kind: string, scope: string, cur
   return Number(row.value);
 }
 
-export function yearScopeFromIsoDate(dateText: string) {
-  return dateText.slice(0, 4);
+export function fiscalYearLabelFromDate(db: Database, dateText: string) {
+  const company = getCompanySettings(db);
+  return fiscalYearForDate(dateText, company.fiscalYearStartMonth, company.fiscalYearLabelStrategy).identifierLabel;
 }
 
-export function currentUtcYearScope(db: Database) {
-  const row = db.query(`SELECT strftime('%Y', CURRENT_TIMESTAMP) AS year`).get() as { year: string };
-  return row.year;
+export function currentUtcIsoDate(db: Database) {
+  const row = db.query(`SELECT strftime('%Y-%m-%d', CURRENT_TIMESTAMP) AS iso_date`).get() as { iso_date: string };
+  return row.iso_date;
 }

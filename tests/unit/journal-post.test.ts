@@ -72,6 +72,49 @@ describe("journal posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("uses configured fiscal year labels for journal entry numbers", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-fiscal-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+    db.run(
+      `INSERT INTO companies (id, name, cvr, fiscal_year_start_month, fiscal_year_label_strategy)
+       VALUES (1, 'Rentemester ApS', 'DK12345678', 7, 'end-year')`
+    );
+
+    const first = postJournalEntry(db, {
+      transactionDate: "2024-07-01",
+      text: "Opening fiscal entry",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    const second = postJournalEntry(db, {
+      transactionDate: "2025-06-30",
+      text: "Fiscal year close",
+      lines: [
+        { accountNo: "2000", debitAmount: 500 },
+        { accountNo: "5000", creditAmount: 500 }
+      ]
+    });
+    const next = postJournalEntry(db, {
+      transactionDate: "2025-07-01",
+      text: "Next fiscal year",
+      lines: [
+        { accountNo: "2000", debitAmount: 750 },
+        { accountNo: "5000", creditAmount: 750 }
+      ]
+    });
+
+    expect(first.entryNo).toBe("2025-00001");
+    expect(second.entryNo).toBe("2025-00002");
+    expect(next.entryNo).toBe("2026-00001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("supports foreign-currency journal entries with stored FX basis", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journal-fx-"));
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-inbox-fx-"));

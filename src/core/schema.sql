@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS companies (
   name TEXT NOT NULL DEFAULT 'Unnamed company',
   country TEXT NOT NULL DEFAULT 'DK',
   currency TEXT NOT NULL DEFAULT 'DKK',
+  cvr TEXT,
+  fiscal_year_start_month INTEGER NOT NULL DEFAULT 1 CHECK(fiscal_year_start_month BETWEEN 1 AND 12),
+  fiscal_year_label_strategy TEXT NOT NULL DEFAULT 'end-year' CHECK(fiscal_year_label_strategy IN ('end-year', 'start-year', 'span')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -152,6 +152,52 @@ describe("document ingest", () => {
     rmSync(inboxRoot, { recursive: true, force: true });
   });
 
+  test("uses configured fiscal year labels for document numbers", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-docfiscal-"));
+    const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-docfiscal-"));
+    const firstFile = join(inboxRoot, "vendor-2026.txt");
+    const secondFile = join(inboxRoot, "vendor-2027.txt");
+    writeFileSync(firstFile, "Invoice July 2026\nAmount 1250 DKK\n");
+    writeFileSync(secondFile, "Invoice July 2027\nAmount 1250 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(companyRoot).db);
+    migrate(db);
+    db.run(
+      `INSERT INTO companies (id, name, cvr, fiscal_year_start_month, fiscal_year_label_strategy)
+       VALUES (1, 'Rentemester ApS', 'DK12345678', 7, 'span')`
+    );
+
+    const first = ingestDocument(db, companyRoot, firstFile, {
+      source: "email",
+      issueDate: "2026-07-15",
+      invoiceNo: "INV-2026-7",
+      deliveryDescription: "Bogføring",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+    const second = ingestDocument(db, companyRoot, secondFile, {
+      source: "email",
+      issueDate: "2027-07-01",
+      invoiceNo: "INV-2027-7",
+      deliveryDescription: "Bogføring",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+
+    expect(first.documentNo).toBe("DOC-2026-27-000001");
+    expect(second.documentNo).toBe("DOC-2027-28-000001");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(inboxRoot, { recursive: true, force: true });
+  });
+
   test("ingests a compliant supporting document and blocks duplicate logical supplier invoices unless forced", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-"));
     const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-"));

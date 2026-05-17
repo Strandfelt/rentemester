@@ -6,7 +6,7 @@ import { companyPaths } from "./paths";
 import { validateInvoice, type InvoicePayload } from "./invoice";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
-import { nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
+import { fiscalYearLabelFromDate } from "./sequences";
 
 export type IssueInvoiceResult = {
   ok: boolean;
@@ -34,10 +34,9 @@ function sha256(text: string) {
 }
 
 function nextIssuedInvoiceNumber(db: Database, issueDate: string) {
-  const scope = yearScopeFromIsoDate(issueDate);
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, 6) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no LIKE ?`).get(`${scope}-%`) as { n: number };
-  const value = nextSequenceValue(db, "issued_invoice", scope, Number(row.n ?? 0));
-  return `${scope}-${String(value).padStart(5, "0")}`;
+  const scope = fiscalYearLabelFromDate(db, issueDate);
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -5) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no LIKE ?`).get(`${scope}-%`) as { n: number };
+  return `${scope}-${String(Number(row.n ?? 0) + 1).padStart(5, "0")}`;
 }
 
 export function issueInvoice(db: Database, companyRoot: string, payload: InvoicePayload): IssueInvoiceResult {

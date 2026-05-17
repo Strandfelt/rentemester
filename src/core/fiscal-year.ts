@@ -1,0 +1,48 @@
+import type { FiscalYearLabelStrategy } from "./company";
+import { isValidIsoDate } from "./dates";
+
+export type FiscalYear = {
+  startYear: number;
+  endYear: number;
+  start: string;
+  end: string;
+  displayLabel: string;
+  identifierLabel: string;
+};
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function lastDayOfMonth(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
+
+export function fiscalYearForDate(
+  dateText: string,
+  startMonth: number,
+  strategy: FiscalYearLabelStrategy,
+): FiscalYear {
+  if (!isValidIsoDate(dateText)) throw new Error(`invalid ISO date: ${dateText}`);
+  const year = Number(dateText.slice(0, 4));
+  const month = Number(dateText.slice(5, 7));
+  const normalizedStartMonth = Number.isInteger(startMonth) && startMonth >= 1 && startMonth <= 12 ? startMonth : 1;
+  const startYear = normalizedStartMonth === 1 || month >= normalizedStartMonth ? year : year - 1;
+  const endYear = normalizedStartMonth === 1 ? startYear : startYear + 1;
+  const displayLabel = strategy === "start-year"
+    ? `${startYear}`
+    : strategy === "span" && normalizedStartMonth !== 1
+      ? `${startYear}/${String(endYear).slice(-2)}`
+      : `${endYear}`;
+
+  return {
+    startYear,
+    endYear,
+    start: `${startYear}-${pad2(normalizedStartMonth)}-01`,
+    end: normalizedStartMonth === 1
+      ? `${endYear}-12-31`
+      : lastDayOfMonth(endYear, normalizedStartMonth - 1),
+    displayLabel,
+    identifierLabel: displayLabel.replaceAll("/", "-"),
+  };
+}

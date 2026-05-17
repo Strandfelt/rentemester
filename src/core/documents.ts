@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
-import { currentUtcYearScope, nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
+import { currentUtcIsoDate, fiscalYearLabelFromDate } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type DocumentType = "purchase_sale" | "cash_register_receipt";
@@ -75,10 +75,9 @@ function detectMimeType(path: string) {
 }
 
 function nextDocumentNo(db: Database, issueDate?: string) {
-  const scope = issueDate ? yearScopeFromIsoDate(issueDate) : currentUtcYearScope(db);
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(document_no, 10) AS INTEGER)), 0) AS n FROM documents WHERE document_no LIKE ?`).get(`DOC-${scope}-%`) as { n: number };
-  const value = nextSequenceValue(db, "document", scope, Number(row.n ?? 0));
-  return `DOC-${scope}-${String(value).padStart(6, "0")}`;
+  const scope = fiscalYearLabelFromDate(db, issueDate ?? currentUtcIsoDate(db));
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(document_no, -6) AS INTEGER)), 0) AS n FROM documents WHERE document_no LIKE ?`).get(`DOC-${scope}-%`) as { n: number };
+  return `DOC-${scope}-${String(Number(row.n ?? 0) + 1).padStart(6, "0")}`;
 }
 
 export function validateDocumentMetadata(metadata: DocumentMetadata): DocumentValidationResult {

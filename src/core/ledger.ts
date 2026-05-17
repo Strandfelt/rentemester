@@ -4,7 +4,7 @@ import { getInvoiceStatus } from "./invoice-payments";
 import { currentRuleBundleVersion } from "./rules-metadata";
 import { insertAuditLog, resolveActor } from "./actor";
 import { validateJournalTransactionDate } from "./periods";
-import { nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
+import { fiscalYearLabelFromDate } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type JournalLineInput = {
@@ -76,10 +76,9 @@ export function seedAccounts(db: Database) {
 }
 
 export function nextEntryNo(db: Database, transactionDate: string) {
-  const scope = yearScopeFromIsoDate(transactionDate);
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(entry_no, 6) AS INTEGER)), 0) AS n FROM journal_entries WHERE entry_no LIKE ?`).get(`${scope}-%`) as { n: number };
-  const value = nextSequenceValue(db, "journal_entry", scope, Number(row.n ?? 0));
-  return `${scope}-${String(value).padStart(5, "0")}`;
+  const scope = fiscalYearLabelFromDate(db, transactionDate);
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(entry_no, -5) AS INTEGER)), 0) AS n FROM journal_entries WHERE entry_no LIKE ?`).get(`${scope}-%`) as { n: number };
+  return `${scope}-${String(Number(row.n ?? 0) + 1).padStart(5, "0")}`;
 }
 
 export function previousHash(db: Database) {

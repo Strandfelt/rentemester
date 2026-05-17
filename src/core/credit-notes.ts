@@ -7,6 +7,7 @@ import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { fiscalYearLabelFromDate } from "./sequences";
 
 export type IssueCreditNoteInput = {
   originalInvoiceDocumentId: number;
@@ -38,9 +39,10 @@ function sha256(text: string) {
 }
 
 
-function nextCreditNoteNumber(db: Database) {
-  const row = db.query("SELECT COUNT(*) AS n FROM documents WHERE document_type = 'credit_note'").get() as { n: number };
-  return `CN-${new Date().getFullYear()}-${String(row.n + 1).padStart(4, "0")}`;
+function nextCreditNoteNumber(db: Database, issueDate: string) {
+  const scope = fiscalYearLabelFromDate(db, issueDate);
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -4) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'credit_note' AND invoice_no LIKE ?`).get(`CN-${scope}-%`) as { n: number };
+  return `CN-${scope}-${String(Number(row.n ?? 0) + 1).padStart(4, "0")}`;
 }
 
 function round2(value: number) { return Number(value.toFixed(2)); }
@@ -119,7 +121,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
   const vatRatio = originalGrossAmount > 0 ? originalVatAmount / originalGrossAmount : 0;
   const vatAmount = round2(grossAmount * vatRatio);
   const netAmount = round2(grossAmount - vatAmount);
-  const creditNoteNumber = input.creditNoteNumber?.trim() || nextCreditNoteNumber(db);
+  const creditNoteNumber = input.creditNoteNumber?.trim() || nextCreditNoteNumber(db, input.issueDate);
 
   const creditPayload = {
     type: "credit_note",

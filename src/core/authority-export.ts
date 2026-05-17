@@ -138,6 +138,9 @@ type CompanyRecord = {
   name: string;
   country: string;
   currency: string;
+  cvr: string | null;
+  fiscalYearStartMonth: number;
+  fiscalYearLabelStrategy: string;
   createdAt: string;
 };
 
@@ -373,12 +376,15 @@ function fetchAccounts(db: Database): AccountRecord[] {
 
 function fetchCompanies(db: Database): CompanyRecord[] {
   return (db.query(
-    `SELECT id, name, country, currency, created_at FROM companies ORDER BY id ASC`
+    `SELECT id, name, country, currency, cvr, fiscal_year_start_month, fiscal_year_label_strategy, created_at FROM companies ORDER BY id ASC`
   ).all() as any[]).map((row) => ({
     id: row.id,
     name: row.name,
     country: row.country,
     currency: row.currency,
+    cvr: row.cvr ?? null,
+    fiscalYearStartMonth: row.fiscal_year_start_month,
+    fiscalYearLabelStrategy: row.fiscal_year_label_strategy,
     createdAt: row.created_at,
   }));
 }
