@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { getInvoiceStatus } from "./invoice-payments";
 import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 const RULE_ID = "DK-INVOICE-REMINDER-FEE-001";
 const BOOKKEEPING_RULE_ID = "DK-INVOICE-REMINDER-FEE-BOOKKEEPING-001";
@@ -48,9 +49,6 @@ export type PostInvoiceReminderToLedgerResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 function round2(value: number) { return Number(value.toFixed(2)); }
 function diffDays(fromDate: string, toDate: string) {
   const from = new Date(`${fromDate}T00:00:00Z`).getTime();

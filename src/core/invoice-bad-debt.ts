@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 const RULE_ID = "DK-INVOICE-BAD-DEBT-WRITEOFF-001";
 const VAT_RULE_ID = "DK-VAT-BAD-DEBT-001";
@@ -28,9 +29,6 @@ export type WriteOffInvoiceBadDebtResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(String(value).trim());
-}
 function round2(value: number) { return Number(value.toFixed(2)); }
 
 export function writeOffInvoiceBadDebt(db: Database, input: WriteOffInvoiceBadDebtInput): WriteOffInvoiceBadDebtResult {

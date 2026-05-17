@@ -24,13 +24,16 @@ import { createSystemBackup, getBackupComplianceStatus } from "./core/system-bac
 import { exportAuthorityPackage } from "./core/authority-export";
 import { restoreSystemBackup } from "./core/system-restore";
 import { closeAccountingPeriod } from "./core/periods";
+import { parseCliArgs } from "./cli-args";
+
+const parsedArgs = parseCliArgs(Bun.argv);
 
 function arg(name: string, fallback?: string) {
-  const i = Bun.argv.indexOf(name);
-  return i >= 0 ? Bun.argv[i + 1] : fallback;
+  const value = parsedArgs.flags.get(name);
+  return typeof value === "string" ? value : fallback;
 }
 function hasFlag(name: string) {
-  return Bun.argv.includes(name);
+  return parsedArgs.flags.has(name);
 }
 function resolveInvoiceDocumentId(db: ReturnType<typeof openDb>) {
   const documentId = Number(arg("--document-id"));
@@ -79,9 +82,14 @@ function usage() {
   console.log(`Rentemester v0.0.1\n\nCommands:\n  init --company <path>\n  system healthcheck --company <path>\n  system backup --company <path> [--at <ISO-8601>]\n  system backup-status --company <path> [--as-of <ISO-8601>]\n  system restore-backup --backup-dir <dir> --target-company <path> [--verify-key <path>]\n  system export-authority --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--requested-at <ISO-8601>] [--requester <name>]\n  audit verify --company <path>\n  accounts list --company <path>\n  exceptions list --company <path>\n  invoice validate --input <file.json>\n  invoice issue --company <path> --input <file.json>\n  invoice credit-note --company <path> --input <file.json>\n  invoice post --company <path> (--document-id <n> | --invoice-number <no>)\n  invoice settle-bank --company <path> --input <file.json>\n  invoice settle-claim-bank --company <path> --input <file.json>\n  invoice write-off-bad-debt --company <path> --input <file.json>\n  invoice refund-bank --company <path> --input <file.json>\n  invoice apply-payment --company <path> --input <file.json>\n  invoice remind --company <path> (--document-id <n> | --invoice-number <no>) --date <YYYY-MM-DD> [--fee <n>] [--note <text>]\n  invoice post-reminder --company <path> (--document-id <n> | --invoice-number <no>) [--reminder-id <n>] [--date <YYYY-MM-DD>]\n  invoice status --company <path> (--document-id <n> | --invoice-number <no>) [--as-of <YYYY-MM-DD>]\n  invoice interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct>\n  invoice claim-interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct> [--note <text>]\n  invoice post-interest --company <path> (--document-id <n> | --invoice-number <no>) [--claim-id <n>] [--date <YYYY-MM-DD>]\n  invoice compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>]\n  invoice claim-compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>] [--note <text>]\n  invoice post-compensation --company <path> (--document-id <n> | --invoice-number <no>) [--date <YYYY-MM-DD>]\n  documents ingest --company <path> --file <path> --metadata <file.json> [--force]\n  documents list --company <path>\n  bank import --company <path> --file <transactions.csv>\n  bank list --company <path>\n  reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat post-eu-service-purchase --company <path> --input <file.json>\n  vat post-representation-purchase --company <path> --input <file.json>\n  period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]\n  journal post --company <path> --input <file.json>\n  journal reverse --company <path> (--entry-id <n> | --entry-no <no>) --date <YYYY-MM-DD> --reason <text>\n  journal list --company <path>`);
 }
 
-const [cmd, sub] = Bun.argv.slice(2).filter(a => !a.startsWith("--") && !Bun.argv[Bun.argv.indexOf(a)-1]?.startsWith("--"));
+const [cmd, sub] = parsedArgs.positionals;
 
-if (!cmd || cmd === "help" || cmd === "--help") usage();
+if (parsedArgs.errors.length > 0) {
+  console.error(parsedArgs.errors.join("\n"));
+  process.exit(2);
+}
+
+if (!cmd || cmd === "help" || hasFlag("--help")) usage();
 else if (cmd === "init") {
   const root = companyRoot();
   const p = ensureCompanyDirs(root);

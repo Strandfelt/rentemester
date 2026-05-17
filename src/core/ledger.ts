@@ -5,6 +5,7 @@ import { currentRuleBundleVersion } from "./rules-metadata";
 import { insertAuditLog, resolveActor } from "./actor";
 import { validateJournalTransactionDate } from "./periods";
 import { nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -90,9 +91,6 @@ export function hashEntry(data: unknown, prev: string) {
   return createHash("sha256").update(JSON.stringify(data)).update(prev).digest("hex");
 }
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 
 function normalizeAmount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : 0;

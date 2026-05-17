@@ -113,6 +113,25 @@ describe("invoice validator", () => {
     expect(result.appliedRules).toContain("DK-INVOICE-DELIVERY-DATE-001");
   });
 
+  test("rejects impossible issue and due dates even when they match the ISO shape", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-02-30",
+      dueDate: "2026-04-31",
+      invoiceNumber: "2026-0047B",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9, 8000 Aarhus C" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("issueDate must be present in YYYY-MM-DD format");
+    expect(result.errors).toContain("dueDate must be YYYY-MM-DD when present");
+  });
+
   test("rejects reverse-charge invoice with invalid legal basis for direction", () => {
     const result = validateInvoice({
       invoiceType: "full",

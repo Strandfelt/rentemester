@@ -60,6 +60,25 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects impossible calendar dates in bank rows", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-baddate-"));
+    const csv = join(root, "bad-date.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-02-30,2026-04-31,Customer payment,2500,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("rows[0].transactionDate must be YYYY-MM-DD");
+    expect(result.errors).toContain("rows[0].bookingDate must be YYYY-MM-DD when present");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type AccountingPeriodKind = "vat_quarter" | "fiscal_year" | "custom";
 export type AccountingPeriodStatus = "open" | "closed" | "reported";
@@ -30,9 +31,6 @@ const PERIOD_RULE_ID = "DK-BOOKKEEPING-PERIOD-LOCK-001";
 const PERIOD_KINDS = new Set<AccountingPeriodKind>(["vat_quarter", "fiscal_year", "custom"]);
 const PERIOD_STATUSES = new Set<Exclude<AccountingPeriodStatus, "open">>(["closed", "reported"]);
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 
 function todayIsoDate() {
   const override = process.env.RENTEMESTER_TODAY;

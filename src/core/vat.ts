@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type VatPeriodReport = {
   ok: boolean;
@@ -52,9 +53,6 @@ export type RepresentationPurchaseInput = {
   createdByProgram?: string;
 };
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 
 function round2(value: number) {
   return Number(value.toFixed(2));

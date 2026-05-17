@@ -6,6 +6,7 @@ import { companyPaths } from "./paths";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type IssueCreditNoteInput = {
   originalInvoiceDocumentId: number;
@@ -36,9 +37,6 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 
 function nextCreditNoteNumber(db: Database) {
   const row = db.query("SELECT COUNT(*) AS n FROM documents WHERE document_type = 'credit_note'").get() as { n: number };

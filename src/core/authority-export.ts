@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { basename, join, relative } from "node:path";
 import type { Database } from "bun:sqlite";
 import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 const RULE_ID = "DK-BOOKKEEPING-AUTHORITY-EXPORT-001";
 const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
@@ -146,9 +147,6 @@ type SchemaMigrationRecord = {
   appliedAt: string;
 };
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 
 function resolveIsoDateTime(value?: string) {
   if (!value) return null;

@@ -5,6 +5,7 @@ import type { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { currentUtcYearScope, nextSequenceValue, yearScopeFromIsoDate } from "./sequences";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type DocumentType = "purchase_sale" | "cash_register_receipt";
 export type DocumentExemptionCode = "FOREIGN_PHYSICAL_ONLY" | null;
@@ -58,9 +59,6 @@ function hasNonNegativeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-function looksLikeIsoDate(value: unknown) {
-  return hasText(value) && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 
 function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");

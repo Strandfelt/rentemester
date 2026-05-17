@@ -1,3 +1,4 @@
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 export type InvoiceType = "full" | "simplified";
 export type VatTreatment = "standard" | "domestic_reverse_charge" | "foreign_reverse_charge";
 export type ReverseChargeBasis =
@@ -67,13 +68,6 @@ function hasPositiveNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-function looksLikeIsoDate(value: unknown) {
-  if (!hasText(value)) return false;
-  const trimmed = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
-  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === trimmed;
-}
 
 function hasLineDescriptions(lines: InvoicePayload["lines"]) {
   return Array.isArray(lines) && lines.length > 0 && lines.every((line) => hasText(line.description));

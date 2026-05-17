@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry } from "./ledger";
 import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 
 export type ApplyInvoicePaymentInput = {
   invoiceDocumentId: number;
@@ -114,9 +115,6 @@ const RULE_ID = "DK-INVOICE-PAYMENT-001";
 const CORRECTION_BALANCE_RULE_ID = "DK-INVOICE-CORRECTION-BALANCE-001";
 const DUE_DATE_RULE_ID = "DK-INVOICE-DUE-DATE-001";
 
-function looksLikeIsoDate(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-}
 function round2(value: number) { return Number(value.toFixed(2)); }
 function isoDate(value: Date) { return value.toISOString().slice(0, 10); }
 function defaultComparisonDate(invoiceDate?: string, effectiveDueDate?: string) {
