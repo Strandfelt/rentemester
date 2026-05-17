@@ -3,6 +3,7 @@ import { getInvoiceStatus } from "./invoice-payments";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-BAD-DEBT-WRITEOFF-001";
 const VAT_RULE_ID = "DK-VAT-BAD-DEBT-001";
@@ -29,7 +30,6 @@ export type WriteOffInvoiceBadDebtResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function round2(value: number) { return Number(value.toFixed(2)); }
 
 export function writeOffInvoiceBadDebt(db: Database, input: WriteOffInvoiceBadDebtInput): WriteOffInvoiceBadDebtResult {
   const errors: string[] = [];
@@ -59,25 +59,25 @@ export function writeOffInvoiceBadDebt(db: Database, input: WriteOffInvoiceBadDe
     return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: ["bad-debt VAT relief currently requires a standard-rated issued invoice"] };
   }
 
-  const grossInvoiceAmount = round2(Number(invoice.amount_inc_vat ?? 0));
-  const originalVatAmount = round2(Number(invoice.vat_amount ?? 0));
+  const grossInvoiceAmount = roundDkk(Number(invoice.amount_inc_vat ?? 0));
+  const originalVatAmount = roundDkk(Number(invoice.vat_amount ?? 0));
   if (!(grossInvoiceAmount > 0) || !(originalVatAmount > 0)) {
     return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: ["bad-debt VAT relief requires a positive gross invoice amount and VAT amount"] };
   }
 
   const status = getInvoiceStatus(db, input.invoiceDocumentId, input.writeOffDate);
   if (!status.ok) return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: status.errors };
-  const openBalance = round2(Number(status.openBalance ?? 0));
+  const openBalance = roundDkk(Number(status.openBalance ?? 0));
   if (!(openBalance > 0)) return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: [`invoice ${invoice.invoice_no} has no open principal balance to write off`] };
 
-  const grossAmount = round2(input.grossAmount ?? openBalance);
+  const grossAmount = roundDkk(input.grossAmount ?? openBalance);
   if (grossAmount > openBalance) {
     return { ok: false, appliedRules: [RULE_ID, VAT_RULE_ID], errors: [`bad-debt write-off amount ${grossAmount} exceeds open principal balance ${openBalance}`] };
   }
 
   const vatRatio = originalVatAmount / grossInvoiceAmount;
-  const vatAmount = round2(grossAmount * vatRatio);
-  const netAmount = round2(grossAmount - vatAmount);
+  const vatAmount = roundDkk(grossAmount * vatRatio);
+  const netAmount = roundDkk(grossAmount - vatAmount);
 
   try {
     const result = db.transaction(() => {

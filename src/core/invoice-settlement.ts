@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { applyInvoicePayment, getInvoiceStatus } from "./invoice-payments";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { insertAuditLog } from "./actor";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-SETTLEMENT-001";
 const COMBINED_RULE_ID = "DK-INVOICE-COMBINED-SETTLEMENT-001";
@@ -28,9 +29,6 @@ export type SettleInvoiceFromBankResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function getIncomingBankTransaction(db: Database, input: SettleInvoiceFromBankInput) {
   if (input.bankTransactionId === undefined && !input.bankTransactionReference) {
@@ -90,12 +88,12 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
   ).get(bank.id) as { id: number } | null;
   if (existingJournal) return { ok: false, appliedRules: [RULE_ID], errors: [`bank transaction ${bank.id} is already linked to journal entry ${existingJournal.id}`] };
 
-  const amount = round2(input.amount ?? Number(bank.amount));
+  const amount = roundDkk(input.amount ?? Number(bank.amount));
   const paymentDate = input.paymentDate ?? bank.transaction_date;
   const before = getInvoiceStatus(db, input.invoiceDocumentId);
   if (!before.ok) return { ok: false, appliedRules: [RULE_ID], errors: before.errors };
-  const principalOpenBalance = round2(Number(before.openBalance ?? 0));
-  const claimOpenBalance = round2(Number(before.claimOpenBalance ?? 0));
+  const principalOpenBalance = roundDkk(Number(before.openBalance ?? 0));
+  const claimOpenBalance = roundDkk(Number(before.claimOpenBalance ?? 0));
 
   try {
     const result = db.transaction(() => {
@@ -115,7 +113,7 @@ export function settleInvoiceFromBank(db: Database, input: SettleInvoiceFromBank
 
       if (isCombined) {
         principalAmount = principalOpenBalance;
-        claimAmount = round2(amount - principalAmount);
+        claimAmount = roundDkk(amount - principalAmount);
         if (claimAmount <= 0) {
           throw new Error(JSON.stringify({ appliedRules: [COMBINED_RULE_ID], errors: ["combined settlement produced no claim component"] }));
         }

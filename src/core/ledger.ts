@@ -8,6 +8,7 @@ import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue } from
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
 import { resolveOpenExceptionsForBankTransaction } from "./exceptions";
+import { compareDkk, fromOre, roundDkk, roundRate6, toOre } from "./money";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -95,7 +96,7 @@ export function hashEntry(data: unknown, prev: string) {
 
 
 function normalizeAmount(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : 0;
+  return typeof value === "number" && Number.isFinite(value) ? roundDkk(value) : 0;
 }
 
 function canonicalEntryData(entry: any, lines: any[]) {
@@ -145,8 +146,8 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
   if (currency.length !== 3) errors.push("currency must be a 3-letter ISO code when present");
 
   const accounts = accountMap(db);
-  let debitSum = 0;
-  let creditSum = 0;
+  let debitSum = 0n;
+  let creditSum = 0n;
   let requiresDocument = false;
 
   lines.forEach((line, idx) => {
@@ -161,26 +162,26 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
     if ((debit > 0 && credit > 0) || (debit === 0 && credit === 0)) {
       errors.push(`lines[${idx}] must have either debitAmount or creditAmount`);
     }
-    debitSum += debit;
-    creditSum += credit;
+    debitSum += toOre(debit);
+    creditSum += toOre(credit);
     if (account.type === "expense" || account.type === "income") requiresDocument = true;
   });
 
-  if (normalizeAmount(debitSum) !== normalizeAmount(creditSum)) {
-    errors.push(`journal entry must balance: debit ${normalizeAmount(debitSum)} != credit ${normalizeAmount(creditSum)}`);
+  if (debitSum !== creditSum) {
+    errors.push(`journal entry must balance: debit ${fromOre(debitSum)} != credit ${fromOre(creditSum)}`);
   }
 
   if (currency !== 'DKK') {
     appliedRules.push(LEDGER_RULES.FX);
     const amountForeign = normalizeAmount(payload.amountForeign);
     const amountDkk = normalizeAmount(payload.amountDkk);
-    const fxRateToDkk = typeof payload.fxRateToDkk === 'number' && Number.isFinite(payload.fxRateToDkk) ? Number(payload.fxRateToDkk.toFixed(6)) : NaN;
+    const fxRateToDkk = typeof payload.fxRateToDkk === 'number' && Number.isFinite(payload.fxRateToDkk) ? roundRate6(payload.fxRateToDkk) : NaN;
     if (!(amountForeign > 0)) errors.push("amountForeign must be positive for non-DKK journal entries");
     if (!(amountDkk > 0)) errors.push("amountDkk must be positive for non-DKK journal entries");
     if (!(fxRateToDkk > 0)) errors.push("fxRateToDkk must be positive for non-DKK journal entries");
     if (amountForeign > 0 && fxRateToDkk > 0) {
-      const expectedAmountDkk = Number((amountForeign * fxRateToDkk).toFixed(2));
-      if (amountDkk !== expectedAmountDkk) errors.push(`amountDkk must equal amountForeign * fxRateToDkk (${expectedAmountDkk})`);
+      const expectedAmountDkk = roundDkk(amountForeign * fxRateToDkk);
+      if (compareDkk(amountDkk, expectedAmountDkk) !== 0) errors.push(`amountDkk must equal amountForeign * fxRateToDkk (${expectedAmountDkk})`);
     }
   }
 
@@ -226,9 +227,9 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       source_bank_transaction_id: payload.sourceBankTransactionId ?? null,
       document_id: payload.documentId ?? null,
       currency: (payload.currency ?? 'DKK').trim().toUpperCase(),
-      amount_foreign: payload.amountForeign ?? null,
-      amount_dkk: payload.amountDkk ?? null,
-      fx_rate_to_dkk: payload.fxRateToDkk ?? null,
+      amount_foreign: payload.amountForeign == null ? null : roundDkk(payload.amountForeign),
+      amount_dkk: payload.amountDkk == null ? null : roundDkk(payload.amountDkk),
+      fx_rate_to_dkk: payload.fxRateToDkk == null ? null : roundRate6(payload.fxRateToDkk),
       rule_version: RULE_VERSION,
       created_by: actor.createdBy,
       created_by_program: actor.createdByProgram,
@@ -253,9 +254,9 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       payload.sourceBankTransactionId ?? null,
       payload.documentId ?? null,
       (payload.currency ?? 'DKK').trim().toUpperCase(),
-      payload.amountForeign ?? null,
-      payload.amountDkk ?? null,
-      payload.fxRateToDkk ?? null,
+      payload.amountForeign == null ? null : roundDkk(payload.amountForeign),
+      payload.amountDkk == null ? null : roundDkk(payload.amountDkk),
+      payload.fxRateToDkk == null ? null : roundRate6(payload.fxRateToDkk),
       RULE_VERSION,
       actor.createdBy,
       actor.createdByProgram,
@@ -373,9 +374,9 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       source_bank_transaction_id: reversalPayload.sourceBankTransactionId ?? null,
       document_id: reversalPayload.documentId ?? null,
       currency: (reversalPayload.currency ?? 'DKK').trim().toUpperCase(),
-      amount_foreign: reversalPayload.amountForeign ?? null,
-      amount_dkk: reversalPayload.amountDkk ?? null,
-      fx_rate_to_dkk: reversalPayload.fxRateToDkk ?? null,
+      amount_foreign: reversalPayload.amountForeign == null ? null : roundDkk(reversalPayload.amountForeign),
+      amount_dkk: reversalPayload.amountDkk == null ? null : roundDkk(reversalPayload.amountDkk),
+      fx_rate_to_dkk: reversalPayload.fxRateToDkk == null ? null : roundRate6(reversalPayload.fxRateToDkk),
       rule_version: RULE_VERSION,
       created_by: actor.createdBy,
       created_by_program: actor.createdByProgram,
@@ -398,9 +399,9 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       reversalPayload.sourceBankTransactionId ?? null,
       reversalPayload.documentId ?? null,
       (reversalPayload.currency ?? 'DKK').trim().toUpperCase(),
-      reversalPayload.amountForeign ?? null,
-      reversalPayload.amountDkk ?? null,
-      reversalPayload.fxRateToDkk ?? null,
+      reversalPayload.amountForeign == null ? null : roundDkk(reversalPayload.amountForeign),
+      reversalPayload.amountDkk == null ? null : roundDkk(reversalPayload.amountDkk),
+      reversalPayload.fxRateToDkk == null ? null : roundRate6(reversalPayload.fxRateToDkk),
       RULE_VERSION,
       actor.createdBy,
       actor.createdByProgram,
@@ -481,9 +482,9 @@ export function verifyAuditChain(db: Database) {
     if (e.previous_hash !== prev) errors.push(`${e.entry_no}: previous_hash mismatch`);
     if (e.entry_hash !== expected) errors.push(`${e.entry_no}: entry_hash mismatch`);
 
-    const debitSum = normalizeAmount(lines.reduce((sum, line) => sum + Number(line.debit_amount ?? 0), 0));
-    const creditSum = normalizeAmount(lines.reduce((sum, line) => sum + Number(line.credit_amount ?? 0), 0));
-    if (debitSum !== creditSum) errors.push(`${e.entry_no}: entry is unbalanced (${debitSum} != ${creditSum})`);
+    const debitSum = lines.reduce((sum, line) => sum + toOre(Number(line.debit_amount ?? 0)), 0n);
+    const creditSum = lines.reduce((sum, line) => sum + toOre(Number(line.credit_amount ?? 0)), 0n);
+    if (debitSum !== creditSum) errors.push(`${e.entry_no}: entry is unbalanced (${fromOre(debitSum)} != ${fromOre(creditSum)})`);
 
     const requiresDocument = lines.some((line) => line.account_type === "expense" || line.account_type === "income");
     if (requiresDocument) {

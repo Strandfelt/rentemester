@@ -6,6 +6,7 @@ import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
+import { compareDkk, multiplyDkk, roundDkk, roundRate6 } from "./money";
 
 export type BankImportRow = {
   transactionDate: string;
@@ -36,7 +37,7 @@ function sha256Bytes(data: Uint8Array | string) {
 
 
 function normalizeAmount(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(2)) : NaN;
+  return typeof value === "number" && Number.isFinite(value) ? roundDkk(value) : NaN;
 }
 
 const HEADER_ALIASES: Record<string, string[]> = {
@@ -203,10 +204,10 @@ export function validateBankImportRows(rows: BankImportRow[]) {
     if (currency !== "DKK") {
       needsFxRule = true;
       if (!Number.isFinite(normalizeAmount(row.amountDkk))) errors.push(`rows[${idx}].amountDkk is required for non-DKK rows`);
-      if (!Number.isFinite(normalizeAmount(row.fxRateToDkk)) || (row.fxRateToDkk ?? 0) <= 0) errors.push(`rows[${idx}].fxRateToDkk must be positive for non-DKK rows`);
-      if (Number.isFinite(normalizeAmount(row.amountDkk)) && Number.isFinite(normalizeAmount(row.fxRateToDkk))) {
-        const expectedAmountDkk = normalizeAmount((row.amount ?? 0) * (row.fxRateToDkk ?? 0));
-        if (normalizeAmount(row.amountDkk) !== expectedAmountDkk) {
+      if (!Number.isFinite(roundRate6(Number(row.fxRateToDkk))) || (row.fxRateToDkk ?? 0) <= 0) errors.push(`rows[${idx}].fxRateToDkk must be positive for non-DKK rows`);
+      if (Number.isFinite(normalizeAmount(row.amountDkk)) && Number.isFinite(Number(row.fxRateToDkk))) {
+        const expectedAmountDkk = multiplyDkk(row.amount ?? 0, row.fxRateToDkk ?? 0);
+        if (compareDkk(normalizeAmount(row.amountDkk), expectedAmountDkk) !== 0) {
           errors.push(`rows[${idx}].amountDkk must equal amount * fxRateToDkk (${expectedAmountDkk})`);
         }
       }
@@ -224,7 +225,7 @@ function transactionFingerprint(row: BankImportRow) {
     currency: row.currency ?? "DKK",
     reference: row.reference ?? null,
     amount_dkk: normalizeAmountOrNull(row.amountDkk),
-    fx_rate_to_dkk: normalizeAmountOrNull(row.fxRateToDkk),
+    fx_rate_to_dkk: row.fxRateToDkk == null ? null : roundRate6(row.fxRateToDkk),
   }));
 }
 
@@ -268,7 +269,7 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
         (row.currency ?? "DKK").trim().toUpperCase(),
         row.reference ?? null,
         normalizeAmountOrNull(row.amountDkk),
-        normalizeAmountOrNull(row.fxRateToDkk),
+        row.fxRateToDkk == null ? null : roundRate6(row.fxRateToDkk),
         sourceFileHash,
         importBatchId,
         hash,

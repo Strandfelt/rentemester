@@ -305,6 +305,55 @@ describe("journal posting", () => {
     rmSync(inbox, { recursive: true, force: true });
   });
 
+  test("normalizes FX payloads before persistence so audit verification reads the same rounded values", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-fx-normalized-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-journal-fx-normalized-inbox-"));
+    const sourceFile = join(inbox, "invoice.txt");
+    writeFileSync(sourceFile, "Invoice\n745.56 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-19",
+      invoiceNo: "INV-EUR-2",
+      deliveryDescription: "Softwareabonnement EUR",
+      amountIncVat: 745.56,
+      currency: "DKK",
+      sender: { name: "Leverandør GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 149.11,
+      paymentDetails: "Kortbetaling"
+    });
+    expect(doc.ok).toBe(true);
+
+    const posted = postJournalEntry(db, {
+      transactionDate: "2026-05-19",
+      text: "FX journal with normalized conversion basis",
+      documentId: doc.documentId,
+      currency: "EUR",
+      amountForeign: 100,
+      amountDkk: 745.56,
+      fxRateToDkk: 7.4555555,
+      lines: [
+        { accountNo: "3000", debitAmount: 596.45, vatCode: "DK_PURCHASE_25" },
+        { accountNo: "4000", debitAmount: 149.11 },
+        { accountNo: "2000", creditAmount: 745.56 }
+      ]
+    });
+
+    expect(posted.ok).toBe(true);
+    const entry = db.query("SELECT amount_foreign, amount_dkk, fx_rate_to_dkk FROM journal_entries WHERE id = ?").get(posted.entryId!) as any;
+    expect(entry).toEqual({ amount_foreign: 100, amount_dkk: 745.56, fx_rate_to_dkk: 7.455556 });
+    expect(verifyAuditChain(db).ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
   test("records actor attribution from environment for direct journal posts", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journal-actor-"));
     const db = openDb(ensureCompanyDirs(root).db);

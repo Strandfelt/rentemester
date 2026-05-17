@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { roundDkk } from "./money";
 
 export type ReconciliationStatus = "all" | "matched" | "unmatched";
 
@@ -59,9 +60,6 @@ export type BankReconciliationReport = {
 const RULE_ID = "DK-BOOKKEEPING-RECONCILIATION-001";
 
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function normalizedStatus(status?: string): ReconciliationStatus {
   return status === "matched" || status === "unmatched" || status === "all" ? status : "all";
@@ -85,7 +83,7 @@ function matchesFilters(row: {
   const status = normalizedStatus(filters.status);
   const textMatch = normalizeTextMatch(filters.textMatch);
   if (status !== "all" && row.reconciliation_status !== status) return false;
-  if (typeof filters.amount === "number" && Number.isFinite(filters.amount) && round2(row.amount) !== round2(filters.amount)) return false;
+  if (typeof filters.amount === "number" && Number.isFinite(filters.amount) && roundDkk(row.amount) !== roundDkk(filters.amount)) return false;
   if (textMatch && !row.text.toLowerCase().includes(textMatch)) return false;
   return true;
 }
@@ -129,7 +127,7 @@ export function listBankTransactions(db: Database, filters: BankReconciliationFi
     transactionDate: row.transaction_date,
     bookingDate: row.booking_date,
     text: row.text,
-    amount: round2(Number(row.amount)),
+    amount: roundDkk(Number(row.amount)),
     currency: row.currency,
     reference: row.reference,
     importBatchId: row.import_batch_id,
@@ -191,7 +189,7 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
 
   for (const row of rows) {
     if (!matchesFilters({ amount: Number(row.amount), text: row.text, reconciliation_status: row.reconciliation_status }, filters)) continue;
-    const amount = round2(Number(row.amount));
+    const amount = roundDkk(Number(row.amount));
     if (row.journal_entry_id) {
       matched.push({
         bankTransactionId: row.bank_transaction_id,
@@ -221,8 +219,8 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
     periodEnd,
     matchedCount: matched.length,
     unmatchedCount: unmatched.length,
-    matchedAmountTotal: round2(matchedAmountTotal),
-    unmatchedAmountTotal: round2(unmatchedAmountTotal),
+    matchedAmountTotal: roundDkk(matchedAmountTotal),
+    unmatchedAmountTotal: roundDkk(unmatchedAmountTotal),
     matched,
     unmatched,
     errors: [],

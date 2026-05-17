@@ -1,4 +1,5 @@
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { roundDkk } from "./money";
 export type InvoiceType = "full" | "simplified";
 export type VatTreatment = "standard" | "domestic_reverse_charge" | "foreign_reverse_charge";
 export type ReverseChargeBasis =
@@ -73,9 +74,6 @@ function hasLineDescriptions(lines: InvoicePayload["lines"]) {
   return Array.isArray(lines) && lines.length > 0 && lines.every((line) => hasText(line.description));
 }
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 export function validateInvoice(payload: InvoicePayload): InvoiceValidationResult {
   const errors: string[] = [];
@@ -173,8 +171,8 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
       const unit = line.unitPriceExVat;
       const total = line.lineTotalExVat;
       if (typeof qty === "number" && typeof unit === "number" && typeof total === "number") {
-        const expected = round2(qty * unit);
-        if (round2(total) !== expected) {
+        const expected = roundDkk(qty * unit);
+        if (roundDkk(total) !== expected) {
           errors.push(`lines[${index}].lineTotalExVat must equal quantity * unitPriceExVat (${expected})`);
         }
       }
@@ -182,18 +180,18 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
   }
 
   const lineSum = Array.isArray(payload.lines)
-    ? round2(payload.lines.reduce((sum, line) => sum + Number(line.lineTotalExVat ?? 0), 0))
+    ? roundDkk(payload.lines.reduce((sum, line) => sum + Number(line.lineTotalExVat ?? 0), 0))
     : 0;
-  const netAmount = round2(Number(payload.totals?.netAmount ?? 0));
-  const vatAmount = round2(Number(payload.totals?.vatAmount ?? 0));
-  const grossAmount = round2(Number(payload.totals?.grossAmount ?? 0));
+  const netAmount = roundDkk(Number(payload.totals?.netAmount ?? 0));
+  const vatAmount = roundDkk(Number(payload.totals?.vatAmount ?? 0));
+  const grossAmount = roundDkk(Number(payload.totals?.grossAmount ?? 0));
 
   if (invoiceType === "full" && Array.isArray(payload.lines) && payload.lines.every((line) => typeof line.lineTotalExVat === "number")) {
     if (netAmount !== lineSum) errors.push(`totals.netAmount must equal sum of lineTotalExVat (${lineSum})`);
   }
 
   if (vatTreatment === "standard" && (invoiceType === "full" || payload.totals?.netAmount !== undefined)) {
-    const expectedGross = round2(netAmount + vatAmount);
+    const expectedGross = roundDkk(netAmount + vatAmount);
     if (grossAmount !== expectedGross) {
       errors.push(`totals.grossAmount must equal totals.netAmount + totals.vatAmount (${expectedGross})`);
     }

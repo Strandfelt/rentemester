@@ -3,6 +3,7 @@ import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { getInvoiceStatus } from "./invoice-payments";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { accrueInterestDkk, addDkk, roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-LATE-INTEREST-001";
 const REGISTER_RULE_ID = "DK-INVOICE-LATE-INTEREST-REGISTER-001";
@@ -58,8 +59,6 @@ export type PostInvoiceLateInterestToLedgerResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function round2(value: number) { return Number(value.toFixed(2)); }
-
 export function calculateInvoiceLateInterest(db: Database, input: CalculateInvoiceLateInterestInput): CalculateInvoiceLateInterestResult {
   const errors: string[] = [];
   if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) errors.push("invoiceDocumentId must be a positive integer");
@@ -70,11 +69,11 @@ export function calculateInvoiceLateInterest(db: Database, input: CalculateInvoi
   const status = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
   if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
 
-  const principalOpenBalance = round2(Number(status.openBalance ?? 0));
+  const principalOpenBalance = roundDkk(Number(status.openBalance ?? 0));
   const overdueDays = Number(status.overdueDays ?? 0);
-  const annualInterestRatePercent = round2(Number(input.referenceRatePercent) + 8);
+  const annualInterestRatePercent = roundDkk(addDkk(Number(input.referenceRatePercent), 8));
   const accruedInterestAmount = overdueDays > 0 && principalOpenBalance > 0
-    ? round2(principalOpenBalance * (annualInterestRatePercent / 100) * (overdueDays / 365))
+    ? accrueInterestDkk(principalOpenBalance, annualInterestRatePercent, overdueDays)
     : 0;
 
   return {
@@ -85,7 +84,7 @@ export function calculateInvoiceLateInterest(db: Database, input: CalculateInvoi
     effectiveDueDate: status.effectiveDueDate,
     overdueDays,
     principalOpenBalance,
-    referenceRatePercent: round2(Number(input.referenceRatePercent)),
+    referenceRatePercent: roundDkk(Number(input.referenceRatePercent)),
     annualInterestRatePercent,
     accruedInterestAmount,
     appliedRules: [RULE_ID],
@@ -107,13 +106,13 @@ export function registerInvoiceLateInterest(db: Database, input: RegisterInvoice
 
   const existing = db.query(
     `SELECT id FROM invoice_interest_claims WHERE invoice_document_id = ? AND claim_date = ? AND reference_rate_percent = ? LIMIT 1`
-  ).get(input.invoiceDocumentId, input.asOfDate, round2(Number(input.referenceRatePercent))) as { id: number } | null;
+  ).get(input.invoiceDocumentId, input.asOfDate, roundDkk(Number(input.referenceRatePercent))) as { id: number } | null;
   if (existing) {
     return {
       ...calculation,
       ok: false,
       appliedRules: [RULE_ID, REGISTER_RULE_ID],
-      errors: [`late interest for invoice ${input.invoiceDocumentId} is already registered for ${input.asOfDate} at reference rate ${round2(Number(input.referenceRatePercent))}`],
+      errors: [`late interest for invoice ${input.invoiceDocumentId} is already registered for ${input.asOfDate} at reference rate ${roundDkk(Number(input.referenceRatePercent))}`],
     };
   }
 
@@ -126,11 +125,11 @@ export function registerInvoiceLateInterest(db: Database, input: RegisterInvoice
   ).get(
     input.invoiceDocumentId,
     input.asOfDate,
-    round2(Number(input.referenceRatePercent)),
-    round2(Number(calculation.annualInterestRatePercent)),
+    roundDkk(Number(input.referenceRatePercent)),
+    roundDkk(Number(calculation.annualInterestRatePercent)),
     Number(calculation.overdueDays),
-    round2(Number(calculation.principalOpenBalance)),
-    round2(Number(calculation.accruedInterestAmount)),
+    roundDkk(Number(calculation.principalOpenBalance)),
+    roundDkk(Number(calculation.accruedInterestAmount)),
     input.note ?? null,
   ) as { id: number };
 
@@ -138,7 +137,7 @@ export function registerInvoiceLateInterest(db: Database, input: RegisterInvoice
     eventType: "invoice_interest_register",
     entityType: "invoice_interest_claim",
     entityId: inserted.id,
-    message: `Registered late interest ${round2(Number(calculation.accruedInterestAmount))} on invoice ${calculation.invoiceNumber}`,
+    message: `Registered late interest ${roundDkk(Number(calculation.accruedInterestAmount))} on invoice ${calculation.invoiceNumber}`,
   });
 
   const statusAfter = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
@@ -192,13 +191,13 @@ export function postInvoiceLateInterestToLedger(db: Database, input: PostInvoice
       invoiceDocumentId: claim.invoice_document_id,
       invoiceNumber: claim.invoice_no,
       claimDate: claim.claim_date,
-      accruedInterestAmount: round2(Number(claim.amount_dkk)),
+      accruedInterestAmount: roundDkk(Number(claim.amount_dkk)),
       appliedRules: [BOOKKEEPING_RULE_ID],
       errors: [`interest claim ${claim.id} is already posted in journal entry ${existing.entry_no}`],
     };
   }
 
-  const amount = round2(Number(claim.amount_dkk));
+  const amount = roundDkk(Number(claim.amount_dkk));
   try {
     return db.transaction(() => {
       const journal = postJournalEntry(db, {

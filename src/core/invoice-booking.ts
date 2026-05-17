@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-BOOKKEEPING-001";
 const REVERSE_RULE_ID = "DK-INVOICE-BOOKKEEPING-REVERSE-002";
@@ -14,9 +15,6 @@ export type PostIssuedInvoiceInput = {
   createdByProgram?: string;
 };
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function issuedInvoiceJournalLines(doc: { invoice_no: string }, payload: any, grossAmount: number, netAmount: number, vatAmount: number, input: PostIssuedInvoiceInput) {
   const vatTreatment = payload?.vatTreatment ?? "standard";
@@ -65,9 +63,9 @@ export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoice
   }
 
   const payload = doc.payload_json ? JSON.parse(doc.payload_json) : null;
-  const grossAmount = round2(Number(doc.amount_inc_vat ?? payload?.totals?.grossAmount ?? 0));
-  const vatAmount = round2(Number(doc.vat_amount ?? payload?.totals?.vatAmount ?? 0));
-  const netAmount = round2(grossAmount - vatAmount);
+  const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? payload?.totals?.grossAmount ?? 0));
+  const vatAmount = roundDkk(Number(doc.vat_amount ?? payload?.totals?.vatAmount ?? 0));
+  const netAmount = roundDkk(grossAmount - vatAmount);
 
   if (!(grossAmount > 0)) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} is missing gross amount`] };
   if (netAmount <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} produced invalid net amount`] };

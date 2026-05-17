@@ -7,6 +7,7 @@ import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { roundDkk } from "./money";
 import { companySequenceScope, fiscalYearLabelFromDate, nextSequenceValue, reserveSequenceValue } from "./sequences";
 import { retainUntilForDate } from "./retention";
 
@@ -74,10 +75,9 @@ function reserveManualCreditNoteNumber(db: Database, issueDate: string, creditNo
   return { ok: true as const };
 }
 
-function round2(value: number) { return Number(value.toFixed(2)); }
 
 function scaledJournalAmount(amount: number, factor: number) {
-  return round2(amount * factor);
+  return roundDkk(amount * factor);
 }
 
 function creditNoteLinesFromOriginalJournal(db: Database, originalInvoiceDocumentId: number, originalGrossAmount: number, grossAmount: number) {
@@ -155,19 +155,19 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
   if (original.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID], errors: [`document ${input.originalInvoiceDocumentId} is not an issued invoice`] };
 
   const payload = original.payload_json ? JSON.parse(original.payload_json) : null;
-  const originalGrossAmount = round2(Number(original.amount_inc_vat ?? payload?.totals?.grossAmount ?? 0));
-  const originalVatAmount = round2(Number(original.vat_amount ?? payload?.totals?.vatAmount ?? 0));
-  const creditedSoFar = round2(Number((db.query("SELECT COALESCE(SUM(amount_inc_vat), 0) AS total FROM documents WHERE document_type = 'credit_note' AND payment_details = ?").get(original.invoice_no) as { total: number }).total ?? 0));
-  const remainingGrossAmount = round2(originalGrossAmount - creditedSoFar);
+  const originalGrossAmount = roundDkk(Number(original.amount_inc_vat ?? payload?.totals?.grossAmount ?? 0));
+  const originalVatAmount = roundDkk(Number(original.vat_amount ?? payload?.totals?.vatAmount ?? 0));
+  const creditedSoFar = roundDkk(Number((db.query("SELECT COALESCE(SUM(amount_inc_vat), 0) AS total FROM documents WHERE document_type = 'credit_note' AND payment_details = ?").get(original.invoice_no) as { total: number }).total ?? 0));
+  const remainingGrossAmount = roundDkk(originalGrossAmount - creditedSoFar);
   if (remainingGrossAmount <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${original.invoice_no} is already fully credited`] };
 
-  const grossAmount = round2(input.grossAmount ?? remainingGrossAmount);
+  const grossAmount = roundDkk(input.grossAmount ?? remainingGrossAmount);
   if (!Number.isFinite(grossAmount) || grossAmount <= 0) return { ok: false, appliedRules: [RULE_ID], errors: ["grossAmount must be a positive number when present"] };
   if (grossAmount > remainingGrossAmount) return { ok: false, appliedRules: [RULE_ID], errors: [`credit amount ${grossAmount} exceeds remaining creditable amount ${remainingGrossAmount}`] };
 
   const vatRatio = originalGrossAmount > 0 ? originalVatAmount / originalGrossAmount : 0;
-  const vatAmount = round2(grossAmount * vatRatio);
-  const netAmount = round2(grossAmount - vatAmount);
+  const vatAmount = roundDkk(grossAmount * vatRatio);
+  const netAmount = roundDkk(grossAmount - vatAmount);
   const explicitCreditNoteNumber = input.creditNoteNumber?.trim();
   if (explicitCreditNoteNumber) {
     const scopeError = validateManualCreditNoteNumberScope(db, input.issueDate, explicitCreditNoteNumber);
@@ -200,7 +200,7 @@ export function issueCreditNote(db: Database, companyRoot: string, input: IssueC
         vatAmount,
         netAmount,
         creditedSoFar,
-        remainingAfterThisCredit: round2(remainingGrossAmount - grossAmount),
+        remainingAfterThisCredit: roundDkk(remainingGrossAmount - grossAmount),
         issuedAt: new Date().toISOString(),
       };
       const serialized = JSON.stringify(creditPayload, null, 2);

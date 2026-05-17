@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
+import { roundDkk } from "./money";
 
 export type BankMatchSuggestion = {
   kind: "issued_invoice" | "purchase_sale";
@@ -33,9 +34,6 @@ export type SuggestBankMatchesInput = {
   max?: number;
 };
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function daysBetween(a: string, b: string) {
   const from = new Date(`${a}T00:00:00Z`).getTime();
@@ -119,8 +117,8 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
   if (!(Number(bank.amount) > 0)) return null;
   const status = getInvoiceStatus(db, doc.id, bank.transaction_date);
   if (!status.ok) return null;
-  const openBalance = round2(Number(status.openBalance ?? 0));
-  const claimOpenBalance = round2(Number(status.claimOpenBalance ?? 0));
+  const openBalance = roundDkk(Number(status.openBalance ?? 0));
+  const claimOpenBalance = roundDkk(Number(status.claimOpenBalance ?? 0));
   if (!(claimOpenBalance > 0)) return null;
 
   const payload = doc.payload_json ? JSON.parse(doc.payload_json) : null;
@@ -129,12 +127,12 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
   let confidence = 0;
   const reasons: string[] = [];
 
-  if (round2(Number(bank.amount)) === claimOpenBalance) {
+  if (roundDkk(Number(bank.amount)) === claimOpenBalance) {
     confidence += 0.6;
-    reasons.push(`amount match: ${round2(Number(bank.amount))} vs claim open balance ${claimOpenBalance}`);
-  } else if (round2(Number(bank.amount)) === openBalance) {
+    reasons.push(`amount match: ${roundDkk(Number(bank.amount))} vs claim open balance ${claimOpenBalance}`);
+  } else if (roundDkk(Number(bank.amount)) === openBalance) {
     confidence += 0.55;
-    reasons.push(`amount match: ${round2(Number(bank.amount))} vs principal open balance ${openBalance}`);
+    reasons.push(`amount match: ${roundDkk(Number(bank.amount))} vs principal open balance ${openBalance}`);
   }
 
   if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
@@ -162,16 +160,16 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
     documentId: doc.id,
     invoiceNo: doc.invoice_no,
     customerName,
-    confidence: round2(confidence),
+    confidence: roundDkk(confidence),
     reasons,
   };
 }
 
 function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof openPurchaseDocuments>[number]): BankMatchSuggestion | null {
   if (!(Number(bank.amount) < 0)) return null;
-  const grossAmount = round2(Number(doc.amount_inc_vat ?? 0));
+  const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? 0));
   if (!(grossAmount > 0)) return null;
-  const paymentAmount = round2(Math.abs(Number(bank.amount)));
+  const paymentAmount = roundDkk(Math.abs(Number(bank.amount)));
   const bankText = combinedBankText(bank);
   let confidence = 0;
   const reasons: string[] = [];
@@ -212,7 +210,7 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
     documentId: doc.id,
     invoiceNo: doc.invoice_no,
     supplierName: doc.sender_name,
-    confidence: round2(confidence),
+    confidence: roundDkk(confidence),
     reasons,
   };
 }
@@ -246,7 +244,7 @@ export function suggestBankMatches(db: Database, input: SuggestBankMatchesInput 
       bankTransactionId: bank.id,
       date: bank.transaction_date,
       text: bank.text,
-      amount: round2(Number(bank.amount)),
+      amount: roundDkk(Number(bank.amount)),
       currency: bank.currency,
       reference: bank.reference,
       suggestions,

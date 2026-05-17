@@ -3,6 +3,7 @@ import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { getInvoiceStatus } from "./invoice-payments";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-LATE-COMPENSATION-001";
 const REGISTER_RULE_ID = "DK-INVOICE-LATE-COMPENSATION-REGISTER-001";
@@ -60,7 +61,6 @@ export type PostInvoiceLateCompensationToLedgerResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function round2(value: number) { return Number(value.toFixed(2)); }
 const STATUTORY_COMPENSATION_DKK = 310;
 const STATUTORY_COMPENSATION_START_DATE = "2013-03-01";
 
@@ -80,9 +80,9 @@ export function calculateInvoiceLateCompensation(db: Database, input: CalculateI
 
   const payload = invoice.payload_json ? JSON.parse(invoice.payload_json) : null;
   const isCommercialTransaction = typeof payload?.buyer?.vatOrCvr === "string" && payload.buyer.vatOrCvr.trim().length > 0;
-  const principalOpenBalance = round2(Number(status.openBalance ?? 0));
+  const principalOpenBalance = roundDkk(Number(status.openBalance ?? 0));
   const overdueDays = Number(status.overdueDays ?? 0);
-  const compensationAmountDkk = round2(input.compensationAmountDkk ?? STATUTORY_COMPENSATION_DKK);
+  const compensationAmountDkk = roundDkk(input.compensationAmountDkk ?? STATUTORY_COMPENSATION_DKK);
   const coveredByStatutoryAmount = (invoice.invoice_date ?? input.asOfDate) >= STATUTORY_COMPENSATION_START_DATE;
   const eligible = isCommercialTransaction && principalOpenBalance > 0 && overdueDays > 0 && coveredByStatutoryAmount;
 
@@ -135,7 +135,7 @@ export function registerInvoiceLateCompensation(db: Database, input: RegisterInv
       principalOpenBalance: assessment.principalOpenBalance,
       isCommercialTransaction: assessment.isCommercialTransaction,
       eligible: assessment.eligible,
-      compensationAmountDkk: round2(Number(existing.amount_dkk)),
+      compensationAmountDkk: roundDkk(Number(existing.amount_dkk)),
       reason: `compensation claim already registered on ${existing.claim_date}`,
       appliedRules: [RULE_ID, REGISTER_RULE_ID],
       errors: [`invoice ${input.invoiceDocumentId} already has a registered compensation claim`],
@@ -146,13 +146,13 @@ export function registerInvoiceLateCompensation(db: Database, input: RegisterInv
     `INSERT INTO invoice_compensation_claims (invoice_document_id, claim_date, amount_dkk, note)
      VALUES (?, ?, ?, ?)
      RETURNING id`
-  ).get(input.invoiceDocumentId, input.asOfDate, round2(Number(assessment.compensationAmountDkk)), input.note ?? null) as { id: number };
+  ).get(input.invoiceDocumentId, input.asOfDate, roundDkk(Number(assessment.compensationAmountDkk)), input.note ?? null) as { id: number };
 
   insertAuditLog(db, {
     eventType: "invoice_compensation_register",
     entityType: "invoice_compensation_claim",
     entityId: inserted.id,
-    message: `Registered compensation claim ${round2(Number(assessment.compensationAmountDkk))} on invoice ${assessment.invoiceNumber}`,
+    message: `Registered compensation claim ${roundDkk(Number(assessment.compensationAmountDkk))} on invoice ${assessment.invoiceNumber}`,
   });
 
   const statusAfter = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);
@@ -169,7 +169,7 @@ export function registerInvoiceLateCompensation(db: Database, input: RegisterInv
     principalOpenBalance: assessment.principalOpenBalance,
     isCommercialTransaction: assessment.isCommercialTransaction,
     eligible: true,
-    compensationAmountDkk: round2(Number(assessment.compensationAmountDkk)),
+    compensationAmountDkk: roundDkk(Number(assessment.compensationAmountDkk)),
     reason: "registered",
     appliedRules: [RULE_ID, REGISTER_RULE_ID],
     errors: [],
@@ -211,13 +211,13 @@ export function postInvoiceLateCompensationToLedger(db: Database, input: PostInv
       claimId: claim.id,
       invoiceDocumentId: claim.invoice_document_id,
       invoiceNumber: claim.invoice_no,
-      compensationAmountDkk: round2(Number(claim.amount_dkk)),
+      compensationAmountDkk: roundDkk(Number(claim.amount_dkk)),
       appliedRules: [BOOKKEEPING_RULE_ID],
       errors: [`compensation claim ${claim.id} is already posted in journal entry ${existing.entry_no}`],
     };
   }
 
-  const amount = round2(Number(claim.amount_dkk));
+  const amount = roundDkk(Number(claim.amount_dkk));
   try {
     return db.transaction(() => {
       const journal = postJournalEntry(db, {

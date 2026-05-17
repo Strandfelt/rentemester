@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { insertAuditLog } from "./actor";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-CLAIM-SETTLEMENT-001";
 
@@ -23,9 +24,6 @@ export type SettleInvoiceClaimsFromBankResult = JournalPostResult & {
   remainingClaimOpenBalance?: number;
 };
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function getIncomingClaimBankTransaction(db: Database, input: SettleInvoiceClaimsFromBankInput) {
   if (input.bankTransactionId === undefined && !input.bankTransactionReference) {
@@ -69,12 +67,12 @@ export function settleInvoiceClaimsFromBank(db: Database, input: SettleInvoiceCl
 
   const status = getInvoiceStatus(db, input.invoiceDocumentId);
   if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
-  const principalOpenBalance = round2(Number(status.openBalance ?? 0));
-  const claimOpenBalance = round2(Number(status.claimOpenBalance ?? 0));
+  const principalOpenBalance = roundDkk(Number(status.openBalance ?? 0));
+  const claimOpenBalance = roundDkk(Number(status.claimOpenBalance ?? 0));
   if (principalOpenBalance !== 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${invoice.invoice_no} still has principal open balance ${principalOpenBalance}; settle principal before claim receipts`] };
   if (!(claimOpenBalance > 0)) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${invoice.invoice_no} has no outstanding claim balance`] };
 
-  const amount = round2(input.amount ?? Number(bank.amount));
+  const amount = roundDkk(input.amount ?? Number(bank.amount));
   if (amount > claimOpenBalance) return { ok: false, appliedRules: [RULE_ID], errors: [`claim receipt amount ${amount} exceeds claim open balance ${claimOpenBalance}`] };
   const paymentDate = input.paymentDate ?? bank.transaction_date;
 
@@ -116,7 +114,7 @@ export function settleInvoiceClaimsFromBank(db: Database, input: SettleInvoiceCl
         ...journal,
         claimPaymentId: payment.id,
         invoiceNumber: invoice.invoice_no,
-        remainingClaimOpenBalance: round2(Number(after.claimOpenBalance ?? 0)),
+        remainingClaimOpenBalance: roundDkk(Number(after.claimOpenBalance ?? 0)),
         appliedRules: [...new Set([RULE_ID, ...(journal.appliedRules ?? [])])],
       };
     })();

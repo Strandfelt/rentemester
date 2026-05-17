@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { postJournalEntry } from "./ledger";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { addDkk, roundDkk, subtractDkk, sumDkk } from "./money";
 
 export type ApplyInvoicePaymentInput = {
   invoiceDocumentId: number;
@@ -115,7 +116,6 @@ const RULE_ID = "DK-INVOICE-PAYMENT-001";
 const CORRECTION_BALANCE_RULE_ID = "DK-INVOICE-CORRECTION-BALANCE-001";
 const DUE_DATE_RULE_ID = "DK-INVOICE-DUE-DATE-001";
 
-function round2(value: number) { return Number(value.toFixed(2)); }
 function isoDate(value: Date) { return value.toISOString().slice(0, 10); }
 function defaultComparisonDate(invoiceDate?: string, effectiveDueDate?: string) {
   return effectiveDueDate ?? invoiceDate ?? "1970-01-01";
@@ -196,17 +196,17 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
      WHERE c.invoice_document_id = ? ORDER BY c.claim_date ASC, c.id ASC`
   ).all(invoiceDocumentId) as Array<{ id: number; claim_date: string; amount_dkk: number; reference_rate_percent: number; annual_interest_rate_percent: number; overdue_days: number; note: string | null; journal_entry_id: number | null }>;
 
-  const grossAmount = round2(Number(invoice.amount_inc_vat ?? 0));
-  const creditedAmount = round2(creditNotes.reduce((sum, c) => sum + Number(c.amount_inc_vat ?? 0), 0));
-  const paidAmount = round2(payments.reduce((sum, p) => sum + Number(p.amount), 0));
-  const refundedAmount = round2(refunds.reduce((sum, r) => sum + Number(r.amount), 0));
-  const totalReminderFees = round2(reminders.reduce((sum, r) => sum + Number(r.fee_amount), 0));
-  const totalCompensationClaims = round2(compensationClaims.reduce((sum, c) => sum + Number(c.amount_dkk), 0));
-  const totalInterestClaims = round2(interestClaims.reduce((sum, c) => sum + Number(c.amount_dkk), 0));
-  const totalClaimPayments = round2(claimPayments.reduce((sum, p) => sum + Number(p.amount), 0));
-  const totalBadDebtWrittenOff = round2(badDebtWriteOffs.reduce((sum, w) => sum + Number(w.gross_amount), 0));
-  const openBalance = round2(grossAmount - creditedAmount - paidAmount + refundedAmount - totalBadDebtWrittenOff);
-  const claimOpenBalance = round2(openBalance + totalReminderFees + totalCompensationClaims + totalInterestClaims - totalClaimPayments);
+  const grossAmount = roundDkk(Number(invoice.amount_inc_vat ?? 0));
+  const creditedAmount = sumDkk(creditNotes.map((c) => Number(c.amount_inc_vat ?? 0)));
+  const paidAmount = sumDkk(payments.map((p) => Number(p.amount)));
+  const refundedAmount = sumDkk(refunds.map((r) => Number(r.amount)));
+  const totalReminderFees = sumDkk(reminders.map((r) => Number(r.fee_amount)));
+  const totalCompensationClaims = sumDkk(compensationClaims.map((c) => Number(c.amount_dkk)));
+  const totalInterestClaims = sumDkk(interestClaims.map((c) => Number(c.amount_dkk)));
+  const totalClaimPayments = sumDkk(claimPayments.map((p) => Number(p.amount)));
+  const totalBadDebtWrittenOff = sumDkk(badDebtWriteOffs.map((w) => Number(w.gross_amount)));
+  const openBalance = subtractDkk(addDkk(subtractDkk(grossAmount, creditedAmount, paidAmount), refundedAmount), totalBadDebtWrittenOff);
+  const claimOpenBalance = subtractDkk(addDkk(openBalance, totalReminderFees, totalCompensationClaims, totalInterestClaims), totalClaimPayments);
   const dueDate = typeof payload?.dueDate === "string" ? payload.dueDate : undefined;
   const effectiveDueDate = dueDate ?? (invoice.invoice_date ? addDays(invoice.invoice_date, 30) : undefined);
   const comparisonDate = asOfDate ?? defaultComparisonDate(invoice.invoice_date ?? undefined, effectiveDueDate);
@@ -239,14 +239,14 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
     isOverdue,
     overdueDays,
     status,
-    payments: payments.map((p) => ({ paymentId: p.id, paymentDate: p.payment_date, amount: round2(Number(p.amount)), bankTransactionId: p.bank_transaction_id, journalEntryId: p.journal_entry_id == null ? null : Number(p.journal_entry_id), note: p.note })),
-    creditNotes: creditNotes.map((c) => ({ documentId: c.id, creditNoteNumber: c.invoice_no, amount: round2(Number(c.amount_inc_vat ?? 0)), issueDate: c.invoice_date })),
-    refunds: refunds.map((r) => ({ refundId: r.id, refundDate: r.refund_date, amount: round2(Number(r.amount)), bankTransactionId: r.bank_transaction_id, note: r.note })),
-    claimPayments: claimPayments.map((p) => ({ claimPaymentId: p.id, paymentDate: p.payment_date, amount: round2(Number(p.amount)), bankTransactionId: p.bank_transaction_id, note: p.note })),
-    badDebtWriteOffs: badDebtWriteOffs.map((w) => ({ writeOffId: w.id, writeOffDate: w.writeoff_date, grossAmount: round2(Number(w.gross_amount)), netAmount: round2(Number(w.net_amount)), vatAmount: round2(Number(w.vat_amount)), journalEntryId: Number(w.journal_entry_id), note: w.note })),
-    reminders: reminders.map((r) => ({ reminderId: r.id, reminderDate: r.reminder_date, feeAmount: round2(Number(r.fee_amount)), note: r.note, journalEntryId: r.journal_entry_id == null ? null : Number(r.journal_entry_id) })),
-    compensationClaims: compensationClaims.map((c) => ({ claimId: c.id, claimDate: c.claim_date, amountDkk: round2(Number(c.amount_dkk)), note: c.note, journalEntryId: c.journal_entry_id == null ? null : Number(c.journal_entry_id) })),
-    interestClaims: interestClaims.map((c) => ({ claimId: c.id, claimDate: c.claim_date, amountDkk: round2(Number(c.amount_dkk)), referenceRatePercent: round2(Number(c.reference_rate_percent)), annualInterestRatePercent: round2(Number(c.annual_interest_rate_percent)), overdueDays: Number(c.overdue_days), note: c.note, journalEntryId: c.journal_entry_id == null ? null : Number(c.journal_entry_id) })),
+    payments: payments.map((p) => ({ paymentId: p.id, paymentDate: p.payment_date, amount: roundDkk(Number(p.amount)), bankTransactionId: p.bank_transaction_id, journalEntryId: p.journal_entry_id == null ? null : Number(p.journal_entry_id), note: p.note })),
+    creditNotes: creditNotes.map((c) => ({ documentId: c.id, creditNoteNumber: c.invoice_no, amount: roundDkk(Number(c.amount_inc_vat ?? 0)), issueDate: c.invoice_date })),
+    refunds: refunds.map((r) => ({ refundId: r.id, refundDate: r.refund_date, amount: roundDkk(Number(r.amount)), bankTransactionId: r.bank_transaction_id, note: r.note })),
+    claimPayments: claimPayments.map((p) => ({ claimPaymentId: p.id, paymentDate: p.payment_date, amount: roundDkk(Number(p.amount)), bankTransactionId: p.bank_transaction_id, note: p.note })),
+    badDebtWriteOffs: badDebtWriteOffs.map((w) => ({ writeOffId: w.id, writeOffDate: w.writeoff_date, grossAmount: roundDkk(Number(w.gross_amount)), netAmount: roundDkk(Number(w.net_amount)), vatAmount: roundDkk(Number(w.vat_amount)), journalEntryId: Number(w.journal_entry_id), note: w.note })),
+    reminders: reminders.map((r) => ({ reminderId: r.id, reminderDate: r.reminder_date, feeAmount: roundDkk(Number(r.fee_amount)), note: r.note, journalEntryId: r.journal_entry_id == null ? null : Number(r.journal_entry_id) })),
+    compensationClaims: compensationClaims.map((c) => ({ claimId: c.id, claimDate: c.claim_date, amountDkk: roundDkk(Number(c.amount_dkk)), note: c.note, journalEntryId: c.journal_entry_id == null ? null : Number(c.journal_entry_id) })),
+    interestClaims: interestClaims.map((c) => ({ claimId: c.id, claimDate: c.claim_date, amountDkk: roundDkk(Number(c.amount_dkk)), referenceRatePercent: roundDkk(Number(c.reference_rate_percent)), annualInterestRatePercent: roundDkk(Number(c.annual_interest_rate_percent)), overdueDays: Number(c.overdue_days), note: c.note, journalEntryId: c.journal_entry_id == null ? null : Number(c.journal_entry_id) })),
     totalReminderFees,
     totalCompensationClaims,
     totalInterestClaims,
@@ -279,8 +279,8 @@ export function applyInvoicePayment(db: Database, input: ApplyInvoicePaymentInpu
 
   const status = getInvoiceStatus(db, input.invoiceDocumentId);
   if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
-  const openBalance = round2(status.openBalance!);
-  const amount = round2(input.amount);
+  const openBalance = roundDkk(status.openBalance!);
+  const amount = roundDkk(input.amount);
   if (amount > openBalance) {
     return { ok: false, appliedRules: [RULE_ID, CORRECTION_BALANCE_RULE_ID], errors: [`payment amount ${amount} exceeds open invoice balance ${openBalance}`] };
   }

@@ -3,6 +3,7 @@ import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { getInvoiceStatus } from "./invoice-payments";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-REMINDER-FEE-001";
 const BOOKKEEPING_RULE_ID = "DK-INVOICE-REMINDER-FEE-BOOKKEEPING-001";
@@ -49,7 +50,6 @@ export type PostInvoiceReminderToLedgerResult = JournalPostResult & {
   claimOpenBalance?: number;
 };
 
-function round2(value: number) { return Number(value.toFixed(2)); }
 function diffDays(fromDate: string, toDate: string) {
   const from = new Date(`${fromDate}T00:00:00Z`).getTime();
   const to = new Date(`${toDate}T00:00:00Z`).getTime();
@@ -68,7 +68,7 @@ export function registerInvoiceReminder(db: Database, input: RegisterInvoiceRemi
   if (invoice.document_type !== "issued_invoice") return { ok: false, appliedRules: [RULE_ID], errors: [`document ${input.invoiceDocumentId} is not an issued invoice`] };
   if ((invoice.currency ?? "DKK") !== "DKK") return { ok: false, appliedRules: [RULE_ID], errors: ["only DKK issued invoices are supported in the current reminder flow"] };
 
-  const feeAmount = round2(input.feeAmount ?? MAX_REMINDER_FEE_DKK);
+  const feeAmount = roundDkk(input.feeAmount ?? MAX_REMINDER_FEE_DKK);
   if (feeAmount > MAX_REMINDER_FEE_DKK) {
     return { ok: false, appliedRules: [RULE_ID], errors: [`reminder fee ${feeAmount} exceeds statutory maximum ${MAX_REMINDER_FEE_DKK}`] };
   }
@@ -111,7 +111,7 @@ export function registerInvoiceReminder(db: Database, input: RegisterInvoiceRemi
     message: `Registered reminder fee ${feeAmount} on invoice ${invoice.invoice_no}`,
   });
 
-  const totalReminderFees = round2(reminders.reduce((sum, reminder) => sum + Number(reminder.fee_amount), 0) + feeAmount);
+  const totalReminderFees = roundDkk(reminders.reduce((sum, reminder) => sum + Number(reminder.fee_amount), 0) + feeAmount);
   return {
     ok: true,
     reminderId: inserted.id,
@@ -165,13 +165,13 @@ export function postInvoiceReminderToLedger(db: Database, input: PostInvoiceRemi
       invoiceDocumentId: reminder.invoice_document_id,
       invoiceNumber: reminder.invoice_no,
       reminderDate: reminder.reminder_date,
-      feeAmount: round2(Number(reminder.fee_amount)),
+      feeAmount: roundDkk(Number(reminder.fee_amount)),
       appliedRules: [BOOKKEEPING_RULE_ID],
       errors: [`reminder ${reminder.id} is already posted in journal entry ${existing.entry_no}`],
     };
   }
 
-  const amount = round2(Number(reminder.fee_amount));
+  const amount = roundDkk(Number(reminder.fee_amount));
   try {
     return db.transaction(() => {
       const journal = postJournalEntry(db, {

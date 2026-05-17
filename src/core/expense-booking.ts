@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./vat";
+import { roundDkk } from "./money";
 
 export type ExpenseVatTreatment = "standard" | "reverse_charge" | "representation" | "exempt";
 
@@ -25,9 +26,6 @@ export type BookExpenseFromBankResult = JournalPostResult & {
   vatTreatment?: ExpenseVatTreatment;
 };
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function inferVatTreatment(defaultVatCode: string | null): ExpenseVatTreatment {
   if (defaultVatCode === "EU_SERVICE_REVERSE_CHARGE") return "reverse_charge";
@@ -77,8 +75,8 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
   if (document.currency !== "DKK") {
     return { ok: false, appliedRules: [], errors: [`document ${input.documentId} must be in DKK for expense book`] };
   }
-  const grossAmount = round2(Number(document.amount_inc_vat ?? 0));
-  const vatAmount = round2(Number(document.vat_amount ?? 0));
+  const grossAmount = roundDkk(Number(document.amount_inc_vat ?? 0));
+  const vatAmount = roundDkk(Number(document.vat_amount ?? 0));
   if (!(grossAmount > 0)) return { ok: false, appliedRules: [], errors: [`document ${input.documentId} must have amount_inc_vat > 0`] };
   if (vatAmount < 0 || vatAmount > grossAmount) return { ok: false, appliedRules: [], errors: [`document ${input.documentId} has invalid vat_amount ${vatAmount}`] };
 
@@ -98,7 +96,7 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
   const transactionDate = input.transactionDate ?? bank.transaction_date;
   const text = input.text?.trim() || `${document.sender_name ?? "Expense"} from bank transaction ${bank.id}`;
   const paymentAccountNo = input.paymentAccountNo ?? "2000";
-  const paymentAmount = round2(Math.abs(Number(bank.amount)));
+  const paymentAmount = roundDkk(Math.abs(Number(bank.amount)));
 
   if (paymentAmount !== grossAmount) {
     return { ok: false, appliedRules: [], errors: [`bank transaction amount ${paymentAmount} does not match document gross amount ${grossAmount}`] };
@@ -106,7 +104,7 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
 
   if (vatTreatment === "standard") {
     if (!(vatAmount > 0)) return { ok: false, appliedRules: [], errors: ["standard expense booking requires document vat_amount > 0"] };
-    const netAmount = round2(grossAmount - vatAmount);
+    const netAmount = roundDkk(grossAmount - vatAmount);
     const result = postJournalEntry(db, {
       transactionDate,
       text,
@@ -141,7 +139,7 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
 
   if (vatTreatment === "representation") {
     if (!(vatAmount > 0)) return { ok: false, appliedRules: [], errors: ["representation expense booking requires document vat_amount > 0"] };
-    const netAmount = round2(grossAmount - vatAmount);
+    const netAmount = roundDkk(grossAmount - vatAmount);
     const result = postRepresentationPurchase(db, {
       transactionDate,
       text,

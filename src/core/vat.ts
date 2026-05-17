@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { requireCachedViesValidation } from "./vies";
+import { addDkk, compareDkk, fromOre, percentOfDkk, roundDkk, subtractDkk, sumDkk, toOre } from "./money";
 
 export type VatPeriodReport = {
   ok: boolean;
@@ -58,10 +59,6 @@ export type RepresentationPurchaseInput = {
 };
 
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
-
 export function postEuServiceReverseChargePurchase(db: Database, input: ReverseChargePurchaseInput): JournalPostResult {
   const errors: string[] = [];
   if (!looksLikeIsoDate(input.transactionDate)) errors.push("transactionDate must be YYYY-MM-DD");
@@ -76,7 +73,7 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
   const viesCheck = requireCachedViesValidation(db, documentRow.sender_vat_cvr, "document sender_vat_cvr");
   if (!viesCheck.ok) return { ok: false, appliedRules: [...new Set([REVERSE_CHARGE_RULE_ID, ...viesCheck.appliedRules])], errors: viesCheck.errors };
 
-  const vatAmount = round2(input.netAmount * 0.25);
+  const vatAmount = percentOfDkk(input.netAmount, 25);
   const result = postJournalEntry(db, {
     transactionDate: input.transactionDate,
     text: input.text.trim(),
@@ -85,9 +82,9 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
     lines: [
-      { accountNo: input.expenseAccountNo, debitAmount: round2(input.netAmount), vatCode: "EU_SERVICE_REVERSE_CHARGE", text: "EU service purchase base" },
+      { accountNo: input.expenseAccountNo, debitAmount: roundDkk(input.netAmount), vatCode: "EU_SERVICE_REVERSE_CHARGE", text: "EU service purchase base" },
       { accountNo: "4000", debitAmount: vatAmount, text: "Deductible reverse-charge input VAT" },
-      { accountNo: input.paymentAccountNo ?? "2000", creditAmount: round2(input.netAmount), text: "Payment / liability" },
+      { accountNo: input.paymentAccountNo ?? "2000", creditAmount: roundDkk(input.netAmount), text: "Payment / liability" },
       { accountNo: "1200", creditAmount: vatAmount, text: "Reverse-charge output VAT" },
     ],
   });
@@ -106,10 +103,10 @@ export function postRepresentationPurchase(db: Database, input: RepresentationPu
   if (!Number.isFinite(input.netAmount) || input.netAmount <= 0) errors.push("netAmount must be a positive number");
   if (errors.length > 0) return { ok: false, appliedRules: [REPRESENTATION_RULE_ID], errors };
 
-  const fullVatAmount = round2(input.netAmount * 0.25);
-  const deductibleVatAmount = round2(fullVatAmount * 0.25);
-  const nonDeductibleVatAmount = round2(fullVatAmount - deductibleVatAmount);
-  const grossAmount = round2(input.netAmount + fullVatAmount);
+  const fullVatAmount = percentOfDkk(input.netAmount, 25);
+  const deductibleVatAmount = percentOfDkk(fullVatAmount, 25);
+  const nonDeductibleVatAmount = subtractDkk(fullVatAmount, deductibleVatAmount);
+  const grossAmount = addDkk(input.netAmount, fullVatAmount);
 
   const result = postJournalEntry(db, {
     transactionDate: input.transactionDate,
@@ -121,7 +118,7 @@ export function postRepresentationPurchase(db: Database, input: RepresentationPu
     lines: [
       {
         accountNo: input.expenseAccountNo ?? "3070",
-        debitAmount: round2(input.netAmount),
+        debitAmount: roundDkk(input.netAmount),
         vatCode: "REPRESENTATION_SPECIAL",
         text: "Representation purchase base"
       },
@@ -223,8 +220,8 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
       activeLinesConsidered += 1;
     }
 
-    const debit = round2(Number(row.debit_amount ?? 0));
-    const credit = round2(Number(row.credit_amount ?? 0));
+    const debit = roundDkk(Number(row.debit_amount ?? 0));
+    const credit = roundDkk(Number(row.credit_amount ?? 0));
 
     if (row.account_no === "1200") outputVat += credit - debit;
     if (row.account_no === "4000") inputVat += debit - credit;
@@ -237,22 +234,22 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     if (row.vat_code === "DK_BAD_DEBT_25") badDebtReliefBase25 += debit - credit;
   }
 
-  outputVat = round2(outputVat);
-  inputVat = round2(inputVat);
-  purchaseBase25 = round2(purchaseBase25);
-  salesBase25 = round2(salesBase25);
-  reverseChargeSalesBase = round2(reverseChargeSalesBase);
-  reverseChargePurchaseBase = round2(reverseChargePurchaseBase);
-  representationPurchaseBase = round2(representationPurchaseBase);
-  badDebtReliefBase25 = round2(badDebtReliefBase25);
+  outputVat = roundDkk(outputVat);
+  inputVat = roundDkk(inputVat);
+  purchaseBase25 = roundDkk(purchaseBase25);
+  salesBase25 = roundDkk(salesBase25);
+  reverseChargeSalesBase = roundDkk(reverseChargeSalesBase);
+  reverseChargePurchaseBase = roundDkk(reverseChargePurchaseBase);
+  representationPurchaseBase = roundDkk(representationPurchaseBase);
+  badDebtReliefBase25 = roundDkk(badDebtReliefBase25);
 
-  const expectedOutputVat = round2(salesBase25 * 0.25 + reverseChargePurchaseBase * 0.25 - badDebtReliefBase25 * 0.25);
-  const expectedInputVat = round2(purchaseBase25 * 0.25 + reverseChargePurchaseBase * 0.25 + representationPurchaseBase * 0.25 * 0.25);
+  const expectedOutputVat = subtractDkk(addDkk(percentOfDkk(salesBase25, 25), percentOfDkk(reverseChargePurchaseBase, 25)), percentOfDkk(badDebtReliefBase25, 25));
+  const expectedInputVat = addDkk(addDkk(percentOfDkk(purchaseBase25, 25), percentOfDkk(reverseChargePurchaseBase, 25)), percentOfDkk(percentOfDkk(representationPurchaseBase, 25), 25));
   const warnings: string[] = [];
-  if (Math.abs(outputVat - expectedOutputVat) > 0.5) {
+  if (compareDkk(outputVat, expectedOutputVat) !== 0) {
     warnings.push(`output VAT mismatch: booked ${outputVat}, expected from base × rate ${expectedOutputVat}`);
   }
-  if (Math.abs(inputVat - expectedInputVat) > 0.5) {
+  if (compareDkk(inputVat, expectedInputVat) !== 0) {
     warnings.push(`input VAT mismatch: booked ${inputVat}, expected from base × rate ${expectedInputVat}`);
   }
 
@@ -263,7 +260,7 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     periodEnd,
     outputVat,
     inputVat,
-    netVatPayable: round2(outputVat - inputVat),
+    netVatPayable: subtractDkk(outputVat, inputVat),
     purchaseBase25,
     salesBase25,
     reverseChargeSalesBase,

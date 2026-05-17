@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { getInvoiceStatus } from "./invoice-payments";
 import { insertAuditLog } from "./actor";
+import { roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-REFUND-001";
 
@@ -23,9 +24,6 @@ export type RefundInvoiceToBankResult = JournalPostResult & {
   remainingCreditBalance?: number;
 };
 
-function round2(value: number) {
-  return Number(value.toFixed(2));
-}
 
 function getOutgoingRefundBankTransaction(db: Database, input: RefundInvoiceToBankInput) {
   if (input.bankTransactionId === undefined && !input.bankTransactionReference) {
@@ -66,10 +64,10 @@ export function refundInvoiceToBank(db: Database, input: RefundInvoiceToBankInpu
 
   const status = getInvoiceStatus(db, input.invoiceDocumentId);
   if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
-  const creditBalance = round2(Math.max(0, -(status.openBalance ?? 0)));
+  const creditBalance = roundDkk(Math.max(0, -(status.openBalance ?? 0)));
   if (creditBalance <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${invoice.invoice_no} has no refundable credit balance`] };
 
-  const amount = round2(input.amount ?? Math.abs(Number(bank.amount)));
+  const amount = roundDkk(input.amount ?? Math.abs(Number(bank.amount)));
   if (amount > creditBalance) return { ok: false, appliedRules: [RULE_ID], errors: [`refund amount ${amount} exceeds refundable credit balance ${creditBalance}`] };
   const refundDate = input.refundDate ?? bank.transaction_date;
 
@@ -110,7 +108,7 @@ export function refundInvoiceToBank(db: Database, input: RefundInvoiceToBankInpu
         ...journal,
         refundId: refund.id,
         invoiceNumber: invoice.invoice_no,
-        remainingCreditBalance: round2(Math.max(0, -(after.openBalance ?? 0))),
+        remainingCreditBalance: roundDkk(Math.max(0, -(after.openBalance ?? 0))),
         appliedRules: [...new Set([RULE_ID, ...(journal.appliedRules ?? [])])],
       };
     })();
