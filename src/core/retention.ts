@@ -29,6 +29,12 @@ export function retainUntilForDate(db: Database, dateText: string) {
   return `${Number(fiscalYear.end.slice(0, 4)) + 5}${fiscalYear.end.slice(4)}`;
 }
 
+export function effectiveRetainUntil(db: Database, retainUntil: string | null | undefined, basisDate: string | null | undefined) {
+  if (retainUntil && isValidIsoDate(retainUntil)) return retainUntil;
+  if (basisDate && isValidIsoDate(basisDate)) return retainUntilForDate(db, basisDate);
+  return null;
+}
+
 function backfillTableRetention(db: Database, table: "documents" | "journal_entries" | "bank_transactions") {
   if (table === "documents") {
     const rows = db.query(`SELECT id, COALESCE(invoice_date, substr(upload_datetime, 1, 10)) AS basis_date FROM documents WHERE retain_until IS NULL`).all() as Array<{ id: number; basis_date: string | null }>;
@@ -39,12 +45,7 @@ function backfillTableRetention(db: Database, table: "documents" | "journal_entr
     }
   }
   if (table === "journal_entries") {
-    const rows = db.query(`SELECT id, transaction_date FROM journal_entries WHERE retain_until IS NULL`).all() as Array<{ id: number; transaction_date: string | null }>;
-    const update = db.prepare("UPDATE journal_entries SET retain_until = ? WHERE id = ?");
-    for (const row of rows) {
-      if (!row.transaction_date || !isValidIsoDate(row.transaction_date)) continue;
-      update.run(retainUntilForDate(db, row.transaction_date), row.id);
-    }
+    return;
   }
   if (table === "bank_transactions") {
     const rows = db.query(`SELECT id, COALESCE(booking_date, transaction_date) AS basis_date FROM bank_transactions WHERE retain_until IS NULL`).all() as Array<{ id: number; basis_date: string | null }>;
@@ -66,19 +67,23 @@ export function buildRetentionStatusReport(db: Database, asOf = currentUtcIsoDat
   if (!isValidIsoDate(asOf)) return { ok: false, asOf, appliedRules: [RULE_ID], rows: [], errors: ["asOf must be YYYY-MM-DD"] };
 
   const summarize = (table: RetentionStatusRow["table"]) => {
-    const row = db.query(
-      `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN retain_until IS NOT NULL AND retain_until < ? THEN 1 ELSE 0 END) AS expired,
-              MIN(CASE WHEN retain_until IS NOT NULL AND retain_until >= ? THEN retain_until END) AS next_expiry,
-              MIN(CASE WHEN retain_until IS NOT NULL AND retain_until < ? THEN retain_until END) AS oldest_expired
-         FROM ${table}`
-    ).get(asOf, asOf, asOf) as { total: number; expired: number | null; next_expiry: string | null; oldest_expired: string | null };
+    const rows = table === "documents"
+      ? db.query(`SELECT retain_until, COALESCE(invoice_date, substr(upload_datetime, 1, 10)) AS basis_date FROM documents`).all() as Array<{ retain_until: string | null; basis_date: string | null }>
+      : table === "journal_entries"
+        ? db.query(`SELECT retain_until, transaction_date AS basis_date FROM journal_entries`).all() as Array<{ retain_until: string | null; basis_date: string | null }>
+        : db.query(`SELECT retain_until, COALESCE(booking_date, transaction_date) AS basis_date FROM bank_transactions`).all() as Array<{ retain_until: string | null; basis_date: string | null }>;
+
+    const effective = rows
+      .map((row) => effectiveRetainUntil(db, row.retain_until, row.basis_date))
+      .filter((value): value is string => Boolean(value));
+    const future = effective.filter((value) => value >= asOf).sort();
+    const expired = effective.filter((value) => value < asOf).sort();
     return {
       table,
-      total: Number(row.total ?? 0),
-      expired: Number(row.expired ?? 0),
-      nextExpiry: row.next_expiry ?? null,
-      oldestExpired: row.oldest_expired ?? null,
+      total: rows.length,
+      expired: expired.length,
+      nextExpiry: future[0] ?? null,
+      oldestExpired: expired[0] ?? null,
     } satisfies RetentionStatusRow;
   };
 

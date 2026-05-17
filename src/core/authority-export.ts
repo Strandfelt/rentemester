@@ -4,6 +4,7 @@ import { basename, join, relative } from "node:path";
 import type { Database } from "bun:sqlite";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { effectiveRetainUntil } from "./retention";
 
 const RULE_ID = "DK-BOOKKEEPING-AUTHORITY-EXPORT-001";
 const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
@@ -262,7 +263,7 @@ function fetchJournalEntries(db: Database, periodStart: string, periodEnd: strin
     reversalOfEntryId: entry.reversal_of_entry_id ?? null,
     createdBy: entry.created_by,
     createdByProgram: entry.created_by_program,
-    retainUntil: entry.retain_until ?? null,
+    retainUntil: effectiveRetainUntil(db, entry.retain_until, entry.transaction_date),
     lines: (linesStmt.all(entry.id) as any[]).map((line) => ({
       accountNo: line.account_no,
       accountName: line.account_name,
@@ -305,7 +306,7 @@ function fetchDocuments(db: Database, journalEntries: JournalEntryRecord[], peri
       amountIncVat: row.amount_inc_vat == null ? null : Number(row.amount_inc_vat),
       vatAmount: row.vat_amount == null ? null : Number(row.vat_amount),
       status: row.status,
-      retainUntil: row.retain_until ?? null,
+      retainUntil: effectiveRetainUntil(db, row.retain_until, row.invoice_date ?? null),
     });
   }
   return [...dedup.values()].sort((a, b) => a.id - b.id);
@@ -338,7 +339,7 @@ function fetchBankTransactions(db: Database, journalEntries: JournalEntryRecord[
       reference: row.reference ?? null,
       importBatchId: row.import_batch_id ?? null,
       status: row.status,
-      retainUntil: row.retain_until ?? null,
+      retainUntil: effectiveRetainUntil(db, row.retain_until, row.booking_date ?? row.transaction_date ?? null),
     });
   }
   return [...dedup.values()].sort((a, b) => a.id - b.id);
