@@ -1,4 +1,4 @@
-const BOOLEAN_FLAGS = new Set(["--force", "--help"]);
+const BOOLEAN_FLAGS = new Set(["--force", "--help", "--example", "--json"]);
 
 export type ParsedCliArgs = {
   positionals: string[];

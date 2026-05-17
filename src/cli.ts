@@ -25,6 +25,8 @@ import { exportAuthorityPackage } from "./core/authority-export";
 import { restoreSystemBackup } from "./core/system-restore";
 import { closeAccountingPeriod } from "./core/periods";
 import { parseCliArgs } from "./cli-args";
+import { resolveOutputFormat, printStructuredResult } from "./cli-format";
+import { getCommandSpec, renderCommandHelp, renderGlobalUsage, validateCommandFlags } from "./cli-meta";
 import { normalizeCvr, normalizeFiscalYearLabelStrategy, normalizeFiscalYearStartMonth } from "./core/company";
 import { buildRetentionStatusReport } from "./core/retention";
 
@@ -81,17 +83,38 @@ if (cliActorVia) process.env.RENTEMESTER_ACTOR_VIA = cliActorVia;
 else if (cliActor && !process.env.RENTEMESTER_ACTOR_VIA) process.env.RENTEMESTER_ACTOR_VIA = "rentemester-cli";
 function companyRoot() { return arg("--company", process.env.RENTEMESTER_COMPANY ?? "/company")!; }
 function usage() {
-  console.log(`Rentemester v0.0.1\n\nCommands:\n  init --company <path> [--cvr <DK12345678>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]\n  system healthcheck --company <path>\n  system backup --company <path> [--at <ISO-8601>]\n  system backup-status --company <path> [--as-of <ISO-8601>]\n  system restore-backup --backup-dir <dir> --target-company <path> [--verify-key <path>]\n  system export-authority --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--requested-at <ISO-8601>] [--requester <name>]\n  audit verify --company <path>\n  accounts list --company <path>\n  exceptions list --company <path>\n  invoice validate --input <file.json>\n  invoice issue --company <path> --input <file.json>\n  invoice credit-note --company <path> --input <file.json>\n  invoice post --company <path> (--document-id <n> | --invoice-number <no>)\n  invoice settle-bank --company <path> --input <file.json>\n  invoice settle-claim-bank --company <path> --input <file.json>\n  invoice write-off-bad-debt --company <path> --input <file.json>\n  invoice refund-bank --company <path> --input <file.json>\n  invoice apply-payment --company <path> --input <file.json>\n  invoice remind --company <path> (--document-id <n> | --invoice-number <no>) --date <YYYY-MM-DD> [--fee <n>] [--note <text>]\n  invoice post-reminder --company <path> (--document-id <n> | --invoice-number <no>) [--reminder-id <n>] [--date <YYYY-MM-DD>]\n  invoice status --company <path> (--document-id <n> | --invoice-number <no>) [--as-of <YYYY-MM-DD>]\n  invoice interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct>\n  invoice claim-interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct> [--note <text>]\n  invoice post-interest --company <path> (--document-id <n> | --invoice-number <no>) [--claim-id <n>] [--date <YYYY-MM-DD>]\n  invoice compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>]\n  invoice claim-compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>] [--note <text>]\n  invoice post-compensation --company <path> (--document-id <n> | --invoice-number <no>) [--date <YYYY-MM-DD>]\n  documents ingest --company <path> --file <path> --metadata <file.json> [--force]\n  documents list --company <path>\n  bank import --company <path> --file <transactions.csv>\n  bank list --company <path>\n  reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n  vat post-eu-service-purchase --company <path> --input <file.json>\n  vat post-representation-purchase --company <path> --input <file.json>\n  period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]\n  retention status --company <path> [--as-of <YYYY-MM-DD>]\n  journal post --company <path> --input <file.json>\n  journal reverse --company <path> (--entry-id <n> | --entry-no <no>) --date <YYYY-MM-DD> --reason <text>\n  journal list --company <path>`);
+  console.log(renderGlobalUsage());
+}
+function fatal(message: string): never {
+  console.error(message);
+  process.exit(2);
+}
+function emitResult(commandLabel: string, result: Record<string, unknown>, outputFormat: "json" | "human") {
+  printStructuredResult(commandLabel, result, outputFormat);
+  if (result.ok === false) process.exitCode = 1;
 }
 
 const [cmd, sub] = parsedArgs.positionals;
+const commandSpec = getCommandSpec(cmd, sub);
+const outputFormat = resolveOutputFormat(parsedArgs.flags);
 
 if (parsedArgs.errors.length > 0) {
-  console.error(parsedArgs.errors.join("\n"));
-  process.exit(2);
+  fatal(parsedArgs.errors.join("\n"));
+}
+if (outputFormat === null) fatal("--format must be either json or human");
+const flagErrors = validateCommandFlags(cmd, sub, parsedArgs.flags.keys());
+if (flagErrors.length > 0) fatal(flagErrors.join("\n"));
+if (hasFlag("--example")) {
+  if (!commandSpec?.examplePath) fatal(`No example is registered for ${cmd}${sub ? ` ${sub}` : ""}`);
+  process.stdout.write(readFileSync(commandSpec.examplePath, "utf8"));
+  process.exit(0);
 }
 
-if (!cmd || cmd === "help" || hasFlag("--help")) usage();
+if (!cmd || cmd === "help") usage();
+else if (hasFlag("--help")) {
+  if (commandSpec) console.log(renderCommandHelp(commandSpec));
+  else usage();
+}
 else if (cmd === "init") {
   const root = companyRoot();
   const p = ensureCompanyDirs(root);
@@ -134,16 +157,14 @@ else if (cmd === "system" && sub === "healthcheck") {
 else if (cmd === "system" && sub === "backup") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = createSystemBackup(db, companyRoot(), { createdAt: arg("--at") });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "system" && sub === "backup-status") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = getBackupComplianceStatus(db, companyRoot(), arg("--as-of"));
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "system" && sub === "restore-backup") {
   const backupDir = arg("--backup-dir");
@@ -153,8 +174,7 @@ else if (cmd === "system" && sub === "restore-backup") {
     process.exit(2);
   }
   const result = restoreSystemBackup({ backupDir, targetCompanyRoot, verificationKeyPath: arg("--verify-key") ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
-  if (!result.ok) process.exit(1);
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
 }
 else if (cmd === "system" && sub === "export-authority") {
   const from = arg("--from");
@@ -172,16 +192,14 @@ else if (cmd === "system" && sub === "export-authority") {
     requestedAt: arg("--requested-at"),
     requester: arg("--requester"),
   });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "audit" && sub === "verify") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const r = verifyAuditChain(db);
-  console.log(JSON.stringify(r, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), r as Record<string, unknown>, outputFormat);
   db.close();
-  if (!r.ok) process.exit(1);
 }
 else if (cmd === "accounts" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -203,8 +221,7 @@ else if (cmd === "invoice" && sub === "validate") {
   }
   const payload = JSON.parse(readFileSync(input, "utf8"));
   const result = validateInvoice(payload);
-  console.log(JSON.stringify(result, null, 2));
-  if (!result.ok) process.exit(1);
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
 }
 else if (cmd === "invoice" && sub === "issue") {
   const input = arg("--input");
@@ -216,9 +233,8 @@ else if (cmd === "invoice" && sub === "issue") {
   const db = openDb(companyPaths(root).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
   const result = issueInvoice(db, root, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "credit-note") {
   const input = arg("--input");
@@ -230,9 +246,8 @@ else if (cmd === "invoice" && sub === "credit-note") {
   const db = openDb(companyPaths(root).db); migrate(db);
   const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "originalInvoiceDocumentId", "originalInvoiceNumber");
   const result = issueCreditNote(db, root, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -242,9 +257,8 @@ else if (cmd === "invoice" && sub === "post") {
     process.exit(2);
   }
   const result = postIssuedInvoiceToLedger(db, { invoiceDocumentId: documentId });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "settle-bank") {
   const input = arg("--input");
@@ -255,9 +269,8 @@ else if (cmd === "invoice" && sub === "settle-bank") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = settleInvoiceFromBank(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "settle-claim-bank") {
   const input = arg("--input");
@@ -268,9 +281,8 @@ else if (cmd === "invoice" && sub === "settle-claim-bank") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = settleInvoiceClaimsFromBank(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "write-off-bad-debt") {
   const input = arg("--input");
@@ -281,9 +293,8 @@ else if (cmd === "invoice" && sub === "write-off-bad-debt") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = writeOffInvoiceBadDebt(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "apply-payment") {
   const input = arg("--input");
@@ -294,9 +305,8 @@ else if (cmd === "invoice" && sub === "apply-payment") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
   const result = applyInvoicePayment(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "refund-bank") {
   const input = arg("--input");
@@ -307,9 +317,8 @@ else if (cmd === "invoice" && sub === "refund-bank") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = refundInvoiceToBank(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "remind") {
   const reminderDate = arg("--date");
@@ -323,9 +332,8 @@ else if (cmd === "invoice" && sub === "remind") {
     process.exit(2);
   }
   const result = registerInvoiceReminder(db, { invoiceDocumentId: documentId, reminderDate, feeAmount, note: note ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post-reminder") {
   const reminderIdArg = arg("--reminder-id");
@@ -338,9 +346,8 @@ else if (cmd === "invoice" && sub === "post-reminder") {
     process.exit(2);
   }
   const result = postInvoiceReminderToLedger(db, { invoiceDocumentId: documentId, reminderId, transactionDate: transactionDate ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "status") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -350,9 +357,8 @@ else if (cmd === "invoice" && sub === "status") {
     process.exit(2);
   }
   const result = getInvoiceStatus(db, documentId, arg("--as-of"));
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "interest") {
   const asOfDate = arg("--as-of");
@@ -364,9 +370,8 @@ else if (cmd === "invoice" && sub === "interest") {
     process.exit(2);
   }
   const result = calculateInvoiceLateInterest(db, { invoiceDocumentId: documentId, asOfDate, referenceRatePercent });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "claim-interest") {
   const asOfDate = arg("--as-of");
@@ -380,9 +385,8 @@ else if (cmd === "invoice" && sub === "claim-interest") {
     process.exit(2);
   }
   const result = registerInvoiceLateInterest(db, { invoiceDocumentId: documentId, asOfDate, referenceRatePercent, note: note ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post-interest") {
   const claimIdArg = arg("--claim-id");
@@ -395,9 +399,8 @@ else if (cmd === "invoice" && sub === "post-interest") {
     process.exit(2);
   }
   const result = postInvoiceLateInterestToLedger(db, { invoiceDocumentId: documentId, claimId, transactionDate: transactionDate ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "compensation") {
   const asOfDate = arg("--as-of");
@@ -410,9 +413,8 @@ else if (cmd === "invoice" && sub === "compensation") {
     process.exit(2);
   }
   const result = calculateInvoiceLateCompensation(db, { invoiceDocumentId: documentId, asOfDate, compensationAmountDkk });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "claim-compensation") {
   const asOfDate = arg("--as-of");
@@ -426,9 +428,8 @@ else if (cmd === "invoice" && sub === "claim-compensation") {
     process.exit(2);
   }
   const result = registerInvoiceLateCompensation(db, { invoiceDocumentId: documentId, asOfDate, compensationAmountDkk, note: note ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "invoice" && sub === "post-compensation") {
   const transactionDate = arg("--date");
@@ -439,9 +440,8 @@ else if (cmd === "invoice" && sub === "post-compensation") {
     process.exit(2);
   }
   const result = postInvoiceLateCompensationToLedger(db, { invoiceDocumentId: documentId, transactionDate: transactionDate ?? undefined });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "documents" && sub === "ingest") {
   const file = arg("--file");
@@ -454,9 +454,8 @@ else if (cmd === "documents" && sub === "ingest") {
   const db = openDb(companyPaths(root).db); migrate(db);
   const metadata = JSON.parse(readFileSync(metadataFile, "utf8"));
   const result = ingestDocument(db, root, file, metadata, { forceDuplicateLogicalIdentity: hasFlag("--force") });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "documents" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -473,9 +472,8 @@ else if (cmd === "bank" && sub === "import") {
   const root = companyRoot();
   const db = openDb(companyPaths(root).db); migrate(db);
   const result = importBankCsv(db, root, file);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "bank" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -492,9 +490,8 @@ else if (cmd === "reconcile" && sub === "bank") {
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = buildBankReconciliationReport(db, from, to);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "vat" && sub === "report") {
   const from = arg("--from");
@@ -505,9 +502,8 @@ else if (cmd === "vat" && sub === "report") {
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = buildVatReport(db, from, to);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "vat" && sub === "post-eu-service-purchase") {
   const input = arg("--input");
@@ -518,9 +514,8 @@ else if (cmd === "vat" && sub === "post-eu-service-purchase") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
   const result = postEuServiceReverseChargePurchase(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "vat" && sub === "post-representation-purchase") {
   const input = arg("--input");
@@ -531,16 +526,14 @@ else if (cmd === "vat" && sub === "post-representation-purchase") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
   const result = postRepresentationPurchase(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "retention" && sub === "status") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const result = buildRetentionStatusReport(db, arg("--as-of"));
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "period" && sub === "close") {
   const from = arg("--from");
@@ -557,9 +550,8 @@ else if (cmd === "period" && sub === "close") {
     status: (arg("--status") as any) ?? undefined,
     reference: arg("--reference") ?? undefined,
   });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "journal" && sub === "post") {
   const input = arg("--input");
@@ -570,9 +562,8 @@ else if (cmd === "journal" && sub === "post") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
   const result = postJournalEntry(db, payload);
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "journal" && sub === "reverse") {
   const date = arg("--date");
@@ -584,9 +575,8 @@ else if (cmd === "journal" && sub === "reverse") {
     process.exit(2);
   }
   const result = reverseJournalEntry(db, { entryId, transactionDate: date, reason });
-  console.log(JSON.stringify(result, null, 2));
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
-  if (!result.ok) process.exit(1);
 }
 else if (cmd === "journal" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
