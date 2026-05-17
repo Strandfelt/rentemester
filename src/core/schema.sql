@@ -124,6 +124,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS accounting_periods (
+  id INTEGER PRIMARY KEY,
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('vat_quarter','fiscal_year','custom')),
+  status TEXT NOT NULL CHECK(status IN ('open','closed','reported')) DEFAULT 'open',
+  closed_at TEXT,
+  closed_by TEXT,
+  reported_at TEXT,
+  reference TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(period_start, period_end, kind)
+);
+
 CREATE TABLE IF NOT EXISTS invoice_payments (
   id INTEGER PRIMARY KEY,
   invoice_document_id INTEGER NOT NULL,

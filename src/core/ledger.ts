@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
 import { currentRuleBundleVersion } from "./rules-metadata";
 import { insertAuditLog, resolveActor } from "./actor";
+import { validateJournalTransactionDate } from "./periods";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -45,6 +46,7 @@ const LEDGER_RULES = {
   REVERSAL: "DK-BOOKKEEPING-REVERSAL-001",
   DOCUMENT: "DK-BOOKKEEPING-DOCUMENT-001",
   FX: "DK-BOOKKEEPING-FX-001",
+  PERIOD_LOCK: "DK-BOOKKEEPING-PERIOD-LOCK-001",
 } as const;
 
 const RULE_VERSION = currentRuleBundleVersion();
@@ -132,6 +134,10 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
 
   if (!looksLikeIsoDate(payload.transactionDate)) errors.push("transactionDate must be present in YYYY-MM-DD format");
   if (typeof payload.text !== "string" || payload.text.trim().length === 0) errors.push("text is required");
+  if (looksLikeIsoDate(payload.transactionDate)) {
+    appliedRules.push(LEDGER_RULES.PERIOD_LOCK);
+    errors.push(...validateJournalTransactionDate(db, payload.transactionDate));
+  }
   if (!Array.isArray(lines) || lines.length < 2) errors.push("at least two journal lines are required");
   if (currency.length !== 3) errors.push("currency must be a 3-letter ISO code when present");
 

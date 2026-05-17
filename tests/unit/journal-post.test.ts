@@ -8,6 +8,7 @@ import { ingestDocument } from "../../src/core/documents";
 import { postJournalEntry, seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { postIssuedInvoiceToLedger } from "../../src/core/invoice-booking";
+import { closeAccountingPeriod } from "../../src/core/periods";
 
 describe("journal posting", () => {
   test("rejects unbalanced journal entries", () => {
@@ -127,6 +128,56 @@ describe("journal posting", () => {
       db.close();
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("blocks closed-period and future-dated journal postings while allowing correcting entries in an open period", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-period-lock-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const closed = closeAccountingPeriod(db, {
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      kind: "vat_quarter",
+      reference: "SKAT-Q2-2026"
+    });
+    expect(closed.ok).toBe(true);
+
+    const insideClosed = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Late backpost into closed period",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(insideClosed.ok).toBe(false);
+    expect(insideClosed.errors).toContain("transactionDate 2026-05-16 falls in closed period vat_quarter 2026-05-01..2026-05-31 ref SKAT-Q2-2026");
+
+    const futureDated = postJournalEntry(db, {
+      transactionDate: "2099-12-31",
+      text: "Future-dated hiding entry",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(futureDated.ok).toBe(false);
+    expect(futureDated.errors.some((error) => error.includes("transactionDate 2099-12-31 cannot be later than"))).toBe(true);
+
+    const correction = postJournalEntry(db, {
+      transactionDate: "2026-06-01",
+      text: "Correction posted in next open period",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(correction.ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
   });
 
   test("requires document evidence for expense or income postings and hashes lines into the audit chain", () => {

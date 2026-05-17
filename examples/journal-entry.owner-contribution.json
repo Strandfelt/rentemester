@@ -1,0 +1,8 @@
+{
+  "transactionDate": "2026-05-16",
+  "text": "Owner contribution",
+  "lines": [
+    { "accountNo": "2000", "debitAmount": 1000 },
+    { "accountNo": "5000", "creditAmount": 1000 }
+  ]
+}

@@ -1,4 +1,4 @@
-version: dk-bookkeeping-v0.0.2
+version: dk-bookkeeping-v0.0.3
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
@@ -126,3 +126,16 @@ rules:
       forbid:
         - restore_from_hash_mismatched_backup_material
     explanation: Rentemester must be able to restore backed-up bookkeeping material into a readable company dataset, validating the manifest and file hashes first so the regnskabsmateriale can actually be reconstructed.
+  - rule_id: DK-BOOKKEEPING-PERIOD-LOCK-001
+    name: Journal postings must stay out of closed periods and must not be future-dated
+    category: period_control
+    source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    severity: hard_stop
+    machine_rule:
+      require:
+        - transaction_date_not_in_closed_or_reported_period
+        - transaction_date_not_after_current_business_date
+      forbid:
+        - mutation_inside_closed_period
+        - future_dated_journal_posting
+    explanation: Rentemester must block postings whose transaction date falls inside a closed or reported accounting period, and must also reject future-dated journal entries so historical VAT and bookkeeping periods stay stable.
