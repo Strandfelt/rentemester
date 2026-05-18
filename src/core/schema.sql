@@ -45,6 +45,34 @@ CREATE TABLE IF NOT EXISTS vies_validations (
   PRIMARY KEY (country_code, vat_number)
 );
 
+CREATE TABLE IF NOT EXISTS customers (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT,
+  vat_or_cvr TEXT,
+  email TEXT,
+  ean_number TEXT,
+  payment_terms_days INTEGER NOT NULL DEFAULT 30 CHECK(payment_terms_days > 0),
+  default_currency TEXT NOT NULL DEFAULT 'DKK',
+  notes TEXT,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(vat_or_cvr, name)
+);
+
+CREATE TABLE IF NOT EXISTS vendors (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT,
+  vat_or_cvr TEXT,
+  default_expense_account TEXT,
+  default_vat_treatment TEXT,
+  notes TEXT,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(vat_or_cvr, name)
+);
+
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY,
   document_no TEXT UNIQUE,
@@ -370,6 +398,30 @@ WHEN (OLD.fiscal_year_start_month != NEW.fiscal_year_start_month
  AND EXISTS(SELECT 1 FROM journal_entries LIMIT 1)
 BEGIN
   SELECT RAISE(ABORT, 'fiscal year configuration is locked after the first journal entry');
+END;
+
+CREATE TRIGGER IF NOT EXISTS customers_no_update
+BEFORE UPDATE ON customers
+BEGIN
+  SELECT RAISE(ABORT, 'customers are append-only; create a new customer record instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS customers_no_delete
+BEFORE DELETE ON customers
+BEGIN
+  SELECT RAISE(ABORT, 'customers are append-only; archive or supersede them instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS vendors_no_update
+BEFORE UPDATE ON vendors
+BEGIN
+  SELECT RAISE(ABORT, 'vendors are append-only; create a new vendor record instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS vendors_no_delete
+BEFORE DELETE ON vendors
+BEGIN
+  SELECT RAISE(ABORT, 'vendors are append-only; archive or supersede them instead');
 END;
 
 CREATE TRIGGER IF NOT EXISTS journal_entries_no_update

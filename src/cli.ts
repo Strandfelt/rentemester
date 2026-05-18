@@ -35,6 +35,7 @@ import { normalizeCvr, normalizeFiscalYearLabelStrategy, normalizeFiscalYearStar
 import { buildRetentionStatusReport } from "./core/retention";
 import { validateVatAgainstVies } from "./core/vies";
 import { listExceptions, recordException, resolveException, syncUnmatchedBankTransactionExceptions } from "./core/exceptions";
+import { createCustomer, createVendor, listCustomers, listVendors, resolveDocumentMasterData, resolveInvoiceMasterData } from "./core/master-data";
 
 const parsedArgs = parseCliArgs(Bun.argv);
 
@@ -91,7 +92,9 @@ function companyRoot() { return arg("--company", process.env.RENTEMESTER_COMPANY
 const cliActor = trimToNull(arg("--actor"));
 const cliActorVia = trimToNull(arg("--actor-via"));
 const MUTATING_COMMANDS = new Set([
+  "customer create",
   "customer validate-vat",
+  "vendor create",
   "system backup",
   "system restore-backup",
   "system export-authority",
@@ -353,6 +356,30 @@ else if (cmd === "accounts" && sub === "list") {
   console.table(rows);
   db.close();
 }
+else if (cmd === "customer" && sub === "create") {
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const paymentTermsRaw = arg("--payment-terms");
+  const paymentTerms = paymentTermsRaw === undefined ? undefined : Number(paymentTermsRaw);
+  const result = createCustomer(db, {
+    name: arg("--name") ?? "",
+    address: arg("--address") ?? undefined,
+    vatOrCvr: arg("--cvr") ?? undefined,
+    email: arg("--email") ?? undefined,
+    eanNumber: arg("--ean") ?? undefined,
+    paymentTermsDays: Number.isFinite(paymentTerms) ? paymentTerms : undefined,
+    defaultCurrency: arg("--currency") ?? undefined,
+    notes: arg("--notes") ?? undefined,
+  });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+  if (!result.ok) process.exit(1);
+}
+else if (cmd === "customer" && sub === "list") {
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = listCustomers(db, { archived: hasFlag("--archived") });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+}
 else if (cmd === "customer" && sub === "validate-vat") {
   const cvr = arg("--cvr");
   if (!cvr) {
@@ -364,6 +391,26 @@ else if (cmd === "customer" && sub === "validate-vat") {
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
   if (!result.ok) process.exit(1);
+}
+else if (cmd === "vendor" && sub === "create") {
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = createVendor(db, {
+    name: arg("--name") ?? "",
+    address: arg("--address") ?? undefined,
+    vatOrCvr: arg("--cvr") ?? undefined,
+    defaultExpenseAccount: arg("--expense-account") ?? undefined,
+    defaultVatTreatment: arg("--default-vat") ?? undefined,
+    notes: arg("--notes") ?? undefined,
+  });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+  if (!result.ok) process.exit(1);
+}
+else if (cmd === "vendor" && sub === "list") {
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const result = listVendors(db, { archived: hasFlag("--archived") });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
 }
 else if (cmd === "exceptions" && sub === "list") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
@@ -420,7 +467,15 @@ else if (cmd === "invoice" && sub === "issue") {
   const root = companyRoot();
   const db = openDb(companyPaths(root).db); migrate(db);
   const payload = JSON.parse(readFileSync(input, "utf8"));
-  const result = issueInvoice(db, root, payload);
+  const customerIdRaw = arg("--customer-id");
+  const customerId = customerIdRaw === undefined ? undefined : Number(customerIdRaw);
+  const resolved = resolveInvoiceMasterData(db, payload, { customerId: Number.isInteger(customerId) && customerId > 0 ? customerId : undefined });
+  if (!resolved.ok) {
+    emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), resolved as Record<string, unknown>, outputFormat);
+    db.close();
+    process.exit(1);
+  }
+  const result = issueInvoice(db, root, resolved.payload);
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
 }
@@ -701,7 +756,15 @@ else if (cmd === "documents" && sub === "ingest") {
   const root = companyRoot();
   const db = openDb(companyPaths(root).db); migrate(db);
   const metadata = JSON.parse(readFileSync(metadataFile, "utf8"));
-  const result = ingestDocument(db, root, file, metadata, { forceDuplicateLogicalIdentity: hasFlag("--force") });
+  const vendorIdRaw = arg("--vendor-id");
+  const vendorId = vendorIdRaw === undefined ? undefined : Number(vendorIdRaw);
+  const resolved = resolveDocumentMasterData(db, metadata, { vendorId: Number.isInteger(vendorId) && vendorId > 0 ? vendorId : undefined });
+  if (!resolved.ok) {
+    emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), resolved as Record<string, unknown>, outputFormat);
+    db.close();
+    process.exit(1);
+  }
+  const result = ingestDocument(db, root, file, resolved.metadata, { forceDuplicateLogicalIdentity: hasFlag("--force") });
   if (!result.ok) {
     recordException(db, {
       type: "DOCUMENT_INGEST_BLOCKED",

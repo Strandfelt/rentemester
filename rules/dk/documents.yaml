@@ -1,4 +1,4 @@
-version: dk-documents-v0.0.1
+version: dk-documents-v0.0.2
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-BILAG-OPBEVARING-2023-1383
@@ -59,3 +59,15 @@ rules:
         - duplicate_hash_rejected
         - append_only_audit_log
     explanation: Stored supporting documents must be kept on a secure, traceable basis so the original content is preserved and duplicates are not silently mutated or overwritten.
+  - rule_id: DK-MASTER-DATA-VENDOR-001
+    name: Vendor master data reused on supporting documents must resolve deterministically before ingest
+    category: document_integrity
+    source_id: DK-BILAG-OPBEVARING-2023-1383
+    severity: hard_stop
+    machine_rule:
+      require:
+        - vendor_id_resolves_to_append_only_vendor_record_when_used
+        - resolved_vendor_sender_fields_materialized_into_stored_document_metadata
+      forbid:
+        - ingest_with_missing_vendor_lookup
+    explanation: Rentemester may reuse stored vendor master data, but the sender fields used for an ingested supporting document must resolve deterministically and be persisted into the stored document metadata at ingest time.

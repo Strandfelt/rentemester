@@ -1,4 +1,4 @@
-version: dk-invoices-v0.0.3
+version: dk-invoices-v0.0.4
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
   - DK-MOMSLOVEN-2024-209
@@ -106,6 +106,18 @@ rules:
       forbid:
         - issue_without_validation
     explanation: Rentemester must only issue invoices after deterministic validation and must persist an immutable issued snapshot tied to a sequential invoice number; when the invoice currency is not DKK, the snapshot must include the chosen FX rate and DKK totals fixed at issue time.
+  - rule_id: DK-MASTER-DATA-CUSTOMER-001
+    name: Customer master data reused on invoices must resolve deterministically before issue
+    category: invoice_integrity
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - customer_id_resolves_to_append_only_customer_record_when_used
+        - resolved_customer_fields_materialized_into_issued_snapshot
+      forbid:
+        - issuing_invoice_with_missing_customer_lookup
+    explanation: Rentemester may reuse stored customer master data, but the buyer fields used for an issued invoice must resolve deterministically at issue time and be materialized into the immutable invoice snapshot.
   - rule_id: DK-INVOICE-DUE-DATE-001
     name: Customer invoices must expose a deterministic due date and overdue classification
     category: invoice_lifecycle

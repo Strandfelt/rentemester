@@ -24,7 +24,11 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "system export-authority", usage: "system export-authority --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--requested-at <ISO-8601>] [--requester <name>]", description: "Eksporterer materiale til myndighedsudlevering.", allowedFlags: ["--company", "--from", "--to", "--out", "--requested-at", "--requester"] },
   { key: "audit verify", usage: "audit verify --company <path>", description: "Verificerer audit-kæde og bogføringsintegritet.", allowedFlags: ["--company"] },
   { key: "accounts list", usage: "accounts list --company <path>", description: "Lister kontoplanen.", allowedFlags: ["--company"] },
+  { key: "customer create", usage: "customer create --company <path> --name <text> [--address <text>] [--cvr <DK...>] [--email <text>] [--ean <text>] [--payment-terms <days>] [--currency <ISO>] [--notes <text>]", description: "Opretter en append-only kundepost til genbrug på fakturaer.", allowedFlags: ["--company", "--name", "--address", "--cvr", "--email", "--ean", "--payment-terms", "--currency", "--notes"] },
+  { key: "customer list", usage: "customer list --company <path> [--archived]", description: "Lister kendte kunder.", allowedFlags: ["--company", "--archived"] },
   { key: "customer validate-vat", usage: "customer validate-vat --company <path> --cvr <EU-VAT>", description: "Validerer et EU-VAT-nummer via VIES og cacher resultatet.", allowedFlags: ["--company", "--cvr"] },
+  { key: "vendor create", usage: "vendor create --company <path> --name <text> [--address <text>] [--cvr <DK...>] [--expense-account <konto>] [--default-vat <text>] [--notes <text>]", description: "Opretter en append-only leverandørpost til bilagsindlæsning.", allowedFlags: ["--company", "--name", "--address", "--cvr", "--expense-account", "--default-vat", "--notes"] },
+  { key: "vendor list", usage: "vendor list --company <path> [--archived]", description: "Lister kendte leverandører.", allowedFlags: ["--company", "--archived"] },
   { key: "exceptions list", usage: "exceptions list --company <path> [--status open|resolved|all]", description: "Lister exceptions-køen.", allowedFlags: ["--company", "--status"] },
   { key: "exceptions resolve", usage: "exceptions resolve --company <path> --id <n> [--note <text>]", description: "Markerer en exception som løst.", allowedFlags: ["--company", "--id", "--note"] },
   {
@@ -43,9 +47,9 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
   {
     key: "invoice issue",
-    usage: "invoice issue --company <path> --input <file.json>",
+    usage: "invoice issue --company <path> --input <file.json> [--customer-id <n>]",
     description: "Udsteder en kundefaktura og gemmer et immutabelt snapshot.",
-    allowedFlags: ["--company", "--input"],
+    allowedFlags: ["--company", "--input", "--customer-id"],
     examplePath: "examples/full-invoice.dk.json",
     exampleHint: "rentemester invoice issue --example > faktura.json",
     inputNotes: [
@@ -81,7 +85,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "invoice compensation", usage: "invoice compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>]", description: "Beregner kompensationskrav for sen betaling.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--as-of", "--amount-dkk"] },
   { key: "invoice claim-compensation", usage: "invoice claim-compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>] [--note <text>]", description: "Registrerer kompensationskrav.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--as-of", "--amount-dkk", "--note"] },
   { key: "invoice post-compensation", usage: "invoice post-compensation --company <path> (--document-id <n> | --invoice-number <no>) [--date <YYYY-MM-DD>]", description: "Bogfører registreret kompensation.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--date"] },
-  { key: "documents ingest", usage: "documents ingest --company <path> --file <path> --metadata <file.json> [--force]", description: "Indlæser og validerer et bilag med metadata.", allowedFlags: ["--company", "--file", "--metadata", "--force"], examplePath: "examples/vendor-invoice.metadata.json" },
+  { key: "documents ingest", usage: "documents ingest --company <path> --file <path> --metadata <file.json> [--vendor-id <n>] [--force]", description: "Indlæser og validerer et bilag med metadata.", allowedFlags: ["--company", "--file", "--metadata", "--vendor-id", "--force"], examplePath: "examples/vendor-invoice.metadata.json" },
   { key: "documents list", usage: "documents list --company <path>", description: "Lister gemte bilag.", allowedFlags: ["--company"] },
   { key: "bank import", usage: "bank import --company <path> --file <transactions.csv>", description: "Importerer banktransaktioner fra CSV.", allowedFlags: ["--company", "--file"], examplePath: "examples/bank-transactions.csv" },
   { key: "bank list", usage: "bank list --company <path> [--status all|matched|unmatched] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--text-match <text>] [--amount <n>]", description: "Lister importerede banktransaktioner med filtre for afstemningsstatus.", allowedFlags: ["--company", "--status", "--from", "--to", "--text-match", "--amount"] },
