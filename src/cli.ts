@@ -64,7 +64,28 @@ function resolveJournalEntryId(db: ReturnType<typeof openDb>) {
     const row = db.query(`SELECT id FROM journal_entries WHERE entry_no = ? LIMIT 1`).get(entryNo) as { id: number } | null;
     return row?.id ?? null;
   }
-  return null;
+  const matchText = trimToNull(arg("--match-text"));
+  const matchDate = trimToNull(arg("--match-date"));
+  const matchDocumentIdRaw = arg("--match-document-id");
+  const matchDocumentId = Number(matchDocumentIdRaw);
+  const hasMatchDocumentId = matchDocumentIdRaw !== undefined;
+  if (!matchText) return null;
+  if (hasMatchDocumentId && (!Number.isInteger(matchDocumentId) || matchDocumentId <= 0)) {
+    fatal("--match-document-id must be a positive integer when present");
+  }
+  const rows = db.query(`
+    SELECT id
+    FROM journal_entries
+    WHERE text = ?
+      AND (? IS NULL OR transaction_date = ?)
+      AND (? IS NULL OR document_id = ?)
+    ORDER BY id DESC
+    LIMIT 2
+  `).all(matchText, matchDate, matchDate, hasMatchDocumentId ? matchDocumentId : null, hasMatchDocumentId ? matchDocumentId : null) as Array<{ id: number }>;
+  if (rows.length > 1) {
+    fatal("Multiple journal entries matched --match-text; narrow with --match-date or --match-document-id");
+  }
+  return rows[0]?.id ?? null;
 }
 function findInvoiceDocumentIdByNumber(db: ReturnType<typeof openDb>, invoiceNumber?: string | null) {
   const value = invoiceNumber?.trim();
@@ -988,7 +1009,7 @@ else if (cmd === "journal" && sub === "reverse") {
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
   const entryId = resolveJournalEntryId(db);
   if (!entryId || !date || !reason) {
-    console.error("Missing required --entry-id <n> or --entry-no <no>, --date <YYYY-MM-DD>, or --reason <text>");
+    console.error("Missing required --entry-id <n>, --entry-no <no>, or --match-text <text> [--match-date <YYYY-MM-DD>] [--match-document-id <n>], plus --date <YYYY-MM-DD> and --reason <text>");
     process.exit(2);
   }
   const result = reverseJournalEntry(db, { entryId, transactionDate: date, reason });

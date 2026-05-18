@@ -10,7 +10,7 @@ describe("invoice write-off-bad-debt CLI", () => {
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
-    await Bun.$`bun run src/cli.ts invoice post --company ${company} --document-id 1`.quiet();
+    await Bun.$`bun run src/cli.ts invoice post --company ${company} --invoice-number 2026-0001`.quiet();
 
     const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "write-off-bad-debt", "--company", company, "--input", "examples/invoice-bad-debt-writeoff.json"], {
       cwd: process.cwd(),

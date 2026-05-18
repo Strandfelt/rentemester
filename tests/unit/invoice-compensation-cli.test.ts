@@ -32,9 +32,9 @@ describe("invoice compensation CLI", () => {
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
-    await Bun.$`bun run src/cli.ts invoice claim-compensation --company ${company} --document-id 1 --as-of 2026-06-20`.quiet();
+    await Bun.$`bun run src/cli.ts invoice claim-compensation --company ${company} --invoice-number 2026-0952C --as-of 2026-06-20`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-compensation", "--company", company, "--document-id", "1"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-compensation", "--company", company, "--invoice-number", "2026-0952C"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -81,7 +81,7 @@ describe("invoice compensation CLI", () => {
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "claim-compensation", "--company", company, "--document-id", "1", "--as-of", "2026-06-20"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "claim-compensation", "--company", company, "--invoice-number", "2026-0952B", "--as-of", "2026-06-20"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -128,7 +128,7 @@ describe("invoice compensation CLI", () => {
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "compensation", "--company", company, "--document-id", "1", "--as-of", "2026-06-20"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "compensation", "--company", company, "--invoice-number", "2026-0952", "--as-of", "2026-06-20"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

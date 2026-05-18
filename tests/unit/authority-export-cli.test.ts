@@ -11,7 +11,7 @@ describe("authority export CLI", () => {
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
-    await Bun.$`bun run src/cli.ts invoice post --company ${company} --document-id 1`.quiet();
+    await Bun.$`bun run src/cli.ts invoice post --company ${company} --invoice-number 2026-0001`.quiet();
     await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
     await Bun.$`bun run src/cli.ts journal post --company ${company} --input examples/journal-entry.expense.json`.quiet();
 

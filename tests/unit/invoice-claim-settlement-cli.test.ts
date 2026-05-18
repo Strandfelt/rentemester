@@ -10,15 +10,15 @@ describe("invoice settle-claim-bank CLI", () => {
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
-    await Bun.$`bun run src/cli.ts invoice post --company ${company} --document-id 1`.quiet();
-    await Bun.$`bun run src/cli.ts invoice remind --company ${company} --document-id 1 --date 2026-06-26`.quiet();
-    await Bun.$`bun run src/cli.ts invoice post-reminder --company ${company} --document-id 1`.quiet();
-    await Bun.$`bun run src/cli.ts invoice compensation --company ${company} --document-id 1 --as-of 2026-06-20`.quiet();
-    await Bun.$`bun run src/cli.ts invoice claim-compensation --company ${company} --document-id 1 --as-of 2026-06-20`.quiet();
-    await Bun.$`bun run src/cli.ts invoice post-compensation --company ${company} --document-id 1`.quiet();
-    await Bun.$`bun run src/cli.ts invoice interest --company ${company} --document-id 1 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
-    await Bun.$`bun run src/cli.ts invoice claim-interest --company ${company} --document-id 1 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
-    await Bun.$`bun run src/cli.ts invoice post-interest --company ${company} --document-id 1`.quiet();
+    await Bun.$`bun run src/cli.ts invoice post --company ${company} --invoice-number 2026-0001`.quiet();
+    await Bun.$`bun run src/cli.ts invoice remind --company ${company} --invoice-number 2026-0001 --date 2026-06-26`.quiet();
+    await Bun.$`bun run src/cli.ts invoice post-reminder --company ${company} --invoice-number 2026-0001`.quiet();
+    await Bun.$`bun run src/cli.ts invoice compensation --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20`.quiet();
+    await Bun.$`bun run src/cli.ts invoice claim-compensation --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20`.quiet();
+    await Bun.$`bun run src/cli.ts invoice post-compensation --company ${company} --invoice-number 2026-0001`.quiet();
+    await Bun.$`bun run src/cli.ts invoice interest --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
+    await Bun.$`bun run src/cli.ts invoice claim-interest --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
+    await Bun.$`bun run src/cli.ts invoice post-interest --company ${company} --invoice-number 2026-0001`.quiet();
     await Bun.$`bun run src/cli.ts bank import --company ${company} --file examples/customer-payment.csv`.quiet();
     await Bun.$`bun run src/cli.ts invoice settle-bank --company ${company} --input examples/invoice-settlement.json`.quiet();
     await Bun.$`bun run src/cli.ts bank import --company ${company} --file examples/customer-claim-payment.csv`.quiet();

@@ -24,9 +24,9 @@ describe("invoice reminder CLI", () => {
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
-    await Bun.$`bun run src/cli.ts invoice remind --company ${company} --document-id 1 --date 2026-06-26`.quiet();
+    await Bun.$`bun run src/cli.ts invoice remind --company ${company} --invoice-number 2026-0962B --date 2026-06-26`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-reminder", "--company", company, "--document-id", "1"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-reminder", "--company", company, "--invoice-number", "2026-0962B"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -65,7 +65,7 @@ describe("invoice reminder CLI", () => {
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "remind", "--company", company, "--document-id", "1", "--date", "2026-06-26"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "remind", "--company", company, "--invoice-number", "2026-0962", "--date", "2026-06-26"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

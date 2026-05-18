@@ -19,9 +19,9 @@ describe("invoice interest CLI", () => {
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
-    await Bun.$`bun run src/cli.ts invoice claim-interest --company ${company} --document-id 1 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
+    await Bun.$`bun run src/cli.ts invoice claim-interest --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-interest", "--company", company, "--document-id", "1"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-interest", "--company", company, "--invoice-number", "2026-0001"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -55,7 +55,7 @@ describe("invoice interest CLI", () => {
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "claim-interest", "--company", company, "--document-id", "1", "--as-of", "2026-06-20", "--reference-rate", "2.2"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "claim-interest", "--company", company, "--invoice-number", "2026-0001", "--as-of", "2026-06-20", "--reference-rate", "2.2"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -89,7 +89,7 @@ describe("invoice interest CLI", () => {
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "interest", "--company", company, "--document-id", "1", "--as-of", "2026-06-20", "--reference-rate", "2.2"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "interest", "--company", company, "--invoice-number", "2026-0001", "--as-of", "2026-06-20", "--reference-rate", "2.2"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

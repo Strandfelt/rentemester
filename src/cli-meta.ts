@@ -98,7 +98,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "period close", usage: "period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]", description: "Lukker eller markerer en regnskabsperiode.", allowedFlags: ["--company", "--from", "--to", "--kind", "--status", "--reference"] },
   { key: "retention status", usage: "retention status --company <path> [--as-of <YYYY-MM-DD>]", description: "Viser opbevaringsfrister og udløbet materiale.", allowedFlags: ["--company", "--as-of"] },
   { key: "journal post", usage: "journal post --company <path> --input <file.json>", description: "Bogfører en manuel finanspostering.", allowedFlags: ["--company", "--input"], examplePath: "examples/journal-entry.expense.json" },
-  { key: "journal reverse", usage: "journal reverse --company <path> (--entry-id <n> | --entry-no <no>) --date <YYYY-MM-DD> --reason <text>", description: "Tilbagefører en bogført finanspostering.", allowedFlags: ["--company", "--entry-id", "--entry-no", "--date", "--reason"] },
+  { key: "journal reverse", usage: "journal reverse --company <path> (--entry-id <n> | --entry-no <no> | --match-text <text> [--match-date <YYYY-MM-DD>] [--match-document-id <n>]) --date <YYYY-MM-DD> --reason <text>", description: "Tilbagefører en bogført finanspostering.", allowedFlags: ["--company", "--entry-id", "--entry-no", "--match-text", "--match-date", "--match-document-id", "--date", "--reason"] },
   { key: "journal list", usage: "journal list --company <path>", description: "Lister finansposteringer.", allowedFlags: ["--company"] },
 ];
 
