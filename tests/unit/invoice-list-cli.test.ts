@@ -72,7 +72,7 @@ describe("invoice list/find/overdue CLI", () => {
       lines: [{ description: "Retainer", quantity: 1, unitPriceExVat: 2000, lineTotalExVat: 2000 }],
       totals: { netAmount: 2000, vatRate: 0.25, vatAmount: 500, grossAmount: 2500 },
     }), null, 2));
-    writeFileSync(payment2, JSON.stringify({ invoiceDocumentId: 2, paymentDate: "2026-05-26", amount: 2500, note: "Paid" }, null, 2));
+    writeFileSync(payment2, JSON.stringify({ invoiceNumber: "2026-0002", paymentDate: "2026-05-26", amount: 2500, note: "Paid" }, null, 2));
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoice1}`.quiet();

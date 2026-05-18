@@ -61,6 +61,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "dueDate: YYYY-MM-DD",
     ],
   },
+  { key: "invoice render", usage: "invoice render --company <path> (--document-id <n> | --invoice-number <no>)", description: "Renderer eller genskaber en deterministisk PDF for en udstedt faktura.", allowedFlags: ["--company", "--document-id", "--invoice-number"] },
   { key: "invoice credit-note", usage: "invoice credit-note --company <path> --input <file.json>", description: "Udsteder en kreditnota mod en eksisterende faktura.", allowedFlags: ["--company", "--input"], examplePath: "examples/credit-note.json" },
   { key: "invoice post", usage: "invoice post --company <path> (--document-id <n> | --invoice-number <no>)", description: "Bogfører en udstedt faktura i finansen.", allowedFlags: ["--company", "--document-id", "--invoice-number"] },
   { key: "invoice settle-bank", usage: "invoice settle-bank --company <path> --input <file.json>", description: "Matcher en bankbetaling mod en faktura.", allowedFlags: ["--company", "--input"], examplePath: "examples/invoice-settlement.json" },

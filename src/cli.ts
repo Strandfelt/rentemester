@@ -12,6 +12,7 @@ import { buildVatReport, postEuServiceReverseChargePurchase, postRepresentationP
 import { bookExpenseFromBank } from "./core/expense-booking";
 import { buildBankReconciliationReport, listBankTransactions } from "./core/reconciliation";
 import { issueInvoice } from "./core/issued-invoices";
+import { renderIssuedInvoicePdf } from "./core/invoice-pdf";
 import { applyInvoicePayment, getInvoiceStatus } from "./core/invoice-payments";
 import { buildInvoiceList, buildOverdueInvoiceList, findInvoices } from "./core/invoice-list";
 import { postIssuedInvoiceToLedger } from "./core/invoice-booking";
@@ -95,6 +96,7 @@ const MUTATING_COMMANDS = new Set([
   "system restore-backup",
   "system export-authority",
   "invoice issue",
+  "invoice render",
   "invoice credit-note",
   "invoice post",
   "invoice settle-bank",
@@ -422,6 +424,17 @@ else if (cmd === "invoice" && sub === "issue") {
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();
 }
+else if (cmd === "invoice" && sub === "render") {
+  const db = openDb(companyPaths(companyRoot()).db); migrate(db);
+  const documentId = resolveInvoiceDocumentId(db);
+  if (!documentId) {
+    console.error("Missing required --document-id <n> or --invoice-number <no>");
+    process.exit(2);
+  }
+  const result = renderIssuedInvoicePdf(db, companyRoot(), { invoiceDocumentId: documentId });
+  emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
+  db.close();
+}
 else if (cmd === "invoice" && sub === "credit-note") {
   const input = arg("--input");
   if (!input) {
@@ -489,7 +502,7 @@ else if (cmd === "invoice" && sub === "apply-payment") {
     process.exit(2);
   }
   const db = openDb(companyPaths(companyRoot()).db); migrate(db);
-  const payload = JSON.parse(readFileSync(input, "utf8"));
+  const payload = withResolvedInvoicePayload(db, JSON.parse(readFileSync(input, "utf8")), "invoiceDocumentId", "invoiceNumber");
   const result = applyInvoicePayment(db, payload);
   emitResult(commandSpec?.description ?? `${cmd} ${sub}`.trim(), result as Record<string, unknown>, outputFormat);
   db.close();

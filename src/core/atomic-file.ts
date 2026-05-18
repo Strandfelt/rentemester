@@ -1,7 +1,7 @@
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, basename, join } from "node:path";
 
-export function writeTempFileFor(finalPath: string, content: string) {
+export function writeTempFileFor(finalPath: string, content: string | Uint8Array) {
   const tempPath = join(dirname(finalPath), `.${basename(finalPath)}.${process.pid}.${Date.now()}.tmp`);
   writeFileSync(tempPath, content);
   return tempPath;

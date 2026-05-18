@@ -9,6 +9,7 @@ import { insertAuditLog } from "./actor";
 import { companySequenceScope, fiscalYearLabelFromDate, reserveSequenceValue, nextSequenceValue } from "./sequences";
 import { retainUntilForDate } from "./retention";
 import { requireCachedViesValidation } from "./vies";
+import { buildIssuedInvoicePdf } from "./invoice-pdf";
 
 export type IssueInvoiceResult = {
   ok: boolean;
@@ -16,6 +17,9 @@ export type IssueInvoiceResult = {
   invoiceNumber?: string;
   storedPath?: string;
   sha256?: string;
+  pdfDocumentId?: number;
+  pdfStoredPath?: string;
+  pdfSha256?: string;
   appliedRules: string[];
   errors: string[];
 };
@@ -97,6 +101,8 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
 
   let tempPath: string | undefined;
   let storedPath: string | undefined;
+  let pdfTempPath: string | undefined;
+  let pdfStoredPath: string | undefined;
 
   try {
     const result = db.transaction(() => {
@@ -118,8 +124,12 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
       };
       const serialized = JSON.stringify(issuedPayload, null, 2);
       const hash = sha256(serialized);
+      const pdfBytes = buildIssuedInvoicePdf(issuedPayload);
+      const pdfHash = createHash("sha256").update(pdfBytes).digest("hex");
       storedPath = join(paths.invoicesIssued, `${invoiceNumber}.json`);
+      pdfStoredPath = join(paths.invoicesIssued, `${invoiceNumber}.pdf`);
       tempPath = writeTempFileFor(storedPath, serialized);
+      pdfTempPath = writeTempFileFor(pdfStoredPath, pdfBytes);
 
       const grossAmount = payload.totals?.grossAmount ?? null;
       const vatAmount = payload.totals?.vatAmount ?? null;
@@ -154,21 +164,69 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
       retainUntilForDate(db, payload.issueDate),
     ) as { id: number };
 
+      const pdfInserted = db.query(
+      `INSERT INTO documents (
+        document_no, source, original_filename, stored_path, mime_type, sha256_hash,
+        supplier_name, invoice_no, invoice_date, amount_inc_vat, currency, status,
+        document_type, sender_name, sender_address, sender_vat_cvr,
+        recipient_name, recipient_address, recipient_vat_cvr, vat_amount, payload_json, retain_until
+      ) VALUES (?, 'rentemester', ?, ?, 'application/pdf', ?, ?, ?, ?, ?, ?, 'issued', 'issued_invoice_pdf', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id`
+    ).get(
+      `${invoiceNumber}-pdf`,
+      `${invoiceNumber}.pdf`,
+      pdfStoredPath,
+      pdfHash,
+      payload.seller?.name ?? null,
+      invoiceNumber,
+      payload.issueDate ?? null,
+      grossAmount,
+      payload.currency ?? 'DKK',
+      payload.seller?.name ?? null,
+      payload.seller?.address ?? null,
+      payload.seller?.vatOrCvr ?? null,
+      payload.buyer?.name ?? null,
+      payload.buyer?.address ?? null,
+      payload.buyer?.vatOrCvr ?? null,
+      vatAmount,
+      serialized,
+      retainUntilForDate(db, payload.issueDate),
+    ) as { id: number };
+
       insertAuditLog(db, {
         eventType: "invoice_issue",
         entityType: "document",
         entityId: inserted.id,
         message: `Issued invoice ${invoiceNumber}`,
       });
+      insertAuditLog(db, {
+        eventType: "invoice_render_pdf",
+        entityType: "document",
+        entityId: pdfInserted.id,
+        message: `Rendered invoice PDF ${invoiceNumber}`,
+      });
 
-      return { ok: true as const, documentId: inserted.id, invoiceNumber, sha256: hash };
+      return { ok: true as const, documentId: inserted.id, invoiceNumber, sha256: hash, pdfDocumentId: pdfInserted.id, pdfSha256: pdfHash };
     }, { immediate: true })();
 
     if (!result.ok) return { ok: false, appliedRules, errors: [result.error] };
     promoteTempFile(tempPath!, storedPath!);
-    return { ok: true, documentId: result.documentId, invoiceNumber: result.invoiceNumber, storedPath, sha256: result.sha256, appliedRules, errors: [] };
+    promoteTempFile(pdfTempPath!, pdfStoredPath!);
+    return {
+      ok: true,
+      documentId: result.documentId,
+      invoiceNumber: result.invoiceNumber,
+      storedPath,
+      sha256: result.sha256,
+      pdfDocumentId: result.pdfDocumentId,
+      pdfStoredPath,
+      pdfSha256: result.pdfSha256,
+      appliedRules,
+      errors: [],
+    };
   } catch (error) {
     if (tempPath) removeIfExists(tempPath);
+    if (pdfTempPath) removeIfExists(pdfTempPath);
     throw error;
   }
 }

@@ -76,13 +76,13 @@ describe("authority export", () => {
 
     const manifest = JSON.parse(readFileSync(first.manifestPath!, "utf8"));
     expect(manifest.counts.journalEntries).toBe(2);
-    expect(manifest.counts.documents).toBe(2);
+    expect(manifest.counts.documents).toBe(3);
     expect(manifest.counts.auditLog).toBeGreaterThanOrEqual(4);
     expect(manifest.counts.exceptions).toBe(2);
     expect(manifest.counts.accounts).toBeGreaterThanOrEqual(10);
     expect(manifest.counts.companies).toBe(1);
     expect(manifest.counts.schemaMigrations).toBeGreaterThanOrEqual(0);
-    expect(manifest.counts.copiedReadableDocuments).toBe(2);
+    expect(manifest.counts.copiedReadableDocuments).toBe(3);
     expect(manifest.files.auditLog).toBe("machine-readable/audit-log.json");
     expect(manifest.files.accounts).toBe("machine-readable/accounts.json");
     expect(manifest.files.exceptions).toBe("machine-readable/exceptions.json");
@@ -103,8 +103,9 @@ describe("authority export", () => {
     expect(accounts.some((entry: any) => entry.accountNo === "3070")).toBe(true);
 
     const exportedDocs = JSON.parse(readFileSync(join(first.exportDir!, "machine-readable", "documents.json"), "utf8"));
-    expect(exportedDocs).toHaveLength(2);
+    expect(exportedDocs).toHaveLength(3);
     expect(exportedDocs.some((doc: any) => doc.documentType === "issued_invoice")).toBe(true);
+    expect(exportedDocs.some((doc: any) => doc.documentType === "issued_invoice_pdf")).toBe(true);
     expect(exportedDocs.some((doc: any) => doc.documentType === "purchase_sale")).toBe(true);
     expect(exportedDocs.every((doc: any) => doc.exportedReadablePath === null || doc.exportedReadablePath.startsWith("documents-readable/"))).toBe(true);
     expect(exportedDocs.every((doc: any) => doc.storedPathRelativeToCompany === null || !doc.storedPathRelativeToCompany.startsWith("/"))).toBe(true);

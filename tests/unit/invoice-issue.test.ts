@@ -7,6 +7,7 @@ import { openDb, migrate } from "../../src/core/db";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { issueCreditNote } from "../../src/core/credit-notes";
 import { storeViesValidation } from "../../src/core/vies";
+import { readIssuedInvoicePdfText, renderIssuedInvoicePdf } from "../../src/core/invoice-pdf";
 
 function failingDocumentInsertDb(realDb: any) {
   return new Proxy(realDb, {
@@ -48,6 +49,7 @@ describe("invoice issue", () => {
     expect(result.invoiceNumber).toBe("2026-0500");
     expect(result.appliedRules).toContain("DK-INVOICE-ISSUE-001");
     expect(existsSync(result.storedPath!)).toBe(true);
+    expect(existsSync(result.pdfStoredPath!)).toBe(true);
 
     const stored = JSON.parse(readFileSync(result.storedPath!, "utf8"));
     expect(stored.status).toBe("issued");
@@ -59,6 +61,23 @@ describe("invoice issue", () => {
     expect(row.invoice_no).toBe("2026-0500");
     expect(row.status).toBe("issued");
     expect(JSON.parse(row.payload_json).invoiceNumber).toBe("2026-0500");
+
+    const pdfRow = db.query("SELECT document_type, invoice_no, mime_type, stored_path FROM documents WHERE id = ?").get(result.pdfDocumentId!) as any;
+    expect(pdfRow).toEqual({
+      document_type: "issued_invoice_pdf",
+      invoice_no: "2026-0500",
+      mime_type: "application/pdf",
+      stored_path: result.pdfStoredPath,
+    });
+    const pdfText = readIssuedInvoicePdfText(result.pdfStoredPath!);
+    expect(pdfText.startsWith("%PDF-")).toBe(true);
+    expect(pdfText).toContain("2026-0500");
+    expect(pdfText).toContain("DK12345678");
+    expect(pdfText).toContain("250.00 DKK");
+
+    const rerender = renderIssuedInvoicePdf(db, root, { invoiceDocumentId: result.documentId! });
+    expect(rerender.ok).toBe(true);
+    expect(rerender.sha256).toBe(result.pdfSha256);
 
     expect(() => db.run("UPDATE documents SET status = 'changed' WHERE id = ?", result.documentId!)).toThrow();
 
@@ -458,7 +477,7 @@ describe("invoice issue", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors[0]).toContain("simulated insert failure");
-    expect(readdirSync(companyPaths(root).invoicesIssued)).toEqual(["2026-0502.json"]);
+    expect(readdirSync(companyPaths(root).invoicesIssued).sort()).toEqual(["2026-0502.json", "2026-0502.pdf"].sort());
 
     realDb.close();
     rmSync(root, { recursive: true, force: true });
