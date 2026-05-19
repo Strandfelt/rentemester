@@ -49,7 +49,7 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 
 - Homepage: https://rentemester.dk/
 - Roadmap / journey to v1: https://rentemester.dk/#roadmap
-- Roadmap items include contacts/companies, EAN/GLN e-invoicing for public customers, recurring invoices/subscriptions, foreign-currency purchases settled in DKK, and a robust plugin system for APIs such as PayPal, Zettle and Shopify
+- Roadmap items include contacts/companies, EAN/GLN e-invoicing for public customers, recurring invoices/subscriptions, foreign-currency purchases settled in DKK, SAF-T export, accountant/reviewer access or export packages, and a robust plugin system for APIs such as PayPal, Zettle and Shopify
 - Agent contribution brief: https://rentemester.dk/#agent-brief
 - Features: https://rentemester.dk/funktioner
 - How it works: https://rentemester.dk/saadan-virker-det
@@ -79,6 +79,8 @@ If a human points you at this site or repository and asks you to contribute:
 - Invoice issuing, reminders, interest, compensation fees, credit notes and bad-debt handling
 - Roadmap: EAN/GLN e-invoicing and recurring invoices/subscription billing
 - Roadmap: foreign-currency purchases, e.g. USD purchase with DKK bank settlement
+- Roadmap: SAF-T (Standard Audit File-Tax) export for authority data exchange under the new Danish bookkeeping rules
+- Roadmap: accountant/reviewer access for hosted deployments, plus easy accountant export packages for local deployments
 - Danish VAT reporting, including representation, EU trade, reverse charge, VIES validation and mixed-use VAT allocation
 - Manual journal entries and reversal entries
 - Deterministic HTML dashboard and export packages for accountants/auditors

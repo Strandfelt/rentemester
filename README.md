@@ -188,7 +188,8 @@ Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
 - udsendelse af fakturaer via mail
 - indbetalinger matchet mod fakturaer
 - fuld bilagsmail-import
-- eksportpakke til revisor
+- SAF-T-eksport efter den nye bogføringslov
+- eksportpakke til revisor eller hosted revisoradgang
 - brugerflade eller enkel kontrolside
 - mere komplet dansk regelbibliotek
 - grundig review med bogholder/revisor

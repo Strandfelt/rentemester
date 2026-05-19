@@ -62,6 +62,7 @@ const groups = [
       { t: "Ed25519-signering", d: "Opt-in kryptografisk signering. Tredjepart kan verificere uden adgang til private nøgler." },
       { t: "Audit verify", d: "CLI-kommando der verificerer hele kæden og signaturen." },
       { t: "Backup-signering", d: "Backups signeres så genoprettelse kan bevises ægte." },
+      { t: "SAF-T", d: "Roadmap: Standard Audit File-Tax til udveksling af regnskabsdata med myndigheder efter den nye bogføringslov." },
       { t: "Skat-eksport", d: "Eksportpakke til myndigheder med komplet historik og verifikationsdata." },
     ],
   },
@@ -72,7 +73,8 @@ const groups = [
       { t: "Dashboard", d: "Deterministisk HTML-rapport — samme data giver bit-for-bit samme output." },
       { t: "Healthcheck", d: "CLI-status der viser om alt er konsistent." },
       { t: "Statusrapporter", d: "Faktura-status, åbne bilag, ubehandlede tasks." },
-      { t: "Eksport til revisor", d: "Komplet pakke med ledger, bilag og verifikationsdata." },
+      { t: "Myndigheds-/audit-eksport", d: "Eksportpakke til myndigheder med komplet historik, bilag og verifikationsdata." },
+      { t: "Revisoradgang", d: "Roadmap: giv revisor eller andre læse-/skriveadgang ved hosted drift — eller lav en nem eksportpakke ved lokal drift." },
     ],
   },
   {
@@ -91,7 +93,7 @@ const groups = [
 
 <BaseLayout
   title="Funktioner til dansk open source bogføring"
-  description="Funktioner i Rentemester: kontakter, bilagsmail, bankimport, faktura, EAN, abonnementer, valutakøb, plugins, momsrapportering, verifiérbar ledger, MCP-integration og revisor-eksport."
+  description="Funktioner i Rentemester: kontakter, bilagsmail, bankimport, faktura, EAN, abonnementer, valutakøb, SAF-T, revisoradgang, plugins, momsrapportering, verifiérbar ledger, MCP-integration og audit-eksport."
   ogImage="/og-funktioner.png"
 >
   <PageHero
