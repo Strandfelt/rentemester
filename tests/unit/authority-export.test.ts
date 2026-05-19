@@ -75,6 +75,7 @@ describe("authority export", () => {
     expect(sha256(join(first.exportDir!, "machine-readable", "documents.json"))).toBe(sha256(join(second.exportDir!, "machine-readable", "documents.json")));
 
     const manifest = JSON.parse(readFileSync(first.manifestPath!, "utf8"));
+    expect(manifest.packageType).toBe("authority_export");
     expect(manifest.counts.journalEntries).toBe(2);
     expect(manifest.counts.documents).toBe(3);
     expect(manifest.counts.auditLog).toBeGreaterThanOrEqual(4);
@@ -116,6 +117,55 @@ describe("authority export", () => {
 
     const exportedBank = JSON.parse(readFileSync(join(first.exportDir!, "machine-readable", "bank-transactions.json"), "utf8"));
     expect(exportedBank.every((row: any) => typeof row.retainUntil === "string")).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("exports an accountant handoff package without implying hosted reviewer access", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-accountant-export-"));
+    const companyRoot = join(root, "company");
+    const exportRoot = join(root, "exports");
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+    seedAccounts(db);
+    db.run("INSERT INTO companies (id, name, country, currency) VALUES (1, 'Rentemester Test', 'DK', 'DKK')");
+
+    const issued = issueInvoice(db, companyRoot, JSON.parse(readFileSync(join(process.cwd(), "examples/full-invoice.dk.json"), "utf8")));
+    expect(issued.ok).toBe(true);
+    const posted = postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! });
+    expect(posted.ok).toBe(true);
+
+    const exported = exportAuthorityPackage(db, companyRoot, {
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      outputDir: exportRoot,
+      requestedAt: "2026-05-17T02:24:00.000Z",
+      requester: "Test accountant",
+      packageProfile: "accountant_handoff",
+    });
+
+    expect(exported.ok).toBe(true);
+    const manifest = JSON.parse(readFileSync(exported.manifestPath!, "utf8"));
+    expect(manifest.packageType).toBe("accountant_handoff_export");
+    expect(manifest.handoffModel).toBe("local_export_package");
+    expect(manifest.accessModel).toBe("no_runtime_access");
+    expect(manifest.outOfScope).toEqual([
+      "hosted_multi_user_access",
+      "role_based_write_access",
+      "real_time_collaboration",
+    ]);
+
+    const readme = readFileSync(join(exported.exportDir!, "README.txt"), "utf8");
+    expect(readme).toContain("Primary handoff model: local export package");
+    expect(readme).toContain("Out of scope: hosted reviewer/accountant access");
+
+    const auditRows = db.query(
+      "SELECT event_type, message FROM audit_log WHERE event_type = 'accountant_handoff_export' ORDER BY id DESC LIMIT 1"
+    ).all() as Array<{ event_type: string; message: string }>;
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]?.message).toContain("Test accountant");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

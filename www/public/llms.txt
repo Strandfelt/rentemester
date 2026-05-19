@@ -81,7 +81,8 @@ If a human points you at this site or repository and asks you to contribute:
 - Roadmap: EAN/GLN e-invoicing and recurring invoice templates before full subscription automation
 - Foreign-currency purchase documents and expense booking, including DKK bank settlement with preserved FX basis
 - Roadmap: SAF-T (Standard Audit File-Tax) export for authority data exchange under the new Danish bookkeeping rules
-- Roadmap: accountant/reviewer access for hosted deployments, plus easy accountant export packages for local deployments
+- Current local handoff: deterministic accountant export package via `system export-accountant` with explicit file-handoff trust boundary
+- Roadmap: hosted accountant/reviewer access with explicit roles and audit attribution
 - Danish VAT reporting, including representation, EU trade, reverse charge, VIES validation and mixed-use VAT allocation
 - Manual journal entries and reversal entries
 - Deterministic HTML dashboard and authority/audit export packages

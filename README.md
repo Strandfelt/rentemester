@@ -175,6 +175,7 @@ Rentemester er i en tidlig teknisk prototype. Den nuværende version har allered
 - container-runtime til drift med monterede virksomhedsmappen
 - deterministiske fulde systemsnapshots af ledger, bilag og udstedte fakturaer med backup-manifest og backup-status mod ugentlig lovpligt
 - deterministisk myndigheds- og kuratorpakke pr. periode med maskinlæsbart eksportformat, læsbare bilag og 4-ugers deadline-spor
+- deterministisk lokal eksportpakke til bogholder eller revisor med eksplicit trust boundary: fil-handoff, ikke live adgang
 
 Det er ikke færdigt, men fundamentet er lagt rigtigt: regler først, dokumentation først, audit først.
 
@@ -191,7 +192,7 @@ Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
 - gentagne fakturaer via templates før egentlig abonnementsautomatik
 - udsendelse af fakturaer via mail
 - første afgrænsede SAF-T-eksport efter den nye bogføringslov
-- eksportpakke/revisor-handoff med tydelige trust boundaries
+- hosted bogholder-/revisoradgang med rollegrænser oven på den eksisterende lokale eksportpakke
 - interaktiv brugerflade oven på det statiske dashboard
 - direkte bankfeeds og åbne API-integrationer
 - mere komplet dansk regelbibliotek

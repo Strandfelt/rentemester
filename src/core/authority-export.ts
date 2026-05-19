@@ -24,6 +24,7 @@ export type ExportAuthorityPackageInput = {
   requestedAt?: string;
   requester?: string;
   generatedAt?: string;
+  packageProfile?: "authority" | "accountant_handoff";
 };
 
 export type ExportAuthorityPackageResult = {
@@ -154,6 +155,43 @@ type SchemaMigrationRecord = {
   appliedAt: string;
 };
 
+type ExportProfile = {
+  packageType: "authority_export" | "accountant_handoff_export";
+  auditEventType: "authority_export" | "accountant_handoff_export";
+  readmeTitle: string;
+  readmeScopeLines: string[];
+  manifestExtras?: Record<string, unknown>;
+};
+
+function resolveExportProfile(profile: ExportAuthorityPackageInput["packageProfile"]): ExportProfile {
+  if (profile === "accountant_handoff") {
+    return {
+      packageType: "accountant_handoff_export",
+      auditEventType: "accountant_handoff_export",
+      readmeTitle: "Rentemester accountant handoff package",
+      readmeScopeLines: [
+        "Primary handoff model: local export package.",
+        "Access model: no runtime access to the live company dataset.",
+        "Out of scope: hosted reviewer/accountant access, role-based write access, and real-time collaboration.",
+      ],
+      manifestExtras: {
+        handoffModel: "local_export_package",
+        accessModel: "no_runtime_access",
+        outOfScope: [
+          "hosted_multi_user_access",
+          "role_based_write_access",
+          "real_time_collaboration",
+        ],
+      },
+    };
+  }
+  return {
+    packageType: "authority_export",
+    auditEventType: "authority_export",
+    readmeTitle: "Rentemester authority export package",
+    readmeScopeLines: [],
+  };
+}
 
 function resolveIsoDateTime(value?: string) {
   if (!value) return null;
@@ -407,6 +445,8 @@ function fetchSchemaMigrations(db: Database): SchemaMigrationRecord[] {
 }
 
 function buildExportReadme(input: {
+  title: string;
+  scopeLines: string[];
   periodStart: string;
   periodEnd: string;
   requester: string | null;
@@ -415,13 +455,14 @@ function buildExportReadme(input: {
   deadlineAt: string | null;
 }) {
   return [
-    "Rentemester authority export package",
+    input.title,
     "",
     `Period: ${input.periodStart}..${input.periodEnd}`,
     `Requester: ${input.requester ?? "unknown"}`,
     `Requested at: ${input.requestedAt ?? "not provided"}`,
     `Generated at: ${input.generatedAt}`,
     `Deadline at: ${input.deadlineAt ?? "not applicable"}`,
+    ...(input.scopeLines.length > 0 ? ["", ...input.scopeLines] : []),
     "",
     "Files:",
     "- machine-readable/journal-entries.json — journal entries with lines for the period",
@@ -450,6 +491,7 @@ export function exportAuthorityPackage(db: Database, companyRoot: string, input:
   if (input.generatedAt && !resolveIsoDateTime(input.generatedAt)) errors.push("generatedAt must be a valid ISO-8601 datetime when provided");
   if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
 
+  const profile = resolveExportProfile(input.packageProfile);
   const deadlineAt = requestedAt ? new Date(new Date(requestedAt).getTime() + FOUR_WEEKS_MS).toISOString() : null;
   const exportDir = join(input.outputDir, packageName(input.periodStart, input.periodEnd, generatedAt));
   const machineReadableDir = join(exportDir, "machine-readable");
@@ -519,6 +561,8 @@ export function exportAuthorityPackage(db: Database, companyRoot: string, input:
 
   const readmePath = join(exportDir, "README.txt");
   writeFileSync(readmePath, buildExportReadme({
+    title: profile.readmeTitle,
+    scopeLines: profile.readmeScopeLines,
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     requester: input.requester ?? null,
@@ -532,7 +576,7 @@ export function exportAuthorityPackage(db: Database, companyRoot: string, input:
   copiedDocuments.sort((a, b) => a.exportedPath.localeCompare(b.exportedPath));
 
   const manifest = {
-    packageType: "authority_export",
+    packageType: profile.packageType,
     generatedAt,
     requestedAt: requestedAt ?? null,
     deadlineAt,
@@ -567,15 +611,16 @@ export function exportAuthorityPackage(db: Database, companyRoot: string, input:
     },
     copiedDocuments,
     outputs,
+    ...profile.manifestExtras,
   };
   const manifestPath = join(exportDir, "manifest.json");
   writeExportJson(exportDir, manifestPath, manifest, outputs);
 
   insertAuditLog(db, {
-    eventType: "authority_export",
+    eventType: profile.auditEventType,
     entityType: "company",
     entityId: 1,
-    message: `Exported bookkeeping package for ${input.periodStart}..${input.periodEnd} to ${packageRelativePath(input.outputDir, exportDir)}`,
+    message: `Exported ${profile.packageType} for ${input.periodStart}..${input.periodEnd} to ${packageRelativePath(input.outputDir, exportDir)}${input.requester ? ` for ${input.requester}` : ""}`,
   });
 
   return {

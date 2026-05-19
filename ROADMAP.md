@@ -15,7 +15,7 @@ Hele den deterministiske kerne er på plads og dækket af tests. Det her er det 
 - **Bank**: CSV-import med kolonne-mapping, suggest-matches, reconciliation, settlement (inkl. kombineret principal + rykker/rente).
 - **Bilag**: ingest med SHA-256, leverandør-stamdata, expense-bogføring, VIES-validering af EU-numre og fremmedvaluta-køb med DKK-bankafregning.
 - **Moms**: rapport, EU reverse charge, repræsentation, bad-debt relief, TastSelv-rubrik-mapping.
-- **System**: signed backups (HMAC + opt-in ed25519 til 3.-parts revisor-verifikation), restore med audit-chain-verifikation, periodelås, 5-års retention, myndighedseksport.
+- **System**: signed backups (HMAC + opt-in ed25519 til 3.-parts revisor-verifikation), restore med audit-chain-verifikation, periodelås, 5-års retention, myndighedseksport og deterministisk lokal bogholder-/revisor-handoff-pakke.
 - **Agent-grænseflade**: MCP-server med 52 tools, agent-agnostisk (Claude, Mistral, Ollama lokalt, eller intet).
 - **Dashboard**: statisk HTML, deterministisk, bygger på DESIGN.md-tokens.
 - **CI**: `bun test` + `bun run smoke` håndhævet på hver PR.
@@ -40,6 +40,10 @@ Skal udvikles uden lock-in til en specifik mail-provider — IMAP eller catalogg
 Den største kvalitetsforbedring lige nu er at få en der faktisk har lavet bogføring til at læse `rules/dk/*.yaml` igennem. Især momsbehandling i grænsetilfælde (delvis fradrag, blandet økonomi, særlige brancher).
 
 Kontakt mig direkte hvis du er kvalificeret og motiveret.
+
+### Bogholder-/revisoradgang ud over eksportpakken
+
+Første slice er nu en deterministisk lokal eksportpakke (`system export-accountant`) med eksplicit trust boundary: fil-handoff, ikke live adgang. Næste lag er evt. hosted reviewer/accountant access med tydelige roller og audit-attribution — men det er stadig roadmap, ikke noget README må oversælge.
 
 ### Live web-UI
 

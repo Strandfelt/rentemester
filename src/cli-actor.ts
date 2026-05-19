@@ -9,6 +9,7 @@ export const MUTATING_COMMANDS = new Set([
   "system backup",
   "system restore-backup",
   "system export-authority",
+  "system export-accountant",
   "invoice issue",
   "invoice render",
   "invoice credit-note",
