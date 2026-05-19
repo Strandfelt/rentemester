@@ -7,7 +7,7 @@ const groups = [
     title: "Input",
     intro: "Sådan kommer data ind i systemet.",
     items: [
-      { t: "Bilagsmail", d: "Send bilag til en dedikeret mailadresse — vedhæftninger registreres og knyttes til transaktioner." },
+      { t: "Bilagsmail", d: "Roadmap: første slice bliver deterministisk intake fra maildrop/EML uden provider-lock-in; usikre cases skal lande i exception-køen." },
       { t: "Dokument-ingest", d: "Importér bilag fra CLI med metadata. Understøtter PDF, billeder, tekst." },
       { t: "Kontakter og virksomheder", d: "Roadmap: opret kunder, leverandører og virksomheder én gang, og link fakturaer, køb og bilag til deres oplysninger." },
       { t: "Bankimport", d: "CSV-import med automatisk format-detektion for danske banker. DKK og EUR med dagskurs." },
@@ -22,7 +22,7 @@ const groups = [
       { t: "Bankafstemning", d: "Match banklinjer mod bilag og fakturaer." },
       { t: "Modposter", d: "Reverser fejlbogføringer — uden at slette historikken." },
       { t: "Periodisering", d: "Spread udgifter og indtægter over perioder hvor det er korrekt." },
-      { t: "Valutakøb", d: "Roadmap: håndtér køb i fx USD/EUR, selv om banken trækker et DKK-beløb på kontoen." },
+      { t: "Valutakøb", d: "Bogfør køb i fx USD/EUR korrekt, også når banken trækker et DKK-beløb på kontoen." },
       { t: "Valuta", d: "EUR-bilag bogføres med dagskurs og valutakursdifferencer." },
     ],
   },

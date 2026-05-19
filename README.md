@@ -153,6 +153,7 @@ Rentemester er i en tidlig teknisk prototype. Den nuværende version har allered
 - indlæsning og hashing af bilag, inkl. fysisk modtagne udenlandske bilag og kassestrimler med bevaret original valuta under lovlige metadata-undtagelser
 - validering af danske fakturaoplysninger
 - deterministisk udstedelse og låsning af udgående fakturaer
+- deterministisk PDF-generering af udstedte fakturaer
 - deterministisk registrering af betalinger på udstedte fakturaer
 - deterministisk bogføring af udstedte fakturaer til debitorer, omsætning og salgsmoms
 - deterministisk afregning af kundeindbetalinger mod debitorer og bank, inkl. separat bankafregning af bogførte rykker-, kompensations- og morarentekrav
@@ -185,13 +186,14 @@ Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
 
 - bedre automatisk match mellem bank og bilag
 - egentlig opgaveliste for undtagelser
-- PDF-faktura og mere komplet fakturaflow
+- bilagsmail med deterministisk intake uden provider-lock-in
+- EAN/GLN-fakturering til offentlige kunder
+- gentagne fakturaer via templates før egentlig abonnementsautomatik
 - udsendelse af fakturaer via mail
-- indbetalinger matchet mod fakturaer
-- fuld bilagsmail-import
-- SAF-T-eksport efter den nye bogføringslov
-- eksportpakke til revisor eller hosted revisoradgang
-- brugerflade eller enkel kontrolside
+- første afgrænsede SAF-T-eksport efter den nye bogføringslov
+- eksportpakke/revisor-handoff med tydelige trust boundaries
+- interaktiv brugerflade oven på det statiske dashboard
+- direkte bankfeeds og åbne API-integrationer
 - mere komplet dansk regelbibliotek
 - grundig review med bogholder/revisor
 

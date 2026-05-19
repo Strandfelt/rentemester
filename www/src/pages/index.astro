@@ -142,14 +142,13 @@ const jsonLd = {
         {[
           { status: "live", day: "Nat 0", title: "Første ledger", body: "CLI, SQLite, dobbelt bogholderi og testbar kerne." },
           { status: "live", day: "Dag 1", title: "Danske regler som kode", body: "Bilag, kontoplan, momslogik og valideringer får faste tests." },
-          { status: "now", day: "Nu", title: "Agent-workflow", body: "Bilag og banklinjer bliver til forslag, stopklodser og forklarbare handlinger." },
-          { status: "next", day: "Næste", title: "Dashboard, SAF-T og audit-pakke", body: "Overblik for brugeren, SAF-T-eksport til myndigheder og en senere eksportpakke der giver revisor noget konkret at kontrollere." },
-          { status: "next", day: "Næste", title: "Kontakter og virksomheder", body: "Kunder, leverandører og virksomheder skal kunne oprettes én gang og linkes til fakturaer, køb, bilag og historik." },
-          { status: "next", day: "Næste", title: "EAN og abonnementer", body: "Elektronisk fakturering til offentlige kunder samt gentagne fakturaer for abonnementer og faste aftaler." },
-          { status: "next", day: "Næste", title: "Køb i andre valutaer", body: "Køb i fx USD eller EUR skal kunne bogføres korrekt, også når banken trækker beløbet i danske kroner." },
-          { status: "future", day: "v0.5", title: "Revisoradgang og deling", body: "Læse-/skriveadgang til revisor eller samarbejdspartnere ved hosted drift, plus nem eksportpakke når man kører lokalt." },
-          { status: "future", day: "v0.5", title: "Plugin-system", body: "Et robust plugin-lag så fællesskabet kan integrere PayPal, Zettle, Shopify og andre API’er uden at gøre kernen skrøbelig." },
-          { status: "future", day: "v0.5", title: "MCP og bidragsmotor", body: "Din agent kan læse projektstatus, vælge en opgave og åbne en pull request." },
+          { status: "live", day: "Dag 2", title: "Faktura + bankafstemning", body: "Fakturaer, betalinger, rykkere, kreditnotaer, bankafstemning og valutakøb er nu dækket af tests og smoke-flow." },
+          { status: "now", day: "Nu", title: "Agent-workflow + dashboard", body: "MCP-server, agent-demo, llms-brief og statisk HTML-dashboard gør projektet læsbart for både mennesker og agenter." },
+          { status: "next", day: "Næste", title: "Bilagsmail og exception-kø", body: "Første deterministiske bilagsmail-slice skal ingest'e EML/vedhæftninger uden mail-provider-lock-in og sende usikre cases til exception-køen." },
+          { status: "next", day: "Næste", title: "EAN, abonnementer og stamdata", body: "Offentlige kunder kræver EAN/GLN, og mange små virksomheder har brug for gentagne fakturaer og stærkere kunde-/leverandørstamdata." },
+          { status: "next", day: "Næste", title: "SAF-T og revisor-handoff", body: "Næste eksportlag er en ærlig første SAF-T-slice og en konkret pakke der giver bogholder eller revisor noget verificerbart at arbejde med." },
+          { status: "future", day: "v0.5", title: "Interaktiv web-UI", body: "Det statiske dashboard skal vokse til et lille kontrolrum for godkendelser, exceptions og drill-down i ledgeren." },
+          { status: "future", day: "v0.5", title: "Åbne bankfeeds og plugins", body: "CSV virker nu. Senere kommer PSD2/open banking og forsigtige integrationer til fx PayPal, Zettle og Shopify." },
           { status: "future", day: "v1", title: "Danmarks bedste bogholder", body: "Ikke fordi den gætter bedst. Fordi den arbejder mest disciplineret, dokumenterer alt og stopper når den bør." },
         ].map((stop) => (
           <article class={`metro-stop ${stop.status}`}>
