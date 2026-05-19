@@ -49,7 +49,7 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 
 - Homepage: https://rentemester.dk/
 - Roadmap / journey to v1: https://rentemester.dk/#roadmap
-- Current roadmap themes include deterministic bilagsmail intake, EAN/GLN public-customer e-invoicing, recurring invoice templates, a first SAF-T export slice, accountant/reviewer handoff, live UI, and carefully scoped bank/plugin integrations
+- Current roadmap themes include deterministic bilagsmail intake, EAN/GLN public-customer e-invoicing, recurring invoice templates, a first SAF-T export slice, hosted accountant/reviewer access on top of the shipped local handoff package, live UI, and carefully scoped bank/plugin integrations
 - Agent contribution brief: https://rentemester.dk/#agent-brief
 - Features: https://rentemester.dk/funktioner
 - How it works: https://rentemester.dk/saadan-virker-det

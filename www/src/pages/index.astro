@@ -276,15 +276,15 @@ Lav en minimal ændring. Kør tests. Forklar hvad du ændrede, hvorfor det er si
 
       <div class="grid gap-gutter sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { t: "Bilagsmail", d: "Send bilag til en mailadresse — agenten registrerer og knytter dem til transaktioner." },
+          { t: "Bilagsmail", d: "Roadmap: første slice bliver deterministisk intake fra maildrop/EML uden provider-lock-in; usikre cases skal lande i exception-køen." },
           { t: "Bankimport", d: "CSV-import fra danske banker. Automatisk matchning af linjer med bilag." },
           { t: "Kontakter", d: "Roadmap: kunder og leverandører linkes til fakturaer, køb, bilag og historik." },
           { t: "Fakturering", d: "Udsted, send påmindelser, kompensation og renter — fuldt sporbart i ledgeren. EAN og abonnementer er på roadmap." },
-          { t: "Valutakøb", d: "Roadmap: køb i fx dollars, bogført korrekt mod det beløb der trækkes i kroner." },
+          { t: "Valutakøb", d: "Bogfør køb i fx USD/EUR korrekt, også når banken trækker et DKK-beløb på kontoen." },
           { t: "Momsrapport", d: "Generér moms­indberetning for periode. Repræsentation, EU-handel, blandet anvendelse." },
           { t: "SAF-T", d: "Roadmap: Standard Audit File-Tax så regnskabsdata kan udveksles med myndigheder efter den nye bogføringslov." },
           { t: "Audit-eksport", d: "Eksportér til myndighedsudlevering og audit-kontrol. Komplet kæde, kryptografisk signeret." },
-          { t: "Revisoradgang", d: "Roadmap: læse-/skriveadgang ved hosted drift og nem eksportpakke ved lokal drift." },
+          { t: "Revisoradgang", d: "Lokal eksportpakke findes i dag. Roadmap: hosted læse-/skriveadgang med tydelige roller og audit-attribution." },
           { t: "Backup-signering", d: "Tredjepart kan verificere backup-integritet med offentlig ed25519-nøgle." },
           { t: "Dashboard", d: "Deterministisk HTML-rapport. Samme data → samme output. Bit-for-bit." },
           { t: "Plugins", d: "Roadmap: robust integration med PayPal, Zettle, Shopify og andre API’er." },
