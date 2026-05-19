@@ -1,0 +1,57 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const bogfoeringslovenUrl = "https://www.retsinformation.dk/eli/lta/2022/700";
+---
+
+<BaseLayout
+  title="Regnskabsmateriale"
+  description="Regnskabsmateriale forklaret: bilag, journal, konti, fakturaer, bank, dokumentation, opbevaring og Rentemesters lokale eksport."
+  pathname="/viden/myndigheder/regnskabsmateriale"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Myndigheder" title="Regnskabsmateriale skal kunne findes igen" lead="Regnskabsmateriale er ikke kun årsrapporten. Det er bilag, posteringer, fakturaer, konti, bankdata, dokumentation og de spor, der forklarer tallene." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      For små virksomheder er udfordringen ofte ikke at forstå ordet regnskabsmateriale, men at holde materialet samlet nok til at kunne udleveres eller kontrolleres. Bilag uden postering og postering uden bilag er begge svage.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: bogfoeringslovenUrl, label: "Bogføringsloven", external: true },
+        { href: "https://erhvervsstyrelsen.dk/vejledning-bogfoeringsloven", label: "Erhvervsstyrelsens vejledning", external: true },
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester eksport- og retention-tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/myndigheder/eksport-af-regnskab", label: "Eksport af regnskab" },
+        { href: "/viden/myndigheder/revisor-handoff", label: "Revisor-handoff" },
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+      ]}
+    />
+
+    <h2>Typiske dele</h2>
+    <ul>
+      <li>journal og kontoplan</li>
+      <li>fakturaer, kreditnotaer og bilag</li>
+      <li>bankdata og afstemning</li>
+      <li>momsrapporter</li>
+      <li>backup- og opbevaringsspor</li>
+      <li>audit trail og rettelser</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester behandler regnskabsmateriale som en lokal pakke af database, filer og manifest. Authority export og accountant handoff samler materialet i strukturerede perioder, men fuld SAF-T skal stadig omtales som WIP, ikke færdig compliance.
+    </p>
+    <p>
+      Den praktiske gevinst er, at materiale til revisor eller myndighed ikke skal samles manuelt fra mange mapper. Systemet kan pakke journal, bilag, bankdata og auditspor, men brugeren skal stadig sikre, at perioden og dokumentgrundlaget er korrekt.
+    </p>
+  </article>
+</BaseLayout>

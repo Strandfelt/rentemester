@@ -1,0 +1,55 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const skatEuKoebUrl = "https://skat.dk/erhverv/moms/moms-ved-handel-med-udlandet/moms-ved-handel-med-virksomheder/moms-ved-handel-med-lande-i-eu/moms-ved-koeb-af-varer-og-ydelser-i-eu";
+---
+
+<BaseLayout
+  title="VIES og momsnummer ved EU-handel"
+  description="VIES og momsnummer ved EU-handel: hvorfor momsnumre skal kontrolleres, hvad fakturaen bør vise, og hvordan Rentemester cacher validering."
+  pathname="/viden/moms/vies-momsnummer"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Moms"
+    title="VIES-kontrol før EU reverse charge"
+    lead="Ved EU-handel bør momsnumre ikke bare indtastes og glemmes. VIES-kontrol hjælper med at dokumentere, at modpartens momsnummer var valideret på tidspunktet for behandlingen."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Når en dansk virksomhed handler med en EU-virksomhed, er momsnummeret en central del af dokumentationen. Det skal stå korrekt på fakturaen, og virksomheden bør kunne vise, at nummeret er kontrolleret, hvis reverse charge eller EU-momsbehandling bruges.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: skatEuKoebUrl, label: "Skattestyrelsen: moms ved køb i EU", external: true },
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester VIES-tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/moms/eu-reverse-charge", label: "EU reverse charge" },
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+      ]}
+    />
+
+    <h2>Hvad betyder det i praksis?</h2>
+    <ul>
+      <li>Dit eget momsnummer bør stå korrekt på fakturaen.</li>
+      <li>Leverandørens momsnummer bør kontrolleres.</li>
+      <li>Kontrollen bør gemmes med tidspunkt og resultat.</li>
+      <li>Ugyldig eller manglende validering bør stoppe automatisk bogføring.</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester kræver cached VIES-validering før visse reverse-charge flows kan bogføres. Det gør momsnummeret til dokumenteret input i stedet for fri tekst. Hvis validering mangler, skal flowet stoppe og afklares.
+    </p>
+  </article>
+</BaseLayout>

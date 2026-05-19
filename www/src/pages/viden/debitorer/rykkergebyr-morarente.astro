@@ -1,0 +1,60 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const rentelovenUrl = "https://www.retsinformation.dk/eli/lta/2014/459";
+---
+
+<BaseLayout
+  title="Rykkergebyr og morarente"
+  description="Rykkergebyr, morarente og kompensation ved forsinket betaling: praktisk debitorflow, dokumentation og Rentemesters testede regler."
+  pathname="/viden/debitorer/rykkergebyr-morarente"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Debitorer"
+    title="Rykkergebyr og morarente skal være sporbare"
+    lead="Når en kunde betaler for sent, skal gebyrer, renter og kompensation beregnes deterministisk og bogføres separat. Ellers bliver debitorsaldoen svær at forklare."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Debitoropfølgning handler ikke kun om at sende en venlig mail. Hvis du opkræver rykkergebyr, morarente eller fast kompensation, skal kravet kunne dokumenteres, beregnes og bogføres uden at ændre den oprindelige faktura.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: rentelovenUrl, label: "Renteloven på Retsinformation", external: true },
+        { href: "https://www.retsinformation.dk/eli/lta/2013/105", label: "Bekendtgørelse om fast kompensationsbeløb", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Rentemester debitorregler", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/faktura", label: "Bogfør faktura" },
+        { href: "/viden/debitorer/tab-paa-debitorer", label: "Tab på debitorer" },
+        { href: "/bogfoering-for-aps", label: "Bogføring for ApS" },
+      ]}
+    />
+
+    <h2>Hvad skal holdes adskilt?</h2>
+    <ul>
+      <li>oprindelig fakturasaldo</li>
+      <li>rykkergebyrer</li>
+      <li>morarente</li>
+      <li>fast kompensation ved relevante handelsforhold</li>
+      <li>betalinger der dækker hovedstol og krav</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har testede flows for rykkergebyr, morarente, fast kompensation og betaling af krav. Systemet registrerer kravene som egne sporbare poster og bogfører dem append-only, så den oprindelige faktura ikke muteres.
+    </p>
+    <p>
+      Ved delbetalinger skal systemet også kunne vise, hvad kunden har betalt: hovedstol, krav eller begge dele. Ellers bliver næste opfølgning upræcis, og bogholderen mister overblikket over den reelle debitorsaldo.
+    </p>
+  </article>
+</BaseLayout>

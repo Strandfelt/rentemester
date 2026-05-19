@@ -1,0 +1,55 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Revisor-handoff af regnskab"
+  description="Revisor-handoff for små virksomheder: hvad bogholder, revisor eller rådgiver skal bruge, og hvordan Rentemester eksporterer materiale lokalt."
+  pathname="/viden/myndigheder/revisor-handoff"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Myndigheder"
+    title="Revisor-handoff uden sort boks"
+    lead="En bogholder eller revisor har brug for materiale, der kan efterprøves: journal, bilag, fakturaer, bank, moms og audit. Ikke bare screenshots fra et system."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      God handoff handler om at reducere tid brugt på at spørge efter manglende bilag. Hvis materialet er samlet med referencer og manifest, kan rådgiveren hurtigere se hvad der er bogført, hvad der mangler, og hvor risikoen ligger.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester accountant handoff tests", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Eksportflow i kildekoden", external: true },
+      ]}
+      related={[
+        { href: "/viden/myndigheder/eksport-af-regnskab", label: "Eksport af regnskab" },
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+        { href: "/bogfoering-for-aps", label: "Bogføring for ApS" },
+      ]}
+    />
+
+    <h2>Hvad bør med?</h2>
+    <ul>
+      <li>kontoplan og journal</li>
+      <li>bilag og fakturaer</li>
+      <li>banktransaktioner og afstemning</li>
+      <li>momsrapport</li>
+      <li>exceptions og åbne spørgsmål</li>
+      <li>audit-verifikation</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har et lokalt accountant handoff-flow med tydelig filgrænse. Hosted reviewer access er roadmap, ikke live. Det er vigtigt, fordi siden ikke må love adgangsstyring eller portal, før den findes og er gated på main.
+    </p>
+  </article>
+</BaseLayout>

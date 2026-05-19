@@ -1,0 +1,53 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Momsindberetning"
+  description="Momsindberetning for små virksomheder: frister, momsrapport, salgsmoms, købsmoms, EU-køb og hvorfor tallene bør være dokumenterede."
+  pathname="/viden/moms/momsindberetning"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Moms" title="Momsindberetning starter med dokumenterede tal" lead="Indberetningen er sidste skridt. Før den kommer bilag, fakturaer, momsbehandling, bankafstemning og en rapport, der kan forklares." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Momsindberetning bør ikke være en manuel gætteøvelse. Tallene skal komme fra bogføringen og kunne følges tilbage til dokumentation. Hvis et beløb i momsrapporten ikke kan forklares, er det et tegn på et bogføringsproblem før det er et indberetningsproblem.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: "https://skat.dk/erhverv/moms/momsindberetning-og-frister", label: "Skattestyrelsen: momsindberetning", external: true },
+        { href: "https://skat.dk/erhverv/moms/frister-indberet-og-betal-moms", label: "Skattestyrelsen: momsfrister", external: true },
+      ]}
+      related={[
+        { href: "/viden/moms/momsrapport", label: "Momsrapport" },
+        { href: "/viden/frister/moms", label: "Momsfrister" },
+        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+      ]}
+    />
+
+    <h2>Før du indberetter</h2>
+    <ul>
+      <li>afstem bank og åbne poster</li>
+      <li>kontrollér momsperioden</li>
+      <li>gennemgå uafklarede bilag</li>
+      <li>kontrollér EU-køb og reverse charge</li>
+      <li>gem rapporten som dokumentation</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester kan beregne en momsrapport for en periode, men siden lover ikke automatisk indsendelse til TastSelv eller myndighedsportal. Den korrekte claim er lokal rapportering og dokumenteret grundlag, ikke fuld automatisk indberetning.
+    </p>
+    <p>
+      Det betyder, at workflowet stopper før myndighedsindsendelsen. Brugeren skal selv kontrollere perioden, åbne poster og eventuelle usikre momskoder, og derefter indberette i Skattestyrelsens løsning med rapporten som dokumentation.
+    </p>
+  </article>
+</BaseLayout>

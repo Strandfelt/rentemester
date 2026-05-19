@@ -1,0 +1,55 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Bogfør kassebon korrekt i regnskabet"
+  description="Sådan bogfører du en kassebon korrekt: kontant køb, kortbetaling, moms, bilag, udlæg, formål og forskellen på bon og faktura i regnskabet."
+  pathname="/viden/saadan-bogfoerer-du/kassebon"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Sådan bogfører du" title="Kasseboner kræver samme kontrol som andre bilag" lead="En kassebon kan være et gyldigt bilag, men den skal stadig forklare køb, formål, betaling og moms. Ellers bliver den bare et billede uden regnskabsværdi." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Kasseboner opstår typisk ved mindre køb, kortbetalinger eller medarbejderudlæg. De bliver hurtigt uoverskuelige, fordi de ofte mangler tydeligt formål og relation til en konkret betaling. Derfor bør de kobles til bank, udlæg eller kasse, så de ikke står alene.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester cash receipt tests", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Cash receipt metadata i kildekoden", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/kvittering", label: "Bogfør kvittering" },
+        { href: "/viden/begreber/bilagsnummer", label: "Bilagsnummer" },
+        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
+      ]}
+    />
+
+    <h2>Kontrolpunkter</h2>
+    <ul>
+      <li>kan leverandør og dato læses?</li>
+      <li>er beløbet betalt med firmakort, privat kort eller kontant?</li>
+      <li>er momsen tydelig og relevant?</li>
+      <li>er formålet erhvervsmæssigt?</li>
+      <li>skal bonen knyttes til et udlæg eller en banktransaktion?</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har dokumentflows for kasseboner og kan bevare original valuta, beløb og metadata. Når bonen ikke har nok oplysninger, skal flowet stoppe som exception i stedet for at gætte konto eller moms.
+    </p>
+
+    <h2>Faktura eller bon?</h2>
+    <p>
+      En faktura har typisk mere struktureret information end en kassebon. Hvis købet er større, gentaget eller leverandøren fakturerer virksomheden direkte, er fakturaen ofte bedre dokumentation. Boner bør især bruges, når de passer til det faktiske køb og kan forklares.
+    </p>
+  </article>
+</BaseLayout>

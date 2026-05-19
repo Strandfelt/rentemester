@@ -49,8 +49,12 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 
 - Homepage: https://rentemester.dk/
 - Regnskabsprogram: https://rentemester.dk/regnskabsprogram
+- Open source-regnskabsprogram: https://rentemester.dk/open-source-regnskabsprogram
 - Bogføringsprogram: https://rentemester.dk/bogfoeringsprogram
 - AI-bogholder: https://rentemester.dk/ai-bogholder
+- Bogføring for freelancere: https://rentemester.dk/bogfoering-for-freelancere
+- Bogføring for enkeltmandsvirksomhed: https://rentemester.dk/bogfoering-for-enkeltmandsvirksomhed
+- Bogføring for ApS: https://rentemester.dk/bogfoering-for-aps
 - Roadmap / journey to v1: https://rentemester.dk/#roadmap
 - Current roadmap themes include deterministic bilagsmail intake, EAN/GLN public-customer e-invoicing, recurring invoice templates, a first SAF-T export slice, hosted accountant/reviewer access on top of the shipped local handoff package, live UI, and carefully scoped bank/plugin integrations
 - Agent contribution brief: https://rentemester.dk/#agent-brief
@@ -58,10 +62,48 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 - How it works: https://rentemester.dk/saadan-virker-det
 - Why it exists: https://rentemester.dk/hvorfor
 - Knowledge hub: https://rentemester.dk/viden
+- Digital bookkeeping in Denmark: https://rentemester.dk/viden/digital-bogfoering
+- Danish bookkeeping law overview: https://rentemester.dk/viden/bogfoeringsloven
 - VAT deadlines: https://rentemester.dk/viden/frister/moms
 - VAT rates: https://rentemester.dk/viden/moms/satser
+- EU reverse charge VAT: https://rentemester.dk/viden/moms/eu-reverse-charge
+- VIES VAT number checks: https://rentemester.dk/viden/moms/vies-momsnummer
+- VAT report: https://rentemester.dk/viden/moms/momsrapport
+- VAT filing: https://rentemester.dk/viden/moms/momsindberetning
+- How to book invoices: https://rentemester.dk/viden/saadan-bogfoerer-du/faktura
+- How to book credit notes: https://rentemester.dk/viden/saadan-bogfoerer-du/kreditnota
+- Bank reconciliation: https://rentemester.dk/viden/saadan-bogfoerer-du/bankafstemning
+- How to book supporting documents: https://rentemester.dk/viden/saadan-bogfoerer-du/bilag
+- How to book foreign invoices: https://rentemester.dk/viden/saadan-bogfoerer-du/udenlandsk-faktura
+- How to book currency/FX: https://rentemester.dk/viden/saadan-bogfoerer-du/valuta
 - How to book expenses paid as outlays: https://rentemester.dk/viden/saadan-bogfoerer-du/udlaeg
+- How to book MobilePay payments: https://rentemester.dk/viden/saadan-bogfoerer-du/mobilepay
+- How to book representation expenses: https://rentemester.dk/viden/saadan-bogfoerer-du/repraesentation
+- How to book mileage allowance: https://rentemester.dk/viden/saadan-bogfoerer-du/koerselsgodtgorelse
+- Debet and credit: https://rentemester.dk/viden/begreber/debet-kredit
+- Chart of accounts: https://rentemester.dk/viden/begreber/kontoplan
+- Audit trail: https://rentemester.dk/viden/begreber/audit-trail
+- Append-only ledger: https://rentemester.dk/viden/begreber/append-only-ledger
+- Accounting backup: https://rentemester.dk/viden/sikkerhed/backup-af-regnskab
+- Local accounting data: https://rentemester.dk/viden/sikkerhed/lokal-regnskabsdata
+- Authority export: https://rentemester.dk/viden/myndigheder/eksport-af-regnskab
+- Accountant handoff: https://rentemester.dk/viden/myndigheder/revisor-handoff
+- AI bookkeeping with controls: https://rentemester.dk/viden/ai/ai-bogfoering-med-kontrol
+- Reminder fees and late interest: https://rentemester.dk/viden/debitorer/rykkergebyr-morarente
+- Bad debt write-off: https://rentemester.dk/viden/debitorer/tab-paa-debitorer
+- Invoice status and open balances: https://rentemester.dk/viden/debitorer/faktura-status
+- Customer refunds: https://rentemester.dk/viden/debitorer/refundering
+- Supplier invoice booking: https://rentemester.dk/viden/saadan-bogfoerer-du/leverandoerfaktura
+- Receipt booking: https://rentemester.dk/viden/saadan-bogfoerer-du/kvittering
+- Cash register receipt booking: https://rentemester.dk/viden/saadan-bogfoerer-du/kassebon
+- Bank transaction booking: https://rentemester.dk/viden/saadan-bogfoerer-du/banktransaktion
+- Reconciliation: https://rentemester.dk/viden/begreber/afstemning
+- Document numbers: https://rentemester.dk/viden/begreber/bilagsnummer
+- Signed accounting backup: https://rentemester.dk/viden/sikkerhed/signeret-backup
+- Accounting material: https://rentemester.dk/viden/myndigheder/regnskabsmateriale
+- MCP bookkeeping: https://rentemester.dk/viden/ai/mcp-bogfoering
 - VAT calculator: https://rentemester.dk/vaerktoej/momsberegner
+- Invoice template checklist: https://rentemester.dk/vaerktoej/fakturaskabelon
 - Installation: https://rentemester.dk/docs/installation
 - Security: https://rentemester.dk/sikkerhed
 - Privacy: https://rentemester.dk/privatlivspolitik

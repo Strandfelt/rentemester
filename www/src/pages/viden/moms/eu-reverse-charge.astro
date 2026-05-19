@@ -1,0 +1,57 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const skatEuKoebUrl = "https://skat.dk/erhverv/moms/moms-ved-handel-med-udlandet/moms-ved-handel-med-virksomheder/moms-ved-handel-med-lande-i-eu/moms-ved-koeb-af-varer-og-ydelser-i-eu";
+---
+
+<BaseLayout
+  title="EU reverse charge moms"
+  description="EU reverse charge forklaret: omvendt betalingspligt ved køb af ydelser og varer i EU, fakturakontrol, momsrapport og Rentemester."
+  pathname="/viden/moms/eu-reverse-charge"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Moms"
+    title="EU reverse charge kræver fakturakontrol"
+    lead="Når en dansk virksomhed køber varer eller ydelser fra virksomheder i andre EU-lande, kan køberen selv skulle beregne dansk moms. Det kræver korrekt faktura, momsnummer og rapportering."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Reverse charge betyder, at sælgeren ikke nødvendigvis opkræver dansk moms. I stedet skal køberen selv beregne og indberette momsen efter de relevante regler. Hvis fakturaen er forkert, risikerer virksomheden både forkert moms og forkert dokumentation.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: skatEuKoebUrl, label: "Skattestyrelsen: moms ved køb i EU", external: true },
+        { href: "https://info.skat.dk/data.aspx?oid=2068790", label: "Skattestyrelsens juridiske vejledning om EU-ydelser", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Rentemester reverse-charge regler", external: true },
+      ]}
+      related={[
+        { href: "/viden/moms/vies-momsnummer", label: "VIES og momsnummer" },
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+      ]}
+    />
+
+    <h2>Hvad skal du kontrollere?</h2>
+    <ul>
+      <li>dit eget momsnummer</li>
+      <li>sælgerens momsnummer</li>
+      <li>om fakturaen viser reverse charge eller tilsvarende tekst</li>
+      <li>om beløbet er i fremmed valuta og skal have DKK-grundlag</li>
+      <li>om købet er vare eller ydelse</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har testede flows for EU service reverse charge, VIES-validering, udenlandsk bilag, DKK-basis og momsrapportering. Siden lover ikke automatisk vurdering af alle grænseoverskridende handler; den beskriver et konkret understøttet EU-service-flow.
+    </p>
+  </article>
+</BaseLayout>

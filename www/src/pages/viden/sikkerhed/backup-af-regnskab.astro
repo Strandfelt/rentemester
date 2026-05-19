@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Backup af regnskab"
+  description="Backup af regnskab for små virksomheder: dokumenter, ledger, signaturer, restore-test og hvordan Rentemester arbejder med verificerbare backups."
+  pathname="/viden/sikkerhed/backup-af-regnskab"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Sikkerhed"
+    title="Backup er først god, når restore virker"
+    lead="En regnskabsbackup er ikke bare en kopi. Den skal kunne verificeres, gendannes og dokumentere hvilke filer og data den indeholder."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Mange opdager først backup-problemer, når noget allerede er tabt. For bogføring er det ekstra kritisk, fordi ledger, bilag, fakturaer og konfiguration skal hænge sammen. En backup uden restore-test er kun et håb.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester backup og restore tests", external: true },
+        { href: "/sikkerhed", label: "Rentemester sikkerhedsside" },
+      ]}
+      related={[
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+        { href: "/viden/begreber/append-only-ledger", label: "Append-only ledger" },
+        { href: "/sikkerhed", label: "Sikkerhed" },
+      ]}
+    />
+
+    <h2>Hvad bør med i backup?</h2>
+    <ul>
+      <li>ledger-database</li>
+      <li>bilag og originale dokumenter</li>
+      <li>udstedte fakturaer og kreditnotaer</li>
+      <li>konfiguration og virksomhedsmapping</li>
+      <li>manifest med checksums</li>
+      <li>mulighed for restore-verifikation</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har backup, backup-status, restore, HMAC-signering, optional ed25519-signatur og standalone signaturverifikation i testede flows. Siden lover ikke hosted backup-service; den beskriver lokale, verificerbare backup-mekanismer i kildekoden.
+    </p>
+    <p>
+      Det praktiske mål er, at en backup kan flyttes til en anden mappe, verificeres og gendannes uden at brugeren skal gætte hvilke filer der hører sammen. Det er især vigtigt, når bilag og database lever side om side.
+    </p>
+  </article>
+</BaseLayout>

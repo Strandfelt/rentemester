@@ -1,0 +1,49 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Signeret backup af regnskab"
+  description="Signeret backup forklaret: HMAC, ed25519, manifest, offentlig nøgle, restore-verifikation og hvorfor regnskabsbackup skal kunne kontrolleres."
+  pathname="/viden/sikkerhed/signeret-backup"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Sikkerhed" title="Signeret backup gør manipulation synlig" lead="En signeret backup kan verificeres efter den er flyttet. Det gør det sværere at skjule ændringer i filer, manifest eller databasekopi." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      En almindelig backup kan stadig være beskadiget eller ændret. Signering og checksums giver en måde at kontrollere, om backupmaterialet matcher det, der blev skabt. Det er særligt relevant for regnskab, hvor dokumentation og ledger skal hænge sammen.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester backup signature tests", external: true },
+        { href: "/viden/sikkerhed/backup-af-regnskab", label: "Backup af regnskab" },
+      ]}
+      related={[
+        { href: "/viden/sikkerhed/backup-af-regnskab", label: "Backup af regnskab" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+        { href: "/sikkerhed", label: "Sikkerhed" },
+      ]}
+    />
+
+    <h2>Hvad signeres?</h2>
+    <ul>
+      <li>manifestet over backupfiler</li>
+      <li>hashes for database og dokumenter</li>
+      <li>metadata om backup-id og tidspunkt</li>
+      <li>eventuelt med offentlig nøgle til tredjepartsverifikation</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har HMAC-signering og optional ed25519-signering af backupmanifestet, med tests for manipulation, restore og standalone public-key verifikation. Private nøgler må ikke ende i backup-pakken.
+    </p>
+  </article>
+</BaseLayout>

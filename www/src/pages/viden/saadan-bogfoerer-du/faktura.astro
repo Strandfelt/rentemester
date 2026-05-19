@@ -1,0 +1,71 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "Sådan bogfører du en faktura",
+  inLanguage: "da-DK",
+  step: [
+    { "@type": "HowToStep", position: 1, name: "Valider fakturaen", text: "Kontroller fakturanummer, dato, kunde, leveringsdato, linjer, moms og total." },
+    { "@type": "HowToStep", position: 2, name: "Bogfør salget", text: "Bogfør debitor/bank, omsætning og eventuel salgsmoms." },
+    { "@type": "HowToStep", position: 3, name: "Følg betaling", text: "Match betaling mod fakturaen, så åben saldo kan lukkes." },
+  ],
+};
+---
+
+<BaseLayout
+  title="Bogfør en faktura"
+  description="Sådan bogfører du en faktura: fakturanummer, moms, debitor, omsætning, betaling, bankmatch og audit trail i Rentemester."
+  pathname="/viden/saadan-bogfoerer-du/faktura"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Sådan bogfører du"
+    title="Sådan bogfører du en faktura"
+    lead="En faktura er både et salgsdokument og grundlag for bogføring. Den skal kunne valideres, bogføres, matches mod betaling og rettes med kreditnota eller modpostering hvis noget går galt."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Bogføring af en faktura starter før pengene rammer banken. Først skal fakturaen være korrekt: kunde, fakturanummer, dato, levering, linjer, moms og totaler skal hænge sammen. Derefter kan salget bogføres på debitor, omsætning og eventuel salgsmoms.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Rentemester faktura- og bogføringsregler", external: true },
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester faktura- og betalingstests", external: true },
+      ]}
+      related={[
+        { href: "/vaerktoej/fakturaskabelon", label: "Fakturaskabelon" },
+        { href: "/viden/saadan-bogfoerer-du/kreditnota", label: "Kreditnota" },
+        { href: "/viden/saadan-bogfoerer-du/bankafstemning", label: "Bankafstemning" },
+      ]}
+    />
+
+    <h2>Typisk bogføring</h2>
+    <pre><code>Debet: debitorer 1.250 kr.
+Kredit: omsætning 1.000 kr.
+Kredit: salgsmoms 250 kr.</code></pre>
+    <p>
+      Når kunden betaler, bogføres betalingen typisk fra debitor til bank. Det er vigtigt at adskille fakturaens opståen fra betalingen, så du kan se åbne, forfaldne og betalte fakturaer.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har validering, udstedelse, PDF-rendering, bogføring, status, betaling, rykkerflow, renter, kompensation, kreditnota, refundering og tab på debitor i den nuværende kodebase. Det betyder ikke, at projektet er færdigt SaaS; det betyder at fakturaflowet er et af de bedst dækkede områder i koden.
+    </p>
+
+    <h2>Fejl og rettelser</h2>
+    <p>
+      Hvis en faktura er forkert, bør historikken ikke overskrives. Brug kreditnota eller en tydelig modpostering, så både kunden, bogholderen og en senere audit kan se hvad der skete. Det er mere besværligt end at redigere direkte, men langt mere robust.
+    </p>
+  </article>
+</BaseLayout>

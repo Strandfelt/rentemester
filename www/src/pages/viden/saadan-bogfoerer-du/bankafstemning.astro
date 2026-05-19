@@ -1,0 +1,59 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Bankafstemning for små virksomheder"
+  description="Praktisk guide til bankafstemning: match banklinjer med fakturaer, bilag, betalinger og åbne poster i en lille virksomhed."
+  pathname="/viden/saadan-bogfoerer-du/bankafstemning"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Sådan bogfører du"
+    title="Bankafstemning er regnskabets virkelighedstjek"
+    lead="Bankafstemning handler om at sikre, at bankens bevægelser matcher fakturaer, køb, udlæg og betalinger. Uafstemte banklinjer er ofte de første tegn på manglende bilag eller fejl."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      En bankkonto viser hvad der faktisk er betalt. Bogføringen viser hvorfor beløbet findes. Bankafstemning forbinder de to. Hvis der står en betaling i banken uden bilag eller faktura, er opgaven ikke færdig.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester bank- og reconciliation-tests", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Bankimport og afstemning i kildekoden", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/mobilepay", label: "MobilePay-betalinger" },
+        { href: "/viden/saadan-bogfoerer-du/banktransaktion", label: "Banktransaktion" },
+        { href: "/viden/saadan-bogfoerer-du/faktura", label: "Bogfør faktura" },
+      ]}
+    />
+
+    <h2>Hvad skal matches?</h2>
+    <ul>
+      <li>kundebetalinger mod fakturaer</li>
+      <li>leverandørbetalinger mod bilag eller fakturaer</li>
+      <li>gebyrer og kortbetalinger mod afregninger</li>
+      <li>udlæg og refusioner mod dokumentation</li>
+      <li>åbne poster der kræver manuel forklaring</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester kan importere bank-CSV, liste og filtrere banktransaktioner, foreslå matches og afstemme mod dokumenterede flows. Umatchede linjer kan synliggøres som exceptions, så de ikke forsvinder som skjulte fejl.
+    </p>
+
+    <h2>Hvorfor det betyder noget</h2>
+    <p>
+      Små virksomheder får ofte rod i regnskabet, når banklinjer bogføres hurtigt uden dokumentation. En stærk afstemning gør det tydeligt, hvad der mangler, og giver bogholderen et bedre udgangspunkt end en mappe med tilfældige bilag.
+    </p>
+  </article>
+</BaseLayout>

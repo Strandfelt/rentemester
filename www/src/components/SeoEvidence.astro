@@ -8,6 +8,7 @@ type LinkItem = {
 };
 
 export interface Props {
+  published?: string;
   updated?: string;
   reviewed?: string;
   status?: string;
@@ -16,6 +17,7 @@ export interface Props {
 }
 
 const {
+  published = "2026-05-19",
   updated = "2026-05-19",
   reviewed = SITE.author,
   status = "QA-gennemgået mod kode, tests og relevante kilder.",
@@ -25,16 +27,31 @@ const {
 ---
 
 <aside class="seo-evidence my-12 border-y border-outline-variant/20 py-7">
+  <p class="mb-6 font-mono text-[12px] uppercase tracking-[0.12em] text-outline">
+    Af <a href="/om" rel="author" class="text-primary hover:text-cyber-blue">{SITE.author}</a>
+    · Publiceret <time datetime={published}>{published}</time>
+    · Opdateret <time datetime={updated}>{updated}</time>
+  </p>
   <div class="grid md:grid-cols-[0.75fr_1fr] gap-8">
     <div>
       <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-cyber-blue mb-3">Kvalitetssikring</div>
       <dl class="space-y-2 text-[15px] text-on-surface-variant">
         <div>
-          <dt class="inline text-outline">Sidst opdateret: </dt>
-          <dd class="inline text-on-surface">{updated}</dd>
+          <dt class="inline text-outline">Udgivet: </dt>
+          <dd class="inline text-on-surface"><time datetime={published}>{published}</time></dd>
         </div>
         <div>
-          <dt class="inline text-outline">Gennemgået af: </dt>
+          <dt class="inline text-outline">Sidst opdateret: </dt>
+          <dd class="inline text-on-surface"><time datetime={updated}>{updated}</time></dd>
+        </div>
+        <div>
+          <dt class="inline text-outline">Forfatter: </dt>
+          <dd class="inline text-on-surface" itemprop="author" itemscope itemtype="https://schema.org/Person">
+            <span itemprop="name">{SITE.author}</span>
+          </dd>
+        </div>
+        <div>
+          <dt class="inline text-outline">Fagligt gennemgået af: </dt>
           <dd class="inline text-on-surface">{reviewed}</dd>
         </div>
         <div>

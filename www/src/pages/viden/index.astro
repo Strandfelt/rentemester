@@ -5,22 +5,89 @@ import SeoEvidence from "../../components/SeoEvidence.astro";
 
 const sections = [
   {
+    title: "Målgrupper",
+    links: [
+      { href: "/bogfoering-for-freelancere", label: "Bogføring for freelancere" },
+      { href: "/bogfoering-for-enkeltmandsvirksomhed", label: "Bogføring for enkeltmandsvirksomhed" },
+      { href: "/bogfoering-for-aps", label: "Bogføring for ApS" },
+      { href: "/open-source-regnskabsprogram", label: "Open source-regnskabsprogram" },
+    ],
+  },
+  {
     title: "Moms",
     links: [
       { href: "/viden/moms/satser", label: "Momssatser i Danmark" },
       { href: "/viden/frister/moms", label: "Momsfrister" },
+      { href: "/viden/moms/eu-reverse-charge", label: "EU reverse charge" },
+      { href: "/viden/moms/vies-momsnummer", label: "VIES og momsnummer" },
+      { href: "/viden/moms/momsrapport", label: "Momsrapport" },
+      { href: "/viden/moms/momsindberetning", label: "Momsindberetning" },
     ],
   },
   {
     title: "Sådan bogfører du",
     links: [
+      { href: "/viden/saadan-bogfoerer-du/faktura", label: "Faktura" },
+      { href: "/viden/saadan-bogfoerer-du/leverandoerfaktura", label: "Leverandørfaktura" },
+      { href: "/viden/saadan-bogfoerer-du/kreditnota", label: "Kreditnota" },
+      { href: "/viden/saadan-bogfoerer-du/bankafstemning", label: "Bankafstemning" },
+      { href: "/viden/saadan-bogfoerer-du/banktransaktion", label: "Banktransaktion" },
+      { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bilag" },
+      { href: "/viden/saadan-bogfoerer-du/kvittering", label: "Kvittering" },
+      { href: "/viden/saadan-bogfoerer-du/kassebon", label: "Kassebon" },
       { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Udlæg" },
+      { href: "/viden/saadan-bogfoerer-du/mobilepay", label: "MobilePay-betalinger" },
+      { href: "/viden/saadan-bogfoerer-du/repraesentation", label: "Repræsentation" },
+      { href: "/viden/saadan-bogfoerer-du/koerselsgodtgorelse", label: "Kørselsgodtgørelse" },
+      { href: "/viden/saadan-bogfoerer-du/udenlandsk-faktura", label: "Udenlandsk faktura" },
+      { href: "/viden/saadan-bogfoerer-du/valuta", label: "Valuta" },
+    ],
+  },
+  {
+    title: "Debitorer",
+    links: [
+      { href: "/viden/debitorer/rykkergebyr-morarente", label: "Rykkergebyr og morarente" },
+      { href: "/viden/debitorer/tab-paa-debitorer", label: "Tab på debitorer" },
+      { href: "/viden/debitorer/faktura-status", label: "Fakturastatus" },
+      { href: "/viden/debitorer/refundering", label: "Refundering" },
+    ],
+  },
+  {
+    title: "Regler og begreber",
+    links: [
+      { href: "/viden/digital-bogfoering", label: "Digital bogføring" },
+      { href: "/viden/bogfoeringsloven", label: "Bogføringsloven" },
+      { href: "/viden/begreber/afstemning", label: "Afstemning" },
+      { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+      { href: "/viden/begreber/bilagsnummer", label: "Bilagsnummer" },
+      { href: "/viden/begreber/append-only-ledger", label: "Append-only ledger" },
+      { href: "/viden/begreber/debet-kredit", label: "Debet og kredit" },
+      { href: "/viden/begreber/kontoplan", label: "Kontoplan" },
+    ],
+  },
+  {
+    title: "Sikkerhed og handoff",
+    links: [
+      { href: "/viden/sikkerhed/backup-af-regnskab", label: "Backup af regnskab" },
+      { href: "/viden/sikkerhed/lokal-regnskabsdata", label: "Lokal regnskabsdata" },
+      { href: "/viden/myndigheder/eksport-af-regnskab", label: "Eksport af regnskab" },
+      { href: "/viden/myndigheder/regnskabsmateriale", label: "Regnskabsmateriale" },
+      { href: "/viden/myndigheder/revisor-handoff", label: "Revisor-handoff" },
+    ],
+  },
+  {
+    title: "AI og kontrol",
+    links: [
+      { href: "/ai-bogholder", label: "AI-bogholder" },
+      { href: "/viden/ai/ai-bogfoering-med-kontrol", label: "AI-bogføring med kontrol" },
+      { href: "/viden/ai/mcp-bogfoering", label: "MCP til bogføring" },
     ],
   },
   {
     title: "Værktøjer",
     links: [
       { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+      { href: "/vaerktoej/fakturaskabelon", label: "Fakturaskabelon" },
     ],
   },
 ];
@@ -55,7 +122,7 @@ const sections = [
         Nye sider bør kun tilføjes, når de kan bære deres egen værdi: konkrete eksempler, kildehenvisninger, intern linking og en tydelig grænse mellem hvad loven siger, hvad god praksis er, og hvad Rentemester faktisk understøtter i kodebasen.
       </p>
     </div>
-    <div class="grid md:grid-cols-3 gap-gutter">
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-gutter">
       {sections.map((section) => (
         <article class="bg-surface-container border border-outline-variant/15 p-7">
           <h2 class="font-serif text-2xl text-primary mb-4">{section.title}</h2>
@@ -72,10 +139,9 @@ const sections = [
     <SeoEvidence
       status="Videnshubben er QA-gennemgået som intern linking-hub. Juridiske detaljer valideres på de enkelte undersider."
       related={[
-        { href: "/viden/moms/satser", label: "Momssatser" },
-        { href: "/viden/frister/moms", label: "Momsfrister" },
-        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
-        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+        { href: "/bogfoering-for-freelancere", label: "Freelancere" },
+        { href: "/open-source-regnskabsprogram", label: "Open source-regnskab" },
+        { href: "/viden/digital-bogfoering", label: "Digital bogføring" },
       ]}
     />
   </section>

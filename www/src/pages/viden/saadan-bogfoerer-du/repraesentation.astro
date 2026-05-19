@@ -1,0 +1,59 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const skatReprUrl = "https://info.skat.dk/data.aspx?oid=2085708";
+---
+
+<BaseLayout
+  title="Bogfør repræsentation"
+  description="Sådan bogfører du repræsentation: bilag, formål, momsfradrag, skattemæssig vurdering og Rentemesters konservative behandling."
+  pathname="/viden/saadan-bogfoerer-du/repraesentation"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Sådan bogfører du"
+    title="Sådan bogfører du repræsentation"
+    lead="Repræsentation kræver ekstra forsigtighed. Bilaget skal vise hvem, hvad og hvorfor, og momsfradrag er ikke det samme som almindelige driftsudgifter."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Repræsentation er en af de poster, hvor automatisering let bliver farlig. Et restaurantbilag eller en gave kan være erhvervsmæssigt begrundet, men moms- og skattebehandling afhænger af den konkrete situation.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: skatReprUrl, label: "Skattestyrelsens juridiske vejledning om repræsentation og moms", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Rentemester danske regler som kode", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+      ]}
+    />
+
+    <h2>Hvad bør bilaget vise?</h2>
+    <ul>
+      <li>dato og leverandør</li>
+      <li>beløb og eventuel moms</li>
+      <li>hvem der deltog eller modtog ydelsen</li>
+      <li>det erhvervsmæssige formål</li>
+      <li>om der er privat element eller blandet formål</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har et testet flow for repræsentationsmoms, hvor fradraget behandles konservativt i momsrapporten. Siden skal ikke love, at alle repræsentationsudgifter kan klassificeres automatisk; usikre tilfælde skal stoppe som exception.
+    </p>
+    <p>
+      Den praktiske arbejdsgang bør derfor være strengere end ved almindelige software- eller kontorudgifter. Mangler deltager, formål eller tydelig erhvervsmæssig begrundelse, er det bedre at markere bilaget til manuel gennemgang end at lade en agent vælge konto og moms automatisk.
+    </p>
+  </article>
+</BaseLayout>

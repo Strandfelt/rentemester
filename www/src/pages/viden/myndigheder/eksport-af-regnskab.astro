@@ -1,0 +1,55 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Eksport af regnskab til myndigheder"
+  description="Eksport af regnskab til myndigheder: periodepakker, bilag, journal, audit, deadlines og Rentemesters aktuelle authority export."
+  pathname="/viden/myndigheder/eksport-af-regnskab"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Myndigheder"
+    title="Regnskabseksport skal kunne forklares"
+    lead="Når regnskabsmateriale skal udleveres, er det ikke nok med en PDF. Eksporten bør samle periode, journal, dokumenter, bank, audit og manifest på en måde der kan kontrolleres."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Myndigheds- og revisorudlevering handler om sporbarhed. Den, der modtager materialet, skal kunne se hvilke posteringer der indgår, hvilke bilag der dokumenterer dem, og om audit-kæden stadig hænger sammen.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester authority export tests", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Authority export regel", external: true },
+      ]}
+      related={[
+        { href: "/viden/myndigheder/regnskabsmateriale", label: "Regnskabsmateriale" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+        { href: "/viden/sikkerhed/backup-af-regnskab", label: "Backup af regnskab" },
+      ]}
+    />
+
+    <h2>Hvad bør eksporten indeholde?</h2>
+    <ul>
+      <li>periode og tidspunkt for generering</li>
+      <li>journalposter og konti</li>
+      <li>bilag og fakturaer</li>
+      <li>banktransaktioner hvor relevant</li>
+      <li>manifest og checksums</li>
+      <li>audit-verifikation eller tydelige fejl</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har et testet authority export-flow, der samler en deterministisk periodepakke med journal, bank, dokumenter, exceptions, audit og manifest. SAF-T er stadig WIP og skal ikke markedsføres som færdigt; den nuværende claim er authority export/handoff, ikke fuld officiel SAF-T.
+    </p>
+  </article>
+</BaseLayout>

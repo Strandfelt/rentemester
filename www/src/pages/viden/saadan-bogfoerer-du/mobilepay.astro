@@ -1,0 +1,70 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "Sådan bogfører du MobilePay-betalinger",
+  inLanguage: "da-DK",
+  step: [
+    { "@type": "HowToStep", position: 1, name: "Find salgsgrundlaget", text: "Start med faktura, bon eller anden dokumentation for salget." },
+    { "@type": "HowToStep", position: 2, name: "Match indbetalingen", text: "Match MobilePay- eller banklinjen mod salget og eventuelle gebyrer." },
+    { "@type": "HowToStep", position: 3, name: "Bogfør gebyret", text: "Bogfør betalingsgebyret separat, hvis det fremgår af afregningen." },
+    { "@type": "HowToStep", position: 4, name: "Afstem banken", text: "Afstem nettobeløbet mod bankkontoen." },
+  ],
+};
+---
+
+<BaseLayout
+  title="Bogfør MobilePay-betalinger"
+  description="Sådan bogfører du MobilePay-betalinger: dokumentation, moms, gebyrer, salgsgrundlag, bankafstemning og Rentemesters rolle."
+  pathname="/viden/saadan-bogfoerer-du/mobilepay"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Sådan bogfører du"
+    title="Sådan bogfører du MobilePay-betalinger"
+    lead="MobilePay er betalingskanalen, ikke selve salgsdokumentationen. Start med faktura, bon eller ordregrundlag, og brug bankafstemningen til at matche betaling og gebyr."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Den typiske fejl er at bogføre MobilePay-indbetalingen som salget i sig selv. Betalingen skal matche et dokumenteret salg, og eventuelle gebyrer skal behandles separat, så omsætning, moms og bank stemmer.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: "https://www.retsinformation.dk/eli/lta/2022/700", label: "Bogføringsloven", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Rentemester kildekode", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+      ]}
+    />
+
+    <h2>Praktisk bogføring</h2>
+    <ul>
+      <li>Brug faktura, bon eller ordre som dokumentation for salget.</li>
+      <li>Match indbetalingen mod kunden eller salgsdokumentet.</li>
+      <li>Del gebyr ud som omkostning, hvis afregningen viser gebyr.</li>
+      <li>Afstem nettobeløbet mod bankkontoen.</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester understøtter bank-CSV import, fakturaer, bilag, betalinger og afstemning. En direkte MobilePay-integration er ikke live på siden; den korrekte claim er, at betalinger kan håndteres via dokumentation og bank-/CSV-flow.
+    </p>
+    <p>
+      Hvis MobilePay udbetaler et nettobeløb efter gebyr, bør omsætning og gebyr ikke blandes sammen. Salget skal stadig stå som omsætning, mens gebyret bør fremgå som en separat omkostning eller afregningspost, så momsrapport og bankafstemning kan kontrolleres.
+    </p>
+  </article>
+</BaseLayout>

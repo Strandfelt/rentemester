@@ -1,0 +1,120 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
+
+const page = {
+  pathname: "/open-source-regnskabsprogram",
+  title: "Open source-regnskabsprogram",
+  description: "Open source-regnskabsprogram til danske små virksomheder: lokal dataejerskab, audit trail, regler som kode og ærlige begrænsninger.",
+  eyebrow: "Open source",
+  h1: "Et open source-regnskabsprogram til dansk bogføring",
+  lead: "Rentemester bygger et åbent regnskabssystem for danske små virksomheder: lokal SQLite-ledger, deterministiske regler, audit trail og AI-assistance med klare grænser.",
+  datePublished: "2026-05-19",
+  dateModified: "2026-05-19",
+  pageType: "Article" as const,
+};
+
+const faq = [
+  {
+    q: "Hvad betyder open source i Rentemester?",
+    a: "Koden er MIT-licenseret, kan inspiceres på GitHub og kan køres lokalt. Det betyder ikke at der findes en færdig hosted service eller supportaftale.",
+  },
+  {
+    q: "Er open source-regnskab mere sikkert?",
+    a: "Open source giver mulighed for inspektion, tests og uafhængig review, men sikkerheden afhænger stadig af implementation, drift, adgangskontrol og korrekt brug.",
+  },
+  {
+    q: "Hvorfor ikke bare bruge et almindeligt cloud-regnskabsprogram?",
+    a: "Mange bør bruge en etableret løsning. Rentemester er relevant når lokal datakontrol, transparens, audit trail og agent-workflows vejer tungere end færdig SaaS-komfort.",
+  },
+];
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+];
+---
+
+<BaseLayout
+  title={page.title}
+  description={page.description}
+  pathname={page.pathname}
+  pageType={page.pageType}
+  datePublished={page.datePublished}
+  dateModified={page.dateModified}
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero eyebrow={page.eyebrow} title={page.h1} lead={page.lead} />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Et open source-regnskabsprogram skal ikke bare være gratis software. Det skal gøre bogføringen lettere at efterprøve. Rentemester bruger åben kildekode, lokale data og verifiérbar historik som modvægt til sorte bokse i både klassisk SaaS og AI-baseret automatisering.
+    </p>
+
+    <SeoEvidence
+      updated={page.dateModified}
+      reviewed={SITE.author}
+      status="QA-gennemgået mod repo, licens, nuværende kodebase og officielle kravsider for bogføringssystemer."
+      sources={[
+        { href: `${SITE.github}`, label: "Rentemester på GitHub", external: true },
+        { href: `${SITE.github}/blob/main/LICENSE`, label: "MIT-licens", external: true },
+        { href: "https://erhvervsstyrelsen.dk/registrering-af-digitale-bogfoeringssystemer-hos-erhvervsstyrelsen", label: "Erhvervsstyrelsen: registrering af bogføringssystemer", external: true },
+      ]}
+      related={[
+        { href: "/regnskabsprogram", label: "Regnskabsprogram" },
+        { href: "/ai-bogholder", label: "AI-bogholder" },
+        { href: "/sikkerhed", label: "Sikkerhed" },
+      ]}
+    />
+
+    <h2>Hvor open source gør en forskel</h2>
+    <p>
+      Bogføring består af beslutninger, regler og dokumentation. Når systemet er lukket, må brugeren stole på leverandørens forklaring. Når koden er åben, kan regler, kontoplan, eksport, audit og dataflow inspiceres direkte.
+    </p>
+    <ul>
+      <li>Regler kan læses, testes og ændres i versionskontrol.</li>
+      <li>Posteringer kan valideres mod en append-only ledger.</li>
+      <li>Data ligger i en lokal virksomhedsmappe frem for kun i en leverandørkonto.</li>
+      <li>Eksport og handoff kan prioriteres som kernefunktioner, ikke nødudgange.</li>
+      <li>AI-assistance kan begrænses til strukturerede handlinger i stedet for fritekstbeslutninger.</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester er skrevet i TypeScript/Bun og bruger lokal SQLite, append-only bogføring, hash-chain/audit-verifikation, bilag, bankimport, faktura, momsrapport, eksport, backup/restore og MCP-server til AI-klienter. Det er kernen i produktpåstanden på siden.
+    </p>
+    <p>
+      Projektet er MIT-licenseret og offentligt på GitHub. Det gør det muligt at læse, køre, teste og bidrage til koden uden at vente på en kommerciel leverandør.
+    </p>
+
+    <h2>Begrænsninger og ansvar</h2>
+    <p>
+      Open source er ikke det samme som compliance. Rentemester er ikke et registreret digitalt standardbogføringssystem, og projektet lover ikke færdig drift for alle virksomheder. Krav til digital bogføring skal vurderes efter Erhvervsstyrelsens aktuelle regler og din virksomheds konkrete forhold.
+    </p>
+
+    <h2>Næste skridt</h2>
+    <ul>
+      <li><a href="/docs/installation">Installer Rentemester lokalt</a></li>
+      <li><a href="/saadan-virker-det">Se hvordan systemet virker</a></li>
+      <li><a href={SITE.github} rel="noopener" target="_blank">Læs koden på GitHub</a></li>
+    </ul>
+
+    <h2>Ofte stillede spørgsmål</h2>
+    {faq.map((item) => (
+      <>
+        <h3>{item.q}</h3>
+        <p>{item.a}</p>
+      </>
+    ))}
+  </article>
+</BaseLayout>

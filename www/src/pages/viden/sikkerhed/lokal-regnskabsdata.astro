@@ -1,0 +1,56 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Lokal regnskabsdata"
+  description="Lokal regnskabsdata forklaret: fordele, ansvar, backup, eksport og hvorfor Rentemester er local-first i stedet for hosted SaaS."
+  pathname="/viden/sikkerhed/lokal-regnskabsdata"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Sikkerhed"
+    title="Lokal regnskabsdata giver kontrol og ansvar"
+    lead="Local-first regnskab betyder, at data ligger i en mappe du ejer. Det giver gennemsigtighed og eksportmuligheder, men kræver også backup, adgangskontrol og disciplin."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      De fleste regnskabsprogrammer er cloud-first. Det er praktisk, men betyder også at data, workflow og eksport afhænger af leverandøren. Rentemester går en anden vej: lokal virksomhedsmappe, SQLite og kildekode, der kan inspiceres.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}`, label: "Rentemester kildekode", external: true },
+        { href: "/sikkerhed", label: "Rentemester sikkerhed" },
+      ]}
+      related={[
+        { href: "/viden/sikkerhed/backup-af-regnskab", label: "Backup af regnskab" },
+        { href: "/open-source-regnskabsprogram", label: "Open source-regnskab" },
+        { href: "/sikkerhed", label: "Sikkerhed" },
+      ]}
+    />
+
+    <h2>Fordele</h2>
+    <ul>
+      <li>du kan inspicere filer og database lokalt</li>
+      <li>eksport og backup kan være førsteprioritet</li>
+      <li>ingen telemetry eller cloudafhængighed som standardclaim</li>
+      <li>AI-workflows kan begrænses til lokale, strukturerede tools</li>
+    </ul>
+
+    <h2>Ansvar</h2>
+    <p>
+      Local-first fjerner ikke driftsansvar. Brugeren skal stadig beskytte filer, nøgler og backups. Derfor skal siden ikke sælge lokal data som magisk sikkerhed, men som et andet tradeoff: mere kontrol, mere ansvar.
+    </p>
+    <p>
+      Den rigtige brugeroplevelse er derfor ikke bare "download og glem". Den bør vise sundhedsstatus, backup-status, audit-fejl og åbne exceptions tydeligt, så lokal kontrol ikke bliver lokal uorden.
+    </p>
+  </article>
+</BaseLayout>

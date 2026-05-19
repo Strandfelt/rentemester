@@ -1,0 +1,54 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Momsrapport for små virksomheder"
+  description="Momsrapport forklaret: salgsmoms, købsmoms, EU-køb, reverse charge, periodeafgrænsning og hvordan Rentemester beregner rapporten."
+  pathname="/viden/moms/momsrapport"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Moms" title="Momsrapporten skal kunne spores tilbage til posteringer" lead="En momsrapport er kun nyttig, hvis tallene kan spores tilbage til fakturaer, bilag og journalposter. Ellers bliver indberetningen svær at kontrollere." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      En momsrapport samler momsgrundlag og momsbeløb for en periode. Den bør vise salgsmoms, købsmoms, EU-køb, reverse charge og eventuelle særlige forhold som repræsentation eller tab på debitorer, hvis de findes i perioden.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: "https://skat.dk/erhverv/moms/momsindberetning-og-frister", label: "Skattestyrelsen: momsindberetning", external: true },
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester VAT report tests", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Rentemester momsregler", external: true },
+      ]}
+      related={[
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/viden/begreber/afstemning", label: "Afstemning" },
+        { href: "/viden/moms/momsindberetning", label: "Momsindberetning" },
+      ]}
+    />
+
+    <h2>Hvad skal rapporten kunne forklare?</h2>
+    <ul>
+      <li>hvilken periode rapporten dækker</li>
+      <li>hvilke journalposter der er medtaget</li>
+      <li>hvilke poster der er reverseret eller korrigeret</li>
+      <li>hvordan salgsmoms og købsmoms er beregnet</li>
+      <li>om reverse charge eller særlige fradragsregler påvirker tallene</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har momsrapportering i kodebasen med testede flows for almindelig moms, EU reverse charge, repræsentation og bad-debt relief. Rapporten er deterministisk og bygger på journalposter, ikke på manuelle tekstnoter.
+    </p>
+    <p>
+      Rapporten er et kontrolgrundlag, ikke en automatisk indsendelse. Brug den til at se periodens salgsmoms, købsmoms og særlige momsbevægelser, og afstem tallene mod bilag og bank før du går videre til <a href="/viden/moms/momsindberetning">momsindberetningen</a>.
+    </p>
+  </article>
+</BaseLayout>

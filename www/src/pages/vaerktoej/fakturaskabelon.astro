@@ -1,0 +1,73 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PageHero from "../../components/PageHero.astro";
+import SeoEvidence from "../../components/SeoEvidence.astro";
+import { SITE } from "../../consts";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "Fakturaskabelon for små virksomheder",
+  inLanguage: "da-DK",
+  step: [
+    { "@type": "HowToStep", position: 1, name: "Udfyld parter", text: "Skriv sælger og kunde med navn, adresse og CVR hvis relevant." },
+    { "@type": "HowToStep", position: 2, name: "Tilføj linjer", text: "Angiv ydelse, antal, pris, moms og leveringsdato eller periode." },
+    { "@type": "HowToStep", position: 3, name: "Kontroller totaler", text: "Sørg for at nettobeløb, moms og total stemmer." },
+    { "@type": "HowToStep", position: 4, name: "Gem dokumentation", text: "Gem fakturaen og bogfør den mod debitor, omsætning og moms." },
+  ],
+};
+---
+
+<BaseLayout
+  title="Fakturaskabelon til små virksomheder"
+  description="Fakturaskabelon for danske freelancere og små virksomheder: nødvendige felter, moms, totaler, betaling og bogføring i Rentemester."
+  pathname="/vaerktoej/fakturaskabelon"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Værktøj"
+    title="Fakturaskabelon med de vigtigste felter"
+    lead="En faktura skal være mere end et pænt dokument. Den skal have nok oplysninger til at kunne bogføres, betales, kontrolleres og matches mod bank."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Brug denne side som tjekliste for fakturaer. Rentemester kan validere og udstede fakturaer i kodebasen, men hvis du laver en manuel faktura, bør de samme oplysninger stadig være tydelige.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/src`, label: "Rentemester faktura- og ledgerkode", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Fakturaregler i rules/dk", external: true },
+      ]}
+      related={[
+        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+      ]}
+    />
+
+    <h2>Felter der bør være med</h2>
+    <ul>
+      <li>fakturanummer og dato</li>
+      <li>sælgerens navn, adresse og CVR</li>
+      <li>kundens navn og adresse</li>
+      <li>leveringsdato eller leveringsperiode</li>
+      <li>beskrivelse af ydelsen eller varen</li>
+      <li>netto, moms og total</li>
+      <li>betalingsfrist og betalingsoplysninger</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har fakturavalidering, udstedelse, PDF-rendering, bogføring, status og betalinger i den nuværende kodebase. Siden fungerer som manuel tjekliste, ikke som download af en færdig skabelon endnu.
+    </p>
+    <p>
+      Når fakturaen bogføres i systemet, bør den hænge sammen med debitor, omsætning, moms og senere bankbetaling. Det er den sammenhæng, der gør fakturaen nyttig som regnskabsmateriale og ikke bare som et dokument sendt til kunden.
+    </p>
+  </article>
+</BaseLayout>

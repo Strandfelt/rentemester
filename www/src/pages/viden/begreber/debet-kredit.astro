@@ -1,0 +1,56 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Debet og kredit forklaret"
+  description="Debet og kredit forklaret kort for små virksomheder: dobbelt bogholderi, balance, fejlrettelser og hvordan Rentemester bruger append-only ledger."
+  pathname="/viden/begreber/debet-kredit"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Begreber"
+    title="Debet og kredit forklaret uden mystik"
+    lead="Debet og kredit er bogføringens måde at sikre balance på. Hver postering har mindst to sider, og summen skal gå op."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      I dobbelt bogholderi registrerer du ikke bare at noget skete. Du registrerer både hvor værdien kommer fra, og hvor den går hen. Derfor skal debet og kredit altid balancere.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: "https://www.retsinformation.dk/eli/lta/2022/700", label: "Bogføringsloven", external: true },
+        { href: `${SITE.github}/tree/main/src/core`, label: "Rentemester ledger-kode", external: true },
+      ]}
+      related={[
+        { href: "/viden/begreber/kontoplan", label: "Kontoplan" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+        { href: "/open-source-regnskabsprogram", label: "Open source-regnskabsprogram" },
+      ]}
+    />
+
+    <h2>Et simpelt eksempel</h2>
+    <pre><code>Debet: bank 1.250 kr.
+Kredit: salg 1.000 kr.
+Kredit: salgsmoms 250 kr.</code></pre>
+    <p>
+      Kunden betaler 1.250 kr. Banken stiger, omsætningen registreres, og momsen skilles ud. Debet og kredit summerer til samme beløb.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester blokerer ubalancerede journalposter og bruger append-only bogføring. Hvis noget er forkert, skal det rettes med en modpostering, så historikken stadig kan læses.
+    </p>
+    <p>
+      Det er også grunden til, at AI ikke bør have fri adgang til at opfinde posteringer. En agent kan foreslå en bogføring, men debet, kredit, dokumentation og regler skal stadig passere deterministisk validering, før posteringen bør accepteres.
+    </p>
+  </article>
+</BaseLayout>

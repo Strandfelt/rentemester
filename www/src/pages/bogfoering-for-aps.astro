@@ -1,0 +1,121 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
+
+const page = {
+  pathname: "/bogfoering-for-aps",
+  title: "Bogføring for ApS",
+  description: "Praktisk guide til bogføring for små ApS'er: selskabsøkonomi, moms, bilag, bankafstemning, audit trail og Rentemesters rolle.",
+  eyebrow: "ApS",
+  h1: "Bogføring for små ApS'er med audit trail",
+  lead: "Et ApS kræver tydelig selskabsøkonomi, dokumentation og kontrolspor. Rentemester er et open source regnskabsprojekt til små danske virksomheder, hvor data ligger lokalt og posteringer kan efterprøves.",
+  datePublished: "2026-05-19",
+  dateModified: "2026-05-19",
+  pageType: "Article" as const,
+};
+
+const faq = [
+  {
+    q: "Er Rentemester klar som regnskabsprogram til ApS?",
+    a: "Rentemester har testede lokale flows for ledger, faktura, bilag, bank, moms, audit og eksport, men det er stadig et open source projekt under udvikling og ikke en færdig hosted ApS-løsning.",
+  },
+  {
+    q: "Hvad er vigtigst i ApS-bogføring?",
+    a: "Adskilt selskabsøkonomi, dokumenterede bilag, bankafstemning, korrekt moms, sporbare rettelser og et materiale som en bogholder eller revisor kan gennemgå.",
+  },
+  {
+    q: "Kan Rentemester lave årsrapport for ApS?",
+    a: "Nej, siden lover ikke færdig årsrapport eller revisorproces. Rentemester fokuserer aktuelt på løbende bogføring, dokumentation, moms, audit og eksport/handoff.",
+  },
+];
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+];
+---
+
+<BaseLayout
+  title={page.title}
+  description={page.description}
+  pathname={page.pathname}
+  pageType={page.pageType}
+  datePublished={page.datePublished}
+  dateModified={page.dateModified}
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero eyebrow={page.eyebrow} title={page.h1} lead={page.lead} />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Bogføring for et lille ApS handler ikke kun om at få tallene ind. Selskabets økonomi skal være adskilt, bilag skal kunne findes, banklinjer skal afstemmes, og rettelser skal kunne forklares efterfølgende. Rentemester er bygget mod den type verifiérbart kontrolspor.
+    </p>
+
+    <SeoEvidence
+      updated={page.dateModified}
+      reviewed={SITE.author}
+      status="QA-gennemgået mod nuværende kodebase, testede flows og officielle kravsider om digital bogføring."
+      sources={[
+        { href: `${SITE.github}/blob/main/package.json`, label: "Rentemester test- og smoke-gates", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Danske regler som kode", external: true },
+        { href: "https://erhvervsstyrelsen.dk/fortegnelse-over-registrerede-bogfoeringssystemer", label: "Erhvervsstyrelsen: registrerede bogføringssystemer", external: true },
+      ]}
+      related={[
+        { href: "/regnskabsprogram", label: "Regnskabsprogram" },
+        { href: "/open-source-regnskabsprogram", label: "Open source-regnskabsprogram" },
+        { href: "/viden/frister/moms", label: "Momsfrister" },
+      ]}
+    />
+
+    <h2>Det et lille ApS typisk har brug for</h2>
+    <p>
+      Mange små ApS'er har en relativt enkel drift, men højere krav til adskillelse og dokumentation end en privatøkonomi-lignende freelancehverdag. Derfor bør systemet prioritere sporbarhed og eksport lige så højt som hastighed.
+    </p>
+    <ul>
+      <li>Fakturaer, betalinger og kreditnotaer skal hænge sammen.</li>
+      <li>Køb og bilag skal være dokumenteret med stabil reference og hash.</li>
+      <li>Moms skal kunne opsummeres pr. periode og spores tilbage til posteringer.</li>
+      <li>Bankafstemning skal gøre åbne poster synlige.</li>
+      <li>Rettelser skal ske med modposteringer og audit trail.</li>
+      <li>Materiale skal kunne eksporteres til bogholder, revisor eller intern gennemgang.</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har lokal ledger, append-only bogføring, fakturaflow, bilag, bank-CSV import, momsrapport, audit-verifikation, backup/restore og eksport/handoff i kodebasen. Det gør projektet relevant for små ApS'er, der vil have et gennemskueligt og inspecterbart regnskabsflow.
+    </p>
+    <p>
+      Det er samtidig vigtigt at sige præcist hvad siden ikke lover: Rentemester er ikke en færdig årsrapportmaskine, ikke et lønsystem, ikke et lager- eller POS-system og ikke et registreret standardbogføringssystem.
+    </p>
+
+    <h2>Begrænsninger og ansvar</h2>
+    <p>
+      ApS'er er typisk omfattet af krav, som ikke bør afgøres ud fra en produkttekst. Brug Erhvervsstyrelsens fortegnelse og vejledning, hvis du skal vurdere om et bogføringssystem opfylder kravene, og involver bogholder eller revisor ved konkrete selskabsspørgsmål.
+    </p>
+
+    <h2>Næste skridt</h2>
+    <ul>
+      <li><a href="/funktioner">Se Rentemesters funktioner</a></li>
+      <li><a href="/sikkerhed">Læs om sikkerhed og lokal datakontrol</a></li>
+      <li><a href="/docs/installation">Installer projektet lokalt</a></li>
+    </ul>
+
+    <h2>Ofte stillede spørgsmål</h2>
+    {faq.map((item) => (
+      <>
+        <h3>{item.q}</h3>
+        <p>{item.a}</p>
+      </>
+    ))}
+  </article>
+</BaseLayout>

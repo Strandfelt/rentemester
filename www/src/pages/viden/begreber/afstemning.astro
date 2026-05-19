@@ -1,0 +1,55 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Afstemning i bogføring"
+  description="Afstemning forklaret: bank, åbne poster, moms, bilag, differencer, audit trail og hvorfor afstemning er en nødvendig kontrol før rapportering."
+  pathname="/viden/begreber/afstemning"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Begreb" title="Afstemning finder forskellen mellem system og virkelighed" lead="Afstemning er kontrollen af, at bogføringen passer med bank, bilag, fakturaer og rapporter. Den bør ske løbende, ikke først ved momsfrist eller årsafslutning." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Afstemning betyder, at du sammenholder to kilder og forklarer forskelle. Det kan være bank mod ledger, faktura mod betaling, momsrapport mod posteringer eller bilag mod journal. Uforklarede differencer bør ikke ignoreres.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester reconciliation tests", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Afstemning i kildekoden", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/bankafstemning", label: "Bankafstemning" },
+        { href: "/viden/moms/momsrapport", label: "Momsrapport" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+      ]}
+    />
+
+    <h2>Typiske afstemninger</h2>
+    <ul>
+      <li>bankkonto mod bogført bankkonto</li>
+      <li>åbne kundefakturaer mod betalinger</li>
+      <li>leverandørfakturaer mod bankbetalinger</li>
+      <li>momsrapport mod momsrelaterede posteringer</li>
+      <li>bilag mod journalposter</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har bankreconciliation, audit-verifikation og rapporter, der kan vise unmatched banklinjer og kontrollerbare totalsummer. Det erstatter ikke faglig vurdering, men gør mangler synlige tidligere.
+    </p>
+
+    <h2>Hvorfor det er vigtigt</h2>
+    <p>
+      Uden afstemning kan regnskabet se komplet ud, selv om der mangler bilag, betalinger eller korrektioner. En god afstemning gør fejl til konkrete opgaver: find bilaget, match betalingen, ret perioden eller forklar differencen.
+    </p>
+  </article>
+</BaseLayout>

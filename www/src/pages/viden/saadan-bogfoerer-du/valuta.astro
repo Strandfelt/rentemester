@@ -1,0 +1,50 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Bogfør valuta og DKK-grundlag"
+  description="Bogfør valuta korrekt: original valuta, DKK-basis, bankafregning, valutakurs, dokumentation og Rentemesters foreign-currency flow."
+  pathname="/viden/saadan-bogfoerer-du/valuta"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Sådan bogfører du" title="Valuta kræver både originalbeløb og DKK-grundlag" lead="Når et køb eller salg sker i anden valuta end DKK, bør bogføringen bevare original valuta og samtidig have et deterministisk DKK-grundlag." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Valutabilag bliver ofte uklare, fordi fakturaen viser én valuta, banken afregner i DKK, og bogføringen skal bruge et DKK-beløb. Hvis grundlaget ikke gemmes, bliver det svært at forklare moms og omkostning senere.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester foreign-currency tests", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Valuta- og money helpers i kildekoden", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/udenlandsk-faktura", label: "Udenlandsk faktura" },
+        { href: "/viden/saadan-bogfoerer-du/bankafstemning", label: "Bankafstemning" },
+        { href: "/viden/moms/eu-reverse-charge", label: "EU reverse charge" },
+      ]}
+    />
+
+    <h2>Hvad bør gemmes?</h2>
+    <ul>
+      <li>original valuta og originalt beløb</li>
+      <li>DKK-beløb brugt i ledgeren</li>
+      <li>kurs eller bankafregning som grundlag</li>
+      <li>dato for faktura og betaling</li>
+      <li>bilag der forklarer omregningen</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har money helpers og testede foreign-currency journal- og expense-flows, der bevarer FX-basis. Systemet skal ikke gætte kursen ud fra fri tekst; der skal være et dokumenteret DKK-grundlag.
+    </p>
+  </article>
+</BaseLayout>

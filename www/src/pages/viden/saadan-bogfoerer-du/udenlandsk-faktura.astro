@@ -1,0 +1,50 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Bogfør udenlandsk faktura"
+  description="Sådan bogfører du en udenlandsk faktura: valuta, DKK-grundlag, EU reverse charge, momsnummer, bilag og Rentemesters FX-flow."
+  pathname="/viden/saadan-bogfoerer-du/udenlandsk-faktura"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Sådan bogfører du" title="Udenlandske fakturaer kræver ekstra kontrol" lead="En udenlandsk faktura handler både om valuta, momsbehandling, leverandørland, momsnummer og DKK-grundlag. Det er ikke nok at bogføre beløbet direkte fra fakturaen." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Ved udenlandske fakturaer skal du kontrollere, om købet er fra EU eller uden for EU, om der er reverse charge, og hvordan beløbet skal omsættes til DKK i bogføringen. Fejl her påvirker både omkostning, momsrapport og audit trail.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: "https://skat.dk/erhverv/moms/moms-ved-handel-med-udlandet/moms-ved-handel-med-virksomheder/moms-ved-handel-med-lande-i-eu/moms-ved-koeb-af-varer-og-ydelser-i-eu", label: "Skattestyrelsen: moms ved EU-køb", external: true },
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester FX og reverse-charge tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/moms/eu-reverse-charge", label: "EU reverse charge" },
+        { href: "/viden/moms/vies-momsnummer", label: "VIES og momsnummer" },
+        { href: "/viden/saadan-bogfoerer-du/valuta", label: "Bogfør valuta" },
+      ]}
+    />
+
+    <h2>Kontroller før bogføring</h2>
+    <ul>
+      <li>leverandørland og momsnummer</li>
+      <li>valuta og beløb i original valuta</li>
+      <li>DKK-beløb eller deterministisk omregningsgrundlag</li>
+      <li>om fakturaen har udenlandsk moms</li>
+      <li>om reverse charge gælder</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har testede flows for udenlandsk valuta, DKK-banksettlement, udenlandsk bilag og EU service reverse charge. Usikker momsklassifikation bør stoppe som exception i stedet for at blive bogført automatisk.
+    </p>
+  </article>
+</BaseLayout>

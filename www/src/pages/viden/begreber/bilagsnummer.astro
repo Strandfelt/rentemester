@@ -1,0 +1,55 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Bilagsnummer i bogføring"
+  description="Bilagsnummer forklaret: hvorfor bilag skal kunne findes igen, hvordan nummerering bør være stabil, og hvordan Rentemester nummererer dokumenter."
+  pathname="/viden/begreber/bilagsnummer"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="Begreb" title="Bilagsnummeret skal gøre dokumentet findbart" lead="Et bilagsnummer er ikke pynt. Det er en stabil reference mellem dokument, journalpost, banklinje og senere kontrol." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Bilagsnummeret hjælper dig med at finde dokumentationen igen. Hvis en journalpost henviser til et bilag, skal bilaget kunne lokaliseres uden gætteri. Nummeret bør derfor være stabilt, entydigt og bevaret sammen med dokumentets hash og metadata.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Rentemester document numbering tests", external: true },
+        { href: `${SITE.github}/tree/main/src`, label: "Dokumentnummerering i kildekoden", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+        { href: "/viden/myndigheder/regnskabsmateriale", label: "Regnskabsmateriale" },
+      ]}
+    />
+
+    <h2>Et godt bilagsnummer er</h2>
+    <ul>
+      <li>entydigt inden for virksomheden</li>
+      <li>stabilt efter bogføring</li>
+      <li>koblet til dokumentets metadata</li>
+      <li>let at finde i eksport eller revisorpakke</li>
+      <li>ikke afhængigt af filnavne, der kan ændres</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester nummererer ingested dokumenter deterministisk og gemmer både dokumentnummer, SHA-256 hash og metadata. Tests dækker blandt andet nummerering per år og konfigurerede regnskabsår, så referencer ikke bygger på tilfældige filnavne.
+    </p>
+
+    <h2>Praktisk konsekvens</h2>
+    <p>
+      Når bilagsnummeret er stabilt, kan en eksportpakke eller audit gennemgang pege direkte fra journalpost til dokument. Det gør det hurtigere at forklare en postering og sværere at skjule, at et bilag mangler.
+    </p>
+  </article>
+</BaseLayout>

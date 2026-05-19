@@ -1,0 +1,53 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="MCP til bogføring"
+  description="MCP til bogføring forklaret: strukturerede tools, agent-workflows, bekræftelse ved mutationer og hvorfor Rentemester bruger MCP."
+  pathname="/viden/ai/mcp-bogfoering"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+>
+  <PageHero eyebrow="AI" title="MCP gør AI-bogføring mere struktureret" lead="Model Context Protocol kan give AI-klienter adgang til konkrete tools i stedet for fri tekst. For bogføring er den forskel afgørende." />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      En AI-model bør ikke bare skrive "bogfør denne udgift" i fri tekst. Den bør kalde et værktøj med strukturerede felter, få valideret input og blive stoppet, hvis noget mangler. Det er den type grænse MCP kan hjælpe med.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/tree/main/src/mcp`, label: "Rentemester MCP-server", external: true },
+        { href: `${SITE.github}/blob/main/docs/mcp-tool-surface.md`, label: "MCP tool surface dokumentation", external: true },
+      ]}
+      related={[
+        { href: "/viden/ai/ai-bogfoering-med-kontrol", label: "AI-bogføring med kontrol" },
+        { href: "/ai-bogholder", label: "AI-bogholder" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+      ]}
+    />
+
+    <h2>Hvorfor strukturerede tools?</h2>
+    <ul>
+      <li>krævede felter kan valideres</li>
+      <li>mutationer kan kræve bekræftelse</li>
+      <li>fejl kan returneres som strukturerede svar</li>
+      <li>audit trail kan gemme hvilken actor der gjorde hvad</li>
+      <li>AI kan hjælpe uden at omgå bogføringsreglerne</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemester har en MCP-server og tests for værktøjsoverfladen. Flere muterende tools kræver eksplicit bekræftelse, og flowet skal stadig gennem samme validering som CLI'en. Det er ikke en garanti mod fejl, men en vigtig arkitekturgrænse.
+    </p>
+    <p>
+      Den rigtige rollefordeling er, at AI-klienten hjælper brugeren med at forberede handlinger, mens Rentemesters tools afgør om input er komplet, balanceret og tilladt. Derfor skal MCP ses som et kontrolinterface, ikke som en genvej udenom bogføringsreglerne.
+    </p>
+  </article>
+</BaseLayout>
