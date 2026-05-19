@@ -80,6 +80,108 @@ describe("expense booking", () => {
     rmSync(inbox, { recursive: true, force: true });
   });
 
+  test("books a foreign-currency purchase settled by a DKK bank transaction and preserves FX basis", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-fx-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-fx-inbox-"));
+    const csv = join(root, "transactions.csv");
+    const sourceFile = join(inbox, "vendor.txt");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,fx_rate_to_dkk,reference",
+      "2026-05-16,2026-05-16,CLOUD VENDOR,-746,DKK,7.46,REF-FX-1"
+    ].join("\n"));
+    writeFileSync(sourceFile, "Invoice\n100 EUR\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = importBankCsv(db, root, csv);
+    expect(bank.ok).toBe(true);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "FX-1001",
+      deliveryDescription: "Cloud subscription",
+      amountIncVat: 100,
+      currency: "EUR",
+      sender: { name: "Cloud Vendor GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 0,
+      paymentDetails: "Card payment"
+    });
+    expect(doc.ok).toBe(true);
+
+    const bankRow = db.query("SELECT id FROM bank_transactions WHERE reference = 'REF-FX-1'").get() as { id: number };
+    const booked = bookExpenseFromBank(db, {
+      documentId: doc.documentId!,
+      bankTransactionId: bankRow.id,
+      expenseAccountNo: "3000",
+      vatTreatment: "exempt"
+    });
+
+    expect(booked.ok).toBe(true);
+    expect(booked.grossAmount).toBe(100);
+    expect(booked.netAmount).toBe(746);
+    expect(booked.vatAmount).toBe(0);
+    expect(booked.vatTreatment).toBe("exempt");
+
+    const entry = db.query("SELECT currency, amount_foreign, amount_dkk, fx_rate_to_dkk FROM journal_entries WHERE id = ?").get(booked.entryId!) as any;
+    expect(entry).toEqual({ currency: "EUR", amount_foreign: 100, amount_dkk: 746, fx_rate_to_dkk: 7.46 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("blocks foreign-currency expense booking when the DKK settlement lacks FX basis", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-fx-missing-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-fx-missing-inbox-"));
+    const csv = join(root, "transactions.csv");
+    const sourceFile = join(inbox, "vendor.txt");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-16,CLOUD VENDOR,-746,DKK,REF-FX-MISSING"
+    ].join("\n"));
+    writeFileSync(sourceFile, "Invoice\n100 EUR\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = importBankCsv(db, root, csv);
+    expect(bank.ok).toBe(true);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "FX-1002",
+      deliveryDescription: "Cloud subscription",
+      amountIncVat: 100,
+      currency: "EUR",
+      sender: { name: "Cloud Vendor GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 0,
+      paymentDetails: "Card payment"
+    });
+    expect(doc.ok).toBe(true);
+
+    const bankRow = db.query("SELECT id FROM bank_transactions WHERE reference = 'REF-FX-MISSING'").get() as { id: number };
+    const booked = bookExpenseFromBank(db, {
+      documentId: doc.documentId!,
+      bankTransactionId: bankRow.id,
+      expenseAccountNo: "3000",
+      vatTreatment: "exempt"
+    });
+
+    expect(booked.ok).toBe(false);
+    expect(booked.errors).toContain("foreign-currency expense booking requires bank fx_rate_to_dkk for DKK-settled payments");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
   test("uses reverse-charge flow when the expense account defaults to EU reverse charge", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-rc-"));
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-rc-inbox-"));

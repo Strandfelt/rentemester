@@ -13,7 +13,7 @@ Hele den deterministiske kerne er på plads og dækket af tests. Det her er det 
 - **Bogføring**: dobbelt bogholderi med append-only journal og hash-kæde. Reverseringer i stedet for rettelser. Hvert entry har audit-spor med eksplicit aktør.
 - **Fakturering**: udstedelse, bogføring, PDF-generering, kreditnota, rykker, rente, kompensation, tab på debitorer, multi-valuta.
 - **Bank**: CSV-import med kolonne-mapping, suggest-matches, reconciliation, settlement (inkl. kombineret principal + rykker/rente).
-- **Bilag**: ingest med SHA-256, leverandør-stamdata, expense-bogføring, VIES-validering af EU-numre.
+- **Bilag**: ingest med SHA-256, leverandør-stamdata, expense-bogføring, VIES-validering af EU-numre og fremmedvaluta-køb med DKK-bankafregning.
 - **Moms**: rapport, EU reverse charge, repræsentation, bad-debt relief, TastSelv-rubrik-mapping.
 - **System**: signed backups (HMAC + opt-in ed25519 til 3.-parts revisor-verifikation), restore med audit-chain-verifikation, periodelås, 5-års retention, myndighedseksport.
 - **Agent-grænseflade**: MCP-server med 52 tools, agent-agnostisk (Claude, Mistral, Ollama lokalt, eller intet).

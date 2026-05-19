@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./vat";
-import { roundDkk } from "./money";
+import { compareDkk, roundDkk } from "./money";
 
 export type ExpenseVatTreatment = "standard" | "reverse_charge" | "representation" | "exempt";
 
@@ -26,12 +26,96 @@ export type BookExpenseFromBankResult = JournalPostResult & {
   vatTreatment?: ExpenseVatTreatment;
 };
 
+type FxBookingBasis = {
+  currency: string;
+  grossAmountForeign: number;
+  grossAmountDkk: number;
+  fxRateToDkk: number;
+};
 
 function inferVatTreatment(defaultVatCode: string | null): ExpenseVatTreatment {
   if (defaultVatCode === "EU_SERVICE_REVERSE_CHARGE") return "reverse_charge";
   if (defaultVatCode === "REPRESENTATION_SPECIAL") return "representation";
   if (defaultVatCode === "DK_PURCHASE_25") return "standard";
   return "exempt";
+}
+
+function resolveFxBookingBasis(document: { currency: string; amount_inc_vat: number | null }, bank: {
+  id: number;
+  amount: number;
+  currency: string;
+  amount_dkk: number | null;
+  fx_rate_to_dkk: number | null;
+}): { ok: true; basis: FxBookingBasis } | { ok: false; error: string } {
+  const currency = (document.currency ?? "DKK").trim().toUpperCase();
+  const grossAmountForeign = roundDkk(Number(document.amount_inc_vat ?? 0));
+
+  if (currency === "DKK") {
+    return {
+      ok: true,
+      basis: {
+        currency,
+        grossAmountForeign,
+        grossAmountDkk: grossAmountForeign,
+        fxRateToDkk: 1,
+      },
+    };
+  }
+
+  const bankCurrency = (bank.currency ?? "DKK").trim().toUpperCase();
+  const fxRateToDkk = bank.fx_rate_to_dkk == null ? NaN : Number(bank.fx_rate_to_dkk);
+  if (!(fxRateToDkk > 0)) {
+    if (bankCurrency === "DKK") return { ok: false, error: "foreign-currency expense booking requires bank fx_rate_to_dkk for DKK-settled payments" };
+    return { ok: false, error: "foreign-currency expense booking requires bank fx_rate_to_dkk" };
+  }
+
+  const expectedAmountDkk = roundDkk(grossAmountForeign * fxRateToDkk);
+
+  if (bankCurrency === "DKK") {
+    const grossAmountDkk = roundDkk(Math.abs(Number(bank.amount)));
+    if (bank.amount_dkk != null && compareDkk(Number(bank.amount_dkk), grossAmountDkk) !== 0) {
+      return { ok: false, error: `bank transaction ${bank.id} amount_dkk ${roundDkk(Number(bank.amount_dkk))} does not match DKK settlement amount ${grossAmountDkk}` };
+    }
+    if (compareDkk(grossAmountDkk, expectedAmountDkk) !== 0) {
+      return { ok: false, error: `bank transaction amount ${grossAmountDkk} DKK does not match document gross amount ${grossAmountForeign} ${currency} at fx_rate_to_dkk ${roundDkk(fxRateToDkk)} (${expectedAmountDkk} DKK)` };
+    }
+    return {
+      ok: true,
+      basis: {
+        currency,
+        grossAmountForeign,
+        grossAmountDkk,
+        fxRateToDkk,
+      },
+    };
+  }
+
+  if (bankCurrency !== currency) {
+    return { ok: false, error: `bank transaction ${bank.id} currency ${bankCurrency} does not match document currency ${currency} or DKK settlement` };
+  }
+
+  const paymentAmountForeign = roundDkk(Math.abs(Number(bank.amount)));
+  if (compareDkk(paymentAmountForeign, grossAmountForeign) !== 0) {
+    return { ok: false, error: `bank transaction amount ${paymentAmountForeign} ${currency} does not match document gross amount ${grossAmountForeign} ${currency}` };
+  }
+
+  const grossAmountDkk = roundDkk(Number(bank.amount_dkk ?? 0));
+  if (!(grossAmountDkk > 0)) {
+    return { ok: false, error: `bank transaction ${bank.id} is missing amount_dkk for foreign-currency settlement` };
+  }
+  if (compareDkk(grossAmountDkk, expectedAmountDkk) !== 0) {
+    return { ok: false, error: `bank transaction amount_dkk ${grossAmountDkk} does not match document gross amount ${grossAmountForeign} ${currency} at fx_rate_to_dkk ${roundDkk(fxRateToDkk)} (${expectedAmountDkk} DKK)` };
+  }
+
+  return {
+    ok: true,
+    basis: {
+      currency,
+      grossAmountForeign,
+      grossAmountDkk,
+      fxRateToDkk,
+    },
+  };
 }
 
 export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInput): BookExpenseFromBankResult {
@@ -72,19 +156,19 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
   if (document.document_type !== "purchase_sale" && document.document_type !== "cash_register_receipt") {
     return { ok: false, appliedRules: [], errors: [`document ${input.documentId} is not a purchase document`] };
   }
-  if (document.currency !== "DKK") {
-    return { ok: false, appliedRules: [], errors: [`document ${input.documentId} must be in DKK for expense book`] };
-  }
   const grossAmount = roundDkk(Number(document.amount_inc_vat ?? 0));
   const vatAmount = roundDkk(Number(document.vat_amount ?? 0));
   if (!(grossAmount > 0)) return { ok: false, appliedRules: [], errors: [`document ${input.documentId} must have amount_inc_vat > 0`] };
   if (vatAmount < 0 || vatAmount > grossAmount) return { ok: false, appliedRules: [], errors: [`document ${input.documentId} has invalid vat_amount ${vatAmount}`] };
 
-  const bank = db.query(`SELECT id, transaction_date, amount, text FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId) as {
+  const bank = db.query(`SELECT id, transaction_date, amount, text, currency, amount_dkk, fx_rate_to_dkk FROM bank_transactions WHERE id = ?`).get(input.bankTransactionId) as {
     id: number;
     transaction_date: string;
     amount: number;
     text: string;
+    currency: string;
+    amount_dkk: number | null;
+    fx_rate_to_dkk: number | null;
   } | null;
   if (!bank) return { ok: false, appliedRules: [], errors: [`bank transaction ${input.bankTransactionId} does not exist`] };
   if (!(Number(bank.amount) < 0)) return { ok: false, appliedRules: [], errors: [`bank transaction ${input.bankTransactionId} is not an outgoing payment`] };
@@ -96,15 +180,28 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
   const transactionDate = input.transactionDate ?? bank.transaction_date;
   const text = input.text?.trim() || `${document.sender_name ?? "Expense"} from bank transaction ${bank.id}`;
   const paymentAccountNo = input.paymentAccountNo ?? "2000";
-  const paymentAmount = roundDkk(Math.abs(Number(bank.amount)));
+  const fxBasis = resolveFxBookingBasis(document, bank);
+  if (!fxBasis.ok) return { ok: false, appliedRules: [], errors: [fxBasis.error] };
 
-  if (paymentAmount !== grossAmount) {
-    return { ok: false, appliedRules: [], errors: [`bank transaction amount ${paymentAmount} does not match document gross amount ${grossAmount}`] };
+  const journalAmount = fxBasis.basis.currency === "DKK" ? roundDkk(Math.abs(Number(bank.amount))) : fxBasis.basis.grossAmountDkk;
+  if (fxBasis.basis.currency === "DKK" && compareDkk(journalAmount, grossAmount) !== 0) {
+    return { ok: false, appliedRules: [], errors: [`bank transaction amount ${journalAmount} does not match document gross amount ${grossAmount}`] };
   }
+
+  const grossAmountDkk = fxBasis.basis.grossAmountDkk;
+  const vatAmountDkk = fxBasis.basis.currency === "DKK" ? vatAmount : roundDkk(vatAmount * fxBasis.basis.fxRateToDkk);
+  const netAmountDkk = roundDkk(grossAmountDkk - vatAmountDkk);
+  const journalMetadata = fxBasis.basis.currency === "DKK"
+    ? {}
+    : {
+        currency: fxBasis.basis.currency,
+        amountForeign: fxBasis.basis.grossAmountForeign,
+        amountDkk: fxBasis.basis.grossAmountDkk,
+        fxRateToDkk: fxBasis.basis.fxRateToDkk,
+      };
 
   if (vatTreatment === "standard") {
     if (!(vatAmount > 0)) return { ok: false, appliedRules: [], errors: ["standard expense booking requires document vat_amount > 0"] };
-    const netAmount = roundDkk(grossAmount - vatAmount);
     const result = postJournalEntry(db, {
       transactionDate,
       text,
@@ -112,13 +209,14 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
       sourceBankTransactionId: input.bankTransactionId,
       createdBy: input.createdBy,
       createdByProgram: input.createdByProgram,
+      ...journalMetadata,
       lines: [
-        { accountNo: account.account_no, debitAmount: netAmount, vatCode: "DK_PURCHASE_25", text: document.invoice_no ?? "Expense base" },
-        { accountNo: "4000", debitAmount: vatAmount, text: "Input VAT" },
-        { accountNo: paymentAccountNo, creditAmount: grossAmount, text: bank.text },
+        { accountNo: account.account_no, debitAmount: netAmountDkk, vatCode: "DK_PURCHASE_25", text: document.invoice_no ?? "Expense base" },
+        { accountNo: "4000", debitAmount: vatAmountDkk, text: "Input VAT" },
+        { accountNo: paymentAccountNo, creditAmount: grossAmountDkk, text: bank.text },
       ],
     });
-    return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount, vatAmount, vatTreatment };
+    return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount: netAmountDkk, vatAmount: vatAmountDkk, vatTreatment };
   }
 
   if (vatTreatment === "reverse_charge") {
@@ -127,31 +225,32 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
       transactionDate,
       text,
       documentId: input.documentId,
-      netAmount: grossAmount,
+      netAmount: grossAmountDkk,
       expenseAccountNo: account.account_no,
       paymentAccountNo,
       sourceBankTransactionId: input.bankTransactionId,
       createdBy: input.createdBy,
       createdByProgram: input.createdByProgram,
+      ...journalMetadata,
     });
-    return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount: grossAmount, vatAmount: 0, vatTreatment };
+    return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount: grossAmountDkk, vatAmount: 0, vatTreatment };
   }
 
   if (vatTreatment === "representation") {
     if (!(vatAmount > 0)) return { ok: false, appliedRules: [], errors: ["representation expense booking requires document vat_amount > 0"] };
-    const netAmount = roundDkk(grossAmount - vatAmount);
     const result = postRepresentationPurchase(db, {
       transactionDate,
       text,
       documentId: input.documentId,
-      netAmount,
+      netAmount: netAmountDkk,
       expenseAccountNo: account.account_no,
       paymentAccountNo,
       sourceBankTransactionId: input.bankTransactionId,
       createdBy: input.createdBy,
       createdByProgram: input.createdByProgram,
+      ...journalMetadata,
     });
-    return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount, vatAmount, vatTreatment };
+    return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount: netAmountDkk, vatAmount: vatAmountDkk, vatTreatment };
   }
 
   if (vatAmount !== 0) return { ok: false, appliedRules: [], errors: ["exempt expense booking requires document vat_amount = 0"] };
@@ -162,10 +261,11 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
     sourceBankTransactionId: input.bankTransactionId,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
+    ...journalMetadata,
     lines: [
-      { accountNo: account.account_no, debitAmount: grossAmount, text: document.invoice_no ?? "Expense" },
-      { accountNo: paymentAccountNo, creditAmount: grossAmount, text: bank.text },
+      { accountNo: account.account_no, debitAmount: grossAmountDkk, text: document.invoice_no ?? "Expense" },
+      { accountNo: paymentAccountNo, creditAmount: grossAmountDkk, text: bank.text },
     ],
   });
-  return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount: grossAmount, vatAmount: 0, vatTreatment };
+  return { ...result, documentId: input.documentId, bankTransactionId: input.bankTransactionId, grossAmount, netAmount: grossAmountDkk, vatAmount: 0, vatTreatment };
 }

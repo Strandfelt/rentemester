@@ -91,8 +91,6 @@ export function validateDocumentMetadata(metadata: DocumentMetadata): DocumentVa
 
   if (!hasText(metadata.source)) errors.push("source is required");
   if (!/^[A-Z]{3}$/.test(currency)) errors.push("currency must be a 3-letter ISO code");
-  const allowsNonDkk = documentType === "cash_register_receipt" || exemptionCode === "FOREIGN_PHYSICAL_ONLY";
-  if (currency !== "DKK" && !allowsNonDkk) errors.push("only DKK document metadata is supported unless documentType is cash_register_receipt or exemptionCode is FOREIGN_PHYSICAL_ONLY");
   if (documentType === "cash_register_receipt") appliedRules.splice(1, 0, RULES.CASH_RECEIPT);
   if (exemptionCode === "FOREIGN_PHYSICAL_ONLY") appliedRules.splice(appliedRules.length - 1, 0, RULES.FOREIGN_PHYSICAL);
 

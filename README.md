@@ -149,6 +149,7 @@ Rentemester er i en tidlig teknisk prototype. Den nuværende version har allered
 - dansk kontoplan-lite
 - import af bank-CSV, inkl. udenlandske banktransaktioner med gemt omregningsfaktor og DKK-beløb
 - simpel bankafstemning
+- deterministisk bogføring af leverandørudgifter i fremmed valuta, også når banken afregner i DKK, med gemt FX-grundlag i ledgeren
 - indlæsning og hashing af bilag, inkl. fysisk modtagne udenlandske bilag og kassestrimler med bevaret original valuta under lovlige metadata-undtagelser
 - validering af danske fakturaoplysninger
 - deterministisk udstedelse og låsning af udgående fakturaer

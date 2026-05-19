@@ -42,6 +42,10 @@ export type ReverseChargePurchaseInput = {
   expenseAccountNo: string;
   paymentAccountNo?: string;
   sourceBankTransactionId?: number;
+  currency?: string;
+  amountForeign?: number;
+  amountDkk?: number;
+  fxRateToDkk?: number;
   createdBy?: string;
   createdByProgram?: string;
 };
@@ -54,6 +58,10 @@ export type RepresentationPurchaseInput = {
   expenseAccountNo?: string;
   paymentAccountNo?: string;
   sourceBankTransactionId?: number;
+  currency?: string;
+  amountForeign?: number;
+  amountDkk?: number;
+  fxRateToDkk?: number;
   createdBy?: string;
   createdByProgram?: string;
 };
@@ -79,6 +87,10 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
     text: input.text.trim(),
     documentId: input.documentId,
     sourceBankTransactionId: input.sourceBankTransactionId,
+    currency: input.currency,
+    amountForeign: input.amountForeign,
+    amountDkk: input.amountDkk,
+    fxRateToDkk: input.fxRateToDkk,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
     lines: [
@@ -113,6 +125,10 @@ export function postRepresentationPurchase(db: Database, input: RepresentationPu
     text: input.text.trim(),
     documentId: input.documentId,
     sourceBankTransactionId: input.sourceBankTransactionId,
+    currency: input.currency,
+    amountForeign: input.amountForeign,
+    amountDkk: input.amountDkk,
+    fxRateToDkk: input.fxRateToDkk,
     createdBy: input.createdBy,
     createdByProgram: input.createdByProgram,
     lines: [

@@ -36,6 +36,22 @@ describe("document ingest", () => {
     expect(result.ok).toBe(true);
   });
 
+  test("accepts foreign-currency purchase/sale metadata when statutory fields are present", () => {
+    const result = validateDocumentMetadata({
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "EUR-1001",
+      deliveryDescription: "Cloud subscription",
+      amountIncVat: 100,
+      currency: "EUR",
+      sender: { name: "Cloud Vendor GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 0,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   test("accepts foreign-currency cash-register receipts with original currency preserved", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-cash-"));
     const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-cash-"));
