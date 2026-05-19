@@ -9,13 +9,16 @@ const jsonLd = {
   headline: "Hvorfor Rentemester findes",
   inLanguage: "da",
   author: { "@type": "Person", name: SITE.author },
-  publisher: { "@type": "Organization", name: SITE.name },
+  publisher: { "@type": "Organization", name: SITE.name, logo: { "@type": "ImageObject", url: new URL("/favicon.svg", SITE.url).toString() } },
+  image: new URL("/og-hvorfor.png", SITE.url).toString(),
+  datePublished: "2026-05-18",
+  dateModified: "2026-05-18",
 };
 ---
 
 <BaseLayout
-  title="Hvorfor"
-  description="Hvorfor Rentemester findes: agent-first bogføring til danske mikrovirksomheder, drevet af åbne regler og en append-only ledger. Et open source projekt under MIT-licens."
+  title="Hvorfor dansk bogføring bør være åben"
+  description="Hvorfor Rentemester findes: åben bogføring til danske små virksomheder, hvor AI hjælper, regler validerer, og ledgeren kan efterprøves."
   ogImage="/og-hvorfor.png"
   jsonLd={jsonLd}
 >
@@ -31,7 +34,7 @@ const jsonLd = {
       Tusindvis af danske mikrovirksomheder og freelancere sidder hver uge med samme problem: en stak bilag, en bankkonto, og et bogføringsprogram der enten er for dyrt, for kompliceret, eller begge dele. Aftenen går med at klikke i en webapp, lede efter den rigtige konto, og håbe man har valgt det rigtige momsfelt.
     </p>
     <p>
-      Det er ikke et teknisk problem. Det er et produktproblem. Markedet har bygget regnskabsprogrammer til revisorer og store virksomheder, og pakket dem ind i et mindre tema når de skulle sælge til den enkelte iværksætter.
+      Det er ikke kun et teknisk problem. Det er et tillidsproblem. Små virksomheder får ofte enten lukkede systemer de ikke kan efterprøve, eller tunge arbejdsgange bygget til større organisationer.
     </p>
 
     <h2>AI'en kan gøre arbejdet — men ikke afgøre reglerne</h2>
@@ -39,7 +42,7 @@ const jsonLd = {
       Sprogmodeller er gode til at læse bilag, foreslå kontering og matche transaktioner. De er katastrofale til at have det sidste ord i et regnskab. De hallucinerer, glemmer, og kan ikke holdes ansvarlige.
     </p>
     <p>
-      Rentemesters svar er at adskille de to. <strong>AI-agenten</strong> handler — hurtigt, fleksibelt, sproglig. <strong>Reglerne</strong> afgør — deterministiske, læsbare, versionsstyrede. Hvis agenten foreslår noget reglerne ikke tillader, bliver det stoppet og du får spørgsmålet stillet. Hvis reglerne mangler en sag, åbner du et issue.
+      Rentemesters svar er at adskille de to. <strong>AI-agenten</strong> hjælper — hurtigt, fleksibelt, sprogligt. <strong>Reglerne</strong> afgør — deterministiske, læsbare, versionsstyrede. Hvis agenten foreslår noget reglerne ikke tillader, bliver det stoppet og du får spørgsmålet stillet. Hvis reglerne mangler en sag, åbner du et issue.
     </p>
 
     <h2>Hvorfor open source er afgørende</h2>
@@ -69,12 +72,12 @@ const jsonLd = {
       Rentemester er ikke et produkt vi sælger. Der er ingen virksomhed bag der tilbyder hosted version, support eller priser. Det er ikke et færdigt værktøj for ikke-tekniske brugere — endnu. Det er ikke beregnet til lønadministration, lagerstyring eller komplekse internationale forhold.
     </p>
     <p>
-      Det er et fællesskabsprojekt, lavet offentligt, under MIT-licens. Hvis du synes ideen er god, så klon koden, prøv det, og hjælp os med at gøre det bedre.
+      Det er et fællesskabsprojekt, udviklet offentligt under MIT-licens. Hvis ideen giver mening, så klon koden, prøv den mod virkelige bilag og hjælp med at gøre reglerne skarpere.
     </p>
 
     <h2>Hvad du kan gøre nu</h2>
     <ul>
-      <li>Læs <a href="/sådan-virker-det">arkitekturen</a> og se om designet giver mening.</li>
+      <li>Læs <a href="/saadan-virker-det">arkitekturen</a> og se om designet giver mening.</li>
       <li><a href="/docs/installation">Installer det lokalt</a> og prøv at køre en demo-virksomhed igennem.</li>
       <li>Åbn et issue på <a href={SITE.github} rel="noopener" target="_blank">GitHub</a> hvis du finder en fejl eller har en idé.</li>
       <li>Hvis du er revisor eller bogholder: udfordr reglerne i <code>rules/dk/</code>. Det er der projektet bliver bedre.</li>

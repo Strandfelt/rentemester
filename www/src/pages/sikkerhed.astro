@@ -5,8 +5,8 @@ import { SITE } from "../consts";
 ---
 
 <BaseLayout
-  title="Sikkerhed"
-  description="Sikkerhedspolitik for Rentemester. Hvordan du ansvarligt rapporterer sårbarheder."
+  title="Sikkerhed og ansvarlig rapportering"
+  description="Sikkerhedspolitik for Rentemester: rapportér sårbarheder ansvarligt via email, med reproduktion, impact og koordineret disclosure."
 >
   <PageHero
     eyebrow="Sikkerhed"
@@ -42,5 +42,10 @@ import { SITE } from "../consts";
     <p>
       Den maskinlæsbare version af denne politik ligger på <a href="/.well-known/security.txt"><code>/.well-known/security.txt</code></a>.
     </p>
+
+    <h2>Ansvarlig afprøvning</h2>
+    <p>Hold testen til egen installation, egne data og de offentlige interfaces i projektet. Forsøg ikke at tilgå andres regnskabsdata, tokens, backups eller private repositories. Hvis du er i tvivl om scope, så spørg først via security-mailen.</p>
+    <p>Gode rapporter er reproducerbare og nøgterne: kort resumé, impact, trin-for-trin reproduktion, forventet adfærd, faktisk adfærd og eventuel patch-idé. Undgå screenshots med persondata eller rigtige bilag, medmindre de er anonymiserede.</p>
+    <p>Rapportér hellere én skarp sårbarhed end en lang liste af usikre observationer. Hvis problemet kræver koordineret publicering, aftales tidslinjen pr. mail, så brugere kan opdatere før detaljer bliver offentlige.</p>
   </article>
 </BaseLayout>

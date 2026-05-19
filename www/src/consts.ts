@@ -3,7 +3,7 @@ export const SITE = {
   name: "Rentemester",
   tagline: "Open source bogføring til danske virksomheder",
   description:
-    "Rentemester er et open source projekt: et agent-first bogføringssystem til danske mikrovirksomheder, freelancere og små ApS'er. Drevet af danske regler, append-only ledger og kryptografisk verifikation. MIT-licens.",
+    "Open source bogføring til danske freelancere og små virksomheder: AI-assisteret bilagsarbejde, danske regler som kode og verifiérbar ledger.",
   locale: "da_DK",
   lang: "da",
   github: "https://github.com/mikkelkrogsholm/rentemester",
@@ -15,7 +15,7 @@ export const SITE = {
 
 export const NAV = [
   { href: "/funktioner", label: "Funktioner" },
-  { href: "/sådan-virker-det", label: "Sådan virker det" },
+  { href: "/saadan-virker-det", label: "Sådan virker det" },
   { href: "/hvorfor", label: "Hvorfor" },
-  { href: "/docs/installation", label: "Dokumentation" },
+  { href: "/docs/installation", label: "Installation" },
 ] as const;

@@ -43,20 +43,33 @@ const orgJsonLd = {
   sameAs: [SITE.github],
 };
 
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: SITE.name,
+  url: SITE.url,
+  inLanguage: "da-DK",
+  description: SITE.description,
+  publisher: { "@type": "Organization", name: SITE.name, url: SITE.url },
+};
+
 const softwareJsonLd = {
   "@context": "https://schema.org",
-  "@type": "SoftwareSourceCode",
+  "@type": ["SoftwareApplication", "SoftwareSourceCode"],
   name: SITE.name,
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Linux, macOS, Windows",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "DKK" },
   description: SITE.description,
   codeRepository: SITE.github,
   programmingLanguage: "TypeScript",
   author: { "@type": "Person", name: SITE.author },
   license: "https://opensource.org/licenses/MIT",
-  inLanguage: "da",
+  inLanguage: "da-DK",
   url: SITE.url,
 };
 
-const allJsonLd = [orgJsonLd, softwareJsonLd, ...(jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [])];
+const allJsonLd = [orgJsonLd, websiteJsonLd, softwareJsonLd, ...(jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [])];
 ---
 
 <!doctype html>
@@ -100,22 +113,10 @@ const allJsonLd = [orgJsonLd, softwareJsonLd, ...(jsonLd ? (Array.isArray(jsonLd
     <link rel="alternate icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Sitemap + feeds -->
+    <!-- Discovery -->
     <link rel="sitemap" href="/sitemap-index.xml" />
-    <link rel="alternate" type="application/atom+xml" title={`${SITE.name} blog`} href="/rss.xml" />
-
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
-    />
+    <link rel="author" href="/om" />
+    <link rel="privacy-policy" href="/privatlivspolitik" />
 
     <!-- Structured data -->
     {allJsonLd.map((data) => (

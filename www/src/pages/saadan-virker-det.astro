@@ -11,7 +11,7 @@ const steps = [
   {
     n: "02",
     t: "Agenten forsøger at forstå",
-    d: "AI-agenten læser bilag, foreslår kontering, matcher banklinjer med fakturaer, og bygger journalposter. Hver foreslået handling er en strukturet operation — ikke fri tekst.",
+    d: "AI-agenten læser bilag, foreslår kontering, matcher banklinjer med fakturaer, og bygger journalposter. Hver foreslået handling er en struktureret operation — ikke fri tekst.",
   },
   {
     n: "03",
@@ -50,15 +50,15 @@ const jsonLd = {
 ---
 
 <BaseLayout
-  title="Sådan virker det"
-  description="Sådan virker Rentemester: agent + regler + append-only ledger. Bilagene kommer ind, agenten forstår, reglerne validerer, du afgør tvivl, og ledgeren signerer."
+  title="Sådan virker Rentemesters bogføring"
+  description="Sådan virker Rentemester: AI-agenten foreslår, danske regler validerer, og en append-only ledger bevarer revisionssporet."
   ogImage="/og-saadan-virker-det.png"
   jsonLd={jsonLd}
 >
   <PageHero
     eyebrow="Arkitektur"
-    title="Sådan virker det"
-    lead="Tre lag der ikke kan snyde hinanden: en AI-agent der handler, danske regler der afgør, og en append-only ledger der husker. Her er flowet fra bilag til årsregnskab."
+    title="Sådan virker Rentemesters bogføring"
+    lead="Tre lag der holder hinanden ærlige: en AI-agent der hjælper, danske regler der validerer, og en append-only ledger der husker. Her er flowet fra bilag til rapport."
   />
 
   <section class="max-w-container mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-20">
@@ -91,7 +91,7 @@ const jsonLd = {
         </div>
         <div>
           <dt class="font-mono text-[11px] uppercase tracking-[0.2em] text-cyber-blue mb-2">Agent</dt>
-          <dd class="text-on-surface-variant leading-relaxed">Modelagnostisk. Eksponeres som MCP-server så Claude, ChatGPT og andre kan tale med Rentemester via en stram operations-protokol — ikke fri samtale.</dd>
+          <dd class="text-on-surface-variant leading-relaxed">Modelagnostisk. Eksponeres som MCP-server så Claude, ChatGPT og andre klienter kan arbejde gennem en stram operations-protokol — ikke fri tekst ind i ledgeren.</dd>
         </div>
         <div>
           <dt class="font-mono text-[11px] uppercase tracking-[0.2em] text-cyber-blue mb-2">Output</dt>

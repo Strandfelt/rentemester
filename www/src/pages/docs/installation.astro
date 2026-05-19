@@ -20,15 +20,15 @@ const jsonLd = {
 ---
 
 <BaseLayout
-  title="Installation"
-  description="Installer Rentemester lokalt på din maskine. Krav: Bun 1.2+, git. Fem minutter fra git clone til en kørende lokal bogføring."
+  title="Installation af Rentemester lokalt"
+  description="Installer Rentemester lokalt med Bun og git. Fra clone til demo-virksomhed, healthcheck, MCP-opsætning og smoke-flow på få minutter."
   ogImage="/og-installation.png"
   jsonLd={jsonLd}
 >
   <PageHero
     eyebrow="Dokumentation"
     title="Installation"
-    lead="Rentemester kører lokalt på din maskine. Du skal bruge Bun og git, og du er kørende på fem minutter."
+    lead="Rentemester kører lokalt. Du skal bruge Bun og git — så kan du oprette en demo-virksomhed og køre smoke-flowet på få minutter."
   />
 
   <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
@@ -65,7 +65,7 @@ cd rentemester</code></pre>
     <h2>MCP-server (for AI-klienter)</h2>
     <p>Hvis du vil bruge Rentemester gennem Claude Desktop, ChatGPT eller en anden MCP-kompatibel klient:</p>
     <pre><code>bun run mcp</code></pre>
-    <p>Og peg din klient mod den. Se <a href={`${SITE.github}/blob/main/docs/mcp.md`} rel="noopener" target="_blank">MCP-dokumentationen ↗</a> for klient-specifik opsætning.</p>
+    <p>Og peg din klient mod den. Se <a href={`${SITE.github}/blob/main/docs/mcp-install.md`} rel="noopener" target="_blank">MCP-installationsguiden ↗</a> for klient-specifik opsætning.</p>
 
     <h2>Næste skridt</h2>
     <ul>

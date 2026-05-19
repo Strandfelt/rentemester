@@ -27,9 +27,11 @@ const year = new Date().getFullYear();
       <div class="font-mono text-[11px] uppercase tracking-[0.2em] text-outline mb-4">Projekt</div>
       <ul class="space-y-2 text-[15px]">
         <li><a href="/hvorfor" class="text-on-surface-variant hover:text-primary">Hvorfor</a></li>
-        <li><a href="/sådan-virker-det" class="text-on-surface-variant hover:text-primary">Sådan virker det</a></li>
+        <li><a href="/saadan-virker-det" class="text-on-surface-variant hover:text-primary">Sådan virker det</a></li>
         <li><a href="/funktioner" class="text-on-surface-variant hover:text-primary">Funktioner</a></li>
+        <li><a href="/about" class="text-on-surface-variant hover:text-primary">About</a></li>
         <li><a href="/om" class="text-on-surface-variant hover:text-primary">Om</a></li>
+        <li><a href="/kontakt" class="text-on-surface-variant hover:text-primary">Kontakt</a></li>
       </ul>
     </div>
 
@@ -40,6 +42,7 @@ const year = new Date().getFullYear();
         <li><a href={`${SITE.github}/blob/main/CONTRIBUTING.md`} rel="noopener" target="_blank" class="text-on-surface-variant hover:text-primary">Bidragsguide ↗</a></li>
         <li><a href={`${SITE.github}/issues`} rel="noopener" target="_blank" class="text-on-surface-variant hover:text-primary">Issues ↗</a></li>
         <li><a href={`${SITE.github}/blob/main/LICENSE`} rel="noopener" target="_blank" class="text-on-surface-variant hover:text-primary">MIT-licens ↗</a></li>
+        <li><a href="/sikkerhed" class="text-on-surface-variant hover:text-primary">Sikkerhed</a></li>
       </ul>
     </div>
   </div>
@@ -48,6 +51,7 @@ const year = new Date().getFullYear();
     <div class="max-w-container mx-auto px-margin-mobile md:px-margin-desktop py-6 flex flex-col md:flex-row justify-between gap-4 text-[12px] font-mono uppercase tracking-[0.1em] text-outline">
       <div>© {year} {SITE.author} · MIT-licens · ingen tracking, ingen cookies</div>
       <div class="flex flex-wrap gap-6">
+        <a href="/privacy-policy" class="hover:text-primary">Privacy Policy</a>
         <a href="/privatlivspolitik" class="hover:text-primary">Privatliv</a>
         <a href="/kontakt" class="hover:text-primary">Kontakt</a>
         <a href="/sitemap-index.xml" class="hover:text-primary">Sitemap</a>

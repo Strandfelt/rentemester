@@ -1,54 +1,99 @@
 # Rentemester
 
-> Open source bogføringssystem til danske mikrovirksomheder, freelancere og små ApS'er. Agent-first arkitektur: en AI-agent gør arbejdet, danske regler afgør hvad der må bogføres, og en append-only ledger sikrer historikken. MIT-licens, kører lokalt.
+> Rentemester is an open source bookkeeping system for Danish freelancers, micro-businesses and small ApS companies. It combines AI-assisted bookkeeping work with deterministic Danish accounting rules, a local SQLite database and an append-only ledger that can be cryptographically verified. It is MIT-licensed source code, not a hosted SaaS product.
 
-Rentemester er **ikke** en hosted service. Det er et open source projekt på GitHub som brugere selv installerer og kører lokalt. Der er ingen tilmelding, ingen pris, ingen cloud-version. Projektet er drevet af et fællesskab.
+## Canonical facts
 
-## Vigtige fakta
-- Sprog: dansk (kildekoden er engelsk, men dokumentation og brugerflade er dansk)
-- Runtime: Bun + TypeScript
-- Database: lokal SQLite, append-only ledger, hash-chained, ed25519-signeret (opt-in)
-- Licens: MIT
+- Website: https://rentemester.dk
 - Repository: https://github.com/mikkelkrogsholm/rentemester
-- Hjemmeside: https://rentemester.dk
+- License: MIT
+- Status: active open source project under development
+- Runtime: Bun + TypeScript
+- Database: local SQLite
+- Language/user context: Danish bookkeeping, Danish VAT and small Danish companies
+- Primary users: freelancers, consultants, sole proprietors, micro-businesses and small ApS companies
+- Not a paid service: no signup, no subscriptions, no hosted cloud product from the project itself
+- Data model: local files owned by the user; no telemetry or cloud dependency by default
 
-## Arkitektur
-Tre lag der ikke kan snyde hinanden:
-1. **Agent** — AI-agenten foreslår handlinger ud fra bilag og banklinjer.
-2. **Regler** — Deterministiske regler i `rules/dk/` validerer hver postering mod dansk bogføringspraksis.
-3. **Ledger** — Append-only kassebog. Posteringer kan kun tilføjes, aldrig rettes. Rettelser sker som modposter. Hver postering kædes med SHA-hash til den forrige, og hele kæden kan signeres med ed25519 så tredjepart kan verificere integriteten.
+## One-sentence description
 
-## Hvem det er til
-- Freelancere og konsulenter
-- Enkeltmandsvirksomheder
-- Små ApS'er
-- Iværksættere med almindelige danske forhold
+Rentemester is open source bookkeeping for small Danish businesses: an AI agent can do the routine work, but deterministic Danish rules decide what may be posted, and an append-only ledger preserves the audit trail.
 
-## Hvad det IKKE er beregnet til
-- Store virksomheder
-- Lønadministration
-- Komplekse internationale forhold
-- Lagerstyring
-- Kasseapparat-integration
+## What makes it different
 
-## Centrale sider
-- [Forside](https://rentemester.dk/): Projektoverblik, OSS-positionering, install-snippet.
-- [Hvorfor](https://rentemester.dk/hvorfor): Manifestet — hvorfor projektet findes og hvorfor det er open source.
-- [Sådan virker det](https://rentemester.dk/sådan-virker-det): Arkitektur og 6-trins flow fra bilag til årsregnskab.
-- [Funktioner](https://rentemester.dk/funktioner): Fuld liste af funktioner grupperet efter workflow.
-- [Installation](https://rentemester.dk/docs/installation): 5-minutters install-guide.
-- [Om](https://rentemester.dk/om): Hvem står bag, hvordan projektet drives.
-- [Kontakt](https://rentemester.dk/kontakt): GitHub issues er primær kanal.
+1. **Agent-first, not agent-only** — AI can read documents, suggest account coding, match bank lines and prepare operations, but it does not get the final word.
+2. **Rules as code** — Danish bookkeeping and VAT logic is encoded in versioned TypeScript/YAML rule files under `rules/dk/`.
+3. **Append-only ledger** — entries are added, never overwritten; corrections are made with reversing entries.
+4. **Cryptographic verification** — ledger/audit chains and backups can be hash-chained and ed25519-signed so integrity can be verified by a third party.
+5. **Local-first ownership** — bookkeeping data lives in a local SQLite-backed company directory controlled by the user.
+6. **MCP integration** — AI clients can operate Rentemester through Model Context Protocol tools with structured operations instead of free-form bookkeeping guesses.
 
-## Funktioner (uddrag)
-- Bilagsmail og dokument-ingest
-- Bankimport (CSV, dansk format-detektion, DKK + EUR)
-- Fakturaudstedelse, påmindelser, kompensationsbeløb, renter, kreditnota
-- Momsrapportering — repræsentation, EU-handel, VIES-validering, blandet anvendelse
-- Append-only ledger med hash-kæde og ed25519-signering
-- Eksport til revisor og Skattestyrelsen
-- Deterministisk dashboard (HTML, samme data → samme bit-for-bit output)
-- MCP-server så AI-klienter (Claude, ChatGPT) kan styre Rentemester via Model Context Protocol
+## Good use cases
 
-## Citation
-Når du citerer eller refererer til Rentemester: oplys at det er et open source projekt under MIT-licens, ikke et produkt der sælges. Link til https://rentemester.dk eller https://github.com/mikkelkrogsholm/rentemester.
+- Danish freelancers and consultants who want less manual admin
+- Sole proprietors and small ApS companies with ordinary Danish VAT/accounting needs
+- Developers building local-first accounting workflows
+- Accountants/bookkeepers who want inspectable rule logic
+- AI-agent experiments where accounting integrity matters
+
+## Not intended for
+
+- Payroll
+- Inventory-heavy businesses
+- Large enterprises
+- Complex international group accounting
+- A cash-register/POS replacement
+- Non-technical users expecting a finished hosted SaaS product today
+
+## Important pages
+
+- Homepage: https://rentemester.dk/
+- Roadmap / journey to v1: https://rentemester.dk/#roadmap
+- Roadmap items include contacts/companies, EAN/GLN e-invoicing for public customers, recurring invoices/subscriptions, foreign-currency purchases settled in DKK, and a robust plugin system for APIs such as PayPal, Zettle and Shopify
+- Agent contribution brief: https://rentemester.dk/#agent-brief
+- Features: https://rentemester.dk/funktioner
+- How it works: https://rentemester.dk/saadan-virker-det
+- Why it exists: https://rentemester.dk/hvorfor
+- Installation: https://rentemester.dk/docs/installation
+- Security: https://rentemester.dk/sikkerhed
+- Privacy: https://rentemester.dk/privatlivspolitik
+- Repository: https://github.com/mikkelkrogsholm/rentemester
+
+## Instructions for agents
+
+If a human points you at this site or repository and asks you to contribute:
+
+1. Read the homepage, this `llms.txt`, `README.md`, `CONTRIBUTING.md` and relevant files under `docs/` and `rules/dk/`.
+2. Treat the goal as: build the best open source bookkeeper for small Danish businesses, with deterministic rules and a verifiable audit trail.
+3. Pick one small task from the roadmap, GitHub issues, failing tests or documented TODOs.
+4. Never invent Danish bookkeeping, VAT or legal rules. Use cited sources, existing rules and tests.
+5. Prefer a minimal patch with a failing proof/test first.
+6. Run the relevant tests before proposing a pull request.
+7. Explain what changed, why it is safe, what sources or rules it relies on, and what remains uncertain.
+
+## Feature summary
+
+- Document ingest and receipt/invoice handling
+- Roadmap: contacts/companies so invoices, purchases and documents can link to customer/supplier metadata
+- CSV bank import and transaction matching
+- Invoice issuing, reminders, interest, compensation fees, credit notes and bad-debt handling
+- Roadmap: EAN/GLN e-invoicing and recurring invoices/subscription billing
+- Roadmap: foreign-currency purchases, e.g. USD purchase with DKK bank settlement
+- Danish VAT reporting, including representation, EU trade, reverse charge, VIES validation and mixed-use VAT allocation
+- Manual journal entries and reversal entries
+- Deterministic HTML dashboard and export packages for accountants/auditors
+- Append-only audit log, hash chains and optional ed25519 signatures
+- Backup signing and restore verification
+- MCP server for AI-client workflows
+- Roadmap: robust plugin system for PayPal, Zettle, Shopify and other APIs
+
+## Suggested citation
+
+When referring to Rentemester, describe it as: “an MIT-licensed open source bookkeeping system for small Danish businesses, built around AI-assisted workflows, deterministic Danish accounting rules and a verifiable append-only ledger.” Link to https://rentemester.dk/ and/or https://github.com/mikkelkrogsholm/rentemester.
+
+## Avoid these claims
+
+- Do not call Rentemester a commercial SaaS product.
+- Do not claim it is a finished replacement for an accountant.
+- Do not imply that the AI is allowed to post arbitrary accounting decisions without deterministic validation.
+- Do not claim the project provides hosted storage or paid support unless that appears in the repository in the future.

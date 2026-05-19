@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-# AI crawlers are explicitly welcome — projektet er open source og vi vil gerne citeres.
+# Rentemester is open source; AI/search crawlers are welcome when they respect robots.txt.
 User-agent: GPTBot
 Allow: /
 User-agent: ClaudeBot
@@ -9,6 +9,10 @@ Allow: /
 User-agent: PerplexityBot
 Allow: /
 User-agent: Google-Extended
+Allow: /
+User-agent: Applebot
+Allow: /
+User-agent: CCBot
 Allow: /
 
 Sitemap: https://rentemester.dk/sitemap-index.xml

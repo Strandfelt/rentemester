@@ -9,6 +9,7 @@ const groups = [
     items: [
       { t: "Bilagsmail", d: "Send bilag til en dedikeret mailadresse — vedhæftninger registreres og knyttes til transaktioner." },
       { t: "Dokument-ingest", d: "Importér bilag fra CLI med metadata. Understøtter PDF, billeder, tekst." },
+      { t: "Kontakter og virksomheder", d: "Roadmap: opret kunder, leverandører og virksomheder én gang, og link fakturaer, køb og bilag til deres oplysninger." },
       { t: "Bankimport", d: "CSV-import med automatisk format-detektion for danske banker. DKK og EUR med dagskurs." },
       { t: "MobilePay", d: "Importér transaktioner som CSV. Matches mod fakturaer og bilag." },
     ],
@@ -21,6 +22,7 @@ const groups = [
       { t: "Bankafstemning", d: "Match banklinjer mod bilag og fakturaer." },
       { t: "Modposter", d: "Reverser fejlbogføringer — uden at slette historikken." },
       { t: "Periodisering", d: "Spread udgifter og indtægter over perioder hvor det er korrekt." },
+      { t: "Valutakøb", d: "Roadmap: håndtér køb i fx USD/EUR, selv om banken trækker et DKK-beløb på kontoen." },
       { t: "Valuta", d: "EUR-bilag bogføres med dagskurs og valutakursdifferencer." },
     ],
   },
@@ -29,6 +31,8 @@ const groups = [
     intro: "Hele fakturalivscyklussen — sporbart i ledgeren.",
     items: [
       { t: "Udstedelse", d: "Validér og udsted fakturaer i dansk format med moms og forfald." },
+      { t: "EAN-fakturering", d: "Roadmap: elektronisk fakturering til offentlige kunder med EAN/GLN og de nødvendige kontroller." },
+      { t: "Abonnementer", d: "Roadmap: gentagne fakturaer for faste aftaler, perioder, fornyelser og korrekt bogføring." },
       { t: "Bogføring", d: "Postér fakturaer automatisk når de udstedes." },
       { t: "Påmindelser", d: "Send rykkere og bogfør dem som debitorhåndtering." },
       { t: "Kompensationsbeløb", d: "Beregn og bogfør lovbestemte 310 kr kompensation ved forsinkelse." },
@@ -77,6 +81,7 @@ const groups = [
     items: [
       { t: "CLI", d: "Alt er tilgængeligt via kommandolinje. Scriptbart, automatiserbart." },
       { t: "MCP-server", d: "AI-klienter (Claude, ChatGPT, lokale modeller) kobler op via Model Context Protocol." },
+      { t: "Plugin-system", d: "Roadmap: stabilt plugin-lag til PayPal, Zettle, Shopify og andre API’er uden at gøre kernen skrøbelig." },
       { t: "JSON-input", d: "Strukturerede operations-payloads — ingen fri tekst hvor det betyder noget." },
       { t: "Standard CSV", d: "Bank, MobilePay, kontoplan — alt der ikke er proprietært." },
     ],
@@ -85,8 +90,8 @@ const groups = [
 ---
 
 <BaseLayout
-  title="Funktioner"
-  description="Funktioner i Rentemester: bilagsmail, bankimport, fakturering, momsrapportering, append-only ledger, ed25519-signering, MCP-integration og audit-eksport til revisor."
+  title="Funktioner til dansk open source bogføring"
+  description="Funktioner i Rentemester: kontakter, bilagsmail, bankimport, faktura, EAN, abonnementer, valutakøb, plugins, momsrapportering, verifiérbar ledger, MCP-integration og revisor-eksport."
   ogImage="/og-funktioner.png"
 >
   <PageHero
