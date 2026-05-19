@@ -1,0 +1,85 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "Må AI'en bogføre frit i Rentemester?",
+      acceptedAnswer: { "@type": "Answer", text: "Nej. AI-klienten arbejder gennem strukturerede tools, og write-tools kræver confirmation og validering mod regler og ledger." },
+    },
+  ],
+};
+---
+
+<BaseLayout
+  title="AI-bogholder til danske små virksomheder"
+  description="En AI-bogholder må ikke gætte i regnskabet. Rentemester kombinerer AI-agent workflow med deterministiske danske regler, append-only ledger og audit trail."
+  pathname="/ai-bogholder"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="AI-bogholder"
+    title="AI må hjælpe. Reglerne skal afgøre."
+    lead="Rentemester bygger en AI-bogholder til danske små virksomheder, men ikke som en chatbot der frit finder på posteringer. Agenten arbejder gennem strukturerede tools, og ledgeren håndhæver bogføringsreglerne."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      AI kan læse bilag, foreslå kontering, matche banklinjer og forberede rapporter. Men bogføring kræver mere end sandsynlige svar. En AI-bogholder skal have faste grænser, dokumentation og et system der siger nej.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/blob/main/docs/mcp-tool-surface.md`, label: "MCP tool surface", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/mcp-server.test.ts`, label: "MCP tests", external: true },
+        { href: `${SITE.github}/blob/main/rules/dk/bookkeeping.yaml`, label: "Regelgates", external: true },
+      ]}
+      related={[
+        { href: "/saadan-virker-det", label: "Arkitekturen" },
+        { href: "/funktioner", label: "Funktioner" },
+        { href: "/docs/installation", label: "Prøv lokalt" },
+      ]}
+    />
+
+    <h2>Problemet med almindelig AI-bogføring</h2>
+    <p>
+      En sprogmodel kan være overbevisende uden at have ret. Det er acceptabelt i en kladde, men ikke i et regnskab. Derfor må AI'en ikke have direkte adgang til at ændre historik, omgå dokumentkrav eller vælge momsbehandling uden validering.
+    </p>
+
+    <h2>Rentemesters model</h2>
+    <ul>
+      <li><strong>Agenten handler:</strong> den kan foreslå match, vælge konto, forberede payloads og kalde tools.</li>
+      <li><strong>Reglerne afgør:</strong> TypeScript/YAML-regler validerer balance, moms, bilag, periode og dokumentation.</li>
+      <li><strong>Ledgeren håndhæver:</strong> posteringer er append-only, hash-kædet og verificerbare.</li>
+    </ul>
+
+    <h2>Hvad agenten kan bruge i dag</h2>
+    <p>
+      Rentemester har en MCP-server, så MCP-kompatible AI-klienter kan kalde tools som `bank_import`, `documents_ingest`, `bank_suggest_matches`, `expense_book`, `vat_report` og `audit_verify`. Write-tools kræver eksplicit confirmation, og operationer tilskrives en aktør.
+    </p>
+
+    <h2>Hvad AI ikke må</h2>
+    <ul>
+      <li>bogføre uden dokumentation hvor dokumentation kræves</li>
+      <li>rette gamle posteringer i stedet for at lave modposteringer</li>
+      <li>ignorere periodelås</li>
+      <li>opfinde danske momsregler</li>
+      <li>skjule usikkerhed i fritekst</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Agent-demoen i repoet viser en måned med bilag og banklinjer over MCP. Testene dækker både bogførte flows og exceptions for cases der kræver manuel afklaring. Læs <a href="/saadan-virker-det">sådan virker det</a> og <a href="/docs/installation">installér projektet</a>, eller gå direkte til <a href={SITE.github} rel="noopener" target="_blank">GitHub</a>.
+    </p>
+  </article>
+</BaseLayout>

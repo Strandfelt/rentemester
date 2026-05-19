@@ -1,0 +1,82 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PageHero from "../../components/PageHero.astro";
+import SeoEvidence from "../../components/SeoEvidence.astro";
+
+const sections = [
+  {
+    title: "Moms",
+    links: [
+      { href: "/viden/moms/satser", label: "Momssatser i Danmark" },
+      { href: "/viden/frister/moms", label: "Momsfrister" },
+    ],
+  },
+  {
+    title: "Sådan bogfører du",
+    links: [
+      { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Udlæg" },
+    ],
+  },
+  {
+    title: "Værktøjer",
+    links: [
+      { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+    ],
+  },
+];
+---
+
+<BaseLayout
+  title="Viden om dansk bogføring"
+  description="Korte, praktiske forklaringer om dansk bogføring, moms, frister, bilag, faktura og regnskab for freelancere og små virksomheder."
+  pathname="/viden"
+  pageType="WebPage"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+>
+  <PageHero
+    eyebrow="Viden"
+    title="Dansk bogføring forklaret kort"
+    lead="Rentemesters videnssider samler praktiske svar om moms, bilag, faktura, frister og regnskab. Målet er klare svar, konkrete eksempler og links til hvordan systemet håndterer det."
+  />
+
+  <section class="max-w-container mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16">
+    <div class="max-w-3xl mb-10 prose-da">
+      <p>
+        Videnshubben er bygget som praktisk indgang til dansk bogføring for små virksomheder. Hver side skal enten forklare en regel, vise et konkret regneeksempel eller pege på hvordan Rentemester håndterer flowet i kildekoden.
+      </p>
+      <p>
+        De juridiske sider bruger officielle kilder som Retsinformation og Skattestyrelsen, og produktpåstande holdes adskilt fra roadmap. Hvis en funktion ikke er testet og merged, skal den ikke beskrives som færdig.
+      </p>
+      <p>
+        Strukturen er bevidst smal i første version. Moms-siderne dækker satser og frister, fordi de er almindelige søgeintentioner med tydelige kilder. Udlægs-guiden dækker et hverdagsflow, hvor bilag, formål og fradrag ofte bliver blandet sammen. Værktøjssiderne skal give praktisk nytte, ikke bare forklare begreber.
+      </p>
+      <p>
+        Nye sider bør kun tilføjes, når de kan bære deres egen værdi: konkrete eksempler, kildehenvisninger, intern linking og en tydelig grænse mellem hvad loven siger, hvad god praksis er, og hvad Rentemester faktisk understøtter i kodebasen.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-gutter">
+      {sections.map((section) => (
+        <article class="bg-surface-container border border-outline-variant/15 p-7">
+          <h2 class="font-serif text-2xl text-primary mb-4">{section.title}</h2>
+          <ul class="space-y-3">
+            {section.links.map((link) => (
+              <li>
+                <a href={link.href} class="text-cyber-blue hover:text-primary">{link.label} →</a>
+              </li>
+            ))}
+          </ul>
+        </article>
+      ))}
+    </div>
+    <SeoEvidence
+      status="Videnshubben er QA-gennemgået som intern linking-hub. Juridiske detaljer valideres på de enkelte undersider."
+      related={[
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/viden/frister/moms", label: "Momsfrister" },
+        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
+        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+      ]}
+    />
+  </section>
+</BaseLayout>

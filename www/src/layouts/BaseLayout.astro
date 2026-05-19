@@ -4,6 +4,11 @@ import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import { SITE } from "../consts";
 
+type LinkItem = {
+  href: string;
+  label: string;
+};
+
 export interface Props {
   title?: string;
   description?: string;
@@ -11,6 +16,11 @@ export interface Props {
   ogImage?: string;
   noindex?: boolean;
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+  datePublished?: string;
+  dateModified?: string;
+  reviewedBy?: string;
+  pageType?: "WebPage" | "AboutPage" | "ContactPage" | "Article" | "FAQPage" | "SoftwareApplication";
+  breadcrumbs?: LinkItem[];
   /** Override the rendered page title fully (used on the homepage). */
   titleOverride?: string;
 }
@@ -18,12 +28,21 @@ export interface Props {
 const {
   title,
   description = SITE.description,
-  pathname = Astro.url.pathname,
+  pathname: rawPathname = Astro.url.pathname,
   ogImage = "/og-default.png",
   noindex = false,
   jsonLd,
+  datePublished,
+  dateModified,
+  reviewedBy,
+  pageType = "WebPage",
+  breadcrumbs,
   titleOverride,
 } = Astro.props;
+
+const pathname = rawPathname === "/index.html"
+  ? "/"
+  : rawPathname.replace(/\/index\.html$/, "").replace(/\.html$/, "");
 
 const fullTitle = titleOverride
   ? titleOverride
@@ -33,24 +52,97 @@ const fullTitle = titleOverride
 
 const canonical = new URL(pathname, SITE.url).toString();
 const ogImageUrl = new URL(ogImage, SITE.url).toString();
+const normalizedPath = pathname === "/" ? "/" : pathname.replace(/\/$/, "");
+
+const fullPathLabelMap: Record<string, string> = {
+  "/docs/installation": "Installation",
+  "/vaerktoej/momsberegner": "Momsberegner",
+  "/viden/frister/moms": "Momsfrister",
+  "/viden/moms/satser": "Momssatser",
+  "/viden/saadan-bogfoerer-du/udlaeg": "Bogfør udlæg",
+};
+
+const labelMap: Record<string, string> = {
+  about: "About",
+  "ai-bogholder": "AI-bogholder",
+  bogfoeringsprogram: "Bogføringsprogram",
+  docs: "Dokumentation",
+  funktioner: "Funktioner",
+  frister: "Frister",
+  hvorfor: "Hvorfor",
+  kontakt: "Kontakt",
+  moms: "Moms",
+  momsberegner: "Momsberegner",
+  om: "Om",
+  privacy: "Privacy",
+  "privacy-policy": "Privacy Policy",
+  privatlivspolitik: "Privatlivspolitik",
+  regnskabsprogram: "Regnskabsprogram",
+  "saadan-bogfoerer-du": "Sådan bogfører du",
+  "saadan-virker-det": "Sådan virker det",
+  satser: "Satser",
+  sikkerhed: "Sikkerhed",
+  udlaeg: "Udlæg",
+  vaerktoej: "Værktøj",
+  viden: "Viden",
+};
+
+const generatedBreadcrumbs: LinkItem[] = (() => {
+  if (breadcrumbs) return breadcrumbs;
+  if (normalizedPath === "/") return [];
+  return [
+    { href: "/", label: "Forside" },
+    {
+      href: normalizedPath,
+      label: fullPathLabelMap[normalizedPath] ?? labelMap[normalizedPath.split("/").filter(Boolean).at(-1) ?? ""] ?? normalizedPath.replace("/", ""),
+    },
+  ];
+})();
+
+const pageJsonLd = {
+  "@context": "https://schema.org",
+  "@type": pageType,
+  "@id": `${canonical}#webpage`,
+  url: canonical,
+  name: fullTitle,
+  headline: title ?? SITE.name,
+  description,
+  inLanguage: SITE.lang === "da" ? "da-DK" : SITE.lang,
+  isPartOf: { "@id": `${SITE.url}/#website` },
+  publisher: {
+    "@type": "Organization",
+    "@id": `${SITE.url}/#organization`,
+    name: SITE.name,
+    logo: { "@type": "ImageObject", url: new URL("/favicon.svg", SITE.url).toString() },
+  },
+  image: ogImageUrl,
+  author: { "@type": "Person", name: SITE.author },
+  mainEntityOfPage: canonical,
+  ...(datePublished ? { datePublished } : {}),
+  ...(dateModified ? { dateModified } : {}),
+  ...(reviewedBy ? { reviewedBy: { "@type": "Person", name: reviewedBy } } : {}),
+};
 
 const orgJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
+  "@id": `${SITE.url}/#organization`,
   name: SITE.name,
   url: SITE.url,
   logo: new URL("/favicon.svg", SITE.url).toString(),
+  founder: { "@type": "Person", name: SITE.author },
   sameAs: [SITE.github],
 };
 
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
+  "@id": `${SITE.url}/#website`,
   name: SITE.name,
   url: SITE.url,
   inLanguage: "da-DK",
   description: SITE.description,
-  publisher: { "@type": "Organization", name: SITE.name, url: SITE.url },
+  publisher: { "@id": `${SITE.url}/#organization` },
 };
 
 const softwareJsonLd = {
@@ -64,12 +156,35 @@ const softwareJsonLd = {
   codeRepository: SITE.github,
   programmingLanguage: "TypeScript",
   author: { "@type": "Person", name: SITE.author },
+  maintainer: { "@type": "Person", name: SITE.author },
   license: "https://opensource.org/licenses/MIT",
   inLanguage: "da-DK",
   url: SITE.url,
+  isAccessibleForFree: true,
+  isPartOf: { "@id": `${SITE.url}/#website` },
 };
 
-const allJsonLd = [orgJsonLd, websiteJsonLd, softwareJsonLd, ...(jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [])];
+const breadcrumbJsonLd = generatedBreadcrumbs.length > 1
+  ? {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: generatedBreadcrumbs.map((item, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        name: item.label,
+        item: new URL(item.href, SITE.url).toString(),
+      })),
+    }
+  : null;
+
+const allJsonLd = [
+  orgJsonLd,
+  websiteJsonLd,
+  softwareJsonLd,
+  pageJsonLd,
+  ...(breadcrumbJsonLd ? [breadcrumbJsonLd] : []),
+  ...(jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []),
+];
 ---
 
 <!doctype html>
@@ -130,6 +245,36 @@ const allJsonLd = [orgJsonLd, websiteJsonLd, softwareJsonLd, ...(jsonLd ? (Array
     <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-brass-gold focus:text-ink-black focus:px-3 focus:py-2 focus:font-mono focus:text-xs">Spring til indhold</a>
     <Header />
     <main id="main" class="pt-16">
+      {generatedBreadcrumbs.length > 1 && (
+        <nav aria-label="Brødkrumme" class="max-w-container mx-auto px-margin-mobile md:px-margin-desktop pt-5 -mb-3">
+          <ol class="flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-outline">
+            {generatedBreadcrumbs.map((item, index) => {
+              const isLast = index === generatedBreadcrumbs.length - 1;
+              return (
+                <li class="flex items-center gap-2">
+                  {index > 0 && <span aria-hidden="true">/</span>}
+                  {isLast ? (
+                    <span class="text-on-surface-variant">{item.label}</span>
+                  ) : (
+                    <a href={item.href} class="hover:text-primary">{item.label}</a>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      )}
+      {datePublished && normalizedPath !== "/" && !noindex && (
+        <div class="byline article-meta max-w-container mx-auto px-margin-mobile md:px-margin-desktop pt-6 -mb-6 font-mono text-[11px] uppercase tracking-[0.12em] text-outline" itemscope itemtype="https://schema.org/Article">
+          <span class="author" itemprop="author" itemscope itemtype="https://schema.org/Person">
+            By <a href="/om" rel="author" itemprop="url" class="text-on-surface-variant hover:text-primary"><span class="author-name" itemprop="name">{SITE.author}</span></a>
+          </span>
+          <span aria-hidden="true"> · </span>
+          <span>Published <time class="published-date" datetime={datePublished} itemprop="datePublished">{datePublished}</time></span>
+          <span aria-hidden="true"> · </span>
+          <span>Updated <time class="updated-date" datetime={dateModified ?? datePublished} itemprop="dateModified">{dateModified ?? datePublished}</time></span>
+        </div>
+      )}
       <slot />
     </main>
     <Footer />

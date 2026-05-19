@@ -15,7 +15,8 @@ export const SITE = {
 
 export const NAV = [
   { href: "/funktioner", label: "Funktioner" },
+  { href: "/regnskabsprogram", label: "Regnskabsprogram" },
+  { href: "/viden", label: "Viden" },
+  { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
   { href: "/saadan-virker-det", label: "Sådan virker det" },
-  { href: "/hvorfor", label: "Hvorfor" },
-  { href: "/docs/installation", label: "Installation" },
 ] as const;

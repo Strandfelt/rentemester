@@ -1,0 +1,116 @@
+---
+/**
+ * Rentemester SEO page template
+ *
+ * Copy this file to `www/src/pages/<route>.astro` and keep the import paths
+ * as-is for top-level pages. For nested pages, add one `../` per directory.
+ *
+ * Required before merge:
+ * - The page is linked from nav, footer, a hub, or a related page.
+ * - Claims are checked against code/tests and legal sources.
+ * - `bun run build`, `bun test`, `bun run smoke`, URL checks and Squirrel pass.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
+
+const page = {
+  pathname: "/CHANGE-ME",
+  title: "CHANGE ME: title under 60 chars",
+  description: "CHANGE ME: unique meta description, normally 120-155 characters, with the user benefit and no exaggerated claims.",
+  eyebrow: "CHANGE ME",
+  h1: "CHANGE ME: clear page promise",
+  lead: "CHANGE ME: answer the search intent directly in one concrete paragraph. State whether this is live functionality, source-backed information, or roadmap context.",
+  datePublished: "2026-05-19",
+  dateModified: "2026-05-19",
+  pageType: "Article" as const,
+};
+
+const faq = [
+  {
+    q: "CHANGE ME: short FAQ question?",
+    a: "CHANGE ME: direct answer that does not overclaim product maturity.",
+  },
+];
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+];
+---
+
+<BaseLayout
+  title={page.title}
+  description={page.description}
+  pathname={page.pathname}
+  pageType={page.pageType}
+  datePublished={page.datePublished}
+  dateModified={page.dateModified}
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero eyebrow={page.eyebrow} title={page.h1} lead={page.lead} />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      CHANGE ME: open with a direct answer. The first paragraph should be useful on its own, because it often determines whether the page matches the search intent.
+    </p>
+
+    <SeoEvidence
+      updated={page.dateModified}
+      reviewed={SITE.author}
+      status="QA-gennemgået mod kode, tests og relevante kilder."
+      sources={[
+        { href: `${SITE.github}`, label: "Rentemester kildekode", external: true },
+        { href: "CHANGE-ME-OFFICIAL-SOURCE", label: "CHANGE ME: officiel kilde", external: true },
+      ]}
+      related={[
+        { href: "/regnskabsprogram", label: "Regnskabsprogram" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+        { href: "/viden", label: "Videnshub" },
+      ]}
+    />
+
+    <h2>CHANGE ME: hvad brugeren skal vide først</h2>
+    <p>
+      CHANGE ME: explain the practical answer in plain Danish. Avoid filler, hype and generic definitions.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      CHANGE ME: say exactly what the current code supports. If the feature is roadmap-only, say that plainly. Never imply Rentemester is a finished SaaS or a registered standard bookkeeping system unless that has become true.
+    </p>
+
+    <h2>Begrænsninger og ansvar</h2>
+    <p>
+      CHANGE ME: list edge cases, legal uncertainty, implementation gaps, and when the user should ask a bookkeeper, accountant or authority.
+    </p>
+
+    <h2>Relaterede næste skridt</h2>
+    <ul>
+      <li><a href="/docs/installation">Installer Rentemester lokalt</a></li>
+      <li><a href="/funktioner">Se funktionsoversigten</a></li>
+      <li><a href={SITE.github} rel="noopener" target="_blank">Læs koden på GitHub</a></li>
+    </ul>
+
+    {faq.length > 0 && (
+      <>
+        <h2>Ofte stillede spørgsmål</h2>
+        {faq.map((item) => (
+          <>
+            <h3>{item.q}</h3>
+            <p>{item.a}</p>
+          </>
+        ))}
+      </>
+    )}
+  </article>
+</BaseLayout>

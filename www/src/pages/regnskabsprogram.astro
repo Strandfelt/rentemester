@@ -1,0 +1,124 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
+
+const faq = [
+  {
+    q: "Er Rentemester et regnskabsprogram?",
+    a: "Ja, i teknisk forstand: kildekoden indeholder en lokal SQLite-ledger, bilag, fakturaer, momsrapport, audit og eksport, dækket af tests og smoke-flow. Det er stadig et open source projekt under udvikling, ikke et færdigt hosted SaaS-produkt.",
+  },
+  {
+    q: "Kan Rentemester erstatte Dinero, Billy eller e-conomic?",
+    a: "Ikke for almindelige ikke-tekniske brugere endnu. Rentemester er først og fremmest et lokalt open source bogføringssystem for udviklere, små virksomheder og bogholdere der vil have gennemsigtighed, audit trail og agent-workflows.",
+  },
+  {
+    q: "Koster Rentemester noget?",
+    a: "Koden er MIT-licenseret og gratis at bruge. Der er ingen signup, ingen licensbetaling og ingen hosted version fra projektet i dag.",
+  },
+];
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+];
+---
+
+<BaseLayout
+  title="Regnskabsprogram til danske små virksomheder"
+  description="Open source regnskabsprogram under udvikling til danske små virksomheder: lokal ledger, faktura, moms, bilag, audit og AI-agent workflow."
+  pathname="/regnskabsprogram"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Regnskabsprogram"
+    title="Et regnskabsprogram du kan inspicere"
+    lead="Rentemester er et dansk open source regnskabsprogram under udvikling. Det er bygget til lokale data, deterministiske regler, verifiérbar bogføring og AI-agent workflows uden at give AI'en fri adgang til at gætte i regnskabet."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Et godt regnskabsprogram skal gøre hverdagen lettere uden at gøre regnskabet uklart. Rentemester går efter en anden model end de klassiske cloud-systemer: bogføringsdata ligger lokalt, kernen er open source, og alle posteringer skal kunne forklares, verificeres og rettes med modposteringer.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/blob/main/package.json`, label: "Smoke-flow og test-gates", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Danske regler som kode", external: true },
+        { href: "https://virk.dk/myndigheder/stat/ERST/selvbetjening/Anmeld_standard_bogfoeringssystem/", label: "Erhvervsstyrelsen om registrerede standardbogføringssystemer", external: true },
+      ]}
+      related={[
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+        { href: "/funktioner", label: "Funktionsoversigt" },
+        { href: "/docs/installation", label: "Installation" },
+      ]}
+    />
+
+    <h2>Hvad kildekoden understøtter i dag</h2>
+    <p>Den tekniske prototype har en lokalt testet kerne for små danske virksomheders almindelige flows. Claims her skal læses som repo-status, ikke som garanti for almindelig produktion uden faglig gennemgang:</p>
+    <ul>
+      <li>lokal virksomhedsmappe med SQLite-ledger</li>
+      <li>append-only dobbelt bogholderi med hash-chain og audit-verifikation</li>
+      <li>bank-CSV import, afstemning og match-forslag</li>
+      <li>bilagsindlæsning med SHA-256 hash og metadata-validering</li>
+      <li>fakturaudstedelse, PDF-rendering, bogføring, status og betaling</li>
+      <li>rykkergebyr, morarente, kompensation, kreditnota, refundering og tab på debitor</li>
+      <li>momsrapport, EU reverse charge, repræsentationsmoms og VIES-validering</li>
+      <li>backup, restore, myndighedseksport og lokal revisor-/bogholder-handoff</li>
+      <li>MCP-server, så AI-klienter kan bruge systemet gennem strukturerede tools</li>
+    </ul>
+
+    <h2>Hvad Rentemester ikke er endnu</h2>
+    <p>
+      Rentemester er ikke et færdigt kommercielt regnskabsprogram med login, betalingsflow og supportafdeling. Der er ingen hosted app, ingen abonnementer og ingen garanti for at det passer til dit konkrete regnskab uden faglig gennemgang.
+    </p>
+    <p>
+      Projektet er stadig under aktiv udvikling. Bilagsmail, live web-UI, PSD2-bankfeeds, PEPPOL/OIOUBL, GDPR-kommandoer og bred revisor-review af reglerne er stadig roadmap.
+    </p>
+    <p>
+      Rentemester er heller ikke et registreret digitalt standardbogføringssystem. Hvis du har pligt til at bruge et bestemt registreret system, skal du kontrollere kravene hos Erhvervsstyrelsen og din rådgiver.
+    </p>
+
+    <h2>Hvorfor open source regnskab?</h2>
+    <p>
+      Bogføring er for vigtig til at være en sort boks. Når reglerne og ledgeren er åbne, kan udviklere, bogholdere og revisorer se hvordan systemet konterer, validerer moms, låser historik og eksporterer data.
+    </p>
+    <p>
+      Det betyder ikke at alle brugere skal læse TypeScript. Det betyder at systemet kan efterprøves. Tillid kommer ikke fra marketingtekst; den kommer fra kildekode, tests, regler og audit trail.
+    </p>
+
+    <h2>Sådan adskiller Rentemester sig</h2>
+    <ul>
+      <li><strong>Lokalt først:</strong> data ligger i en mappe du ejer.</li>
+      <li><strong>Ingen lock-in:</strong> eksport og audit er kernefunktioner.</li>
+      <li><strong>AI med grænser:</strong> agenten kan hjælpe, men reglerne bestemmer hvad der må bogføres.</li>
+      <li><strong>Append-only:</strong> fejl rettes med modposter, ikke skjulte overskrivninger.</li>
+      <li><strong>Verifiérbart:</strong> hash-kæde og signeret backup gør manipulation synlig.</li>
+    </ul>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Start med <a href="/docs/installation">installationsguiden</a>, læs <a href="/funktioner">funktionsoversigten</a>, og se projektets aktuelle status på <a href={SITE.github} rel="noopener" target="_blank">GitHub</a>. Hvis du leder efter et færdigt program til almindelig drift i dag, skal du stadig bruge en etableret løsning eller en bogholder. Hvis du vil følge eller bidrage til et åbent dansk regnskabssystem, er Rentemester bygget til netop det.
+    </p>
+
+    <h2>Ofte stillede spørgsmål</h2>
+    {faq.map((item) => (
+      <>
+        <h3>{item.q}</h3>
+        <p>{item.a}</p>
+      </>
+    ))}
+  </article>
+</BaseLayout>

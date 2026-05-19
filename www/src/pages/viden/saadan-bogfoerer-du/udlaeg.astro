@@ -1,0 +1,91 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "Sådan bogfører du udlæg",
+  inLanguage: "da-DK",
+  step: [
+    { "@type": "HowToStep", position: 1, name: "Gem bilaget", text: "Gem kvittering eller faktura med dato, leverandør, beløb og moms." },
+    { "@type": "HowToStep", position: 2, name: "Vurder formålet", text: "Udlægget skal være erhvervsmæssigt og dokumenteret." },
+    { "@type": "HowToStep", position: 3, name: "Bogfør udgiften", text: "Bogfør udgiften på korrekt omkostningskonto med korrekt momsbehandling." },
+    { "@type": "HowToStep", position: 4, name: "Afregn personen", text: "Udbetal refusion eller modregn i mellemregning." },
+  ],
+};
+
+const bogfoeringslovenUrl = "https://www.retsinformation.dk/eli/lta/2022/700";
+---
+
+<BaseLayout
+  title="Sådan bogfører du udlæg"
+  description="Guide til bogføring af udlæg: bilag, erhvervsmæssigt formål, moms, mellemregning og refusion for danske freelancere og små virksomheder."
+  pathname="/viden/saadan-bogfoerer-du/udlaeg"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Sådan bogfører du"
+    title="Sådan bogfører du udlæg"
+    lead="Et udlæg er en udgift betalt af en person på virksomhedens vegne. Det vigtigste er dokumentation: bilag, formål, beløb, moms og hvem der skal refunderes."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Kort version: gem bilaget, vurder om udgiften er erhvervsmæssig, bogfør udgiften på korrekt konto, og bogfør refusionen til personen separat. Udlæg uden bilag eller klart formål bør ikke bogføres automatisk.
+    </p>
+    <p>
+      Kildegrundlaget er bogføringslovens krav om registrering, dokumentation og opbevaring af regnskabsmateriale. Se <a href={bogfoeringslovenUrl} rel="noopener" target="_blank">bogføringsloven på Retsinformation</a>, og få faglig vurdering ved tvivl om fradrag eller privat/erhvervsmæssig blanding.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: bogfoeringslovenUrl, label: "Bogføringsloven", external: true },
+        { href: "https://www.retsinformation.dk/eli/lta/2023/1383", label: "Bekendtgørelse om digital opbevaring af bilag", external: true },
+      ]}
+      related={[
+        { href: "/viden/moms/satser", label: "Momssatser" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+      ]}
+    />
+
+    <h2>Hvad er et udlæg?</h2>
+    <p>
+      Et udlæg opstår når en ejer, medarbejder eller anden person betaler en udgift for virksomheden med private midler. Virksomheden skylder derefter personen pengene, indtil udlægget refunderes.
+    </p>
+
+    <h2>Hvilke oplysninger skal du have?</h2>
+    <ul>
+      <li>bilag eller kvittering</li>
+      <li>dato</li>
+      <li>leverandør</li>
+      <li>beløb inkl. og ekskl. moms hvis relevant</li>
+      <li>valuta hvis beløbet ikke er i DKK</li>
+      <li>erhvervsmæssigt formål</li>
+      <li>person der skal refunderes</li>
+    </ul>
+
+    <h2>Typisk bogføring</h2>
+    <p>
+      Udgiften bogføres på den relevante omkostningskonto. Modposten er normalt en mellemregning eller skyldig post til personen, indtil virksomheden udbetaler refusionen.
+    </p>
+    <pre><code>Debet: relevant omkostningskonto
+Debet: købsmoms hvis fradragsberettiget
+Kredit: mellemregning / skyldig refusion</code></pre>
+
+    <h2>Udlæg med usikker moms</h2>
+    <p>
+      Nogle udlæg kræver ekstra vurdering. Restaurant, repræsentation, blandet privat/erhverv og udenlandske bilag bør ikke behandles blindt. Her er det bedre at stoppe og spørge end at bogføre forkert.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemesters kildekode kan ingest'e bilag, gemme SHA-256 hash og bogføre udgifter med dokumentation. Roadmap'et er at udbygge udlægsflowet med bedre masterdata, bilagsmail og exception-kø, så manglende formål eller usikker moms ikke ender som skjult fejl.
+    </p>
+  </article>
+</BaseLayout>

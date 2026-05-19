@@ -1,0 +1,85 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "Hvad er den normale momssats i Danmark?",
+      acceptedAnswer: { "@type": "Answer", text: "Den normale danske momssats er 25 procent af afgiftsgrundlaget. Det svarer til 20 procent af en pris inklusiv moms." },
+    },
+  ],
+};
+
+const skatMomssatsUrl = "https://info.skat.dk/data.aspx?oid=1921136";
+const retsinfoMomslovenUrl = "https://www.retsinformation.dk/eli/lta/2024/209";
+---
+
+<BaseLayout
+  title="Momssatser i Danmark"
+  description="Danmark har som udgangspunkt 25 procent moms. Læs om standardmoms, momsfritagelse, 0-sats, reverse charge og hvordan Rentemester håndterer moms."
+  pathname="/viden/moms/satser"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Moms"
+    title="Momssatser i Danmark"
+    lead="Danmark har som udgangspunkt 25 procent moms på varer og ydelser. Men der findes vigtige undtagelser: momsfritagelse, 0-sats og omvendt betalingspligt."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Kort version: den normale danske momssats er 25 procent. Når du beregner moms oven på en nettopris, lægger du 25 procent til. Når du finder momsen i en pris inklusiv moms, udgør momsen 20 procent af bruttobeløbet.
+    </p>
+    <p>
+      Kilder: Momslovens § 33 fastsætter afgiften til 25 procent af afgiftsgrundlaget, og Skattestyrelsens juridiske vejledning forklarer, at det svarer til 20 procent af prisen inklusiv moms. Se <a href={retsinfoMomslovenUrl} rel="noopener" target="_blank">momsloven på Retsinformation</a> og <a href={skatMomssatsUrl} rel="noopener" target="_blank">Skattestyrelsens afsnit om momssatsen</a>.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: retsinfoMomslovenUrl, label: "Momsloven § 33", external: true },
+        { href: skatMomssatsUrl, label: "Skattestyrelsen D.A.9 om momssatsen", external: true },
+      ]}
+      related={[
+        { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
+        { href: "/viden/frister/moms", label: "Momsfrister" },
+        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
+      ]}
+    />
+
+    <h2>Standardmoms: 25 procent</h2>
+    <p>
+      De fleste momspligtige danske salg af varer og ydelser er omfattet af 25 procent moms. En faktura på 1.000 kr. ekskl. moms bliver derfor 1.250 kr. inkl. moms.
+    </p>
+    <pre><code>1.000,00 kr. ekskl. moms
++ 250,00 kr. moms
+= 1.250,00 kr. inkl. moms</code></pre>
+
+    <h2>Moms i et beløb inkl. moms</h2>
+    <p>
+      Hvis beløbet allerede er inklusiv moms, finder du momsen som 20 procent af bruttobeløbet. En kvittering på 1.250 kr. inkl. moms indeholder 250 kr. moms.
+    </p>
+
+    <h2>Momsfritagelse og 0-sats</h2>
+    <p>
+      Nogle aktiviteter er momsfritaget, og enkelte salg kan være 0-sats eller uden dansk moms afhængigt af reglerne. Det skal ikke behandles som almindelig 25 procent moms. Eksempler afhænger af branche, ydelse, kundetype og land, så kontroller altid den konkrete situation.
+    </p>
+
+    <h2>Reverse charge</h2>
+    <p>
+      Ved visse køb fra EU eller udlandet skal køberen selv beregne dansk moms efter reglerne om omvendt betalingspligt. I praksis kan der både opstå udgående og indgående moms i samme bogføring, hvis der er fuldt fradrag.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Rentemesters kildekode har momslogik for standardmoms, EU reverse charge, repræsentationsmoms og bad-debt VAT relief. `vat report` samler tallene for en periode, og posteringer kobles til moms-koder i ledgeren. Brug <a href="/vaerktoej/momsberegner">momsberegneren</a> til simple beløb og <a href="/viden/frister/moms">momsfrister</a> til perioder.
+    </p>
+  </article>
+</BaseLayout>

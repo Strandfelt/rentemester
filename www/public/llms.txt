@@ -48,12 +48,20 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 ## Important pages
 
 - Homepage: https://rentemester.dk/
+- Regnskabsprogram: https://rentemester.dk/regnskabsprogram
+- Bogføringsprogram: https://rentemester.dk/bogfoeringsprogram
+- AI-bogholder: https://rentemester.dk/ai-bogholder
 - Roadmap / journey to v1: https://rentemester.dk/#roadmap
 - Current roadmap themes include deterministic bilagsmail intake, EAN/GLN public-customer e-invoicing, recurring invoice templates, a first SAF-T export slice, hosted accountant/reviewer access on top of the shipped local handoff package, live UI, and carefully scoped bank/plugin integrations
 - Agent contribution brief: https://rentemester.dk/#agent-brief
 - Features: https://rentemester.dk/funktioner
 - How it works: https://rentemester.dk/saadan-virker-det
 - Why it exists: https://rentemester.dk/hvorfor
+- Knowledge hub: https://rentemester.dk/viden
+- VAT deadlines: https://rentemester.dk/viden/frister/moms
+- VAT rates: https://rentemester.dk/viden/moms/satser
+- How to book expenses paid as outlays: https://rentemester.dk/viden/saadan-bogfoerer-du/udlaeg
+- VAT calculator: https://rentemester.dk/vaerktoej/momsberegner
 - Installation: https://rentemester.dk/docs/installation
 - Security: https://rentemester.dk/sikkerhed
 - Privacy: https://rentemester.dk/privatlivspolitik
@@ -90,6 +98,10 @@ If a human points you at this site or repository and asks you to contribute:
 - Backup signing and restore verification
 - MCP server for AI-client workflows
 - Roadmap: live UI plus carefully scoped bank/plugin integrations for PayPal, Zettle, Shopify and similar APIs
+
+## SEO page policy
+
+Rentemester pages should be useful, Danish, specific and honest. Head-term pages such as `/regnskabsprogram`, `/bogfoeringsprogram` and `/ai-bogholder` must explain the product's open source status and current development maturity. Knowledge pages under `/viden/` should answer concrete bookkeeping questions and link back to relevant features or documentation without implying that unfinished roadmap work is live.
 
 ## Suggested citation
 

@@ -22,6 +22,10 @@ const jsonLd = {
 <BaseLayout
   title="Installation af Rentemester lokalt"
   description="Installer Rentemester lokalt med Bun og git. Fra clone til demo-virksomhed, healthcheck, MCP-opsætning og smoke-flow på få minutter."
+  pathname="/docs/installation"
+  pageType="Article"
+  datePublished="2026-05-18"
+  dateModified="2026-05-19"
   ogImage="/og-installation.png"
   jsonLd={jsonLd}
 >
@@ -63,7 +67,7 @@ cd rentemester</code></pre>
     <p>Det kører hele smoke-testen: opretter en virksomhed, importerer bilag, bogfører, fakturerer, beregner moms, eksporterer til revisor og verificerer. Når den ender med "OK" har du set Rentemester arbejde end-to-end.</p>
 
     <h2>MCP-server (for AI-klienter)</h2>
-    <p>Hvis du vil bruge Rentemester gennem Claude Desktop, ChatGPT eller en anden MCP-kompatibel klient:</p>
+    <p>Hvis du vil bruge Rentemester gennem en MCP-kompatibel klient:</p>
     <pre><code>bun run mcp</code></pre>
     <p>Og peg din klient mod den. Se <a href={`${SITE.github}/blob/main/docs/mcp-install.md`} rel="noopener" target="_blank">MCP-installationsguiden ↗</a> for klient-specifik opsætning.</p>
 

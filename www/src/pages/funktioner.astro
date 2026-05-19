@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
 
 const groups = [
   {
@@ -9,7 +11,7 @@ const groups = [
     items: [
       { t: "Bilagsmail", d: "Roadmap: første slice bliver deterministisk intake fra maildrop/EML uden provider-lock-in; usikre cases skal lande i exception-køen." },
       { t: "Dokument-ingest", d: "Importér bilag fra CLI med metadata. Understøtter PDF, billeder, tekst." },
-      { t: "Kontakter og virksomheder", d: "Roadmap: opret kunder, leverandører og virksomheder én gang, og link fakturaer, køb og bilag til deres oplysninger." },
+      { t: "Kontakter og virksomheder", d: "Kunde- og leverandørstamdata findes i kernen. Roadmap: bredere kobling til køb, bilag og historik." },
       { t: "Bankimport", d: "CSV-import med automatisk format-detektion for danske banker. DKK og EUR med dagskurs." },
       { t: "MobilePay", d: "Importér transaktioner som CSV. Matches mod fakturaer og bilag." },
     ],
@@ -21,7 +23,7 @@ const groups = [
       { t: "Manuelle journalposter", d: "Klassiske posteringer med fuld kontrol over konti og moms." },
       { t: "Bankafstemning", d: "Match banklinjer mod bilag og fakturaer." },
       { t: "Modposter", d: "Reverser fejlbogføringer — uden at slette historikken." },
-      { t: "Periodisering", d: "Spread udgifter og indtægter over perioder hvor det er korrekt." },
+      { t: "Periodestyring", d: "Luk perioder og blokér posteringer i lukkede eller fremtidige perioder." },
       { t: "Valutakøb", d: "Bogfør køb i fx USD/EUR korrekt, også når banken trækker et DKK-beløb på kontoen." },
       { t: "Valuta", d: "EUR-bilag bogføres med dagskurs og valutakursdifferencer." },
     ],
@@ -34,9 +36,9 @@ const groups = [
       { t: "EAN-fakturering", d: "Roadmap: elektronisk fakturering til offentlige kunder med EAN/GLN og de nødvendige kontroller." },
       { t: "Abonnementer", d: "Roadmap: gentagne fakturaer for faste aftaler, perioder, fornyelser og korrekt bogføring." },
       { t: "Bogføring", d: "Postér fakturaer automatisk når de udstedes." },
-      { t: "Påmindelser", d: "Send rykkere og bogfør dem som debitorhåndtering." },
-      { t: "Kompensationsbeløb", d: "Beregn og bogfør lovbestemte 310 kr kompensation ved forsinkelse." },
-      { t: "Renter", d: "Renteberegning efter referencerente, klar til indkrævning." },
+      { t: "Påmindelser", d: "Registrér rykkere og bogfør dem som debitorhåndtering." },
+      { t: "Kompensationsbeløb", d: "Beregn og bogfør lovbestemt kompensation ved dokumenteret forsinkelse." },
+      { t: "Renter", d: "Beregn og bogfør morarentekrav ud fra eksplicit referenceinput." },
       { t: "Kreditnota", d: "Udsted kreditnota og refundér mod bank." },
       { t: "Tab på debitorer", d: "Afskriv ubetalte fakturaer korrekt i forhold til moms." },
     ],
@@ -45,12 +47,12 @@ const groups = [
     title: "Moms",
     intro: "Dansk moms — den komplekse del.",
     items: [
-      { t: "Momsrapport", d: "Generér momsindberetning for periode. Klar til Skat." },
-      { t: "Repræsentation", d: "Korrekt fradrag for repræsentation efter danske regler." },
-      { t: "EU-handel", d: "Omvendt betalingspligt på EU-services og varer." },
-      { t: "Import udenfor EU", d: "Importmoms og told håndteres separat." },
+      { t: "Momsrapport", d: "Generér afstemningsgrundlag for en momsperiode ud fra ledgeren." },
+      { t: "Repræsentation", d: "Testet flow for begrænset momsfradrag på repræsentation." },
+      { t: "EU-handel", d: "Testet reverse-charge flow for EU-servicekøb." },
+      { t: "Import udenfor EU", d: "Roadmap: importmoms og told håndteres separat." },
       { t: "VIES-validering", d: "Validér EU-momsnumre mod VIES før EU-bogføring." },
-      { t: "Blandet anvendelse", d: "Korrekt fordeling af moms på erhverv vs. privat brug." },
+      { t: "Blandet anvendelse", d: "Roadmap: tydelig fordeling af moms på erhverv vs. privat brug." },
     ],
   },
   {
@@ -63,7 +65,7 @@ const groups = [
       { t: "Audit verify", d: "CLI-kommando der verificerer hele kæden og signaturen." },
       { t: "Backup-signering", d: "Backups signeres så genoprettelse kan bevises ægte." },
       { t: "SAF-T", d: "Roadmap: Standard Audit File-Tax til udveksling af regnskabsdata med myndigheder efter den nye bogføringslov." },
-      { t: "Skat-eksport", d: "Eksportpakke til myndigheder med komplet historik og verifikationsdata." },
+      { t: "Myndighedseksport", d: "Eksportpakke med periodens historik, bilag og verifikationsdata." },
     ],
   },
   {
@@ -72,7 +74,7 @@ const groups = [
     items: [
       { t: "Dashboard", d: "Deterministisk HTML-rapport — samme data giver bit-for-bit samme output." },
       { t: "Healthcheck", d: "CLI-status der viser om alt er konsistent." },
-      { t: "Statusrapporter", d: "Faktura-status, åbne bilag, ubehandlede tasks." },
+      { t: "Statusrapporter", d: "Faktura-status, åbne exceptions, backupstatus og auditstatus." },
       { t: "Myndigheds-/audit-eksport", d: "Eksportpakke til myndigheder med komplet historik, bilag og verifikationsdata." },
       { t: "Revisoradgang", d: "Lokal eksportpakke findes i dag. Roadmap: giv revisor eller andre hosted læse-/skriveadgang med tydelige roller og audit-attribution." },
     ],
@@ -82,7 +84,7 @@ const groups = [
     intro: "Sådan taler andre systemer med Rentemester.",
     items: [
       { t: "CLI", d: "Alt er tilgængeligt via kommandolinje. Scriptbart, automatiserbart." },
-      { t: "MCP-server", d: "AI-klienter (Claude, ChatGPT, lokale modeller) kobler op via Model Context Protocol." },
+      { t: "MCP-server", d: "MCP-kompatible klienter kobler op via en struktureret tool-protokol." },
       { t: "Plugin-system", d: "Roadmap: stabilt plugin-lag til PayPal, Zettle, Shopify og andre API’er uden at gøre kernen skrøbelig." },
       { t: "JSON-input", d: "Strukturerede operations-payloads — ingen fri tekst hvor det betyder noget." },
       { t: "Standard CSV", d: "Bank, MobilePay, kontoplan — alt der ikke er proprietært." },
@@ -93,13 +95,16 @@ const groups = [
 
 <BaseLayout
   title="Funktioner til dansk open source bogføring"
-  description="Funktioner i Rentemester: kontakter, bilagsmail, bankimport, faktura, EAN, abonnementer, valutakøb, SAF-T, revisoradgang, plugins, momsrapportering, verifiérbar ledger, MCP-integration og audit-eksport."
+  description="Funktioner og roadmap i Rentemester: bankimport, faktura, momsrapportering, verifiérbar ledger, MCP, audit-eksport og kommende bilagsmail."
+  pageType="WebPage"
+  datePublished="2026-05-18"
+  dateModified="2026-05-19"
   ogImage="/og-funktioner.png"
 >
   <PageHero
     eyebrow="Funktioner"
-    title="Hvad systemet kan"
-    lead="En oversigt over funktionerne i Rentemester, grupperet efter hvor de hører hjemme i workflow'et. Alt er åbent på GitHub — se selv hvordan det er implementeret."
+    title="Hvad systemet kan - og hvad der er roadmap"
+    lead="En oversigt over funktionerne i Rentemester, grupperet efter hvor de hører hjemme i workflow'et. Roadmap-punkter er markeret direkte i teksten."
   />
 
   <div class="max-w-container mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-20 space-y-16">
@@ -119,5 +124,17 @@ const groups = [
         </div>
       </section>
     ))}
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/blob/main/package.json`, label: "Smoke-flow", external: true },
+        { href: `${SITE.github}/tree/main/tests/unit`, label: "Unit tests", external: true },
+        { href: `${SITE.github}/tree/main/rules/dk`, label: "Regelbundter", external: true },
+      ]}
+      related={[
+        { href: "/regnskabsprogram", label: "Regnskabsprogram" },
+        { href: "/bogfoeringsprogram", label: "Bogføringsprogram" },
+        { href: "/saadan-virker-det", label: "Arkitektur" },
+      ]}
+    />
   </div>
 </BaseLayout>

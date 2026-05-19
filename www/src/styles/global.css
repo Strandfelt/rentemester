@@ -154,4 +154,11 @@
     color: #e1e2eb;
     font-weight: 600;
   }
+  .seo-evidence a {
+    color: #00D1FF;
+    border-bottom: 1px dotted rgba(0, 209, 255, 0.4);
+  }
+  .seo-evidence a:hover {
+    border-bottom-color: #00D1FF;
+  }
 }

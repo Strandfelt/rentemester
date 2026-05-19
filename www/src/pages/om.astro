@@ -7,6 +7,11 @@ import { SITE } from "../consts";
 <BaseLayout
   title="Om Rentemester og projektets principper"
   description="Om Rentemester: hvem står bag, hvorfor projektet er åbent, og hvordan udvikling, regler, issues og bidrag drives offentligt i repository."
+  pathname="/om"
+  pageType="AboutPage"
+  datePublished="2026-05-18"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
 >
   <PageHero
     eyebrow="Om"
@@ -17,7 +22,7 @@ import { SITE } from "../consts";
   <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
     <h2>Hvem står bag</h2>
     <p>
-      Projektet er startet og vedligeholdes af <a href="https://github.com/mikkelkrogsholm" rel="noopener" target="_blank">{SITE.author}</a>. Alt arbejde foregår offentligt i <a href={SITE.github} rel="noopener" target="_blank">GitHub-repoet</a>.
+      Projektet er startet og vedligeholdes af {SITE.author}. Du kan se <a href="https://github.com/mikkelkrogsholm" rel="noopener" target="_blank">Mikkels GitHub-profil</a>, og alt arbejde foregår offentligt i <a href={SITE.github} rel="noopener" target="_blank">GitHub-repoet</a>.
     </p>
     <p>
       Bidrag fra andre er velkomne — revisorer, bogholdere, udviklere, brugere. Se commit-historikken og issues hvis du vil se hvem der ellers er involveret.

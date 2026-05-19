@@ -1,0 +1,79 @@
+---
+import { SITE } from "../consts";
+
+type LinkItem = {
+  href: string;
+  label: string;
+  external?: boolean;
+};
+
+export interface Props {
+  updated?: string;
+  reviewed?: string;
+  status?: string;
+  sources?: LinkItem[];
+  related?: LinkItem[];
+}
+
+const {
+  updated = "2026-05-19",
+  reviewed = SITE.author,
+  status = "QA-gennemgået mod kode, tests og relevante kilder.",
+  sources = [],
+  related = [],
+} = Astro.props;
+---
+
+<aside class="seo-evidence my-12 border-y border-outline-variant/20 py-7">
+  <div class="grid md:grid-cols-[0.75fr_1fr] gap-8">
+    <div>
+      <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-cyber-blue mb-3">Kvalitetssikring</div>
+      <dl class="space-y-2 text-[15px] text-on-surface-variant">
+        <div>
+          <dt class="inline text-outline">Sidst opdateret: </dt>
+          <dd class="inline text-on-surface">{updated}</dd>
+        </div>
+        <div>
+          <dt class="inline text-outline">Gennemgået af: </dt>
+          <dd class="inline text-on-surface">{reviewed}</dd>
+        </div>
+        <div>
+          <dt class="inline text-outline">Status: </dt>
+          <dd class="inline text-on-surface">{status}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-7">
+      {sources.length > 0 && (
+        <div>
+          <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-primary mb-3">Kilder</div>
+          <ul class="space-y-2">
+            {sources.map((source) => (
+              <li>
+                <a href={source.href} rel={source.external ? "noopener" : undefined} target={source.external ? "_blank" : undefined}>
+                  {source.label}{source.external ? " ↗" : ""}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {related.length > 0 && (
+        <div>
+          <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-primary mb-3">Relateret</div>
+          <ul class="space-y-2">
+            {related.map((link) => (
+              <li>
+                <a href={link.href} rel={link.external ? "noopener" : undefined} target={link.external ? "_blank" : undefined}>
+                  {link.label}{link.external ? " ↗" : ""}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  </div>
+</aside>

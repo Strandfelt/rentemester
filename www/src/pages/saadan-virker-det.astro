@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import PageHero from "../components/PageHero.astro";
+import { SITE } from "../consts";
 
 const steps = [
   {
@@ -53,6 +54,10 @@ const jsonLd = {
   title="Sådan virker Rentemesters bogføring"
   description="Sådan virker Rentemester: AI-agenten foreslår, danske regler validerer, og en append-only ledger bevarer revisionssporet."
   ogImage="/og-saadan-virker-det.png"
+  pageType="Article"
+  datePublished="2026-05-18"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
   jsonLd={jsonLd}
 >
   <PageHero
@@ -91,11 +96,11 @@ const jsonLd = {
         </div>
         <div>
           <dt class="font-mono text-[11px] uppercase tracking-[0.2em] text-cyber-blue mb-2">Agent</dt>
-          <dd class="text-on-surface-variant leading-relaxed">Modelagnostisk. Eksponeres som MCP-server så Claude, ChatGPT og andre klienter kan arbejde gennem en stram operations-protokol — ikke fri tekst ind i ledgeren.</dd>
+          <dd class="text-on-surface-variant leading-relaxed">Modelagnostisk. Eksponeres som MCP-server så kompatible klienter kan arbejde gennem en stram operations-protokol — ikke fri tekst ind i ledgeren.</dd>
         </div>
         <div>
           <dt class="font-mono text-[11px] uppercase tracking-[0.2em] text-cyber-blue mb-2">Output</dt>
-          <dd class="text-on-surface-variant leading-relaxed">Dashboard som ren HTML (deterministisk render), myndigheds-/audit-eksport som JSON+CSV, momsrapporter som strukturerede dokumenter klar til Skat.</dd>
+          <dd class="text-on-surface-variant leading-relaxed">Dashboard som ren HTML (deterministisk render), myndigheds-/audit-eksport som JSON+CSV, og momsrapporter som struktureret afstemningsgrundlag.</dd>
         </div>
       </dl>
     </div>

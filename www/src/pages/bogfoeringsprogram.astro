@@ -1,0 +1,96 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHero from "../components/PageHero.astro";
+import SeoEvidence from "../components/SeoEvidence.astro";
+import { SITE } from "../consts";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "Er Rentemester et færdigt bogføringsprogram?",
+      acceptedAnswer: { "@type": "Answer", text: "Nej. Rentemester er et open source projekt under udvikling. Kernen er testet lokalt, men projektet er ikke en færdig SaaS-løsning." },
+    },
+  ],
+};
+---
+
+<BaseLayout
+  title="Bogføringsprogram til dansk bogføring"
+  description="Open source bogføringsprogram til danske små virksomheder: bilag, bank, faktura, moms, append-only ledger og AI-agent workflow med deterministiske regler."
+  pathname="/bogfoeringsprogram"
+  pageType="Article"
+  datePublished="2026-05-19"
+  dateModified="2026-05-19"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Bogføringsprogram"
+    title="Bogføring med regler før gæt"
+    lead="Rentemester er et bogføringsprogram under udvikling til danske freelancere, konsulenter og små ApS'er. Målet er at automatisere rutinerne, men bevare en hård, kontrollerbar bogføringskerne."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Et bogføringsprogram må ikke være kreativt. Det skal kunne tage imod bilag og banklinjer, bogføre efter faste regler, stoppe usikre cases og bevare et revisionsspor. Rentemester er bygget omkring netop den disciplin.
+    </p>
+
+    <SeoEvidence
+      sources={[
+        { href: `${SITE.github}/blob/main/rules/dk/bookkeeping.yaml`, label: "Bogføringsregler i repoet", external: true },
+        { href: `${SITE.github}/blob/main/docs/mcp-tool-surface.md`, label: "MCP tool surface", external: true },
+        { href: "https://www.retsinformation.dk/eli/lta/2022/700", label: "Bogføringsloven", external: true },
+      ]}
+      related={[
+        { href: "/regnskabsprogram", label: "Regnskabsprogram" },
+        { href: "/saadan-virker-det", label: "Sådan virker det" },
+        { href: "/viden/saadan-bogfoerer-du/udlaeg", label: "Bogfør udlæg" },
+      ]}
+    />
+
+    <h2>Den korte forklaring</h2>
+    <p>
+      Rentemester arbejder med tre lag: input fra bilag, bank og fakturaer; danske regler som kode; og en append-only ledger. AI kan hjælpe med arbejdet, men den kan ikke bogføre udenom valideringerne.
+    </p>
+
+    <h2>Hverdagsflowet</h2>
+    <ol>
+      <li>Banktransaktioner importeres fra CSV.</li>
+      <li>Bilag indlæses med metadata og SHA-256 hash.</li>
+      <li>Systemet foreslår match mellem banklinjer, bilag og fakturaer.</li>
+      <li>Sikre posteringer bogføres i dobbelt bogholderi.</li>
+      <li>Usikre eller blokerede cases kan registreres som exceptions.</li>
+      <li>Momsrapport, dashboard, backup og eksport kan genereres efterfølgende.</li>
+    </ol>
+
+    <h2>Hvad er særligt ved Rentemester?</h2>
+    <p>
+      Mange bogføringsprogrammer starter med en brugerflade. Rentemester starter med ledgeren. Det gør projektet langsommere at gøre pænt, men stærkere som fundament: bogføringen skal være korrekt, testbar og mulig at verificere før der bygges convenience ovenpå.
+    </p>
+
+    <h2>Funktioner der allerede findes</h2>
+    <ul>
+      <li>journalposteringer med krav om balance</li>
+      <li>reverseringer i stedet for sletning</li>
+      <li>periodelås</li>
+      <li>dokumentkrav for indtægter og udgifter</li>
+      <li>fremmed valuta med DKK-grundlag</li>
+      <li>momsrapport og særlige momsflows</li>
+      <li>backup og restore med signaturkontrol</li>
+      <li>agentadgang via MCP-tools med confirm-gates</li>
+    </ul>
+
+    <h2>Hvornår giver det mening?</h2>
+    <p>
+      Rentemester giver mest mening, hvis du vil forstå, teste eller bidrage til et dansk open source bogføringssystem. Det er også relevant hvis du bygger lokale agent-workflows og har brug for et bogføringsværktøj med strukturerede operationer i stedet for fritekst. Det er ikke klar som plug-and-play erstatning for et etableret bogføringsprogram.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      Se <a href="/saadan-virker-det">arkitekturen</a>, <a href="/funktioner">funktionerne</a> og <a href="/docs/installation">installationen</a>. Koden ligger på <a href={SITE.github} rel="noopener" target="_blank">GitHub</a>, og alle seriøse produktclaims bør kunne spores til tests eller roadmap.
+    </p>
+  </article>
+</BaseLayout>
