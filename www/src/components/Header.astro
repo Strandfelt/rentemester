@@ -4,7 +4,7 @@ const pathname = Astro.url.pathname;
 ---
 
 <header class="fixed top-0 inset-x-0 z-50 bg-ink-black/85 backdrop-blur-md border-b border-outline-variant/20">
-  <div class="flex justify-between items-center gap-3 h-16 px-4 sm:px-margin-mobile md:px-margin-desktop max-w-container mx-auto overflow-hidden">
+  <div class="site-header-inner flex justify-between items-center gap-3 h-16 px-4 sm:px-margin-mobile md:px-margin-desktop max-w-container mx-auto">
     <a href="/" class="min-w-0 truncate font-serif text-[22px] sm:text-2xl md:text-[28px] text-primary tracking-tight" aria-label={`${SITE.name} — forside`}>
       {SITE.name}
     </a>
@@ -28,7 +28,7 @@ const pathname = Astro.url.pathname;
       })}
     </nav>
 
-    <div class="flex shrink-0 items-center gap-2 sm:gap-3">
+    <div class="site-header-actions flex shrink-0 items-center gap-2 sm:gap-3">
       <a
         href={SITE.github}
         rel="noopener me"
@@ -43,7 +43,7 @@ const pathname = Astro.url.pathname;
       <button
         type="button"
         id="mobile-nav-toggle"
-        class="shrink-0 items-center justify-center w-10 h-10 text-on-surface border border-outline-variant/40"
+        class="site-menu-button shrink-0 items-center justify-center w-10 h-10 text-on-surface border border-outline-variant/40"
         aria-label="Vis menu"
         aria-expanded="false"
         aria-controls="mobile-nav"
@@ -94,6 +94,29 @@ const pathname = Astro.url.pathname;
 
   #mobile-nav-toggle {
     display: inline-flex;
+  }
+
+  .site-header-inner {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  @media (max-width: 767px) {
+    .site-header-inner {
+      max-width: 100vw;
+      padding-left: 1rem;
+      padding-right: calc(1.5rem + env(safe-area-inset-right, 0px));
+    }
+
+    .site-header-actions {
+      min-width: 2.5rem;
+    }
+
+    .site-menu-button {
+      margin-right: 0.25rem;
+    }
   }
 
   .mobile-nav-panel:not(.hidden) {
