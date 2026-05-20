@@ -79,5 +79,14 @@
     "url": "https://www.retsinformation.dk/eli/lta/2013/105",
     "xmlUrl": "https://www.retsinformation.dk/eli/lta/2013/105/xml",
     "notes": "Introduces the fixed DKK 310 compensation amount for late commercial payment claims from 2013-03-01."
+  },
+  {
+    "id": "DK-AARSREGNSKABSLOVEN-2024-1140",
+    "title": "Bekendtgørelse af årsregnskabsloven",
+    "authority": "Erhvervsministeriet",
+    "category": "annual_report",
+    "url": "https://www.retsinformation.dk/eli/lta/2024/1140",
+    "xmlUrl": "https://www.retsinformation.dk/eli/lta/2024/1140/xml",
+    "notes": "Annual-report law; source for regnskabsklasse B (micro/small) årsrapport content and the iXBRL/XBRL digital-submission requirement to Erhvervsstyrelsen."
   }
 ]

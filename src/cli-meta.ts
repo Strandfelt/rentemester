@@ -332,6 +332,19 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   // ===== END GDPR (#184) =====
+  // ===== ANNUAL REPORT (#177) =====
+  {
+    key: "report annual",
+    usage: "report annual --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--ixbrl-out <file.xhtml>]",
+    description: "Samler en arsrapport for regnskabsklasse B (resultatopgørelse, balance, noteskelet og ledelsespategning) for et lukket regnskabsaar og kan skrive en deterministisk iXBRL-fil. Rentemester forbereder; ejer/revisor gennemgar og indberetter.",
+    allowedFlags: ["--company", "--from", "--to", "--ixbrl-out"],
+    inputNotes: [
+      "--from / --to afgrænser regnskabsaaret (skal være helt dækket af en lukket/indberettet periode)",
+      "Kræver registreret CVR og balancerede bøger",
+      "--ixbrl-out skriver en deterministisk iXBRL (inline-XBRL) XHTML-fil mod et afgrænset micro/small-taksonomi-udsnit",
+    ],
+  },
+  // ===== END ANNUAL REPORT (#177) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
