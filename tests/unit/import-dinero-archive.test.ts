@@ -237,10 +237,15 @@ describe("Dinero import flow: archiving wired into runImportFromSource", () => {
       const result = runImportFromSource(db, dineroParser, FIXTURE, { createdBy: "user:tester" });
       expect(result.errors).toEqual([]);
       expect(result.ok).toBe(true);
-      // Only the cut-over year was posted.
+      // Only the cut-over year (2025) reached the live ledger: the primobalance
+      // plus the cut-over year's replayed year-to-date postings (#195). Nothing
+      // from the archived 2024 year is posted — no journal entry predates the
+      // cut-over date.
       expect(result.cutOverDate).toBe("2025-01-01");
-      const entries = db.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number };
-      expect(entries.n).toBe(1);
+      const preCutOver = db
+        .query("SELECT COUNT(*) AS n FROM journal_entries WHERE transaction_date < '2025-01-01'")
+        .get() as { n: number };
+      expect(preCutOver.n).toBe(0);
       // 2024 was archived as read-only reference data.
       const archived = queryArchive(db).years.map((y) => y.fiscalYear);
       expect(archived).toEqual([2024]);
