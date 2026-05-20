@@ -212,16 +212,20 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
   const comparisonDate = asOfDate ?? defaultComparisonDate(invoice.invoice_date ?? undefined, effectiveDueDate);
   const overdueDays = effectiveDueDate && openBalance > 0 ? Math.max(0, diffDays(effectiveDueDate, comparisonDate)) : 0;
   const isOverdue = overdueDays > 0;
+  // Status ladder: a written-off or refunded zero-balance invoice must never be
+  // mislabelled "paid". Write-off and refund take precedence over "paid", and
+  // "refunded" is decoupled from creditedAmount so a refund without a credit
+  // note (e.g. an overpayment returned) is still labelled "refunded".
   const status = openBalance > 0
     ? "open"
     : openBalance < 0
       ? "overpaid"
-      : creditedAmount > 0 && refundedAmount > 0
-        ? "refunded"
-        : creditedAmount === grossAmount && paidAmount === 0
-          ? "credited"
-          : totalBadDebtWrittenOff > 0
-            ? "written_off"
+      : totalBadDebtWrittenOff > 0
+        ? "written_off"
+        : refundedAmount > 0
+          ? "refunded"
+          : creditedAmount === grossAmount && paidAmount === 0
+            ? "credited"
             : "paid";
 
   return {
