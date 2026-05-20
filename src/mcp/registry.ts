@@ -50,6 +50,8 @@ import { registerMailIntakeTools } from "./tools/mail-intake";
 import { registerMileageTools } from "./tools/mileage";
 // Fixed assets (#124, #125)
 import { registerAssetTools } from "./tools/asset";
+// Multi-company portfolio: company_add + portfolio_overview (#172)
+import { registerPortfolioTools } from "./tools/portfolio";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -77,4 +79,6 @@ export function registerAllTools(server: McpServer): void {
   registerMileageTools(server);
   // Fixed assets (#124, #125)
   registerAssetTools(server);
+  // Multi-company portfolio: company_add + portfolio_overview (#172)
+  registerPortfolioTools(server);
 }
