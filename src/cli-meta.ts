@@ -29,6 +29,17 @@ export const COMMAND_SPECS: CommandSpec[] = [
     description: "Lister virksomheder i workspacet.",
     allowedFlags: ["--workspace"],
   },
+  {
+    key: "serve",
+    usage: "serve [--workspace <dir>] [--host <addr>] [--port <n>]",
+    description: "Starter cockpit-backenden: en lokal JSON-API over workspacet (kun læsning + workspace-styring).",
+    allowedFlags: ["--workspace", "--host", "--port"],
+    inputNotes: [
+      "Bind-adressen er konfigurations-styret: standard 127.0.0.1 (kun localhost)",
+      "Miljøvariabler: RENTEMESTER_APP_HOST, RENTEMESTER_APP_PORT, RENTEMESTER_WORKSPACE",
+      "Ingen bogføringsmutationer — dem ejer agent/CLI-stien",
+    ],
+  },
   { key: "system healthcheck", usage: "system healthcheck --company <slug|path>", description: "Tjekker at virksomhedsmappen og kernefiler findes.", allowedFlags: ["--company"] },
   { key: "system backup", usage: "system backup --company <path> [--at <ISO-8601>] [--sign-with-ed25519]", description: "Opretter en revisionsklar backup. Med --sign-with-ed25519 tilføjes en asymmetrisk signatur som 3.-part kan verificere uafhængigt.", allowedFlags: ["--company", "--at", "--sign-with-ed25519"] },
   { key: "system backup-status", usage: "system backup-status --company <path> [--as-of <ISO-8601>]", description: "Viser om backup-pligten er opfyldt.", allowedFlags: ["--company", "--as-of"] },
