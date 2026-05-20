@@ -1,0 +1,23 @@
+version: dk-peppol-v0.0.1
+sources:
+  - DK-MOMSBEKENDTGORELSEN-2023-1435
+rules:
+  - rule_id: DK-PEPPOL-SUBMIT-001
+    name: Public-recipient PEPPOL submission must be deterministic, idempotent, and built on the OIOUBL handoff artifact
+    category: invoice_integrity
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - oioubl_handoff_artifact_valid
+        - access_point_config_present
+        - deterministic_submission_envelope
+        - append_only_submission_record
+        - idempotency_key_protects_duplicates
+        - submission_audit_event
+      forbid:
+        - submission_without_access_point_config
+        - submission_mutating_original_invoice_payload
+        - access_point_credentials_in_bookkeeping_state
+        - duplicate_submission_record_for_same_idempotency_key
+    explanation: Rentemester may record a direct PEPPOL submission attempt for a public-customer invoice, but only on top of a valid OIOUBL handoff artifact. The submission envelope must be deterministic and idempotent on a derived key, the submission record append-only and audit-linked, and the original immutable invoice payload must never be mutated. Access-point credentials and access-point configuration stay outside core bookkeeping state — Rentemester prepares and records the attempt, it does not perform the transport itself.

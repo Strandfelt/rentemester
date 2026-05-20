@@ -34,6 +34,8 @@ import { registerExceptionTools } from "./tools/exceptions";
 import { registerExpenseTools } from "./tools/expense";
 import { registerInvoiceTools } from "./tools/invoice";
 import { registerJournalTools } from "./tools/journal";
+// PEPPOL submission (#128)
+import { registerPeppolTools } from "./tools/peppol";
 import { registerPeriodTools } from "./tools/period";
 import { registerRetentionTools } from "./tools/retention";
 import { registerSystemTools } from "./tools/system";
@@ -59,6 +61,8 @@ export function registerAllTools(server: McpServer): void {
   registerExpenseTools(server);
   registerInvoiceTools(server);
   registerJournalTools(server);
+  // PEPPOL submission (#128)
+  registerPeppolTools(server);
   registerPeriodTools(server);
   registerRetentionTools(server);
   registerSystemTools(server);
