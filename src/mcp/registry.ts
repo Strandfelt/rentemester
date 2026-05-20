@@ -39,6 +39,9 @@ import { registerRetentionTools } from "./tools/retention";
 import { registerSystemTools } from "./tools/system";
 import { registerVatTools } from "./tools/vat";
 import { registerVendorTools } from "./tools/vendor";
+// ===== RECURRING INVOICES (#118) =====
+import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
+// ===== END RECURRING INVOICES (#118) =====
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -55,4 +58,7 @@ export function registerAllTools(server: McpServer): void {
   registerSystemTools(server);
   registerVatTools(server);
   registerVendorTools(server);
+  // ===== RECURRING INVOICES (#118) =====
+  registerRecurringInvoiceTools(server);
+  // ===== END RECURRING INVOICES (#118) =====
 }

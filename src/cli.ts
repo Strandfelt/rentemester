@@ -37,6 +37,9 @@ import { register as registerExpense } from "./cli/expense";
 import { register as registerRetention } from "./cli/retention";
 import { register as registerPeriod } from "./cli/period";
 import { register as registerDashboard } from "./cli/dashboard";
+// ===== RECURRING INVOICES (#118) =====
+import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
+// ===== END RECURRING INVOICES (#118) =====
 
 function fatal(message: string): never {
   console.error(message);
@@ -141,6 +144,9 @@ for (const registerFn of [
   registerRetention,
   registerPeriod,
   registerDashboard,
+  // ===== RECURRING INVOICES (#118) =====
+  registerRecurringInvoice,
+  // ===== END RECURRING INVOICES (#118) =====
 ]) {
   registerFn(dispatch);
 }
