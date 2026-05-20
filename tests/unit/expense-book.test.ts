@@ -80,6 +80,56 @@ describe("expense booking", () => {
     rmSync(inbox, { recursive: true, force: true });
   });
 
+  test("rejects a standard expense whose document vat_amount is inconsistent with the 25% rate (#143)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-badvat-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-badvat-inbox-"));
+    const csv = join(root, "transactions.csv");
+    const sourceFile = join(inbox, "vendor.txt");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-16,SOFTWARE APS,-1250,DKK,REF-BADVAT-1"
+    ].join("\n"));
+    writeFileSync(sourceFile, "Invoice\n1250 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = importBankCsv(db, root, csv);
+    expect(bank.ok).toBe(true);
+
+    // Document carries a garbled vat_amount (251) — gross 1250, so net would
+    // be 999 and 25% of 999 = 249.75 → 250, not 251. Must be rejected.
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "V-BADVAT-1",
+      deliveryDescription: "Softwareabonnement",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Software ApS", address: "SaaSvej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 251,
+      paymentDetails: "Bank transfer"
+    });
+    expect(doc.ok).toBe(true);
+
+    const bankRow = db.query("SELECT id FROM bank_transactions WHERE reference = 'REF-BADVAT-1'").get() as { id: number };
+    const booked = bookExpenseFromBank(db, {
+      documentId: doc.documentId!,
+      bankTransactionId: bankRow.id,
+      expenseAccountNo: "3000"
+    });
+
+    expect(booked.ok).toBe(false);
+    expect(booked.errors.join(" ")).toContain("vat_amount");
+    expect(booked.entryId).toBeUndefined();
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
   test("books a foreign-currency purchase settled by a DKK bank transaction and preserves FX basis", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-fx-"));
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-fx-inbox-"));

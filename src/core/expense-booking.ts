@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./vat";
-import { compareDkk, roundDkk } from "./money";
+import { absDkk, compareDkk, percentOfDkk, roundDkk, subtractDkk } from "./money";
 
 export type ExpenseVatTreatment = "standard" | "reverse_charge" | "representation" | "exempt";
 
@@ -199,6 +199,24 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
         amountDkk: fxBasis.basis.grossAmountDkk,
         fxRateToDkk: fxBasis.basis.fxRateToDkk,
       };
+
+  // For 25%-rated treatments the document vat_amount becomes deductible input
+  // VAT, so it must be consistent with a 25% rate rather than trusted blindly.
+  // A garbled or OCR-extracted vat_amount would otherwise be booked verbatim,
+  // over- or under-claiming købsmoms. Validate in the document's native
+  // currency (the 25% ratio is currency-independent), allowing 1 øre of
+  // rounding slack.
+  if (vatTreatment === "standard" || vatTreatment === "representation") {
+    const documentNetAmount = subtractDkk(grossAmount, vatAmount);
+    const expectedVatAmount = percentOfDkk(documentNetAmount, 25);
+    if (compareDkk(absDkk(subtractDkk(vatAmount, expectedVatAmount)), 0.01) > 0) {
+      return {
+        ok: false,
+        appliedRules: [],
+        errors: [`document ${input.documentId} vat_amount ${vatAmount} is inconsistent with the 25% rate (expected ~${expectedVatAmount} for net ${documentNetAmount})`],
+      };
+    }
+  }
 
   if (vatTreatment === "standard") {
     if (!(vatAmount > 0)) return { ok: false, appliedRules: [], errors: ["standard expense booking requires document vat_amount > 0"] };
