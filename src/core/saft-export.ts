@@ -1,0 +1,482 @@
+import { createHash } from "node:crypto";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, join, relative } from "node:path";
+import type { Database } from "bun:sqlite";
+import { insertAuditLog } from "./actor";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { formatAmount, sumDkk } from "./money";
+
+type CanonicalJson = null | boolean | number | string | CanonicalJson[] | { [key: string]: CanonicalJson };
+
+type ExportedFileMeta = {
+  path: string;
+  sha256: string;
+  sizeBytes: number;
+};
+
+type AccountRow = {
+  accountNo: string;
+  name: string;
+  type: string;
+  normalBalance: string;
+  defaultVatCode: string | null;
+};
+
+type JournalLineRow = {
+  accountNo: string;
+  accountName: string;
+  debitAmount: number;
+  creditAmount: number;
+  vatCode: string | null;
+  text: string | null;
+};
+
+type JournalEntryRow = {
+  id: number;
+  entryNo: string;
+  transactionDate: string;
+  registrationDatetime: string;
+  text: string;
+  currency: string;
+  amountDkk: number | null;
+  documentId: number | null;
+  lines: JournalLineRow[];
+};
+
+type SalesInvoiceRow = {
+  documentNo: string;
+  invoiceNo: string;
+  issueDate: string;
+  dueDate: string | null;
+  currency: string;
+  sellerName: string | null;
+  sellerVatOrCvr: string | null;
+  buyerName: string | null;
+  buyerVatOrCvr: string | null;
+  netAmount: number | null;
+  vatAmount: number | null;
+  grossAmount: number | null;
+  payloadJson: string | null;
+};
+
+type CompanyRow = {
+  id: number;
+  name: string;
+  country: string;
+  currency: string;
+  cvr: string | null;
+  fiscalYearStartMonth: number;
+  fiscalYearLabelStrategy: string;
+};
+
+type InvoiceLinePayload = {
+  description?: string;
+  quantity?: number;
+  unitPriceExVat?: number;
+  lineTotalExVat?: number;
+};
+
+export type ExportSaftPackageInput = {
+  periodStart: string;
+  periodEnd: string;
+  outputDir: string;
+  generatedAt?: string;
+};
+
+export type ExportSaftPackageResult = {
+  ok: boolean;
+  exportDir?: string;
+  manifestPath?: string;
+  saftXmlPath?: string;
+  generatedAt?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  journalEntryCount?: number;
+  salesInvoiceCount?: number;
+  appliedRules: string[];
+  errors: string[];
+};
+
+const RULE_ID = "DK-BOOKKEEPING-SAFT-EXPORT-001";
+const PROFILE_ID = "rentemester-dk-saft-v1-ledger-sales";
+const OUT_OF_SCOPE = [
+  "purchase_documents",
+  "bank_statement_transport",
+  "supplier_master_files",
+  "payments_collections",
+  "official_schema_submission",
+] as const;
+
+function resolveIsoDateTime(value?: string) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
+function normalizeExportTimestamp(periodEnd: string) {
+  return `${periodEnd}T23:59:59.000Z`;
+}
+
+function packageName(periodStart: string, periodEnd: string, generatedAt: string) {
+  return `saft-export-${periodStart}_${periodEnd}_${generatedAt.replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`;
+}
+
+function packageRelativePath(exportDir: string, path: string) {
+  return relative(exportDir, path).replace(/\\/g, "/");
+}
+
+function sha256Text(text: string) {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+function canonicalize(value: unknown): CanonicalJson {
+  if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map((entry) => canonicalize(entry));
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return Object.fromEntries(entries.map(([key, entry]) => [key, canonicalize(entry)]));
+  }
+  return String(value);
+}
+
+function stringifyCanonicalJson(value: unknown) {
+  return `${JSON.stringify(canonicalize(value), null, 2)}\n`;
+}
+
+function recordWrittenText(exportDir: string, path: string, text: string, outputs: ExportedFileMeta[]) {
+  writeFileSync(path, text);
+  outputs.push({
+    path: packageRelativePath(exportDir, path),
+    sha256: sha256Text(text),
+    sizeBytes: statSync(path).size,
+  });
+}
+
+function escapeXml(value: string | number | null | undefined) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function xmlTag(name: string, value: string | number | null | undefined, indent = "") {
+  if (value == null || value === "") return "";
+  return `${indent}<${name}>${escapeXml(value)}</${name}>`;
+}
+
+function money(value: number | null | undefined) {
+  return formatAmount(value);
+}
+
+function fetchCompany(db: Database): CompanyRow | null {
+  const row = db.query(
+    `SELECT id, name, country, currency, cvr, fiscal_year_start_month, fiscal_year_label_strategy
+     FROM companies ORDER BY id ASC LIMIT 1`
+  ).get() as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    country: row.country,
+    currency: row.currency,
+    cvr: row.cvr ?? null,
+    fiscalYearStartMonth: row.fiscal_year_start_month,
+    fiscalYearLabelStrategy: row.fiscal_year_label_strategy,
+  };
+}
+
+function fetchAccounts(db: Database): AccountRow[] {
+  return (db.query(
+    `SELECT account_no, name, type, normal_balance, default_vat_code
+     FROM accounts ORDER BY account_no ASC`
+  ).all() as any[]).map((row) => ({
+    accountNo: row.account_no,
+    name: row.name,
+    type: row.type,
+    normalBalance: row.normal_balance,
+    defaultVatCode: row.default_vat_code ?? null,
+  }));
+}
+
+function fetchJournalEntries(db: Database, periodStart: string, periodEnd: string): JournalEntryRow[] {
+  const entries = db.query(
+    `SELECT id, entry_no, transaction_date, registration_datetime, text, currency, amount_dkk, document_id
+     FROM journal_entries
+     WHERE transaction_date BETWEEN ? AND ?
+     ORDER BY transaction_date ASC, id ASC`
+  ).all(periodStart, periodEnd) as any[];
+
+  const linesStmt = db.query(
+    `SELECT a.account_no, a.name AS account_name, jl.debit_amount, jl.credit_amount, jl.vat_code, jl.text
+     FROM journal_lines jl
+     JOIN accounts a ON a.id = jl.account_id
+     WHERE jl.journal_entry_id = ?
+     ORDER BY jl.id ASC`
+  );
+
+  return entries.map((entry) => ({
+    id: entry.id,
+    entryNo: entry.entry_no,
+    transactionDate: entry.transaction_date,
+    registrationDatetime: entry.registration_datetime,
+    text: entry.text,
+    currency: entry.currency,
+    amountDkk: entry.amount_dkk == null ? null : Number(entry.amount_dkk),
+    documentId: entry.document_id ?? null,
+    lines: (linesStmt.all(entry.id) as any[]).map((line) => ({
+      accountNo: line.account_no,
+      accountName: line.account_name,
+      debitAmount: Number(line.debit_amount),
+      creditAmount: Number(line.credit_amount),
+      vatCode: line.vat_code ?? null,
+      text: line.text ?? null,
+    })),
+  }));
+}
+
+function fetchSalesInvoices(db: Database, periodStart: string, periodEnd: string): SalesInvoiceRow[] {
+  return (db.query(
+    `SELECT document_no, invoice_no, invoice_date, currency, sender_name, sender_vat_cvr,
+            recipient_name, recipient_vat_cvr, amount_inc_vat, vat_amount, payload_json
+     FROM documents
+     WHERE document_type = 'issued_invoice'
+       AND invoice_date BETWEEN ? AND ?
+     ORDER BY invoice_date ASC, id ASC`
+  ).all(periodStart, periodEnd) as any[]).map((row) => {
+    const payload = row.payload_json ? JSON.parse(row.payload_json) as { dueDate?: string; totals?: { netAmount?: number; grossAmount?: number }; lines?: InvoiceLinePayload[] } : null;
+    return {
+      documentNo: row.document_no,
+      invoiceNo: row.invoice_no,
+      issueDate: row.invoice_date,
+      dueDate: payload?.dueDate ?? null,
+      currency: row.currency ?? "DKK",
+      sellerName: row.sender_name ?? null,
+      sellerVatOrCvr: row.sender_vat_cvr ?? null,
+      buyerName: row.recipient_name ?? null,
+      buyerVatOrCvr: row.recipient_vat_cvr ?? null,
+      netAmount: payload?.totals?.netAmount == null ? null : Number(payload.totals.netAmount),
+      vatAmount: row.vat_amount == null ? null : Number(row.vat_amount),
+      grossAmount: payload?.totals?.grossAmount == null ? (row.amount_inc_vat == null ? null : Number(row.amount_inc_vat)) : Number(payload.totals.grossAmount),
+      payloadJson: row.payload_json ?? null,
+    };
+  });
+}
+
+function buildReadme(input: { periodStart: string; periodEnd: string; generatedAt: string }) {
+  return [
+    "Rentemester SAF-T export (first deterministic slice)",
+    "",
+    `Profile: ${PROFILE_ID}`,
+    `Period: ${input.periodStart}..${input.periodEnd}`,
+    `Generated at: ${input.generatedAt}`,
+    "",
+    "Included:",
+    "- Header/company metadata",
+    "- Chart of accounts",
+    "- General ledger entries with lines",
+    "- Sales invoices issued in the selected period",
+    "",
+    "Out of scope in this first slice:",
+    ...OUT_OF_SCOPE.map((item) => `- ${item}`),
+    "",
+  ].join("\n");
+}
+
+function renderSaftXml(input: {
+  company: CompanyRow;
+  accounts: AccountRow[];
+  journalEntries: JournalEntryRow[];
+  salesInvoices: SalesInvoiceRow[];
+  periodStart: string;
+  periodEnd: string;
+  generatedAt: string;
+  companyRoot: string;
+}) {
+  const invoiceTotals = sumDkk(input.salesInvoices.map((invoice) => invoice.grossAmount));
+  const journalBlocks = input.journalEntries.map((entry) => [
+    "      <Transaction>",
+    xmlTag("TransactionID", entry.entryNo, "        "),
+    xmlTag("TransactionDate", entry.transactionDate, "        "),
+    xmlTag("Description", entry.text, "        "),
+    ...entry.lines.flatMap((line) => [
+      "        <Line>",
+      xmlTag("AccountID", line.accountNo, "          "),
+      xmlTag("AccountDescription", line.accountName, "          "),
+      xmlTag("DebitAmount", money(line.debitAmount), "          "),
+      xmlTag("CreditAmount", money(line.creditAmount), "          "),
+      xmlTag("TaxCode", line.vatCode, "          "),
+      xmlTag("LineDescription", line.text, "          "),
+      "        </Line>",
+    ].filter(Boolean)),
+    "      </Transaction>",
+  ].filter(Boolean).join("\n")).join("\n");
+
+  const invoiceBlocks = input.salesInvoices.map((invoice) => {
+    const payload = invoice.payloadJson ? JSON.parse(invoice.payloadJson) as { lines?: InvoiceLinePayload[] } : null;
+    const lineBlocks = (payload?.lines ?? []).map((line, index) => [
+      "        <Line>",
+      xmlTag("LineNumber", index + 1, "          "),
+      xmlTag("Description", line.description ?? null, "          "),
+      xmlTag("Quantity", formatAmount(line.quantity), "          "),
+      xmlTag("UnitPrice", formatAmount(line.unitPriceExVat), "          "),
+      xmlTag("CreditAmount", formatAmount(line.lineTotalExVat), "          "),
+      "        </Line>",
+    ].filter(Boolean).join("\n")).join("\n");
+
+    return [
+      "      <Invoice>",
+      xmlTag("InvoiceNo", invoice.invoiceNo, "        "),
+      xmlTag("DocumentNo", invoice.documentNo, "        "),
+      xmlTag("IssueDate", invoice.issueDate, "        "),
+      xmlTag("DueDate", invoice.dueDate, "        "),
+      xmlTag("CustomerName", invoice.buyerName, "        "),
+      xmlTag("CustomerTaxID", invoice.buyerVatOrCvr, "        "),
+      xmlTag("SellerName", invoice.sellerName, "        "),
+      xmlTag("SellerTaxID", invoice.sellerVatOrCvr, "        "),
+      xmlTag("DocumentCurrencyCode", invoice.currency, "        "),
+      xmlTag("NetTotal", money(invoice.netAmount), "        "),
+      xmlTag("TaxPayable", money(invoice.vatAmount), "        "),
+      xmlTag("GrossTotal", money(invoice.grossAmount), "        "),
+      lineBlocks,
+      "      </Invoice>",
+    ].filter(Boolean).join("\n");
+  }).join("\n");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<AuditFile xmlns="urn:rentemester:dk:saft:v1" sourceCompanyRoot="${escapeXml(basename(input.companyRoot))}">`,
+    "  <Header>",
+    xmlTag("ProfileID", PROFILE_ID, "    "),
+    xmlTag("AuditFileVersion", "1.0", "    "),
+    xmlTag("CompanyName", input.company.name, "    "),
+    xmlTag("RegistrationNumber", input.company.cvr, "    "),
+    xmlTag("TaxRegistrationNumber", input.company.cvr, "    "),
+    xmlTag("Country", input.company.country, "    "),
+    xmlTag("DefaultCurrencyCode", input.company.currency, "    "),
+    xmlTag("FiscalYearStartMonth", input.company.fiscalYearStartMonth, "    "),
+    xmlTag("FiscalYearLabelStrategy", input.company.fiscalYearLabelStrategy, "    "),
+    xmlTag("SelectionStartDate", input.periodStart, "    "),
+    xmlTag("SelectionEndDate", input.periodEnd, "    "),
+    xmlTag("DateCreated", input.generatedAt, "    "),
+    "  </Header>",
+    "  <MasterFiles>",
+    "    <GeneralLedgerAccounts>",
+    ...input.accounts.map((account) => [
+      "      <Account>",
+      xmlTag("AccountID", account.accountNo, "        "),
+      xmlTag("AccountDescription", account.name, "        "),
+      xmlTag("AccountType", account.type, "        "),
+      xmlTag("NormalBalance", account.normalBalance, "        "),
+      xmlTag("TaxCode", account.defaultVatCode, "        "),
+      "      </Account>",
+    ].filter(Boolean).join("\n")),
+    "    </GeneralLedgerAccounts>",
+    "  </MasterFiles>",
+    "  <GeneralLedgerEntries>",
+    "    <Journal>",
+    xmlTag("JournalID", "GENERAL", "      "),
+    xmlTag("Description", "Rentemester general journal", "      "),
+    journalBlocks,
+    "    </Journal>",
+    "  </GeneralLedgerEntries>",
+    "  <SourceDocuments>",
+    "    <SalesInvoices>",
+    xmlTag("NumberOfEntries", input.salesInvoices.length, "      "),
+    xmlTag("TotalDebit", "0.00", "      "),
+    xmlTag("TotalCredit", formatAmount(invoiceTotals), "      "),
+    invoiceBlocks,
+    "    </SalesInvoices>",
+    "  </SourceDocuments>",
+    "</AuditFile>",
+    "",
+  ].filter(Boolean).join("\n");
+}
+
+export function exportSaftPackage(db: Database, companyRoot: string, input: ExportSaftPackageInput): ExportSaftPackageResult {
+  const errors: string[] = [];
+  if (!looksLikeIsoDate(input.periodStart)) errors.push("periodStart must be YYYY-MM-DD");
+  if (!looksLikeIsoDate(input.periodEnd)) errors.push("periodEnd must be YYYY-MM-DD");
+  if (typeof input.outputDir !== "string" || input.outputDir.trim().length === 0) errors.push("outputDir is required");
+  if (errors.length === 0 && input.periodStart > input.periodEnd) errors.push("periodStart cannot be after periodEnd");
+  const generatedAt = resolveIsoDateTime(input.generatedAt) ?? normalizeExportTimestamp(input.periodEnd);
+  if (input.generatedAt && !resolveIsoDateTime(input.generatedAt)) errors.push("generatedAt must be a valid ISO-8601 datetime when provided");
+
+  const company = fetchCompany(db);
+  if (!company) errors.push("company row is required for SAF-T export");
+  if (company && !company.cvr) errors.push("company cvr is required for SAF-T export");
+
+  if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
+
+  const accounts = fetchAccounts(db);
+  const journalEntries = fetchJournalEntries(db, input.periodStart, input.periodEnd);
+  const salesInvoices = fetchSalesInvoices(db, input.periodStart, input.periodEnd);
+
+  const exportDir = join(input.outputDir, packageName(input.periodStart, input.periodEnd, generatedAt));
+  mkdirSync(exportDir, { recursive: true });
+
+  const outputs: ExportedFileMeta[] = [];
+  const saftXmlPath = join(exportDir, "saft.xml");
+  const readmePath = join(exportDir, "README.txt");
+  const manifestPath = join(exportDir, "manifest.json");
+
+  const xml = renderSaftXml({
+    company: company!,
+    accounts,
+    journalEntries,
+    salesInvoices,
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    generatedAt,
+    companyRoot,
+  });
+  recordWrittenText(exportDir, saftXmlPath, xml, outputs);
+  recordWrittenText(exportDir, readmePath, `${buildReadme({ periodStart: input.periodStart, periodEnd: input.periodEnd, generatedAt })}\n`, outputs);
+
+  const manifest = {
+    packageType: "saft_export",
+    profileId: PROFILE_ID,
+    generatedAt,
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    sourceCompanyRootName: basename(companyRoot),
+    appliedRules: [RULE_ID],
+    files: {
+      saftXml: "saft.xml",
+      readme: "README.txt",
+    },
+    counts: {
+      accounts: accounts.length,
+      journalEntries: journalEntries.length,
+      salesInvoices: salesInvoices.length,
+    },
+    outOfScope: [...OUT_OF_SCOPE],
+    outputs,
+  };
+  recordWrittenText(exportDir, manifestPath, stringifyCanonicalJson(manifest), outputs);
+
+  insertAuditLog(db, {
+    eventType: "saft_export",
+    entityType: "company",
+    entityId: company!.id,
+    message: `Exported saft_export ${PROFILE_ID} for ${input.periodStart}..${input.periodEnd} to ${packageRelativePath(input.outputDir, exportDir)}`,
+  });
+
+  return {
+    ok: true,
+    exportDir,
+    manifestPath,
+    saftXmlPath,
+    generatedAt,
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    journalEntryCount: journalEntries.length,
+    salesInvoiceCount: salesInvoices.length,
+    appliedRules: [RULE_ID],
+    errors: [],
+  };
+}

@@ -3,6 +3,7 @@ import { openDb, migrate } from "../core/db";
 import { createSystemBackup, exportBackupPublicKey, getBackupComplianceStatus } from "../core/system-backups";
 import { restoreSystemBackup, verifyBackupSignature } from "../core/system-restore";
 import { exportAuthorityPackage } from "../core/authority-export";
+import { exportSaftPackage } from "../core/saft-export";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
 
 function runExportPackage(
@@ -96,5 +97,25 @@ export function register(dispatch: CommandDispatch): void {
 
   dispatch.on("system", "export-accountant", (ctx) => {
     runExportPackage(ctx, "accountant_handoff");
+  });
+
+  dispatch.on("system", "export-saft", (ctx) => {
+    const from = ctx.arg("--from");
+    const to = ctx.arg("--to");
+    const outputDir = ctx.arg("--out");
+    if (!from || !to || !outputDir) {
+      console.error("Missing required --from <YYYY-MM-DD>, --to <YYYY-MM-DD>, or --out <dir>");
+      process.exit(2);
+    }
+    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    migrate(db);
+    const result = exportSaftPackage(db, ctx.companyRoot(), {
+      periodStart: from,
+      periodEnd: to,
+      outputDir,
+      generatedAt: ctx.arg("--generated-at") ?? undefined,
+    });
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
   });
 }

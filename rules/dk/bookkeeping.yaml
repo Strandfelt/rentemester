@@ -1,4 +1,4 @@
-version: dk-bookkeeping-v0.0.3
+version: dk-bookkeeping-v0.0.4
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
@@ -112,6 +112,22 @@ rules:
       forbid:
         - authority_export_without_period_filter
     explanation: Rentemester must be able to assemble bookkeeping transactions and related vouchers for a requested period in a structured machine-readable format, alongside readable document files and a traceable deadline for a four-week authority handover flow.
+  - rule_id: DK-BOOKKEEPING-SAFT-EXPORT-001
+    name: SAF-T export packages must be deterministic and period-bounded
+    category: authority_access
+    source_id: DK-DIGITAL-STANDARD-BOGFORING-2023-97
+    severity: hard_stop
+    machine_rule:
+      require:
+        - period_bounded_export_request
+        - deterministic_package_name
+        - machine_readable_saft_xml
+        - export_manifest_with_file_hashes
+        - explicit_out_of_scope_sections
+      forbid:
+        - saft_export_without_period_filter
+        - non_deterministic_manifest_output
+    explanation: Rentemester must assemble the first SAF-T export slice as a deterministic, period-bounded package with XML, manifest hashes, and clear scope boundaries so the output is auditable and reproducible.
   - rule_id: DK-BOOKKEEPING-RESTORE-001
     name: Backup material must be restorable into a readable company dataset
     category: restore_compliance
