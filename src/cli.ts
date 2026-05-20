@@ -145,12 +145,6 @@ for (const registerFn of [
   registerFn(dispatch);
 }
 
-// Resolve the company root only for mutating commands — non-mutating
-// commands (e.g. `invoice validate`) legitimately run without --company.
-if (MUTATING_COMMANDS.has(commandKey)) {
-  enforceMutationActorPolicy(commandKey, ctx.companyRoot(), cliActor, cliActorVia, fatal);
-}
-
 if (!cmd || cmd === "help") {
   console.log(renderGlobalUsage());
 } else if (parsedArgs.flags.has("--help")) {
@@ -162,6 +156,18 @@ if (!cmd || cmd === "help") {
     console.error(`Unknown command: ${cmd}${sub ? " " + sub : ""}`);
     console.log(renderGlobalUsage());
     process.exit(2);
+  }
+  // Enforce the actor policy only when actually executing a mutating
+  // command — never for `help` / `--help`, which neither read nor write
+  // company data. `restore-backup` writes to --target-company, not
+  // --company, so resolve its policy root from that flag.
+  if (MUTATING_COMMANDS.has(commandKey)) {
+    const mutationRoot = commandKey === "system restore-backup"
+      ? trimToNull(parsedArgs.flags.get("--target-company") as string | undefined)
+      : ctx.companyRoot();
+    if (mutationRoot) {
+      enforceMutationActorPolicy(commandKey, mutationRoot, cliActor, cliActorVia, fatal);
+    }
   }
   await handler(ctx);
 }
