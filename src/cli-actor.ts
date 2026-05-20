@@ -67,6 +67,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== IMPORT FRAMEWORK (#185) =====
   "import run",
   // ===== END IMPORT FRAMEWORK (#185) =====
+  // ===== RUNTIME AGENT (#183) =====
+  "agent run",
+  // ===== END RUNTIME AGENT (#183) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

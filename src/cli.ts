@@ -73,6 +73,9 @@ import { register as registerAnnualReport } from "./cli/annual-report";
 // ===== IMPORT FRAMEWORK (#185) =====
 import { register as registerImport } from "./cli/import";
 // ===== END IMPORT FRAMEWORK (#185) =====
+// ===== RUNTIME AGENT (#183) =====
+import { register as registerAgent } from "./cli/agent";
+// ===== END RUNTIME AGENT (#183) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -247,6 +250,9 @@ for (const registerFn of [
   // ===== IMPORT FRAMEWORK (#185) =====
   registerImport,
   // ===== END IMPORT FRAMEWORK (#185) =====
+  // ===== RUNTIME AGENT (#183) =====
+  registerAgent,
+  // ===== END RUNTIME AGENT (#183) =====
 ]) {
   registerFn(dispatch);
 }

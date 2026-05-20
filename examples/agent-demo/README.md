@@ -151,6 +151,26 @@ agent-setup ville Claude/anden LLM blive prompted med kontoplanen og
 træffe disse valg selv — `--mode claude` er stubbet til at vise hvor
 det udvidelsespunkt sidder.
 
+## Fra demo til pakket runtime-agent (#183)
+
+Denne demo viser thesisen uformelt. Den **pakkede runtime-bogholder-agent**
+kører den samme idé deterministisk og replaybart:
+
+```
+rentemester agent run \
+  --company /tmp/agent-demo \
+  --as-of 2026-05-20 \
+  --inbox examples/agent-demo/inbox \
+  --metadata-dir examples/agent-demo/metadata \
+  --bank-csv examples/agent-demo/bank.csv
+```
+
+Agenten ingester bilag, bogfører det entydige, ruter alt usikkert til
+exception-køen (gætter aldrig), afstemmer banken, tjekker moms-/årsrapport-
+deadlines og udskriver en slutrapport. Samme fixture + samme `--as-of` giver
+identisk output. Se `docs/runtime-agent-contract.md` for driftskontrakten og
+`src/agent/` for koden.
+
 ## Bonus: video
 
 Hvis du vil optage en asciinema af kørslen og committe den:
