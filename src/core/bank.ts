@@ -7,6 +7,14 @@ import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
 import { compareDkk, multiplyDkk, roundDkk, roundRate6 } from "./money";
+// ===== BANK CLUSTER (#186) =====
+import {
+  getBankProfile,
+  listBankProfileNames,
+  type BankImportProfile,
+  type ProfileFieldName,
+} from "./bank-profiles";
+// ===== END BANK CLUSTER (#186) =====
 
 export type BankImportRow = {
   transactionDate: string;
@@ -373,6 +381,118 @@ function toRow(input: Record<string, string>): BankImportRow {
   };
 }
 
+// ===== BANK CLUSTER (#186) =====
+/**
+ * Normalises a date to ISO using a profile's *declared* day/month order. A
+ * profile is an explicit statement of the format, so unlike the generic
+ * `normalizeDateText` it never refuses an ambiguous `dd.mm.yyyy` — the order
+ * was declared, not guessed. An impossible calendar date still fails later in
+ * `validateBankImportRows`.
+ */
+function normalizeDateWithOrder(value: string | undefined, order: BankImportProfile["dateOrder"]) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (order === "iso") return trimmed;
+  const ymd = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(trimmed);
+  if (order === "ymd" && ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+  }
+  const dmyMatch = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(trimmed);
+  if (!dmyMatch) return trimmed;
+  const a = dmyMatch[1].padStart(2, "0");
+  const b = dmyMatch[2].padStart(2, "0");
+  const year = dmyMatch[3];
+  if (order === "mdy") return `${year}-${a}-${b}`;
+  // dmy (default for non-ISO)
+  return `${year}-${b}-${a}`;
+}
+
+/**
+ * Decodes raw CSV bytes for a profile. UTF-8 (BOM tolerated) is the common
+ * case; Windows-1252 is decoded for legacy Danish exports. A profile that
+ * declares utf8 still falls back to a 1252 decode if the UTF-8 decode produced
+ * replacement characters, so a mislabelled file is not silently mangled.
+ */
+function decodeForProfile(bytes: Uint8Array, encoding: BankImportProfile["encoding"]) {
+  if (encoding === "windows-1252") {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+  const utf8 = new TextDecoder("utf-8").decode(bytes);
+  if (utf8.includes("�")) {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+  return utf8;
+}
+
+type ProfileParseResult = { rows: BankImportRow[]; errors: string[] };
+
+/**
+ * Parses a CSV file with a pinned profile: fixed delimiter, declared encoding,
+ * declared date order and an explicit column->field map. No alias guessing.
+ */
+export function parseCsvWithProfile(bytes: Uint8Array, profile: BankImportProfile): ProfileParseResult {
+  const content = decodeForProfile(bytes, profile.encoding).replace(/^﻿/, "");
+  const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return { rows: [], errors: [] };
+
+  const headerParsed = parseCsvLine(lines[0], profile.delimiter);
+  const errors: string[] = [];
+  if (headerParsed.unterminatedQuote) errors.push("CSV header has unterminated quoted field");
+
+  // Map each header column index to the canonical field the profile assigns.
+  const columnField: (ProfileFieldName | null)[] = headerParsed.values.map((header) => {
+    const key = normalizeHeader(header).replace(/_/g, " ");
+    return profile.columns[key] ?? null;
+  });
+  for (const required of ["transaction_date", "text", "amount"] as const) {
+    if (!columnField.includes(required)) {
+      errors.push(`profile '${profile.name}' could not map a column to required field: ${required}`);
+    }
+  }
+  if (errors.length > 0) return { rows: [], errors };
+
+  const rows: BankImportRow[] = [];
+  for (const [lineOffset, line] of lines.slice(1).entries()) {
+    const lineNumber = lineOffset + 2;
+    const parsed = parseCsvLine(line, profile.delimiter);
+    if (parsed.unterminatedQuote) errors.push(`CSV row ${lineNumber} has unterminated quoted field`);
+    if (parsed.values.length !== headerParsed.values.length) {
+      errors.push(`CSV row ${lineNumber} has ${parsed.values.length} fields, header has ${headerParsed.values.length}`);
+      continue;
+    }
+    const fields: Partial<Record<ProfileFieldName, string>> = {};
+    const raw: Record<string, string> = {};
+    headerParsed.values.forEach((header, idx) => {
+      raw[header] = parsed.values[idx] ?? "";
+      const field = columnField[idx];
+      // First non-empty wins (e.g. Afsender vs Oprindelig afsender both map to
+      // counterparty_name).
+      if (field && !(fields[field]?.trim())) fields[field] = parsed.values[idx] ?? "";
+    });
+
+    rows.push({
+      transactionDate: normalizeDateWithOrder(fields.transaction_date, profile.dateOrder) ?? "",
+      bookingDate: normalizeDateWithOrder(fields.booking_date, profile.dateOrder),
+      text: fields.text ?? "",
+      amount: parseLocalizedNumber(fields.amount) ?? NaN,
+      currency: fields.currency || "DKK",
+      reference: fields.reference || undefined,
+      amountDkk: parseLocalizedNumber(fields.amount_dkk),
+      fxRateToDkk: parseLocalizedNumber(fields.fx_rate_to_dkk),
+      counterpartyName: fields.counterparty_name || undefined,
+      counterpartyAccount: fields.counterparty_account || undefined,
+      message: fields.message || undefined,
+      archiveReference: fields.archive_reference || undefined,
+      customerReference: fields.customer_reference || undefined,
+      balanceAfter: parseLocalizedNumber(fields.balance_after),
+      raw,
+    });
+  }
+  return { rows, errors };
+}
+// ===== END BANK CLUSTER (#186) =====
+
 export function validateBankImportRows(rows: BankImportRow[]) {
   const errors: string[] = [];
   let needsFxRule = false;
@@ -451,12 +571,36 @@ export function importBankCsv(
   const bankAccountId = bankAccount?.id ?? null;
   // ===== END BANK CLUSTER (#187) =====
 
+  // ===== BANK CLUSTER (#186) =====
+  // A named profile pins delimiter / encoding / date order and an explicit
+  // column->field map. A given-but-unknown profile aborts before parsing.
+  let profile: BankImportProfile | null = null;
+  if (options.profile !== undefined && String(options.profile).trim() !== "") {
+    profile = getBankProfile(String(options.profile));
+    if (!profile) {
+      return { ok: false, errors: [`unknown bank import profile '${options.profile}' (known: ${listBankProfileNames().join(", ")})`] };
+    }
+  }
+  // ===== END BANK CLUSTER (#186) =====
+
   const fileBytes = readFileSync(csvPath);
   const sourceFileHash = sha256Bytes(fileBytes);
   const importBatchId = `BANK-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}-${sourceFileHash.slice(0, 8)}`;
-  const parsedCsv = parseCsv(fileBytes.toString("utf8"));
-  if (parsedCsv.errors.length > 0) return { ok: false, errors: parsedCsv.errors };
-  const rows = parsedCsv.rows.map(toRow);
+
+  // ===== BANK CLUSTER (#186) =====
+  // With a profile the file is parsed under the pinned format; without one the
+  // generic alias-guessing parser is used unchanged.
+  let rows: BankImportRow[];
+  if (profile) {
+    const parsed = parseCsvWithProfile(fileBytes, profile);
+    if (parsed.errors.length > 0) return { ok: false, errors: parsed.errors };
+    rows = parsed.rows;
+  } else {
+    const parsedCsv = parseCsv(fileBytes.toString("utf8"));
+    if (parsedCsv.errors.length > 0) return { ok: false, errors: parsedCsv.errors };
+    rows = parsedCsv.rows.map(toRow);
+  }
+  // ===== END BANK CLUSTER (#186) =====
   const validation = validateBankImportRows(rows);
   if (!validation.ok) return { ok: false, errors: validation.errors };
 
@@ -534,6 +678,7 @@ export function importBankCsv(
     sourceFileHash,
     bankAccountId: bankAccountId ?? undefined,
     bankAccountSlug: bankAccount?.slug,
+    profile: profile?.name,
     errors: [],
   };
 }

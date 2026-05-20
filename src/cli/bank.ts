@@ -62,6 +62,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const result = importBankCsv(db, root, file, {
       account: ctx.trimToNull(ctx.arg("--account")) ?? undefined,
+      profile: ctx.trimToNull(ctx.arg("--profile")) ?? undefined,
     });
     const sync = result.ok
       ? syncUnmatchedBankTransactionExceptions(db)

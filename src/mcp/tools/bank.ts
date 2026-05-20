@@ -164,14 +164,15 @@ export function registerBankTools(server: McpServer): void {
         company: z.string().min(1),
         csvPath: z.string().optional(),
         csvContent: z.string().optional(),
-        // ===== BANK CLUSTER (#187) =====
+        // ===== BANK CLUSTER (#187,#186) =====
         account: z.string().optional(),
-        // ===== END BANK CLUSTER (#187) =====
+        profile: z.string().optional(),
+        // ===== END BANK CLUSTER (#187,#186) =====
         confirm: z.boolean(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; profile?: string; confirm: boolean }>(
       server,
       "bank_import",
       ({ db, args }) => {
@@ -190,6 +191,7 @@ export function registerBankTools(server: McpServer): void {
         }
         const result = importBankCsv(db, args.company, path, {
           account: args.account && args.account.trim() !== "" ? args.account : undefined,
+          profile: args.profile && args.profile.trim() !== "" ? args.profile : undefined,
         });
         const sync = result.ok
           ? syncUnmatchedBankTransactionExceptions(db)
