@@ -4,7 +4,13 @@ import { roundDkk, equalsDkk } from "./money";
 import { daysBetween } from "./dates";
 
 export type BankMatchSuggestion = {
-  kind: "issued_invoice" | "purchase_sale";
+  // ===== BANK CLUSTER (#182) =====
+  // issued_invoice        — incoming customer payment -> issued invoice
+  // purchase_sale         — outgoing supplier payment -> purchase document
+  // credit_note_refund    — outgoing customer refund  -> its credit note
+  // supplier_credit_refund — incoming supplier refund -> the purchase it reverses
+  kind: "issued_invoice" | "purchase_sale" | "credit_note_refund" | "supplier_credit_refund";
+  // ===== END BANK CLUSTER (#182) =====
   documentId: number;
   invoiceNo: string | null;
   supplierName?: string | null;
@@ -140,14 +146,54 @@ function openPurchaseDocuments(db: Database) {
   }>;
 }
 
+// ===== BANK CLUSTER (#182) =====
+// All credit-note documents. A credit note carries the customer (recipient)
+// name, its own number (invoice_no = CN-...) and the original invoice number
+// it credits (payment_details). An outgoing customer-refund bank row is matched
+// against these.
+function creditNoteDocuments(db: Database) {
+  return db.query(
+    `SELECT id, invoice_no, invoice_date, amount_inc_vat, recipient_name, payment_details
+     FROM documents
+     WHERE document_type = 'credit_note'
+     ORDER BY id ASC`
+  ).all() as Array<{
+    id: number;
+    invoice_no: string | null;
+    invoice_date: string | null;
+    amount_inc_vat: number | null;
+    recipient_name: string | null;
+    payment_details: string | null;
+  }>;
+}
+
+// All purchase documents, regardless of journal status. The refund direction
+// matches an incoming supplier credit-note refund against the purchase it
+// reverses, and that purchase is typically already booked — so unlike
+// openPurchaseDocuments this query does not filter on journal status.
+function allPurchaseDocuments(db: Database) {
+  return db.query(
+    `SELECT id, invoice_no, invoice_date, amount_inc_vat, sender_name, payment_details
+     FROM documents
+     WHERE document_type = 'purchase_sale'
+       AND currency = 'DKK'
+     ORDER BY id ASC`
+  ).all() as Array<{
+    id: number;
+    invoice_no: string | null;
+    invoice_date: string | null;
+    amount_inc_vat: number | null;
+    sender_name: string | null;
+    payment_details: string | null;
+  }>;
+}
+// ===== END BANK CLUSTER (#182) =====
+
 function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof openIssuedInvoices>[number]): BankMatchSuggestion | null {
-  // KNOWN LIMITATION (#154): only incoming customer payments (amount > 0) are
-  // matched against issued invoices. An *outgoing* customer refund / credit-note
-  // payout (amount < 0) is not matched against the invoice it reverses — there
-  // is no refund/credit-note matching path here. Such negative rows fall
-  // through to purchaseSuggestion and, finding no purchase document, stay
-  // unmatched by design. An unmatched refund row is an unsupported case, not a
-  // bug; settle it explicitly via `invoice refund-bank`.
+  // Only incoming customer payments (amount > 0) are matched against issued
+  // invoices here. An *outgoing* customer refund (amount < 0) is matched
+  // against its credit note by creditNoteRefundSuggestion (#182), a separate
+  // matching direction.
   if (!(Number(bank.amount) > 0)) return null;
   const status = getInvoiceStatus(db, doc.id, bank.transaction_date);
   if (!status.ok) return null;
@@ -218,12 +264,10 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
 }
 
 function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof openPurchaseDocuments>[number]): BankMatchSuggestion | null {
-  // KNOWN LIMITATION (#154): only outgoing supplier payments (amount < 0) are
-  // matched against purchase documents. An *incoming* supplier credit-note
-  // refund (amount > 0) is not matched against the purchase it reverses — there
-  // is no credit-note matching path here. Such positive rows fall through to
-  // invoiceSuggestion and, finding no issued invoice, stay unmatched by design.
-  // An unmatched supplier-refund row is an unsupported case, not a bug.
+  // Only outgoing supplier payments (amount < 0) are matched against purchase
+  // documents here. An *incoming* supplier credit-note refund (amount > 0) is
+  // matched against the purchase it reverses by supplierCreditRefundSuggestion
+  // (#182), a separate matching direction.
   if (!(Number(bank.amount) < 0)) return null;
   const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? 0));
   if (!(grossAmount > 0)) return null;
@@ -287,6 +331,161 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
   };
 }
 
+// ===== BANK CLUSTER (#182) =====
+/**
+ * Matches an *outgoing* customer-refund bank row (amount < 0) against a credit
+ * note. #154 documented that such rows had no matching path and stayed
+ * permanently unmatched; this is that path.
+ *
+ * Matching stays conservative: amount + date proximity alone never crosses the
+ * 0.5 threshold. A crossing-threshold suggestion requires a corroborating
+ * signal — the credit-note number, the credited invoice number, or a strong
+ * (>= 2 token) customer-name overlap — so an agent never auto-applies a wrong
+ * refund. Amounts are compared in integer øre (equalsDkk).
+ */
+function creditNoteRefundSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof creditNoteDocuments>[number]): BankMatchSuggestion | null {
+  if (!(Number(bank.amount) < 0)) return null;
+  const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? 0));
+  if (!(grossAmount > 0)) return null;
+  const refundAmount = Math.abs(Number(bank.amount));
+  const bankText = combinedBankText(bank);
+  let confidence = 0;
+  const reasons: string[] = [];
+  let corroborated = false;
+
+  if (equalsDkk(refundAmount, grossAmount)) {
+    confidence += 0.55;
+    reasons.push(`amount match: ${roundDkk(refundAmount)} vs credit-note gross amount ${grossAmount}`);
+  }
+
+  if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
+    confidence += 0.25;
+    corroborated = true;
+    reasons.push(`credit-note number '${doc.invoice_no}' found in bank text/reference`);
+  }
+
+  // payment_details on a credit note is the original invoice number it credits.
+  if (doc.payment_details && bankText.includes(doc.payment_details.toUpperCase())) {
+    confidence += 0.15;
+    corroborated = true;
+    reasons.push(`credited invoice number '${doc.payment_details}' found in bank text/reference`);
+  }
+
+  const sharedCustomerTokens = overlapTokens(bankText, doc.recipient_name).slice(0, 3);
+  if (sharedCustomerTokens.length > 0) {
+    confidence += Math.min(0.15, sharedCustomerTokens.length * 0.05);
+    if (sharedCustomerTokens.length >= 2) corroborated = true;
+    reasons.push(`customer token match: ${sharedCustomerTokens.join(", ")}`);
+  }
+
+  if (doc.invoice_date) {
+    const days = daysBetween(doc.invoice_date, bank.transaction_date);
+    if (days <= 14) {
+      confidence += 0.1;
+      reasons.push(`date within ${days} days of credit-note date`);
+    }
+  }
+
+  // Amount + date proximity alone never crosses the threshold without a
+  // credit-note/invoice number or strong customer-name match.
+  if (!corroborated && confidence >= 0.5) {
+    confidence = 0.45;
+    reasons.push("low confidence: amount-only match, no credit-note number or customer corroboration");
+  }
+
+  if (confidence < 0.5) return null;
+  return {
+    kind: "credit_note_refund",
+    documentId: doc.id,
+    invoiceNo: doc.invoice_no,
+    customerName: doc.recipient_name,
+    confidence: roundDkk(confidence),
+    reasons,
+  };
+}
+
+/**
+ * Matches an *incoming* supplier credit-note refund (amount > 0) against the
+ * purchase document it reverses. #154 documented that such rows had no
+ * matching path; this is that path.
+ *
+ * The purchase is typically already booked, so allPurchaseDocuments is used
+ * (no journal-status filter). Matching stays conservative the same way: a
+ * crossing-threshold suggestion needs a corroborating signal — the purchase
+ * invoice number, a payment-reference token, or a strong supplier-name overlap.
+ */
+function supplierCreditRefundSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof allPurchaseDocuments>[number]): BankMatchSuggestion | null {
+  if (!(Number(bank.amount) > 0)) return null;
+  const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? 0));
+  if (!(grossAmount > 0)) return null;
+  const refundAmount = Number(bank.amount);
+  const bankText = combinedBankText(bank);
+  let confidence = 0;
+  const reasons: string[] = [];
+  let corroborated = false;
+
+  // A supplier refund is usually a partial or full reversal of the purchase:
+  // accept an exact gross match, never a larger amount (that is not a refund).
+  if (equalsDkk(refundAmount, grossAmount)) {
+    confidence += 0.5;
+    reasons.push(`amount match: ${roundDkk(refundAmount)} vs purchase gross amount ${grossAmount}`);
+  } else if (refundAmount < grossAmount) {
+    confidence += 0.3;
+    reasons.push(`partial-refund amount: ${roundDkk(refundAmount)} of purchase gross amount ${grossAmount}`);
+  } else {
+    return null;
+  }
+
+  // A credit-note / refund row almost always says so explicitly; requiring a
+  // refund cue keeps an ordinary incoming customer payment from being mistaken
+  // for a supplier refund.
+  const looksLikeRefund = /\b(KREDIT|KREDITNOTA|REFUSION|REFUND|TILBAGEBETALING|CREDIT)\b/.test(bankText);
+
+  if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
+    confidence += 0.25;
+    corroborated = true;
+    reasons.push(`purchase invoice number '${doc.invoice_no}' found in bank text/reference`);
+  }
+
+  const paymentDetailsTokens = overlapTokens(bankText, doc.payment_details).slice(0, 2);
+  if (paymentDetailsTokens.length > 0) {
+    confidence += 0.1;
+    corroborated = true;
+    reasons.push(`payment-details token match: ${paymentDetailsTokens.join(", ")}`);
+  }
+
+  const sharedSupplierTokens = overlapTokens(bankText, doc.sender_name).slice(0, 3);
+  if (sharedSupplierTokens.length > 0) {
+    confidence += Math.min(0.2, sharedSupplierTokens.length * 0.1);
+    if (sharedSupplierTokens.length >= 2) corroborated = true;
+    reasons.push(`supplier token match: ${sharedSupplierTokens.join(", ")}`);
+  }
+
+  if (looksLikeRefund) {
+    confidence += 0.1;
+    reasons.push("bank text identifies the row as a credit-note / refund");
+  }
+
+  // A supplier refund needs BOTH a document-identifying corroboration and an
+  // explicit refund cue: without the cue an incoming payment that happens to
+  // name a supplier would be wrongly offered as a refund.
+  if (!(corroborated && looksLikeRefund) && confidence >= 0.5) {
+    confidence = 0.45;
+    reasons.push("low confidence: not corroborated as a supplier credit-note refund");
+  }
+
+  if (confidence < 0.5) return null;
+  return {
+    kind: "supplier_credit_refund",
+    documentId: doc.id,
+    invoiceNo: doc.invoice_no,
+    supplierName: doc.sender_name,
+    confidence: roundDkk(confidence),
+    reasons,
+  };
+}
+// ===== END BANK CLUSTER (#182) =====
+
 export function suggestBankMatches(db: Database, input: SuggestBankMatchesInput = {}): SuggestBankMatchesResult {
   const errors: string[] = [];
   if (input.bankTransactionId !== undefined && (!Number.isInteger(input.bankTransactionId) || input.bankTransactionId <= 0)) {
@@ -303,11 +502,19 @@ export function suggestBankMatches(db: Database, input: SuggestBankMatchesInput 
 
   const invoiceDocs = openIssuedInvoices(db);
   const purchaseDocs = openPurchaseDocuments(db);
+  // ===== BANK CLUSTER (#182) =====
+  const creditNoteDocs = creditNoteDocuments(db);
+  const allPurchaseDocs = allPurchaseDocuments(db);
+  // ===== END BANK CLUSTER (#182) =====
 
   const rows: BankMatchSuggestionRow[] = bankRows.map((bank) => {
     const suggestions = [
       ...invoiceDocs.map((doc) => invoiceSuggestion(db, bank, doc)).filter((value): value is BankMatchSuggestion => Boolean(value)),
       ...purchaseDocs.map((doc) => purchaseSuggestion(bank, doc)).filter((value): value is BankMatchSuggestion => Boolean(value)),
+      // ===== BANK CLUSTER (#182) =====
+      ...creditNoteDocs.map((doc) => creditNoteRefundSuggestion(bank, doc)).filter((value): value is BankMatchSuggestion => Boolean(value)),
+      ...allPurchaseDocs.map((doc) => supplierCreditRefundSuggestion(bank, doc)).filter((value): value is BankMatchSuggestion => Boolean(value)),
+      // ===== END BANK CLUSTER (#182) =====
     ]
       .sort((a, b) => b.confidence - a.confidence || a.documentId - b.documentId)
       .slice(0, max);
