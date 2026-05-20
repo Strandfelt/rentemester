@@ -24,6 +24,8 @@ export type BankImportResult = {
   importBatchId?: string;
   imported?: number;
   skippedDuplicates?: number;
+  /** Human-readable descriptions of rows skipped as duplicates, for review. */
+  skippedDuplicateRows?: string[];
   sourceFileHash?: string;
   errors: string[];
 };
@@ -261,7 +263,12 @@ export function validateBankImportRows(rows: BankImportRow[]) {
   return { ok: errors.length === 0, appliedRules: needsFxRule ? [RULE_ID, FX_RULE_ID] : [RULE_ID], errors };
 }
 
-function transactionFingerprint(row: BankImportRow) {
+// `occurrence` is the 0-based count of preceding rows in the SAME file with
+// identical field content. This keeps the fingerprint deterministic on
+// re-import while letting two legitimately-distinct identical transactions
+// (e.g. two 50 kr fees on the same day) both import instead of one being
+// wrongly skipped as a coarse-fingerprint duplicate.
+function transactionFingerprint(row: BankImportRow, occurrence: number) {
   return sha256Bytes(JSON.stringify({
     transaction_date: row.transactionDate,
     booking_date: row.bookingDate ?? null,
@@ -271,6 +278,7 @@ function transactionFingerprint(row: BankImportRow) {
     reference: row.reference ?? null,
     amount_dkk: normalizeAmountOrNull(row.amountDkk),
     fx_rate_to_dkk: row.fxRateToDkk == null ? null : roundRate6(row.fxRateToDkk),
+    occurrence,
   }));
 }
 
@@ -292,6 +300,10 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
 
   let imported = 0;
   let skippedDuplicates = 0;
+  const skippedDuplicateRows: string[] = [];
+  // Per-content-fingerprint counter: distinguishes repeated identical rows
+  // within this file so each gets a unique transaction_hash.
+  const occurrenceByContent = new Map<string, number>();
   const insert = db.prepare(
     `INSERT INTO bank_transactions (
       transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status, retain_until
@@ -300,10 +312,14 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
 
   db.transaction(() => {
     for (const row of rows) {
-      const hash = transactionFingerprint(row);
+      const contentHash = transactionFingerprint(row, 0);
+      const occurrence = occurrenceByContent.get(contentHash) ?? 0;
+      occurrenceByContent.set(contentHash, occurrence + 1);
+      const hash = transactionFingerprint(row, occurrence);
       const existing = db.query("SELECT id FROM bank_transactions WHERE transaction_hash = ?").get(hash) as { id: number } | null;
       if (existing) {
         skippedDuplicates += 1;
+        skippedDuplicateRows.push(`${row.transactionDate} ${row.text.trim()} ${normalizeAmount(row.amount)} ${(row.currency ?? "DKK").trim().toUpperCase()}`);
         continue;
       }
       insert.run(
@@ -330,5 +346,5 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
     });
   })();
 
-  return { ok: true, importBatchId, imported, skippedDuplicates, sourceFileHash, errors: [] };
+  return { ok: true, importBatchId, imported, skippedDuplicates, skippedDuplicateRows, sourceFileHash, errors: [] };
 }

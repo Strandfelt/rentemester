@@ -237,6 +237,34 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("imports two legitimately-distinct identical same-day fees, still dedups re-import (issue #155)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-dedup-"));
+    const csv = join(root, "fees.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-16,Fee,-50,DKK,",
+      "2026-05-16,2026-05-16,Fee,-50,DKK,"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const first = importBankCsv(db, root, csv);
+    expect(first.ok).toBe(true);
+    expect(first.imported).toBe(2);
+    expect(first.skippedDuplicates).toBe(0);
+    expect(first.skippedDuplicateRows ?? []).toEqual([]);
+
+    // re-importing the same file must still dedup deterministically
+    const second = importBankCsv(db, root, csv);
+    expect(second.ok).toBe(true);
+    expect(second.imported).toBe(0);
+    expect(second.skippedDuplicates).toBe(2);
+    expect((second.skippedDuplicateRows ?? []).length).toBe(2);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");
