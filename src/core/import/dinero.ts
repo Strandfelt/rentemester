@@ -26,10 +26,12 @@
 
 import { requireFile } from "./source";
 import { isValidIsoDate } from "../dates";
+import { parseDineroPostings } from "./dinero-postings";
 import type {
   ImportAccount,
   ImportAccountType,
   ImportCompanyMasterData,
+  ImportHistoricalEntry,
   ImportNormalBalance,
   ImportOpeningBalanceLine,
   MultiArtifactSource,
@@ -378,6 +380,25 @@ function parseDineroSource(input: MultiArtifactSource): ParseResult {
     ? parsePosteringer(posteringer.text, posteringer.name, errors)
     : { openingBalances: [] as ImportOpeningBalanceLine[], cutOverDate: "" };
 
+  // Year-to-date activity (#195): the cut-over year's `Posteringer.csv` rows
+  // that are NOT Primobeholdning, grouped by `Bilag` into balanced vouchers.
+  // The framework replays them as journal entries after the primobalance.
+  const historicalEntries: ImportHistoricalEntry[] = posteringer
+    ? parseDineroPostings(posteringer.text, posteringer.name, errors).map((voucher) => ({
+        transactionDate: voucher.transactionDate,
+        text: voucher.text,
+        voucherRef: voucher.bilag,
+        entryType: voucher.voucherType,
+        lines: voucher.lines.map((line) => ({
+          accountNo: line.accountNo,
+          ...(line.debitAmount !== undefined ? { debitAmount: line.debitAmount } : {}),
+          ...(line.creditAmount !== undefined ? { creditAmount: line.creditAmount } : {}),
+          text: line.text,
+          ...(line.vatCode ? { vatCode: line.vatCode } : {}),
+        })),
+      }))
+    : [];
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -393,6 +414,7 @@ function parseDineroSource(input: MultiArtifactSource): ParseResult {
       cutOverDate,
       chartOfAccounts: accounts,
       openingBalances,
+      ...(historicalEntries.length > 0 ? { historicalEntries } : {}),
       ...(companyMasterData ? { companyMasterData } : {}),
       ...(unmappedVatCodes.length > 0 ? { unmappedVatCodes } : {}),
     },

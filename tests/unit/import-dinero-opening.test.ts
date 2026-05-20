@@ -139,7 +139,9 @@ describe("Dinero import: Posteringer.csv primobalance posted via runImport", () 
       const result = runImport(db, source, { createdBy: "user:tester" });
       expect(result.ok).toBe(true);
 
-      const tb = buildTrialBalance(db, "2025-01-01", "2025-12-31");
+      // Scoped to the cut-over date alone so it isolates the primobalance from
+      // the year-to-date activity that the same import also posts (#195).
+      const tb = buildTrialBalance(db, "2025-01-01", "2025-01-01");
       expect(tb.ok).toBe(true);
       expect(tb.balanced).toBe(true);
       const acct = (no: string) => tb.accounts.find((a) => a.accountNo === no)!;
@@ -174,11 +176,17 @@ describe("Dinero import: Posteringer.csv primobalance posted via runImport", () 
     try {
       const first = runImportFromSource(db, dineroParser, FIXTURE, { createdBy: "user:tester" });
       expect(first.ok).toBe(true);
+      // First import landed the primobalance + the year-to-date vouchers (#195).
+      const afterFirst = db
+        .query("SELECT COUNT(*) AS n FROM journal_entries")
+        .get() as { n: number };
+      expect(afterFirst.n).toBe(6);
       const second = runImportFromSource(db, dineroParser, FIXTURE, { createdBy: "user:tester" });
       expect(second.ok).toBe(false);
       expect(second.errors.join(" ").toLowerCase()).toContain("already");
+      // The rejected second import posted nothing further.
       const count = db.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number };
-      expect(count.n).toBe(1);
+      expect(count.n).toBe(6);
     } finally {
       db.close();
       rmSync(root, { recursive: true, force: true });

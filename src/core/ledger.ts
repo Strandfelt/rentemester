@@ -30,8 +30,20 @@ export type JournalEntryInput = {
   fxRateToDkk?: number;
   createdBy?: string;
   createdByProgram?: string;
+  // When true the entry is a migration posting replayed from another
+  // accounting system (the Dinero import, #195): the income/expense
+  // document-evidence requirement is waived because the original receipt has
+  // not been ingested into Rentemester yet (#196 attaches the bilag later).
+  // The entry is still balanced, hash-chained and append-only — and stamped
+  // with an import `createdByProgram` so it is visibly an imported voucher.
+  importedHistorical?: boolean;
   lines: JournalLineInput[];
 };
+
+// `created_by_program` values flagging a journal entry as a replayed import
+// posting (#195). Such entries are exempt from the income/expense
+// document-evidence requirement until #196 attaches the original bilag.
+const IMPORTED_HISTORICAL_PROGRAMS = new Set(["rentemester-import-postings"]);
 
 export type JournalPostResult = {
   ok: boolean;
@@ -210,7 +222,11 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
 
   if (requiresDocument) {
     appliedRules.push(LEDGER_RULES.DOCUMENT);
-    if (!payload.documentId) {
+    if (payload.importedHistorical && !payload.documentId) {
+      // A replayed migration posting (#195): the original receipt is not yet
+      // ingested into Rentemester. The entry is still recorded as needing
+      // document evidence — #196 attaches the bilag — but is not rejected.
+    } else if (!payload.documentId) {
       errors.push("documentId is required when posting expense or income lines");
     } else {
       const doc = db.query("SELECT id FROM documents WHERE id = ?").get(payload.documentId) as { id: number } | null;
@@ -516,7 +532,11 @@ export function verifyAuditChain(db: Database) {
     if (debitSum !== creditSum) errors.push(`${e.entry_no}: entry is unbalanced (${fromOre(debitSum)} != ${fromOre(creditSum)})`);
 
     const requiresDocument = lines.some((line) => line.account_type === "expense" || line.account_type === "income");
-    if (requiresDocument) {
+    // A replayed migration posting (#195) carries no Rentemester document yet —
+    // #196 attaches the original bilag. It is identified by its import
+    // `created_by_program` and exempted from the document-evidence check.
+    const isImportedHistorical = IMPORTED_HISTORICAL_PROGRAMS.has(e.created_by_program);
+    if (requiresDocument && !isImportedHistorical) {
       if (e.document_id == null) {
         errors.push(`${e.entry_no}: income/expense entry is missing document evidence`);
       } else {

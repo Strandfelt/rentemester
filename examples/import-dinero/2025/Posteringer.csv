@@ -7,3 +7,13 @@ Konto;Kontonavn;Dato;Bilag;Bilagstype;Tekst;Momstype;Beløb;Saldo
 60000;Registreret kapital mv.;2025-01-01;0;;Primobeholdning;;-40000,000000;-40000,000000
 60010;Overført resultat fra tidligere år;2025-01-01;0;;Primobeholdning;;-87200,500000;-87200,500000
 60040;Udbytte;2025-01-01;0;;Primobeholdning;;-25000,000000;-25000,000000
+3000;Vareforbrug;2025-02-10;1;Køb;Indkøb af varelager;I25 - Dansk købsmoms;5000,000000;5000,000000
+5510;Bankkonto;2025-02-10;1;Køb;Indkøb af varelager;;-5000,000000;83200,500000
+5510;Bankkonto;2025-03-05;2;Registrering af betaling;Kundebetaling faktura 2024-118;;30000,000000;113200,500000
+5520;Tilgodehavender fra salg;2025-03-05;2;Registrering af betaling;Kundebetaling faktura 2024-118;;-30000,000000;12000,000000
+5520;Tilgodehavender fra salg;2025-03-20;3;Finansbilag;Salg af ydelser;U25 - Dansk salgsmoms;12500,000000;24500,000000
+1000;Salg af ydelser;2025-03-20;3;Finansbilag;Salg af ydelser;U25 - Dansk salgsmoms;-12500,000000;-12500,000000
+3010;Køb af AI-værktøjer i EU;2025-04-01;4;Køb;Abonnement AI-værktøjer;IEUY - Ydelseskøb EU (rubrik A - ydelser);2400,000000;2400,000000
+5510;Bankkonto;2025-04-01;4;Køb;Abonnement AI-værktøjer;;-2400,000000;110800,500000
+55000;Skyldig moms;2025-04-15;5;Momsafregning;Momsafregning 1. kvartal;;8000,000000;-23000,000000
+5510;Bankkonto;2025-04-15;5;Momsafregning;Momsafregning 1. kvartal;;-8000,000000;102800,500000
