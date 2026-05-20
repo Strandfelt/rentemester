@@ -61,6 +61,9 @@ import { register as registerOpeningBalance } from "./cli/opening-balance";
 // ===== EMAIL DELIVERY (#180) =====
 import { register as registerEmail } from "./cli/email";
 // ===== END EMAIL DELIVERY (#180) =====
+// ===== GDPR (#184) =====
+import { register as registerGdpr } from "./cli/gdpr";
+// ===== END GDPR (#184) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -223,6 +226,9 @@ for (const registerFn of [
   // ===== EMAIL DELIVERY (#180) =====
   registerEmail,
   // ===== END EMAIL DELIVERY (#180) =====
+  // ===== GDPR (#184) =====
+  registerGdpr,
+  // ===== END GDPR (#184) =====
 ]) {
   registerFn(dispatch);
 }

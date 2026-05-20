@@ -58,6 +58,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== EMAIL DELIVERY (#180) =====
   "invoice send",
   // ===== END EMAIL DELIVERY (#180) =====
+  // ===== GDPR (#184) =====
+  "gdpr erase",
+  // ===== END GDPR (#184) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
