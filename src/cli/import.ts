@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { migrate } from "../core/db";
 import { runImportFromSource } from "../core/import/framework";
+import { queryArchive } from "../core/import/dinero-archive";
 import { PARSERS } from "../core/import/synthetic-csv";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
@@ -51,5 +52,62 @@ export function register(dispatch: CommandDispatch): void {
     } else {
       console.table(rows);
     }
+  });
+
+  // `import archive` — the read path for the pre-cut-over fiscal-year archive
+  // (#197). A Dinero export spans several fiscal years; only the cut-over year
+  // is posted to the live ledger, the earlier years are kept as a read-only
+  // archive. With no `--year` it lists the archived years; with `--year` it
+  // dumps that year's archived Posteringer / SaldoBalance detail rows.
+  dispatch.on("import", "archive", (ctx) => {
+    const system = ctx.trimToNull(ctx.arg("--system")) ?? "dinero";
+    const yearArg = ctx.trimToNull(ctx.arg("--year"));
+    let fiscalYear: number | undefined;
+    if (yearArg != null) {
+      const parsedYear = Number(yearArg);
+      if (!Number.isInteger(parsedYear)) {
+        console.error(`Invalid --year '${yearArg}': expected a four-digit fiscal year`);
+        process.exit(2);
+      }
+      fiscalYear = parsedYear;
+    }
+
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const result = queryArchive(db, { sourceSystem: system, fiscalYear });
+    db.close();
+
+    if (ctx.outputFormat === "json") {
+      ctx.emitResult(result as unknown as Record<string, unknown>);
+    } else if (!result.ok) {
+      console.error(result.errors.join("; "));
+    } else if (fiscalYear != null) {
+      const year = result.years[0]!;
+      console.log(
+        `Archived ${year.sourceSystem} fiscal year ${year.fiscalYear} ` +
+          `(imported ${year.importedAt}) — read-only, not in the live ledger`,
+      );
+      console.table((year.postings ?? []).map((p) => ({
+        konto: p.accountNo,
+        dato: p.transactionDate,
+        bilag: p.voucher,
+        tekst: p.text,
+        beloeb: p.amount,
+      })));
+      console.table((year.balances ?? []).map((b) => ({
+        konto: b.accountNo,
+        kontonavn: b.accountName,
+        beloeb: b.amount,
+      })));
+    } else {
+      console.table(result.years.map((y) => ({
+        fiscalYear: y.fiscalYear,
+        sourceSystem: y.sourceSystem,
+        postings: y.postingCount,
+        balances: y.balanceCount,
+        importedAt: y.importedAt,
+      })));
+    }
+    if (!result.ok) process.exit(1);
   });
 }

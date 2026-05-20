@@ -366,6 +366,16 @@ export const COMMAND_SPECS: CommandSpec[] = [
     description: "Lister de bogføringssystemer import-frameworket har en parser til. Read-only.",
     allowedFlags: [],
   },
+  {
+    key: "import archive",
+    usage: "import archive --company <path> [--system <id>] [--year <YYYY>]",
+    description: "Læser pre-cut-over arkivet: de tidligere regnskabsår fra et flerårigt eksport, der er gemt som read-only referencedata uden for hovedbogen (#197). Uden --year listes de arkiverede år; med --year vises årets fulde Posteringer/SaldoBalance.",
+    allowedFlags: ["--company", "--system", "--year"],
+    inputNotes: [
+      "--system standard er 'dinero'",
+      "Arkivet bogføres aldrig i den hash-kædede journal — kun cut-over året lander i hovedbogen",
+    ],
+  },
   // ===== END IMPORT FRAMEWORK (#185) =====
   // ===== RUNTIME AGENT (#183) =====
   {

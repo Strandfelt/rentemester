@@ -1,0 +1,12 @@
+Nummer;Navn;Type;Momstype;Total
+1000;Salg af ydelser;Indtægt;U25 - Dansk salgsmoms;-300000,00
+3000;Vareforbrug;Udgift;I25 - Dansk købsmoms;90000,00
+3090;Kontorartikler;Udgift;;1000,00
+5500;Driftsmidler;Aktiv;;65000,00
+5510;Bankkonto;Aktiv;;88200,50
+5520;Tilgodehavender fra salg;Aktiv;;42000,00
+55000;Skyldig moms;Passiv;;-31000,00
+55010;Anden gæld;Passiv;;-12000,00
+60000;Registreret kapital mv.;Passiv;;-40000,00
+60010;Overført resultat fra tidligere år;Passiv;;-87200,50
+60040;Udbytte;Passiv;;-25000,00
