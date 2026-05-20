@@ -624,3 +624,81 @@ BEFORE DELETE ON invoice_bad_debt_writeoffs
 BEGIN
   SELECT RAISE(ABORT, 'invoice bad-debt writeoffs are append-only; add a correcting journal entry instead');
 END;
+
+-- ===== RECURRING INVOICES (#118) =====
+-- Recurring-invoice templates and their explicit, deterministic generations.
+-- A template captures the repeating invoice spec (interval, customer, lines,
+-- VAT, delivery-period mode). Generation is an explicit step keyed by an
+-- integer period_index counted from first_issue_date — no background
+-- scheduling. UNIQUE(template_id, period_index) prevents duplicate generation
+-- for the same template/period. Reminders/settlement live on the generated
+-- documents row, never on the template.
+
+CREATE TABLE IF NOT EXISTS recurring_invoice_templates (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  interval TEXT NOT NULL CHECK(interval IN ('monthly', 'quarterly', 'yearly')),
+  first_issue_date TEXT NOT NULL,
+  next_issue_date TEXT NOT NULL,
+  payment_terms_days INTEGER NOT NULL DEFAULT 30 CHECK(payment_terms_days BETWEEN 0 AND 365),
+  delivery_period_mode TEXT NOT NULL DEFAULT 'issue_month'
+    CHECK(delivery_period_mode IN ('issue_month', 'interval_window', 'none')),
+  payload_json TEXT NOT NULL,
+  notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS recurring_invoice_generations (
+  id INTEGER PRIMARY KEY,
+  template_id INTEGER NOT NULL,
+  period_index INTEGER NOT NULL CHECK(period_index >= 0),
+  document_id INTEGER NOT NULL,
+  invoice_number TEXT NOT NULL,
+  issue_date TEXT NOT NULL,
+  delivery_period_start TEXT,
+  delivery_period_end TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(template_id) REFERENCES recurring_invoice_templates(id),
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  UNIQUE(template_id, period_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recurring_invoice_generations_template
+  ON recurring_invoice_generations(template_id, period_index);
+
+-- Template identity and the embedded payload are immutable; only the
+-- next_issue_date marker may advance and active may be retired (1 -> 0).
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_templates_guard_update
+BEFORE UPDATE ON recurring_invoice_templates
+WHEN OLD.name != NEW.name
+   OR OLD.interval != NEW.interval
+   OR OLD.first_issue_date != NEW.first_issue_date
+   OR OLD.payment_terms_days != NEW.payment_terms_days
+   OR OLD.delivery_period_mode != NEW.delivery_period_mode
+   OR OLD.payload_json != NEW.payload_json
+   OR OLD.created_at != NEW.created_at
+   OR NEW.next_issue_date < OLD.next_issue_date
+   OR (OLD.active = 0 AND NEW.active = 1)
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice templates are append-only; only next_issue_date may advance and active may be retired');
+END;
+
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_templates_no_delete
+BEFORE DELETE ON recurring_invoice_templates
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice templates are append-only; retire them with active = 0 instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_generations_no_update
+BEFORE UPDATE ON recurring_invoice_generations
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice generations are append-only audit links; issue a credit note on the generated invoice instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_generations_no_delete
+BEFORE DELETE ON recurring_invoice_generations
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice generations are append-only audit links; issue a credit note on the generated invoice instead');
+END;
+-- ===== END RECURRING INVOICES (#118) =====

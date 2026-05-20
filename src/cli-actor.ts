@@ -34,6 +34,10 @@ export const MUTATING_COMMANDS = new Set([
   "journal post",
   "journal reverse",
   "exceptions resolve",
+  // ===== RECURRING INVOICES (#118) =====
+  "recurring-invoice create",
+  "recurring-invoice generate",
+  // ===== END RECURRING INVOICES (#118) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
