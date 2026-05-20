@@ -1,0 +1,19 @@
+{
+  "issueDate": "2026-05-16",
+  "invoiceNo": "INV-1001",
+  "deliveryDescription": "Bogføring og momsafstemning",
+  "amountIncVat": 1250,
+  "currency": "DKK",
+  "sender": {
+    "name": "Leverandør ApS",
+    "address": "Sælgervej 1, 2100 København Ø",
+    "vatOrCvr": "DK11223344"
+  },
+  "recipient": {
+    "name": "Rentemester ApS",
+    "address": "Testvej 1, 2100 København Ø",
+    "vatOrCvr": "DK12345678"
+  },
+  "vatAmount": 250,
+  "paymentDetails": "Bankoverførsel 2026-05-17"
+}

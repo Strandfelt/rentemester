@@ -37,6 +37,8 @@ import { register as registerExpense } from "./cli/expense";
 import { register as registerRetention } from "./cli/retention";
 import { register as registerPeriod } from "./cli/period";
 import { register as registerDashboard } from "./cli/dashboard";
+// ===== MAIL INTAKE (#122) =====
+import { register as registerMailIntake } from "./cli/mail-intake";
 
 function fatal(message: string): never {
   console.error(message);
@@ -141,6 +143,8 @@ for (const registerFn of [
   registerRetention,
   registerPeriod,
   registerDashboard,
+  // ===== MAIL INTAKE (#122) =====
+  registerMailIntake,
 ]) {
   registerFn(dispatch);
 }

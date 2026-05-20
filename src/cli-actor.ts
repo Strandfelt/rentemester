@@ -34,6 +34,8 @@ export const MUTATING_COMMANDS = new Set([
   "journal post",
   "journal reverse",
   "exceptions resolve",
+  // ===== MAIL INTAKE (#122) =====
+  "mail-intake ingest",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
