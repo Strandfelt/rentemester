@@ -39,6 +39,8 @@ import { registerRetentionTools } from "./tools/retention";
 import { registerSystemTools } from "./tools/system";
 import { registerVatTools } from "./tools/vat";
 import { registerVendorTools } from "./tools/vendor";
+// ===== MILEAGE LOG (#123) =====
+import { registerMileageTools } from "./tools/mileage";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -55,4 +57,6 @@ export function registerAllTools(server: McpServer): void {
   registerSystemTools(server);
   registerVatTools(server);
   registerVendorTools(server);
+  // ===== MILEAGE LOG (#123) =====
+  registerMileageTools(server);
 }

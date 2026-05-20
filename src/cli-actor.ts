@@ -34,6 +34,9 @@ export const MUTATING_COMMANDS = new Set([
   "journal post",
   "journal reverse",
   "exceptions resolve",
+  // ===== MILEAGE LOG (#123) =====
+  "mileage log",
+  "mileage export",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

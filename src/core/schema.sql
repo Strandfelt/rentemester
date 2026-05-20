@@ -624,3 +624,41 @@ BEFORE DELETE ON invoice_bad_debt_writeoffs
 BEGIN
   SELECT RAISE(ABORT, 'invoice bad-debt writeoffs are append-only; add a correcting journal entry instead');
 END;
+
+-- ===== MILEAGE LOG (#123) =====
+-- Standalone kørselsregnskab register. Mileage entries are documentation/audit
+-- data only; nothing here is posted to the journal/ledger. The per-kilometre
+-- rate is user-supplied and source-backed (rate_basis), never a hardcoded tax
+-- rate. Entries are append-only audit data.
+CREATE TABLE IF NOT EXISTS mileage_entries (
+  id INTEGER PRIMARY KEY,
+  entry_no TEXT NOT NULL UNIQUE,
+  trip_date TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  from_location TEXT NOT NULL,
+  to_location TEXT NOT NULL,
+  kilometers NUMERIC NOT NULL CHECK(kilometers > 0),
+  vehicle TEXT NOT NULL,
+  driver TEXT NOT NULL,
+  rate_per_km NUMERIC NOT NULL CHECK(rate_per_km > 0),
+  amount_basis NUMERIC NOT NULL CHECK(amount_basis >= 0),
+  rate_basis TEXT NOT NULL,
+  rate_source TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mileage_entries_trip_date
+ON mileage_entries(trip_date);
+
+CREATE TRIGGER IF NOT EXISTS mileage_entries_no_update
+BEFORE UPDATE ON mileage_entries
+BEGIN
+  SELECT RAISE(ABORT, 'mileage_entries are append-only audit data; record a correcting entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS mileage_entries_no_delete
+BEFORE DELETE ON mileage_entries
+BEGIN
+  SELECT RAISE(ABORT, 'mileage_entries are append-only audit data; record a correcting entry instead');
+END;
