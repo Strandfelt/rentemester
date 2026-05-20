@@ -129,6 +129,57 @@ describe("invoice late interest", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("refuses a second open interest claim so overlapping periods are not double-charged", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-double-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-06-15",
+      invoiceNumber: "2026-0900E",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(applyInvoicePayment(db, {
+      invoiceDocumentId: issued.documentId!,
+      paymentDate: "2026-05-20",
+      amount: 1000,
+      note: "Partial payment"
+    }).ok).toBe(true);
+
+    const first = registerInvoiceLateInterest(db, {
+      invoiceDocumentId: issued.documentId!,
+      asOfDate: "2026-06-20",
+      referenceRatePercent: 2.2,
+    });
+    expect(first.ok).toBe(true);
+
+    // A later as-of date recomputes interest over the FULL window from the due
+    // date, so registering it again would re-bill the first 5 overdue days.
+    const second = registerInvoiceLateInterest(db, {
+      invoiceDocumentId: issued.documentId!,
+      asOfDate: "2026-07-20",
+      referenceRatePercent: 2.2,
+    });
+    expect(second.ok).toBe(false);
+    expect(second.errors[0]).toContain("open");
+
+    const status = getInvoiceStatus(db, issued.documentId!, "2026-07-20");
+    expect(status.interestClaims).toHaveLength(1);
+    expect(status.totalInterestClaims).toBe(0.35);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("posts a registered late-interest claim once to receivables and non-VAT claim income", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-post-"));
     const db = openDb(ensureCompanyDirs(root).db);
