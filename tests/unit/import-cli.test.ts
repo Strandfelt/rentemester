@@ -84,5 +84,34 @@ describe("import run CLI", () => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(true);
     expect(parsed.systems.some((s: { system: string }) => s.system === "synthetic-csv")).toBe(true);
+    expect(parsed.systems.some((s: { system: string }) => s.system === "dinero")).toBe(true);
+  });
+
+  test("imports a Dinero export directory: reconciles chart & company", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-import-cli-dinero-"));
+    const company = join(root, "company");
+    const fixture = join(process.cwd(), "examples/import-dinero");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+
+    const proc = runCli([
+      "import", "run",
+      "--company", company,
+      "--file", fixture,
+      "--system", "dinero",
+    ]);
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    rmSync(root, { recursive: true, force: true });
+    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.sourceSystem).toBe("dinero");
+    // A chart-only import posts no primobalance entry.
+    expect(parsed.entryNo).toBeUndefined();
+    expect(parsed.chart.created.length).toBeGreaterThan(0);
+    expect(parsed.company.updatedFields).toContain("cvr");
   });
 });

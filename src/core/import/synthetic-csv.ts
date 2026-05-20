@@ -23,6 +23,7 @@
 //   Amounts are integer øre, exactly like the rest of Rentemester.
 
 import type { ImportAccount, ImportOpeningBalanceLine, ParseResult, SourceParser } from "./types";
+import { dineroParser } from "./dinero";
 
 const SYSTEM = "synthetic-csv";
 const LABEL = "Synthetic CSV (import-framework example)";
@@ -155,7 +156,12 @@ export const syntheticCsvParser: SourceParser = {
  * Registry of available parsers, keyed by `system`. The CLI resolves
  * `--system <id>` against this map. Adding the real e-conomic / Billy parsers
  * later is a one-line registration here — no framework change.
+ *
+ * Parsers may implement the single-string `parse` (synthetic-csv) or the
+ * multi-file `parseSource` (Dinero, #193) shape — `runImportFromSource`
+ * dispatches on whichever the selected parser provides.
  */
 export const PARSERS: Record<string, SourceParser> = {
   [SYSTEM]: syntheticCsvParser,
+  [dineroParser.system]: dineroParser,
 };

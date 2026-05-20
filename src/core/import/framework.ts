@@ -22,7 +22,15 @@ import type { Database } from "bun:sqlite";
 import { postOpeningBalance } from "../opening-balance";
 import { isValidIsoDate } from "../dates";
 import { toOre } from "../money";
-import type { ImportOptions, ImportResult, ImportSource } from "./types";
+import { reconcileChartOfAccounts, reconcileCompanyMasterData } from "./reconcile";
+import { resolveSource } from "./source";
+import type {
+  ImportOptions,
+  ImportResult,
+  ImportSource,
+  ParseResult,
+  SourceParser,
+} from "./types";
 
 const IMPORT_RULE = "DK-BOOKKEEPING-BALANCED-001";
 
@@ -61,14 +69,6 @@ export function runImport(
 
   auditTrail.push(`Import started from source system '${sourceSystem}'`);
 
-  // --- cut-over date -------------------------------------------------------
-  const cutOverDate = typeof source?.cutOverDate === "string" ? source.cutOverDate.trim() : "";
-  if (!isValidIsoDate(cutOverDate)) {
-    errors.push("cut-over date must be present in YYYY-MM-DD format");
-  } else {
-    auditTrail.push(`Cut-over date is ${cutOverDate}`);
-  }
-
   // --- chart of accounts ---------------------------------------------------
   const chart = Array.isArray(source?.chartOfAccounts) ? source.chartOfAccounts : [];
   const chartAccountNos = new Set(
@@ -83,10 +83,28 @@ export function runImport(
   );
   auditTrail.push(`Source chart of accounts has ${chartAccountNos.size} account(s)`);
 
-  // --- opening balances ----------------------------------------------------
+  // --- opening balances & cut-over date ------------------------------------
+  // A source may carry only a chart of accounts + company master data and no
+  // primobalance — that is the Dinero chart import (#193); posting the
+  // primobalance is a separate step (#194). Such a source declares its intent
+  // by carrying NO cut-over date: it is reconciled into the live ledger but
+  // posts nothing. A source that DOES carry a cut-over date is a primobalance
+  // import and must carry balanced opening balances.
   const openingBalances = Array.isArray(source?.openingBalances) ? source.openingBalances : [];
-  if (openingBalances.length === 0) {
-    errors.push("import source has no opening balances to post");
+  const cutOverDate = typeof source?.cutOverDate === "string" ? source.cutOverDate.trim() : "";
+  const chartOnly = cutOverDate.length === 0 && openingBalances.length === 0 && chart.length > 0;
+
+  if (chartOnly) {
+    auditTrail.push("Source carries no cut-over date — chart/master-data import only");
+  } else {
+    if (!isValidIsoDate(cutOverDate)) {
+      errors.push("cut-over date must be present in YYYY-MM-DD format");
+    } else {
+      auditTrail.push(`Cut-over date is ${cutOverDate}`);
+    }
+    if (openingBalances.length === 0) {
+      errors.push("import source has no opening balances to post");
+    }
   }
 
   let debitOre = 0n;
@@ -137,6 +155,55 @@ export function runImport(
   if (errors.length > 0) {
     auditTrail.push(`Validation failed with ${errors.length} error(s) — nothing posted`);
     return fail();
+  }
+
+  // --- reconcile chart of accounts & company master data ------------------
+  // This always runs when the source carries them, for BOTH a chart-only
+  // import (#193) and a full primobalance import (#194). It is the prerequisite
+  // that lets `postOpeningBalance` validate every line against the live chart.
+  let chartResult: ImportResult["chart"];
+  let companyResult: ImportResult["company"];
+  if (chart.length > 0) {
+    chartResult = reconcileChartOfAccounts(db, source, {
+      createdBy: options.createdBy,
+      createdByProgram: options.createdByProgram ?? "rentemester-import",
+    });
+    auditTrail.push(
+      `Reconciled chart of accounts: ${chartResult.created.length} created, ` +
+        `${chartResult.existing.length} already present, ` +
+        `${chartResult.differences.length} difference(s)`,
+    );
+    if (chartResult.unmappedVatCodes.length > 0) {
+      auditTrail.push(
+        `Unmapped VAT code(s) — review required: ${chartResult.unmappedVatCodes.join("; ")}`,
+      );
+    }
+    for (const diff of chartResult.differences) auditTrail.push(`Chart difference: ${diff}`);
+  }
+  if (source?.companyMasterData) {
+    companyResult = reconcileCompanyMasterData(db, source, {
+      createdBy: options.createdBy,
+      createdByProgram: options.createdByProgram ?? "rentemester-import",
+    });
+    auditTrail.push(
+      `Reconciled company master data: updated [${companyResult.updatedFields.join(", ") || "nothing"}]`,
+    );
+    for (const note of companyResult.notes) auditTrail.push(`Company note: ${note}`);
+  }
+
+  // A chart-only source (#193) is done here — the primobalance is #194's job.
+  if (chartOnly) {
+    return {
+      ok: true,
+      sourceSystem,
+      openingBalanceLineCount: 0,
+      historicalEntriesSkipped: historicalEntries.length,
+      chart: chartResult,
+      company: companyResult,
+      auditTrail,
+      appliedRules: [IMPORT_RULE],
+      errors: [],
+    };
   }
 
   auditTrail.push(
@@ -195,8 +262,69 @@ export function runImport(
     entryHash: result.entryHash,
     openingBalanceLineCount: openingBalances.length,
     historicalEntriesSkipped: historicalEntries.length,
+    chart: chartResult,
+    company: companyResult,
     auditTrail,
     appliedRules: [...new Set([IMPORT_RULE, ...result.appliedRules])],
     errors: [],
   };
+}
+
+/**
+ * Runs an import end-to-end from an export PATH using a `SourceParser`. It
+ * resolves the path (a directory, a `.zip`'s unpacked tree, or a single file)
+ * into a `MultiArtifactSource`, dispatches to whichever parser shape is
+ * implemented — `parseSource` (multi-file, e.g. Dinero #193) or `parse` (a
+ * single text file, e.g. synthetic-csv) — checks the parser's `requiredFiles`,
+ * and hands the resulting `ImportSource` to `runImport`.
+ *
+ * The CLI `import run` calls this so a single code path serves every parser.
+ */
+export function runImportFromSource(
+  db: Database,
+  parser: SourceParser,
+  path: string,
+  options: ImportOptions = {},
+): ImportResult {
+  const failParse = (errors: string[]): ImportResult => ({
+    ok: false,
+    sourceSystem: parser.system,
+    openingBalanceLineCount: 0,
+    historicalEntriesSkipped: 0,
+    auditTrail: [`Import started from source system '${parser.system}'`],
+    appliedRules: [IMPORT_RULE],
+    errors,
+  });
+
+  const resolved = resolveSource(path);
+
+  let parsed: ParseResult;
+  if (typeof parser.parseSource === "function") {
+    // Multi-file parser: enforce declared required files before parsing.
+    const missing: string[] = [];
+    for (const required of parser.requiredFiles ?? []) {
+      if (!resolved.files[required]) {
+        missing.push(`required export file '${required}' is missing`);
+      }
+    }
+    if (missing.length > 0) return failParse(missing);
+    parsed = parser.parseSource(resolved);
+  } else if (typeof parser.parse === "function") {
+    // Single-string parser: it expects one file's text. A directory with more
+    // than one file is ambiguous for such a parser.
+    const names = Object.keys(resolved.files);
+    if (names.length !== 1) {
+      return failParse([
+        `parser '${parser.system}' expects a single export file but ${names.length} were found at ${path}`,
+      ]);
+    }
+    parsed = parser.parse(resolved.files[names[0]!]!.text);
+  } else {
+    return failParse([`parser '${parser.system}' implements neither parse nor parseSource`]);
+  }
+
+  if (!parsed.ok || !parsed.source) {
+    return failParse(parsed.errors);
+  }
+  return runImport(db, parsed.source as ImportSource, options);
 }
