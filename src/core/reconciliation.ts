@@ -8,6 +8,10 @@ export type BankReconciliationFilters = {
   status?: ReconciliationStatus;
   textMatch?: string;
   amount?: number;
+  // ===== BANK CLUSTER (#187) =====
+  /** Restrict to a single bank account (numeric id). */
+  bankAccountId?: number;
+  // ===== END BANK CLUSTER (#187) =====
 };
 
 export type BankTransactionListResult = {
@@ -22,6 +26,7 @@ export type BankTransactionListResult = {
     currency: string;
     reference: string | null;
     importBatchId: string | null;
+    bankAccountId: number | null;
     ledgerStatus: string;
     reconciliationStatus: Exclude<ReconciliationStatus, "all">;
     journalEntryId: number | null;
@@ -96,8 +101,9 @@ export function listBankTransactions(db: Database, filters: BankReconciliationFi
   if (statusError) errors.push(statusError);
   if (errors.length > 0) return { ok: false, count: 0, rows: [], errors };
 
+  const bankAccountId = filters.bankAccountId ?? null;
   const rows = db.query(
-    `SELECT bt.id, bt.transaction_date, bt.booking_date, bt.text, bt.amount, bt.currency, bt.reference, bt.import_batch_id, bt.status,
+    `SELECT bt.id, bt.transaction_date, bt.booking_date, bt.text, bt.amount, bt.currency, bt.reference, bt.import_batch_id, bt.status, bt.bank_account_id,
             je.id as journal_entry_id, je.entry_no,
             CASE WHEN je.id IS NULL THEN 'unmatched' ELSE 'matched' END as reconciliation_status
      FROM bank_transactions bt
@@ -106,8 +112,13 @@ export function listBankTransactions(db: Database, filters: BankReconciliationFi
       AND je.status = 'posted'
      WHERE (? IS NULL OR bt.transaction_date >= ?)
        AND (? IS NULL OR bt.transaction_date <= ?)
+       AND (? IS NULL OR bt.bank_account_id = ?)
      ORDER BY bt.transaction_date DESC, bt.id DESC`
-  ).all(filters.from ?? null, filters.from ?? null, filters.to ?? null, filters.to ?? null) as Array<{
+  ).all(
+    filters.from ?? null, filters.from ?? null,
+    filters.to ?? null, filters.to ?? null,
+    bankAccountId, bankAccountId,
+  ) as Array<{
     id: number;
     transaction_date: string;
     booking_date: string | null;
@@ -117,6 +128,7 @@ export function listBankTransactions(db: Database, filters: BankReconciliationFi
     reference: string | null;
     import_batch_id: string | null;
     status: string;
+    bank_account_id: number | null;
     journal_entry_id: number | null;
     entry_no: string | null;
     reconciliation_status: "matched" | "unmatched";
@@ -131,6 +143,7 @@ export function listBankTransactions(db: Database, filters: BankReconciliationFi
     currency: row.currency,
     reference: row.reference,
     importBatchId: row.import_batch_id,
+    bankAccountId: row.bank_account_id,
     ledgerStatus: row.status,
     reconciliationStatus: row.reconciliation_status,
     journalEntryId: row.journal_entry_id,
@@ -163,6 +176,7 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
     };
   }
 
+  const bankAccountId = filters.bankAccountId ?? null;
   const rows = db.query(
     `SELECT bt.id as bank_transaction_id, bt.transaction_date, bt.text, bt.amount, bt.import_batch_id,
             je.id as journal_entry_id, je.entry_no,
@@ -170,8 +184,9 @@ export function buildBankReconciliationReport(db: Database, periodStart: string,
      FROM bank_transactions bt
      LEFT JOIN journal_entries je ON je.source_bank_transaction_id = bt.id AND je.status = 'posted'
      WHERE bt.transaction_date >= ? AND bt.transaction_date <= ?
+       AND (? IS NULL OR bt.bank_account_id = ?)
      ORDER BY bt.transaction_date ASC, bt.id ASC`
-  ).all(periodStart, periodEnd) as Array<{
+  ).all(periodStart, periodEnd, bankAccountId, bankAccountId) as Array<{
     bank_transaction_id: number;
     transaction_date: string;
     text: string;

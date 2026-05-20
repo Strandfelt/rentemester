@@ -6,7 +6,16 @@ import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
-import { compareDkk, multiplyDkk, roundDkk, roundRate6 } from "./money";
+import { addDkk, compareDkk, equalsDkk, multiplyDkk, roundDkk, roundRate6, subtractDkk } from "./money";
+// ===== BANK CLUSTER (#186,#189) =====
+import {
+  getBankProfile,
+  listBankProfileNames,
+  type BankImportProfile,
+  type ProfileFieldName,
+} from "./bank-profiles";
+import { recordException } from "./exceptions";
+// ===== END BANK CLUSTER (#186,#189) =====
 
 export type BankImportRow = {
   transactionDate: string;
@@ -17,7 +26,130 @@ export type BankImportRow = {
   reference?: string;
   amountDkk?: number;
   fxRateToDkk?: number;
+  // ===== BANK CLUSTER (#188,#189) =====
+  // Extra columns preserved from the source export when a profile supplies
+  // them. All optional; generic CSV imports leave them undefined.
+  counterpartyName?: string;
+  counterpartyAccount?: string;
+  message?: string;
+  archiveReference?: string;
+  customerReference?: string;
+  balanceAfter?: number;
+  raw?: Record<string, string>;
+  // ===== END BANK CLUSTER (#188,#189) =====
 };
+
+// ===== BANK CLUSTER (#187) =====
+export type BankAccount = {
+  id: number;
+  slug: string;
+  name: string;
+  bankName: string | null;
+  registrationNo: string | null;
+  accountNo: string | null;
+  iban: string | null;
+  currency: string;
+  ledgerAccountNo: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
+export type AddBankAccountInput = {
+  name: string;
+  slug?: string;
+  bankName?: string;
+  registrationNo?: string;
+  accountNo?: string;
+  iban?: string;
+  currency?: string;
+  ledgerAccountNo?: string;
+};
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function mapBankAccountRow(row: any): BankAccount {
+  return {
+    id: Number(row.id),
+    slug: row.slug,
+    name: row.name,
+    bankName: row.bank_name ?? null,
+    registrationNo: row.registration_no ?? null,
+    accountNo: row.account_no ?? null,
+    iban: row.iban ?? null,
+    currency: row.currency,
+    ledgerAccountNo: row.ledger_account_no ?? null,
+    active: Number(row.active) === 1,
+    createdAt: row.created_at,
+  };
+}
+
+/** Resolves a bank account by numeric id or slug. Returns null when absent. */
+export function resolveBankAccount(db: Database, idOrSlug: string | number): BankAccount | null {
+  const asNumber = typeof idOrSlug === "number" ? idOrSlug : Number(idOrSlug);
+  const byId = Number.isInteger(asNumber) && asNumber > 0
+    ? db.query("SELECT * FROM bank_accounts WHERE id = ?").get(asNumber)
+    : null;
+  if (byId) return mapBankAccountRow(byId);
+  const slug = String(idOrSlug).trim();
+  const bySlug = slug ? db.query("SELECT * FROM bank_accounts WHERE slug = ?").get(slug) : null;
+  return bySlug ? mapBankAccountRow(bySlug) : null;
+}
+
+export function listBankAccounts(db: Database, includeInactive = true) {
+  const rows = db.query(
+    `SELECT * FROM bank_accounts ${includeInactive ? "" : "WHERE active = 1"} ORDER BY id ASC`,
+  ).all() as any[];
+  return { ok: true as const, count: rows.length, accounts: rows.map(mapBankAccountRow), errors: [] as string[] };
+}
+
+export function addBankAccount(db: Database, input: AddBankAccountInput) {
+  const errors: string[] = [];
+  const name = input.name?.trim();
+  if (!name) errors.push("name is required");
+  const slug = (input.slug?.trim() ? slugify(input.slug) : slugify(name ?? "")) || "";
+  if (!slug) errors.push("slug could not be derived; pass an explicit --slug");
+  const currency = (input.currency ?? "DKK").trim().toUpperCase();
+  if (currency.length !== 3) errors.push("currency must be a 3-letter ISO currency code");
+  if (errors.length > 0) return { ok: false as const, account: undefined, errors };
+
+  if (db.query("SELECT id FROM bank_accounts WHERE slug = ?").get(slug)) {
+    return { ok: false as const, account: undefined, errors: [`a bank account with slug '${slug}' already exists`] };
+  }
+  const ledgerAccountNo = input.ledgerAccountNo?.trim() || null;
+  if (ledgerAccountNo && !db.query("SELECT account_no FROM accounts WHERE account_no = ?").get(ledgerAccountNo)) {
+    return { ok: false as const, account: undefined, errors: [`ledger account ${ledgerAccountNo} does not exist`] };
+  }
+
+  const row = db.query(
+    `INSERT INTO bank_accounts (slug, name, bank_name, registration_no, account_no, iban, currency, ledger_account_no)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+  ).get(
+    slug,
+    name,
+    input.bankName?.trim() || null,
+    input.registrationNo?.trim() || null,
+    input.accountNo?.trim() || null,
+    input.iban?.trim() || null,
+    currency,
+    ledgerAccountNo,
+  );
+  insertAuditLog(db, {
+    eventType: "bank_account_add",
+    entityType: "bank_account",
+    entityId: String((row as any).id),
+    message: `Added bank account '${slug}' (${name})`,
+  });
+  return { ok: true as const, account: mapBankAccountRow(row), errors: [] as string[] };
+}
+// ===== END BANK CLUSTER (#187) =====
 
 export type BankImportResult = {
   ok: boolean;
@@ -27,11 +159,27 @@ export type BankImportResult = {
   /** Human-readable descriptions of rows skipped as duplicates, for review. */
   skippedDuplicateRows?: string[];
   sourceFileHash?: string;
+  // ===== BANK CLUSTER (#186-189) =====
+  /** Numeric id of the bank account these rows were imported into (#187). */
+  bankAccountId?: number;
+  /** Slug of the bank account these rows were imported into (#187). */
+  bankAccountSlug?: string;
+  /** Name of the CSV import profile used, when one was supplied (#186). */
+  profile?: string;
+  /** Running-balance continuity warnings detected after import (#189). */
+  balanceWarnings?: string[];
+  /** First/last running balance of the batch when a profile supplied it (#189). */
+  firstBalance?: number;
+  lastBalance?: number;
+  // ===== END BANK CLUSTER (#186-189) =====
   errors: string[];
 };
 
 const RULE_ID = "DK-BOOKKEEPING-BANK-IMPORT-001";
 const FX_RULE_ID = "DK-BOOKKEEPING-FX-001";
+// ===== BANK CLUSTER (#189) =====
+const BALANCE_CONTINUITY_RULE_ID = "DK-BANK-BALANCE-CONTINUITY-001";
+// ===== END BANK CLUSTER (#189) =====
 
 function sha256Bytes(data: Uint8Array | string) {
   return createHash("sha256").update(data).digest("hex");
@@ -237,6 +385,118 @@ function toRow(input: Record<string, string>): BankImportRow {
   };
 }
 
+// ===== BANK CLUSTER (#186) =====
+/**
+ * Normalises a date to ISO using a profile's *declared* day/month order. A
+ * profile is an explicit statement of the format, so unlike the generic
+ * `normalizeDateText` it never refuses an ambiguous `dd.mm.yyyy` — the order
+ * was declared, not guessed. An impossible calendar date still fails later in
+ * `validateBankImportRows`.
+ */
+function normalizeDateWithOrder(value: string | undefined, order: BankImportProfile["dateOrder"]) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (order === "iso") return trimmed;
+  const ymd = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(trimmed);
+  if (order === "ymd" && ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+  }
+  const dmyMatch = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(trimmed);
+  if (!dmyMatch) return trimmed;
+  const a = dmyMatch[1].padStart(2, "0");
+  const b = dmyMatch[2].padStart(2, "0");
+  const year = dmyMatch[3];
+  if (order === "mdy") return `${year}-${a}-${b}`;
+  // dmy (default for non-ISO)
+  return `${year}-${b}-${a}`;
+}
+
+/**
+ * Decodes raw CSV bytes for a profile. UTF-8 (BOM tolerated) is the common
+ * case; Windows-1252 is decoded for legacy Danish exports. A profile that
+ * declares utf8 still falls back to a 1252 decode if the UTF-8 decode produced
+ * replacement characters, so a mislabelled file is not silently mangled.
+ */
+function decodeForProfile(bytes: Uint8Array, encoding: BankImportProfile["encoding"]) {
+  if (encoding === "windows-1252") {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+  const utf8 = new TextDecoder("utf-8").decode(bytes);
+  if (utf8.includes("�")) {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+  return utf8;
+}
+
+type ProfileParseResult = { rows: BankImportRow[]; errors: string[] };
+
+/**
+ * Parses a CSV file with a pinned profile: fixed delimiter, declared encoding,
+ * declared date order and an explicit column->field map. No alias guessing.
+ */
+export function parseCsvWithProfile(bytes: Uint8Array, profile: BankImportProfile): ProfileParseResult {
+  const content = decodeForProfile(bytes, profile.encoding).replace(/^﻿/, "");
+  const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return { rows: [], errors: [] };
+
+  const headerParsed = parseCsvLine(lines[0], profile.delimiter);
+  const errors: string[] = [];
+  if (headerParsed.unterminatedQuote) errors.push("CSV header has unterminated quoted field");
+
+  // Map each header column index to the canonical field the profile assigns.
+  const columnField: (ProfileFieldName | null)[] = headerParsed.values.map((header) => {
+    const key = normalizeHeader(header).replace(/_/g, " ");
+    return profile.columns[key] ?? null;
+  });
+  for (const required of ["transaction_date", "text", "amount"] as const) {
+    if (!columnField.includes(required)) {
+      errors.push(`profile '${profile.name}' could not map a column to required field: ${required}`);
+    }
+  }
+  if (errors.length > 0) return { rows: [], errors };
+
+  const rows: BankImportRow[] = [];
+  for (const [lineOffset, line] of lines.slice(1).entries()) {
+    const lineNumber = lineOffset + 2;
+    const parsed = parseCsvLine(line, profile.delimiter);
+    if (parsed.unterminatedQuote) errors.push(`CSV row ${lineNumber} has unterminated quoted field`);
+    if (parsed.values.length !== headerParsed.values.length) {
+      errors.push(`CSV row ${lineNumber} has ${parsed.values.length} fields, header has ${headerParsed.values.length}`);
+      continue;
+    }
+    const fields: Partial<Record<ProfileFieldName, string>> = {};
+    const raw: Record<string, string> = {};
+    headerParsed.values.forEach((header, idx) => {
+      raw[header] = parsed.values[idx] ?? "";
+      const field = columnField[idx];
+      // First non-empty wins (e.g. Afsender vs Oprindelig afsender both map to
+      // counterparty_name).
+      if (field && !(fields[field]?.trim())) fields[field] = parsed.values[idx] ?? "";
+    });
+
+    rows.push({
+      transactionDate: normalizeDateWithOrder(fields.transaction_date, profile.dateOrder) ?? "",
+      bookingDate: normalizeDateWithOrder(fields.booking_date, profile.dateOrder),
+      text: fields.text ?? "",
+      amount: parseLocalizedNumber(fields.amount) ?? NaN,
+      currency: fields.currency || "DKK",
+      reference: fields.reference || undefined,
+      amountDkk: parseLocalizedNumber(fields.amount_dkk),
+      fxRateToDkk: parseLocalizedNumber(fields.fx_rate_to_dkk),
+      counterpartyName: fields.counterparty_name || undefined,
+      counterpartyAccount: fields.counterparty_account || undefined,
+      message: fields.message || undefined,
+      archiveReference: fields.archive_reference || undefined,
+      customerReference: fields.customer_reference || undefined,
+      balanceAfter: parseLocalizedNumber(fields.balance_after),
+      raw,
+    });
+  }
+  return { rows, errors };
+}
+// ===== END BANK CLUSTER (#186) =====
+
 export function validateBankImportRows(rows: BankImportRow[]) {
   const errors: string[] = [];
   let needsFxRule = false;
@@ -268,8 +528,13 @@ export function validateBankImportRows(rows: BankImportRow[]) {
 // re-import while letting two legitimately-distinct identical transactions
 // (e.g. two 50 kr fees on the same day) both import instead of one being
 // wrongly skipped as a coarse-fingerprint duplicate.
-function transactionFingerprint(row: BankImportRow, occurrence: number) {
+//
+// bank_account_id (#187) is part of the fingerprint so an identical
+// transaction (same date/text/amount) in two different accounts is not
+// wrongly skipped as a cross-account duplicate.
+function transactionFingerprint(row: BankImportRow, occurrence: number, bankAccountId: number | null) {
   return sha256Bytes(JSON.stringify({
+    bank_account_id: bankAccountId,
     transaction_date: row.transactionDate,
     booking_date: row.bookingDate ?? null,
     text: row.text.trim(),
@@ -282,15 +547,152 @@ function transactionFingerprint(row: BankImportRow, occurrence: number) {
   }));
 }
 
-export function importBankCsv(db: Database, companyRoot: string, csvPath: string): BankImportResult {
+// ===== BANK CLUSTER (#189) =====
+type BalanceContinuityResult = {
+  balanceWarnings?: string[];
+  firstBalance?: number;
+  lastBalance?: number;
+};
+
+/**
+ * Verifies running-balance continuity over a freshly-imported batch (#189).
+ *
+ * Most bank statements carry a running balance (`Saldo`) on every row. In a
+ * complete, correctly ordered statement each row's balance equals the previous
+ * row's balance plus this row's amount. A break means rows are missing,
+ * duplicated or misordered — a silent import error that would undermine a
+ * ledger meant to be trusted.
+ *
+ * Rows are walked in transaction-date then insertion order. A break is surfaced
+ * as a warning AND a `BANK_BALANCE_GAP` exception-queue entry; it never fails
+ * the import, because a legitimately partial export is a valid input. Comparison
+ * is integer-øre (`equalsDkk`) so float artefacts do not raise a false break.
+ *
+ * Rows without a stored balance (generic CSV import, or a profile column the
+ * file omitted) are skipped — there is nothing to check.
+ */
+function verifyBatchBalanceContinuity(db: Database, importedRowIds: number[]): BalanceContinuityResult {
+  if (importedRowIds.length === 0) return {};
+  const placeholders = importedRowIds.map(() => "?").join(", ");
+  const rows = db.query(
+    `SELECT id, transaction_date, text, amount, balance_after
+     FROM bank_transactions
+     WHERE id IN (${placeholders})
+     ORDER BY transaction_date ASC, id ASC`,
+  ).all(...importedRowIds) as Array<{
+    id: number;
+    transaction_date: string;
+    text: string;
+    amount: number;
+    balance_after: number | null;
+  }>;
+
+  const withBalance = rows.filter((row) => row.balance_after !== null && row.balance_after !== undefined);
+  if (withBalance.length < 2) {
+    // 0 rows: nothing to report. 1 row: a single balance, no adjacency to check.
+    return withBalance.length === 1
+      ? { firstBalance: roundDkk(Number(withBalance[0].balance_after)), lastBalance: roundDkk(Number(withBalance[0].balance_after)) }
+      : {};
+  }
+
+  const balanceWarnings: string[] = [];
+  for (let idx = 1; idx < withBalance.length; idx += 1) {
+    const prev = withBalance[idx - 1];
+    const curr = withBalance[idx];
+    const expected = addDkk(Number(prev.balance_after), Number(curr.amount));
+    if (!equalsDkk(expected, Number(curr.balance_after))) {
+      const drift = subtractDkk(Number(curr.balance_after), expected);
+      const warning =
+        `balance break before bank transaction ${curr.id} (${curr.transaction_date} '${curr.text.trim()}'): ` +
+        `expected ${expected} from previous balance ${roundDkk(Number(prev.balance_after))} + amount ${roundDkk(Number(curr.amount))}, ` +
+        `statement shows ${roundDkk(Number(curr.balance_after))} (drift ${drift})`;
+      balanceWarnings.push(warning);
+      recordException(db, {
+        type: "BANK_BALANCE_GAP",
+        severity: "medium",
+        relatedBankTransactionId: curr.id,
+        message: warning,
+        requiredAction: "Check the statement for missing, duplicated or misordered rows around this transaction; re-import the complete export if needed.",
+        sourceEvidence: {
+          ruleId: BALANCE_CONTINUITY_RULE_ID,
+          bankTransactionId: curr.id,
+          transactionDate: curr.transaction_date,
+          previousBalance: roundDkk(Number(prev.balance_after)),
+          amount: roundDkk(Number(curr.amount)),
+          expectedBalance: expected,
+          statementBalance: roundDkk(Number(curr.balance_after)),
+          drift,
+        },
+      });
+    }
+  }
+
+  return {
+    balanceWarnings,
+    firstBalance: roundDkk(Number(withBalance[0].balance_after)),
+    lastBalance: roundDkk(Number(withBalance[withBalance.length - 1].balance_after)),
+  };
+}
+// ===== END BANK CLUSTER (#189) =====
+
+// ===== BANK CLUSTER (#186-189) =====
+export type ImportBankCsvOptions = {
+  /** Numeric id or slug of the target bank account (#187). */
+  account?: string | number;
+  /** Named CSV import profile, e.g. "danske-bank" (#186). */
+  profile?: string;
+};
+// ===== END BANK CLUSTER (#186-189) =====
+
+export function importBankCsv(
+  db: Database,
+  companyRoot: string,
+  csvPath: string,
+  options: ImportBankCsvOptions = {},
+): BankImportResult {
   if (!existsSync(csvPath)) return { ok: false, errors: [`file does not exist: ${csvPath}`] };
+
+  // ===== BANK CLUSTER (#187) =====
+  // Resolve the target account up front: new imports couple their rows to a
+  // bank account. A given-but-unknown account aborts before any parsing.
+  let bankAccount: BankAccount | null = null;
+  if (options.account !== undefined && String(options.account).trim() !== "") {
+    bankAccount = resolveBankAccount(db, options.account);
+    if (!bankAccount) return { ok: false, errors: [`bank account '${options.account}' does not exist`] };
+  }
+  const bankAccountId = bankAccount?.id ?? null;
+  // ===== END BANK CLUSTER (#187) =====
+
+  // ===== BANK CLUSTER (#186) =====
+  // A named profile pins delimiter / encoding / date order and an explicit
+  // column->field map. A given-but-unknown profile aborts before parsing.
+  let profile: BankImportProfile | null = null;
+  if (options.profile !== undefined && String(options.profile).trim() !== "") {
+    profile = getBankProfile(String(options.profile));
+    if (!profile) {
+      return { ok: false, errors: [`unknown bank import profile '${options.profile}' (known: ${listBankProfileNames().join(", ")})`] };
+    }
+  }
+  // ===== END BANK CLUSTER (#186) =====
 
   const fileBytes = readFileSync(csvPath);
   const sourceFileHash = sha256Bytes(fileBytes);
   const importBatchId = `BANK-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}-${sourceFileHash.slice(0, 8)}`;
-  const parsedCsv = parseCsv(fileBytes.toString("utf8"));
-  if (parsedCsv.errors.length > 0) return { ok: false, errors: parsedCsv.errors };
-  const rows = parsedCsv.rows.map(toRow);
+
+  // ===== BANK CLUSTER (#186) =====
+  // With a profile the file is parsed under the pinned format; without one the
+  // generic alias-guessing parser is used unchanged.
+  let rows: BankImportRow[];
+  if (profile) {
+    const parsed = parseCsvWithProfile(fileBytes, profile);
+    if (parsed.errors.length > 0) return { ok: false, errors: parsed.errors };
+    rows = parsed.rows;
+  } else {
+    const parsedCsv = parseCsv(fileBytes.toString("utf8"));
+    if (parsedCsv.errors.length > 0) return { ok: false, errors: parsedCsv.errors };
+    rows = parsedCsv.rows.map(toRow);
+  }
+  // ===== END BANK CLUSTER (#186) =====
   const validation = validateBankImportRows(rows);
   if (!validation.ok) return { ok: false, errors: validation.errors };
 
@@ -301,28 +703,31 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
   let imported = 0;
   let skippedDuplicates = 0;
   const skippedDuplicateRows: string[] = [];
+  const importedRowIds: number[] = [];
   // Per-content-fingerprint counter: distinguishes repeated identical rows
   // within this file so each gets a unique transaction_hash.
   const occurrenceByContent = new Map<string, number>();
   const insert = db.prepare(
     `INSERT INTO bank_transactions (
-      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status, retain_until
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', ?)`
+      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk,
+      source_file_hash, import_batch_id, transaction_hash, status, retain_until,
+      bank_account_id, counterparty_name, counterparty_account, message, archive_reference, customer_reference, balance_after, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   db.transaction(() => {
     for (const row of rows) {
-      const contentHash = transactionFingerprint(row, 0);
+      const contentHash = transactionFingerprint(row, 0, bankAccountId);
       const occurrence = occurrenceByContent.get(contentHash) ?? 0;
       occurrenceByContent.set(contentHash, occurrence + 1);
-      const hash = transactionFingerprint(row, occurrence);
+      const hash = transactionFingerprint(row, occurrence, bankAccountId);
       const existing = db.query("SELECT id FROM bank_transactions WHERE transaction_hash = ?").get(hash) as { id: number } | null;
       if (existing) {
         skippedDuplicates += 1;
         skippedDuplicateRows.push(`${row.transactionDate} ${row.text.trim()} ${normalizeAmount(row.amount)} ${(row.currency ?? "DKK").trim().toUpperCase()}`);
         continue;
       }
-      insert.run(
+      const result = insert.run(
         row.transactionDate,
         row.bookingDate ?? null,
         row.text.trim(),
@@ -335,7 +740,16 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
         importBatchId,
         hash,
         retainUntilForDate(db, row.bookingDate ?? row.transactionDate),
+        bankAccountId,
+        row.counterpartyName?.trim() || null,
+        row.counterpartyAccount?.trim() || null,
+        row.message?.trim() || null,
+        row.archiveReference?.trim() || null,
+        row.customerReference?.trim() || null,
+        row.balanceAfter == null ? null : normalizeAmount(row.balanceAfter),
+        row.raw ? JSON.stringify(row.raw) : null,
       );
+      importedRowIds.push(Number(result.lastInsertRowid));
       imported += 1;
     }
     insertAuditLog(db, {
@@ -346,5 +760,24 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
     });
   })();
 
-  return { ok: true, importBatchId, imported, skippedDuplicates, skippedDuplicateRows, sourceFileHash, errors: [] };
+  // ===== BANK CLUSTER (#189) =====
+  // When a profile supplied a running balance, verify continuity across the
+  // freshly-imported batch. A break is surfaced (warning + exception) but never
+  // fails the import — a partial export is a legitimate input.
+  const balanceCheck = verifyBatchBalanceContinuity(db, importedRowIds);
+  // ===== END BANK CLUSTER (#189) =====
+
+  return {
+    ok: true,
+    importBatchId,
+    imported,
+    skippedDuplicates,
+    skippedDuplicateRows,
+    sourceFileHash,
+    bankAccountId: bankAccountId ?? undefined,
+    bankAccountSlug: bankAccount?.slug,
+    profile: profile?.name,
+    ...balanceCheck,
+    errors: [],
+  };
 }

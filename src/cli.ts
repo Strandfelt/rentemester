@@ -28,6 +28,9 @@ import { register as registerExceptions } from "./cli/exceptions";
 import { register as registerInvoice } from "./cli/invoice";
 import { register as registerDocuments } from "./cli/documents";
 import { register as registerBank } from "./cli/bank";
+// ===== BANK CLUSTER (#187) =====
+import { register as registerBankAccount } from "./cli/bank-account";
+// ===== END BANK CLUSTER (#187) =====
 import { register as registerVat } from "./cli/vat";
 import { register as registerJournal } from "./cli/journal";
 import { register as registerSystem } from "./cli/system";
@@ -193,6 +196,9 @@ for (const registerFn of [
   registerInvoice,
   registerDocuments,
   registerBank,
+  // ===== BANK CLUSTER (#187) =====
+  registerBankAccount,
+  // ===== END BANK CLUSTER (#187) =====
   registerVat,
   registerJournal,
   registerSystem,
