@@ -16,9 +16,27 @@ export function openDb(path: string) {
   return db;
 }
 
+// Protective triggers are declared with CREATE TRIGGER IF NOT EXISTS, so a
+// plain re-run of the schema cannot repair a trigger that was dropped and
+// re-created with a tampered (or missing) body. Re-applying every trigger
+// definition unconditionally guarantees migrate() restores the canonical
+// append-only protection.
+function restoreSchemaTriggers(db: Database, schema: string) {
+  const triggerStatements = schema.match(/CREATE TRIGGER[\s\S]*?END;/gi) ?? [];
+  for (const statement of triggerStatements) {
+    const nameMatch = /CREATE TRIGGER(?:\s+IF\s+NOT\s+EXISTS)?\s+([A-Za-z_][A-Za-z0-9_]*)/i.exec(statement);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+    const canonical = statement.replace(/CREATE TRIGGER\s+IF\s+NOT\s+EXISTS/i, "CREATE TRIGGER");
+    db.run(`DROP TRIGGER IF EXISTS ${name}`);
+    db.exec(canonical);
+  }
+}
+
 export function migrate(db: Database) {
   const schema = readFileSync(join(import.meta.dir, "../../src/core/schema.sql"), "utf8");
   db.exec(schema);
+  restoreSchemaTriggers(db, schema);
   if (!hasColumn(db, "companies", "cvr")) db.exec("ALTER TABLE companies ADD COLUMN cvr TEXT;");
   if (!hasColumn(db, "companies", "fiscal_year_start_month")) db.exec("ALTER TABLE companies ADD COLUMN fiscal_year_start_month INTEGER NOT NULL DEFAULT 1 CHECK(fiscal_year_start_month BETWEEN 1 AND 12);");
   if (!hasColumn(db, "companies", "fiscal_year_label_strategy")) db.exec("ALTER TABLE companies ADD COLUMN fiscal_year_label_strategy TEXT NOT NULL DEFAULT 'end-year' CHECK(fiscal_year_label_strategy IN ('end-year', 'start-year', 'span'));");

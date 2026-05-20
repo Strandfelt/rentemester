@@ -51,6 +51,38 @@ describe("journal posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects journal lines with negative debit or credit amounts", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-negative-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const result = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Negative-amount posting",
+      lines: [
+        { accountNo: "2000", debitAmount: -500 },
+        { accountNo: "5000", creditAmount: -500 }
+      ]
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((error) => error.includes("must not be negative"))).toBe(true);
+
+    const positive = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Valid positive posting",
+      lines: [
+        { accountNo: "2000", debitAmount: 500 },
+        { accountNo: "5000", creditAmount: 500 }
+      ]
+    });
+    expect(positive.ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("numbers journal entries from transaction year and resets per year", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journal-entryno-"));
     const db = openDb(ensureCompanyDirs(root).db);
@@ -691,6 +723,45 @@ describe("ledger hardening", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("restores dropped and tampered append-only triggers when migrate runs again", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-trigger-restore-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    // A dropped trigger leaves the table unprotected.
+    db.run("DROP TRIGGER journal_entries_no_delete");
+    expect(db.query("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'journal_entries_no_delete'").get()).toBeNull();
+
+    // A tampered trigger still exists by name but has a harmless no-op body,
+    // so CREATE TRIGGER IF NOT EXISTS would silently leave it broken.
+    db.run("DROP TRIGGER journal_lines_no_delete");
+    db.run("CREATE TRIGGER journal_lines_no_delete BEFORE DELETE ON journal_lines BEGIN SELECT 1; END;");
+
+    migrate(db);
+
+    const restored = db.query("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'journal_entries_no_delete'").get() as { sql: string } | null;
+    expect(restored).not.toBeNull();
+    expect(restored!.sql).toContain("append-only");
+    const repaired = db.query("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'journal_lines_no_delete'").get() as { sql: string };
+    expect(repaired.sql).toContain("append-only");
+
+    const posted = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Entry protected by restored trigger",
+      lines: [
+        { accountNo: "2000", debitAmount: 1000 },
+        { accountNo: "5000", creditAmount: 1000 }
+      ]
+    });
+    expect(posted.ok).toBe(true);
+    expect(() => db.run("DELETE FROM journal_entries WHERE id = ?", posted.entryId!)).toThrow("journal_entries are append-only");
+    expect(() => db.run("DELETE FROM journal_lines WHERE journal_entry_id = ?", posted.entryId!)).toThrow("journal_lines are append-only");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("audit verify detects structural ledger corruption beyond hash mismatch", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-audit-corrupt-"));
     const db = openDb(ensureCompanyDirs(root).db);
@@ -728,7 +799,7 @@ describe("ledger hardening", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-STATUS-AUDIT",
+      invoiceNumber: "2026-00001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
