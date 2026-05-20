@@ -624,3 +624,44 @@ BEFORE DELETE ON invoice_bad_debt_writeoffs
 BEGIN
   SELECT RAISE(ABORT, 'invoice bad-debt writeoffs are append-only; add a correcting journal entry instead');
 END;
+
+-- ===== PEPPOL SUBMISSION (#128) =====
+-- Records a deterministic PEPPOL submission attempt built on top of an
+-- existing OIOUBL handoff artifact. Submission records are audit data:
+-- append-only, never updated or deleted. The idempotency key protects
+-- against duplicate submissions. Access-point credentials are NEVER
+-- stored here — only the non-secret access-point id used to derive the
+-- submission envelope. The original invoice payload is not mutated.
+CREATE TABLE IF NOT EXISTS peppol_submissions (
+  id INTEGER PRIMARY KEY,
+  invoice_document_id INTEGER NOT NULL,
+  invoice_no TEXT,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  submission_reference TEXT NOT NULL UNIQUE,
+  access_point_id TEXT NOT NULL,
+  receiver_endpoint_id TEXT NOT NULL,
+  oioubl_sha256 TEXT NOT NULL,
+  envelope_sha256 TEXT NOT NULL,
+  envelope_xml TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('prepared','acknowledged')),
+  transmission_id TEXT,
+  acknowledged_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_peppol_submissions_invoice
+  ON peppol_submissions(invoice_document_id);
+CREATE INDEX IF NOT EXISTS idx_peppol_submissions_reference
+  ON peppol_submissions(submission_reference);
+
+CREATE TRIGGER IF NOT EXISTS peppol_submissions_no_update
+BEFORE UPDATE ON peppol_submissions
+BEGIN
+  SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS peppol_submissions_no_delete
+BEFORE DELETE ON peppol_submissions
+BEGIN
+  SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
+END;

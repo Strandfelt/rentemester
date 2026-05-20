@@ -34,6 +34,8 @@ export const MUTATING_COMMANDS = new Set([
   "journal post",
   "journal reverse",
   "exceptions resolve",
+  // PEPPOL submission (#128)
+  "invoice submit-public-peppol",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
