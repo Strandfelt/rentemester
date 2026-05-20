@@ -56,7 +56,7 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 - Bogføring for enkeltmandsvirksomhed: https://rentemester.dk/bogfoering-for-enkeltmandsvirksomhed
 - Bogføring for ApS: https://rentemester.dk/bogfoering-for-aps
 - Roadmap / journey to v1: https://rentemester.dk/#roadmap
-- Current roadmap themes include deterministic bilagsmail intake, EAN/GLN public-customer e-invoicing, recurring invoice templates, a first SAF-T export slice, hosted accountant/reviewer access on top of the shipped local handoff package, live UI, and carefully scoped bank/plugin integrations
+- Current roadmap themes include deterministic bilagsmail intake, EAN/GLN public-customer e-invoicing, recurring invoice templates, broader SAF-T coverage beyond the shipped first slice, hosted accountant/reviewer access on top of the shipped local handoff package, live UI, and carefully scoped bank/plugin integrations
 - Agent contribution brief: https://rentemester.dk/#agent-brief
 - Features: https://rentemester.dk/funktioner
 - How it works: https://rentemester.dk/saadan-virker-det
@@ -130,7 +130,7 @@ If a human points you at this site or repository and asks you to contribute:
 - Invoice issuing, reminders, interest, compensation fees, credit notes and bad-debt handling
 - Roadmap: EAN/GLN e-invoicing and recurring invoice templates before full subscription automation
 - Foreign-currency purchase documents and expense booking, including DKK bank settlement with preserved FX basis
-- Roadmap: SAF-T (Standard Audit File-Tax) export for authority data exchange under the new Danish bookkeeping rules
+- Current export: first deterministic SAF-T (Standard Audit File-Tax) slice for ledger + sales-invoice authority data exchange; roadmap: broader coverage, stricter profile support, and any official submission-specific follow-up
 - Current local handoff: deterministic accountant export package via `system export-accountant` with explicit file-handoff trust boundary
 - Roadmap: hosted accountant/reviewer access with explicit roles and audit attribution
 - Danish VAT reporting, including representation, EU trade, reverse charge, VIES validation and mixed-use VAT allocation

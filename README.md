@@ -191,7 +191,7 @@ Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
 - EAN/GLN-fakturering til offentlige kunder
 - gentagne fakturaer via templates før egentlig abonnementsautomatik
 - udsendelse af fakturaer via mail
-- første afgrænsede SAF-T-eksport efter den nye bogføringslov
+- bredere SAF-T-dækning oven på den første afgrænsede eksport efter den nye bogføringslov
 - hosted bogholder-/revisoradgang med rollegrænser oven på den eksisterende lokale eksportpakke
 - interaktiv brugerflade oven på det statiske dashboard
 - direkte bankfeeds og åbne API-integrationer
