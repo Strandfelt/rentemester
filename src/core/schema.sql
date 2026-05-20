@@ -732,6 +732,7 @@ CREATE TRIGGER IF NOT EXISTS mail_intake_messages_no_delete
 BEFORE DELETE ON mail_intake_messages
 BEGIN
   SELECT RAISE(ABORT, 'mail intake dedup rows are append-only and cannot be deleted');
+END;
 -- ===== MILEAGE LOG (#123) =====
 -- Standalone kørselsregnskab register. Mileage entries are documentation/audit
 -- data only; nothing here is posted to the journal/ledger. The per-kilometre
