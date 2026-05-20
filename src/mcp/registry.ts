@@ -46,6 +46,9 @@ import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
 // ===== MAIL INTAKE (#122) =====
 import { registerMailIntakeTools } from "./tools/mail-intake";
+// ===== IMAP INTAKE (#181) =====
+import { registerImapIntakeTools } from "./tools/imap-intake";
+// ===== END IMAP INTAKE (#181) =====
 // ===== MILEAGE LOG (#123) =====
 import { registerMileageTools } from "./tools/mileage";
 // Fixed assets (#124, #125)
@@ -78,6 +81,9 @@ export function registerAllTools(server: McpServer): void {
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   registerMailIntakeTools(server);
+  // ===== IMAP INTAKE (#181) =====
+  registerImapIntakeTools(server);
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   registerMileageTools(server);
   // Fixed assets (#124, #125)
