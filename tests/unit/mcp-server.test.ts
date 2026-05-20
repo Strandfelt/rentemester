@@ -389,6 +389,20 @@ describe("MCP tools full surface (#78)", () => {
     expect(structured?.errors?.[0]).toContain("confirm: true required");
   });
 
+  test("missing company path error does not leak the absolute path to the caller", async () => {
+    const secretPath = join(tmpdir(), "rentemester-secret-host-dir-abc123");
+    const response = await client.send("tools/call", {
+      name: "accounts_list",
+      arguments: { company: secretPath },
+    });
+    const structured = response.result?.structuredContent;
+    expect(structured?.ok).toBe(false);
+    expect(structured?.errors?.length).toBeGreaterThan(0);
+    const joined = (structured?.errors ?? []).join(" | ");
+    expect(joined).not.toContain(secretPath);
+    expect(joined).not.toContain(tmpdir());
+  });
+
   test("customer_create with confirm:true persists the customer", async () => {
     const response = await client.send("tools/call", {
       name: "customer_create",
