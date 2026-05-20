@@ -4,10 +4,24 @@
 // changed without touching code. Everything is resolved from the environment
 // here, in one place, so the rest of the server is pure.
 
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveConfiguredWorkspaceRoot } from "../core/workspace";
 
 export const DEFAULT_APP_HOST = "127.0.0.1";
 export const DEFAULT_APP_PORT = 4319;
+
+/**
+ * Absolute path of the built cockpit SPA. The repo layout is `<root>/app/dist`
+ * and this file lives at `<root>/src/server/config.ts`, so the dist directory
+ * is two levels up plus `app/dist`. Overridable via `RENTEMESTER_APP_STATIC`.
+ */
+function resolveStaticRoot(env: Record<string, string | undefined>): string {
+  const override = env.RENTEMESTER_APP_STATIC?.trim();
+  if (override) return override;
+  const here = dirname(fileURLToPath(import.meta.url));
+  return join(here, "..", "..", "app", "dist");
+}
 
 export type ServerConfig = {
   /** Interface to bind. Defaults to 127.0.0.1 (localhost-only). */
@@ -24,6 +38,13 @@ export type ServerConfig = {
   authRequired: boolean;
   /** Optional shared secret consulted only when `authRequired` is true. */
   authToken: string | null;
+  /**
+   * Absolute path to the built cockpit SPA (`app/dist`). When the directory
+   * exists, the server serves it for every non-`/api` route. Resolved here so
+   * the rest of the server stays pure. Optional: when absent the server is a
+   * pure JSON API (the shape used by API-only tests).
+   */
+  staticRoot?: string;
 };
 
 function parsePort(raw: string | undefined, fallback: number): number {
@@ -93,5 +114,12 @@ export function resolveServerConfig(
   const authRequired =
     (env.RENTEMESTER_APP_AUTH?.trim().toLowerCase() ?? "") === "required";
 
-  return { host, port, workspaceRoot, authRequired, authToken };
+  return {
+    host,
+    port,
+    workspaceRoot,
+    authRequired,
+    authToken,
+    staticRoot: resolveStaticRoot(env),
+  };
 }

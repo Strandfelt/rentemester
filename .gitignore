@@ -14,6 +14,10 @@ graphify-out/.rebuild.lock
 graphify-out/manifest.json
 graphify-out/cost.json
 
+# Cockpit SPA (#171) — build output + installed deps
+app/node_modules/
+app/dist/
+
 # Claude Code: track shared settings.json, ignore local state and agent worktrees
 .claude/*
 !.claude/settings.json

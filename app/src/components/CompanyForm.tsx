@@ -1,0 +1,124 @@
+// The "add company" form — POSTs to /api/companies. It is reused verbatim by
+// the first-run onboarding flow and the standalone add-company route, so it
+// owns input state + submit, and reports the created slug via `onCreated`.
+
+import { useState } from "react";
+import { api, ApiError } from "../lib/api";
+import { Banner } from "./Feedback";
+
+export function CompanyForm({
+  onCreated,
+  submitLabel = "Opret virksomhed",
+}: {
+  onCreated: (slug: string) => void;
+  submitLabel?: string;
+}) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [cvr, setCvr] = useState("");
+  const [fiscalMonth, setFiscalMonth] = useState("1");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (name.trim().length === 0) {
+      setError("Angiv et virksomhedsnavn.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const created = await api.createCompany({
+        name: name.trim(),
+        slug: slug.trim() || undefined,
+        cvr: cvr.trim() || undefined,
+        fiscalYearStartMonth: fiscalMonth.trim() || undefined,
+      });
+      onCreated(created.slug);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Kunne ikke oprette virksomheden.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="form" onSubmit={handleSubmit} aria-label="Opret virksomhed">
+      {error && <Banner kind="error">{error}</Banner>}
+
+      <label>
+        Virksomhedsnavn
+        <input
+          name="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Eksempel ApS"
+          autoFocus
+          required
+        />
+      </label>
+
+      <label>
+        Slug (valgfrit)
+        <input
+          name="slug"
+          value={slug}
+          onChange={(e) => setSlug(e.target.value)}
+          placeholder="udledes-af-navnet"
+        />
+        <span className="field-hint">
+          Mappenavnet for regnskabet. Udledes automatisk hvis tomt.
+        </span>
+      </label>
+
+      <label>
+        CVR-nummer (valgfrit)
+        <input
+          name="cvr"
+          value={cvr}
+          onChange={(e) => setCvr(e.target.value)}
+          placeholder="DK12345678"
+        />
+      </label>
+
+      <label>
+        Regnskabsår starter i måned
+        <select
+          name="fiscalYearStartMonth"
+          value={fiscalMonth}
+          onChange={(e) => setFiscalMonth(e.target.value)}
+        >
+          {MONTHS.map((m, i) => (
+            <option key={m} value={String(i + 1)}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="row-actions">
+        <button className="btn" type="submit" disabled={submitting}>
+          {submitting ? "Opretter…" : submitLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const MONTHS = [
+  "Januar",
+  "Februar",
+  "Marts",
+  "April",
+  "Maj",
+  "Juni",
+  "Juli",
+  "August",
+  "September",
+  "Oktober",
+  "November",
+  "December",
+];
