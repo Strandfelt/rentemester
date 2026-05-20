@@ -9,6 +9,7 @@ import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
 import { resolveOpenExceptionsForBankTransaction } from "./exceptions";
 import { compareDkk, fromOre, roundDkk, roundRate6, toOre } from "./money";
+import { asJournalEntryId, type JournalEntryId } from "./ids";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -34,7 +35,7 @@ export type JournalEntryInput = {
 
 export type JournalPostResult = {
   ok: boolean;
-  entryId?: number;
+  entryId?: JournalEntryId;
   entryNo?: string;
   entryHash?: string;
   appliedRules: string[];
@@ -42,7 +43,7 @@ export type JournalPostResult = {
 };
 
 export type JournalReverseResult = JournalPostResult & {
-  originalEntryId?: number;
+  originalEntryId?: JournalEntryId;
 };
 
 const LEDGER_RULES = {
@@ -312,13 +313,13 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       );
     }
 
-    return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
+    return { entryId: asJournalEntryId(entry.id), entryNo: entry.entry_no, entryHash };
   }, { immediate: true })();
 
   return { ok: true, appliedRules: validation.appliedRules, errors: [], ...result };
 }
 
-export function reverseJournalEntry(db: Database, input: { entryId: number; transactionDate: string; reason: string; createdBy?: string; createdByProgram?: string; }): JournalReverseResult {
+export function reverseJournalEntry(db: Database, input: { entryId: JournalEntryId; transactionDate: string; reason: string; createdBy?: string; createdByProgram?: string; }): JournalReverseResult {
   const appliedRules = [LEDGER_RULES.APPEND_ONLY, LEDGER_RULES.REVERSAL];
   const errors: string[] = [];
 
@@ -451,10 +452,10 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       createdByProgram: actor.createdByProgram,
     });
 
-    return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
+    return { entryId: asJournalEntryId(entry.id), entryNo: entry.entry_no, entryHash };
   }, { immediate: true })();
 
-  return { ok: true, originalEntryId: original.id, appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: [], ...result };
+  return { ok: true, originalEntryId: asJournalEntryId(original.id), appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: [], ...result };
 }
 
 export function verifyAuditChain(db: Database) {

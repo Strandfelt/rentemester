@@ -17,6 +17,12 @@ import { existsSync } from "node:fs";
 import { openDb, migrate } from "../core/db";
 import { companyPaths } from "../core/paths";
 import {
+  asDocumentId,
+  asJournalEntryId,
+  type DocumentId,
+  type JournalEntryId,
+} from "../core/ids";
+import {
   envelopeToCallResult,
   errorEnvelope,
   type Envelope,
@@ -143,16 +149,16 @@ export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confir
 export function resolveIssuedInvoiceDocumentId(
   db: Database,
   args: { documentId?: number | null; invoiceNumber?: string | null },
-): number | null {
+): DocumentId | null {
   if (Number.isInteger(args.documentId) && Number(args.documentId) > 0) {
-    return Number(args.documentId);
+    return asDocumentId(Number(args.documentId));
   }
   const value = (args.invoiceNumber ?? "").trim();
   if (!value) return null;
   const row = db
     .query(`SELECT id FROM documents WHERE document_type = 'issued_invoice' AND invoice_no = ? LIMIT 1`)
     .get(value) as { id: number } | null;
-  return row?.id ?? null;
+  return row?.id == null ? null : asDocumentId(row.id);
 }
 
 /**
@@ -168,14 +174,16 @@ export function resolveJournalEntryId(
     matchDate?: string | null;
     matchDocumentId?: number | null;
   },
-): number | null {
-  if (Number.isInteger(args.entryId) && Number(args.entryId) > 0) return Number(args.entryId);
+): JournalEntryId | null {
+  if (Number.isInteger(args.entryId) && Number(args.entryId) > 0) {
+    return asJournalEntryId(Number(args.entryId));
+  }
   const entryNo = (args.entryNo ?? "").trim();
   if (entryNo) {
     const row = db.query(`SELECT id FROM journal_entries WHERE entry_no = ? LIMIT 1`).get(entryNo) as
       | { id: number }
       | null;
-    if (row) return row.id;
+    if (row) return asJournalEntryId(row.id);
   }
   const matchText = (args.matchText ?? "").trim();
   if (matchText) {
@@ -189,7 +197,7 @@ export function resolveJournalEntryId(
         `SELECT id FROM journal_entries WHERE text = ? ${dateClause} ${docClause} ORDER BY id DESC LIMIT 1`,
       )
       .get(...(params as [unknown])) as { id: number } | null;
-    if (row) return row.id;
+    if (row) return asJournalEntryId(row.id);
   }
   return null;
 }

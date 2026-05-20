@@ -1,21 +1,23 @@
 import { readFileSync } from "node:fs";
+import type { Database } from "bun:sqlite";
 import { migrate } from "../core/db";
 import { postJournalEntry, reverseJournalEntry } from "../core/ledger";
+import { asJournalEntryId, type JournalEntryId } from "../core/ids";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 function resolveJournalEntryId(
-  db: ReturnType<typeof openDb>,
+  db: Database,
   ctx: { arg(name: string): string | undefined; fatal(message: string): never; trimToNull(v: string | null | undefined): string | null },
-): number | null {
+): JournalEntryId | null {
   const entryId = Number(ctx.arg("--entry-id"));
-  if (Number.isInteger(entryId) && entryId > 0) return entryId;
+  if (Number.isInteger(entryId) && entryId > 0) return asJournalEntryId(entryId);
   const entryNo = ctx.arg("--entry-no")?.trim();
   if (entryNo) {
     const row = db
       .query(`SELECT id FROM journal_entries WHERE entry_no = ? LIMIT 1`)
       .get(entryNo) as { id: number } | null;
-    return row?.id ?? null;
+    return row?.id == null ? null : asJournalEntryId(row.id);
   }
   const matchText = ctx.trimToNull(ctx.arg("--match-text"));
   const matchDate = ctx.trimToNull(ctx.arg("--match-date"));
@@ -50,7 +52,7 @@ function resolveJournalEntryId(
       "Multiple journal entries matched --match-text; narrow with --match-date or --match-document-id",
     );
   }
-  return rows[0]?.id ?? null;
+  return rows[0]?.id == null ? null : asJournalEntryId(rows[0].id);
 }
 
 export function register(dispatch: CommandDispatch): void {
