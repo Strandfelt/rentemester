@@ -28,7 +28,13 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "system export-saft", usage: "system export-saft --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--generated-at <ISO-8601>]", description: "Eksporterer første deterministiske SAF-T-slice (kontoplan, journal og salgsfakturaer).", allowedFlags: ["--company", "--from", "--to", "--out", "--generated-at"] },
   { key: "audit verify", usage: "audit verify --company <path>", description: "Verificerer audit-kæde og bogføringsintegritet.", allowedFlags: ["--company"] },
   { key: "accounts list", usage: "accounts list --company <path>", description: "Lister kontoplanen.", allowedFlags: ["--company"] },
-  { key: "customer create", usage: "customer create --company <path> --name <text> [--address <text>] [--cvr <DK...>] [--email <text>] [--ean <text>] [--payment-terms <days>] [--currency <ISO>] [--notes <text>]", description: "Opretter en append-only kundepost til genbrug på fakturaer.", allowedFlags: ["--company", "--name", "--address", "--cvr", "--email", "--ean", "--payment-terms", "--currency", "--notes"] },
+  {
+    key: "customer create",
+    usage:
+      "customer create --company <path> --name <text> [--address <text>] [--cvr <DK...>] [--email <text>] [--ean <text>] [--payment-terms <days>] [--currency <ISO>] [--notes <text>]",
+    description: "Opretter en append-only kundepost til genbrug på fakturaer.",
+    allowedFlags: ["--company", "--name", "--address", "--cvr", "--email", "--ean", "--payment-terms", "--currency", "--notes"],
+  },
   { key: "customer list", usage: "customer list --company <path> [--archived]", description: "Lister kendte kunder.", allowedFlags: ["--company", "--archived"] },
   { key: "customer validate-vat", usage: "customer validate-vat --company <path> --cvr <EU-VAT>", description: "Validerer et EU-VAT-nummer via VIES og cacher resultatet.", allowedFlags: ["--company", "--cvr"] },
   { key: "vendor create", usage: "vendor create --company <path> --name <text> [--address <text>] [--cvr <DK...>] [--expense-account <konto>] [--default-vat <text>] [--notes <text>]", description: "Opretter en append-only leverandørpost til bilagsindlæsning.", allowedFlags: ["--company", "--name", "--address", "--cvr", "--expense-account", "--default-vat", "--notes"] },
@@ -82,7 +88,13 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "invoice remind", usage: "invoice remind --company <path> (--document-id <n> | --invoice-number <no>) --date <YYYY-MM-DD> [--fee <n>] [--note <text>]", description: "Registrerer en rykker på en forfalden faktura.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--date", "--fee", "--note"] },
   { key: "invoice post-reminder", usage: "invoice post-reminder --company <path> (--document-id <n> | --invoice-number <no>) [--reminder-id <n>] [--date <YYYY-MM-DD>]", description: "Bogfører en registreret rykker.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--reminder-id", "--date"] },
   { key: "invoice status", usage: "invoice status --company <path> (--document-id <n> | --invoice-number <no>) [--as-of <YYYY-MM-DD>]", description: "Viser åben saldo og status på en faktura.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--as-of"] },
-  { key: "invoice list", usage: "invoice list --company <path> [--status open|paid|credited|refunded|overpaid|written_off|overdue|all] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--customer-cvr <DK...>] [--customer <text>] [--invoice-number <no>] [--min-amount <n>] [--max-amount <n>] [--as-of <YYYY-MM-DD>]", description: "Lister udstedte fakturaer med filtre for status, kunde og dato.", allowedFlags: ["--company", "--status", "--from", "--to", "--customer-cvr", "--customer", "--invoice-number", "--min-amount", "--max-amount", "--as-of"] },
+  {
+    key: "invoice list",
+    usage:
+      "invoice list --company <path> [--status open|paid|credited|refunded|overpaid|written_off|overdue|all] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--customer-cvr <DK...>] [--customer <text>] [--invoice-number <no>] [--min-amount <n>] [--max-amount <n>] [--as-of <YYYY-MM-DD>]",
+    description: "Lister udstedte fakturaer med filtre for status, kunde og dato.",
+    allowedFlags: ["--company", "--status", "--from", "--to", "--customer-cvr", "--customer", "--invoice-number", "--min-amount", "--max-amount", "--as-of"],
+  },
   { key: "invoice find", usage: "invoice find --company <path> [<query>] [--customer <text>] [--amount <n>] [--invoice-number <no>] [--as-of <YYYY-MM-DD>]", description: "Finder udstedte fakturaer via nummer, kunde eller beløb.", allowedFlags: ["--company", "--customer", "--amount", "--invoice-number", "--as-of"] },
   { key: "invoice overdue", usage: "invoice overdue --company <path> [--as-of <YYYY-MM-DD>] [--min-days <n>]", description: "Lister forfaldne udstedte fakturaer som ikke er fuldt afregnet.", allowedFlags: ["--company", "--as-of", "--min-days"] },
   { key: "invoice interest", usage: "invoice interest --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> --reference-rate <pct>", description: "Beregner morarente på en faktura.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--as-of", "--reference-rate"] },
@@ -97,14 +109,26 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "bank list", usage: "bank list --company <path> [--status all|matched|unmatched] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--text-match <text>] [--amount <n>]", description: "Lister importerede banktransaktioner med filtre for afstemningsstatus.", allowedFlags: ["--company", "--status", "--from", "--to", "--text-match", "--amount"] },
   { key: "bank suggest-matches", usage: "bank suggest-matches --company <path> [--bank-transaction-id <n>] [--max <n>]", description: "Foreslår deterministiske match mellem uafstemte banktransaktioner og fakturaer/bilag.", allowedFlags: ["--company", "--bank-transaction-id", "--max"] },
   { key: "reconcile bank", usage: "reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--status all|matched|unmatched] [--text-match <text>] [--amount <n>]", description: "Viser afstemte og uafstemte banktransaktioner med filtre.", allowedFlags: ["--company", "--from", "--to", "--status", "--text-match", "--amount"] },
-  { key: "expense book", usage: "expense book --company <path> --document-id <n> --bank-transaction-id <n> --expense-account <konto> [--vat-treatment standard|reverse_charge|representation|exempt] [--payment-account <konto>] [--date <YYYY-MM-DD>] [--text <tekst>]", description: "Bogfører en leverandørudgift direkte fra bilag + bankpost.", allowedFlags: ["--company", "--document-id", "--bank-transaction-id", "--expense-account", "--vat-treatment", "--payment-account", "--date", "--text"] },
+  {
+    key: "expense book",
+    usage:
+      "expense book --company <path> --document-id <n> --bank-transaction-id <n> --expense-account <konto> [--vat-treatment standard|reverse_charge|representation|exempt] [--payment-account <konto>] [--date <YYYY-MM-DD>] [--text <tekst>]",
+    description: "Bogfører en leverandørudgift direkte fra bilag + bankpost.",
+    allowedFlags: ["--company", "--document-id", "--bank-transaction-id", "--expense-account", "--vat-treatment", "--payment-account", "--date", "--text"],
+  },
   { key: "vat report", usage: "vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en momsrapport for perioden.", allowedFlags: ["--company", "--from", "--to"] },
   { key: "vat post-eu-service-purchase", usage: "vat post-eu-service-purchase --company <path> --input <file.json>", description: "Bogfører et EU-servicekøb med reverse charge.", allowedFlags: ["--company", "--input"], examplePath: "examples/eu-service-purchase.json" },
   { key: "vat post-representation-purchase", usage: "vat post-representation-purchase --company <path> --input <file.json>", description: "Bogfører repræsentationsudgift med delvis momsfradrag.", allowedFlags: ["--company", "--input"], examplePath: "examples/representation-purchase.json" },
   { key: "period close", usage: "period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]", description: "Lukker eller markerer en regnskabsperiode.", allowedFlags: ["--company", "--from", "--to", "--kind", "--status", "--reference"] },
   { key: "retention status", usage: "retention status --company <path> [--as-of <YYYY-MM-DD>]", description: "Viser opbevaringsfrister og udløbet materiale.", allowedFlags: ["--company", "--as-of"] },
   { key: "journal post", usage: "journal post --company <path> --input <file.json>", description: "Bogfører en manuel finanspostering.", allowedFlags: ["--company", "--input"], examplePath: "examples/journal-entry.expense.json" },
-  { key: "journal reverse", usage: "journal reverse --company <path> (--entry-id <n> | --entry-no <no> | --match-text <text> [--match-date <YYYY-MM-DD>] [--match-document-id <n>]) --date <YYYY-MM-DD> --reason <text>", description: "Tilbagefører en bogført finanspostering.", allowedFlags: ["--company", "--entry-id", "--entry-no", "--match-text", "--match-date", "--match-document-id", "--date", "--reason"] },
+  {
+    key: "journal reverse",
+    usage:
+      "journal reverse --company <path> (--entry-id <n> | --entry-no <no> | --match-text <text> [--match-date <YYYY-MM-DD>] [--match-document-id <n>]) --date <YYYY-MM-DD> --reason <text>",
+    description: "Tilbagefører en bogført finanspostering.",
+    allowedFlags: ["--company", "--entry-id", "--entry-no", "--match-text", "--match-date", "--match-document-id", "--date", "--reason"],
+  },
   { key: "journal list", usage: "journal list --company <path>", description: "Lister finansposteringer.", allowedFlags: ["--company"] },
   {
     key: "dashboard",
