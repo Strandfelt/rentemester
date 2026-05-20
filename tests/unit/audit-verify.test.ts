@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
-import { hashEntry, seedAccounts, verifyAuditChain } from "../../src/core/ledger";
+import { hashEntry, postJournalEntry, seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 
 type ManualLine = {
   account_no: string;
@@ -40,14 +40,30 @@ function insertManualEntry(db: ReturnType<typeof openDb>, input: {
     status: input.status ?? "posted",
     reversal_of_entry_id: input.reversalOfEntryId ?? null,
   };
-  const entryHash = hashEntry({ ...entry, lines: input.lines }, input.previousHash);
+  // The audit chain binds the row id and per-line ordinal, so the hash must be
+  // computed with the id this row will receive once inserted.
+  const predictedId = ((db.query("SELECT COALESCE(MAX(id), 0) AS n FROM journal_entries").get() as { n: number }).n) + 1;
+  const canonical = {
+    id: predictedId,
+    ...entry,
+    lines: input.lines.map((line, ordinal) => ({
+      ordinal,
+      account_no: line.account_no,
+      debit_amount: line.debit_amount,
+      credit_amount: line.credit_amount,
+      vat_code: line.vat_code ?? null,
+      text: line.text ?? null,
+    })),
+  };
+  const entryHash = hashEntry(canonical, input.previousHash);
 
   db.run(
     `INSERT INTO journal_entries (
-      entry_no, transaction_date, text, source_bank_transaction_id, document_id,
+      id, entry_no, transaction_date, text, source_bank_transaction_id, document_id,
       currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
       rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash
-    ) VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+    predictedId,
     entry.entry_no,
     entry.transaction_date,
     entry.text,
@@ -145,6 +161,84 @@ describe("audit verify", () => {
     const audit = verifyAuditChain(db);
     expect(audit.ok).toBe(false);
     expect(audit.errors.some((error) => error.includes("duplicate source_bank_transaction_id"))).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("detects tail truncation of the most recent journal entries", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-audit-truncate-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    for (let i = 0; i < 3; i++) {
+      const posted = postJournalEntry(db, {
+        transactionDate: "2026-05-16",
+        text: `Balanced entry ${i}`,
+        lines: [
+          { accountNo: "2000", debitAmount: 1000 },
+          { accountNo: "5000", creditAmount: 1000 }
+        ]
+      });
+      expect(posted.ok).toBe(true);
+    }
+    expect(verifyAuditChain(db).ok).toBe(true);
+
+    // Drop the append-only protection and truncate the most recent entry.
+    const lastId = (db.query("SELECT MAX(id) AS id FROM journal_entries").get() as { id: number }).id;
+    db.run("DROP TRIGGER journal_lines_no_delete");
+    db.run("DROP TRIGGER journal_entries_no_delete");
+    db.run("DELETE FROM journal_lines WHERE journal_entry_id = ?", lastId);
+    db.run("DELETE FROM journal_entries WHERE id = ?", lastId);
+
+    const result = verifyAuditChain(db);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((error) => error.includes("missing"))).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("binds the row id into the entry hash so swapped rows fail verification", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-audit-id-bind-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const first = insertManualEntry(db, {
+      entryNo: "2026-00001",
+      previousHash: "GENESIS",
+      transactionDate: "2026-05-16",
+      text: "First entry",
+      lines: [
+        { account_no: "2000", debit_amount: 100, credit_amount: 0, vat_code: null, text: "Bank" },
+        { account_no: "5000", debit_amount: 0, credit_amount: 100, vat_code: null, text: "Equity" },
+      ],
+    });
+    insertManualEntry(db, {
+      entryNo: "2026-00002",
+      previousHash: first.entryHash,
+      transactionDate: "2026-05-16",
+      text: "Second entry",
+      lines: [
+        { account_no: "2000", debit_amount: 200, credit_amount: 0, vat_code: null, text: "Bank" },
+        { account_no: "5000", debit_amount: 0, credit_amount: 200, vat_code: null, text: "Equity" },
+      ],
+    });
+    expect(verifyAuditChain(db).ok).toBe(true);
+
+    // Swap the entry_no values between the two rows. The chain walks by id, so
+    // each row keeps a valid previous_hash link, but the id-bound hash no longer
+    // matches its row identity.
+    db.run("DROP TRIGGER journal_entries_no_update");
+    db.run("UPDATE journal_entries SET entry_no = '2026-TMP' WHERE entry_no = '2026-00001'");
+    db.run("UPDATE journal_entries SET entry_no = '2026-00001' WHERE entry_no = '2026-00002'");
+    db.run("UPDATE journal_entries SET entry_no = '2026-00002' WHERE entry_no = '2026-TMP'");
+
+    const result = verifyAuditChain(db);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((error) => error.includes("entry_hash mismatch"))).toBe(true);
 
     db.close();
     rmSync(root, { recursive: true, force: true });
