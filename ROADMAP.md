@@ -35,6 +35,17 @@ README lover det. Idéen: en dedikeret e-mail-adresse pr. virksomhed; vedhæfted
 
 Skal udvikles uden lock-in til en specifik mail-provider — IMAP eller cataloggeret mailserver med plain disk-ingest.
 
+### Gentagne fakturaskabeloner før abonnementsautomatik
+
+Udstedte fakturaer, betalinger og rykkerflow er på plads. Det næste naturlige lag er ikke "subscription SaaS", men en lille deterministisk kerne for gentagne fakturaer:
+
+- en template med kunde, linjer, moms, interval og næste dato
+- eksplicit generering for en given `asOfDate`
+- blokering af dubletter for samme template/periode
+- audit-spor fra genereret faktura tilbage til template
+
+Det skal løse den reelle hverdag for freelancere og små ApS'er uden at opfinde baggrundsautomation eller skjult tilstand.
+
 ### Bogholder-/revisor-review af regelfortolkning
 
 Den største kvalitetsforbedring lige nu er at få en der faktisk har lavet bogføring til at læse `rules/dk/*.yaml` igennem. Især momsbehandling i grænsetilfælde (delvis fradrag, blandet økonomi, særlige brancher).
@@ -73,6 +84,16 @@ Første slices er nu landet som deterministisk EAN/GLN preview-eksport og et det
 Det næste trin er direkte PEPPOL-transport via access point. Det er ikke teknisk svært, men det kræver registrering hos et access point og en skarp trust-boundary omkring selve submission-leddet.
 
 Relevant når der er brugere der har offentlige kunder.
+
+### Bredere SAF-T og eksportprofil
+
+Den første SAF-T-slice er landet for ledger + salgsfakturaer. Det er bevidst smalt. Næste arbejde er at udvide eksporten uden at foregive fuld compliance før hver profilkant er testet:
+
+- bredere dækning af de relevante tabeller/felter omkring køb, moms og dokumentreference
+- tydelig profil/versionering så eksporten ikke ligner en generisk "færdig SAF-T"
+- regression-tests der holder XML, manifest og audit-event deterministiske
+
+Det her er ikke pynt. Eksporten er en del af projektets troværdighed over for myndigheder, revisorer og agenter.
 
 ### Asymmetric backup signatures — udvidelser
 
