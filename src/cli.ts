@@ -37,6 +37,12 @@ import { register as registerExpense } from "./cli/expense";
 import { register as registerRetention } from "./cli/retention";
 import { register as registerPeriod } from "./cli/period";
 import { register as registerDashboard } from "./cli/dashboard";
+import { register as registerCompany } from "./cli/company";
+import {
+  isValidSlug,
+  resolveConfiguredWorkspaceRoot,
+  resolveWorkspaceSlug,
+} from "./core/workspace";
 
 function fatal(message: string): never {
   console.error(message);
@@ -46,11 +52,19 @@ function fatal(message: string): never {
 /**
  * Resolves the company root from `--company` / `RENTEMESTER_COMPANY`.
  *
- * There is no silent default: a command that needs a company but was
- * given none fails with a clear error. The path is rejected if it
- * contains parent-directory (`..`) segments, then `resolve()`d to an
- * absolute path so the ledger/backup tree cannot be relocated by a
- * traversal payload.
+ * `--company` accepts EITHER a workspace slug OR a raw path:
+ *  - A bare slug (lowercase letters/digits/dashes, no path separator) is
+ *    resolved against the configured `RENTEMESTER_WORKSPACE`. If a workspace
+ *    is configured and the slug is registered, its company directory is used.
+ *    If a workspace is configured but the slug is unknown, the command fails
+ *    with a clear error.
+ *  - Anything else (or a bare slug with no workspace configured) is treated as
+ *    a raw path — the original, unchanged behaviour for tests/smoke/Docker.
+ *
+ * There is no silent default: a command that needs a company but was given
+ * none fails with a clear error. A raw path is rejected if it contains
+ * parent-directory (`..`) segments, then `resolve()`d to an absolute path so
+ * the ledger/backup tree cannot be relocated by a traversal payload.
  */
 function resolveCompanyRoot(): string {
   const raw =
@@ -58,9 +72,30 @@ function resolveCompanyRoot(): string {
     trimToNull(process.env.RENTEMESTER_COMPANY);
   if (!raw) {
     fatal(
-      "--company is required: pass --company <path> or set RENTEMESTER_COMPANY",
+      "--company is required: pass --company <slug|path> or set RENTEMESTER_COMPANY",
     );
   }
+
+  // Slug resolution: only a bare, separator-free, slug-shaped value is a
+  // candidate, so a real path can never be misread as a slug.
+  const looksLikeBareSlug = !raw.includes("/") && !raw.includes("\\") && isValidSlug(raw);
+  if (looksLikeBareSlug) {
+    let workspaceRoot: string | null;
+    try {
+      workspaceRoot = resolveConfiguredWorkspaceRoot();
+    } catch (error) {
+      fatal(error instanceof Error ? error.message : String(error));
+    }
+    if (workspaceRoot) {
+      const fromSlug = resolveWorkspaceSlug(workspaceRoot, raw);
+      if (fromSlug) return fromSlug;
+      fatal(
+        `--company '${raw}': no company with that slug in workspace ${workspaceRoot}. ` +
+          `Run 'rentemester company list' or pass a path instead.`,
+      );
+    }
+  }
+
   const segments = raw.split(/[\\/]+/);
   if (segments.includes("..")) {
     fatal("--company must not contain parent-directory ('..') segments");
@@ -141,6 +176,7 @@ for (const registerFn of [
   registerRetention,
   registerPeriod,
   registerDashboard,
+  registerCompany,
 ]) {
   registerFn(dispatch);
 }

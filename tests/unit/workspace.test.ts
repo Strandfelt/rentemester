@@ -1,0 +1,208 @@
+// Tests: src/core/workspace.ts, src/core/company.ts (workspace model + createCompany)
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+  WORKSPACE_MANIFEST_FILE,
+  adoptCompanyDir,
+  initWorkspace,
+  listWorkspaceCompanies,
+  loadWorkspaceManifest,
+  resolveWorkspaceSlug,
+  saveWorkspaceManifest,
+  slugifyCompanyName,
+  workspaceExists,
+} from "../../src/core/workspace";
+import { createCompany } from "../../src/core/company";
+import { companyPaths } from "../../src/core/paths";
+import { openDb, migrate } from "../../src/core/db";
+
+function tmpRoot(label: string) {
+  return mkdtempSync(join(tmpdir(), `rentemester-${label}-`));
+}
+
+describe("workspace model", () => {
+  test("detects when no workspace exists yet", () => {
+    const root = tmpRoot("ws-detect");
+    try {
+      expect(workspaceExists(root)).toBe(false);
+      initWorkspace(root);
+      expect(workspaceExists(root)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("initWorkspace creates an empty manifest at the root", () => {
+    const root = tmpRoot("ws-init");
+    try {
+      initWorkspace(root);
+      expect(existsSync(join(root, WORKSPACE_MANIFEST_FILE))).toBe(true);
+      const manifest = loadWorkspaceManifest(root);
+      expect(manifest.companies).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("manifest round-trips through save/load deterministically", () => {
+    const root = tmpRoot("ws-roundtrip");
+    try {
+      initWorkspace(root);
+      const manifest = {
+        version: 1 as const,
+        companies: [
+          { slug: "acme", name: "Acme ApS", createdAt: "2026-05-20T00:00:00.000Z", archived: false },
+          { slug: "beta", name: "Beta IVS", createdAt: "2026-05-20T01:00:00.000Z", archived: true },
+        ],
+      };
+      saveWorkspaceManifest(root, manifest);
+      expect(loadWorkspaceManifest(root)).toEqual(manifest);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("slugifyCompanyName produces filesystem-safe deterministic slugs", () => {
+    expect(slugifyCompanyName("Acme ApS")).toBe("acme-aps");
+    expect(slugifyCompanyName("  Bla  Bla  ")).toBe("bla-bla");
+    expect(slugifyCompanyName("Æbleskive Smør Ø")).toBe("aebleskive-smoer-oe");
+    expect(slugifyCompanyName("Acme ApS")).toBe(slugifyCompanyName("Acme ApS"));
+  });
+});
+
+describe("createCompany", () => {
+  test("creates the full directory structure and an initialised ledger DB", () => {
+    const root = tmpRoot("create-company");
+    try {
+      initWorkspace(root);
+      const result = createCompany(root, { name: "Acme ApS", cvr: "DK12345678" });
+      expect(result.slug).toBe("acme-aps");
+
+      const p = companyPaths(result.companyRoot);
+      expect(existsSync(p.db)).toBe(true);
+      expect(existsSync(p.documentsInbox)).toBe(true);
+      expect(existsSync(p.config)).toBe(true);
+      expect(existsSync(join(p.config, "policy.yaml"))).toBe(true);
+
+      const db = openDb(p.db);
+      migrate(db);
+      const accounts = db.query("SELECT COUNT(*) AS n FROM accounts").get() as { n: number };
+      expect(accounts.n).toBeGreaterThan(0);
+      const company = db.query("SELECT cvr FROM companies WHERE id = 1").get() as { cvr: string };
+      expect(company.cvr).toBe("DK12345678");
+      db.close();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("registers the new company in the workspace manifest", () => {
+    const root = tmpRoot("create-company-manifest");
+    try {
+      initWorkspace(root);
+      createCompany(root, { name: "Acme ApS" });
+      const companies = listWorkspaceCompanies(root);
+      expect(companies.map((c) => c.slug)).toEqual(["acme-aps"]);
+      expect(companies[0]!.name).toBe("Acme ApS");
+      expect(companies[0]!.archived).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a duplicate slug", () => {
+    const root = tmpRoot("create-company-dup");
+    try {
+      initWorkspace(root);
+      createCompany(root, { name: "Acme ApS" });
+      expect(() => createCompany(root, { slug: "acme-aps", name: "Other" })).toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("honours an explicit slug and fiscal-year settings", () => {
+    const root = tmpRoot("create-company-explicit");
+    try {
+      initWorkspace(root);
+      const result = createCompany(root, {
+        slug: "my-co",
+        name: "My Co",
+        fiscalYearStartMonth: 7,
+        fiscalYearLabelStrategy: "span",
+      });
+      expect(result.slug).toBe("my-co");
+      const db = openDb(companyPaths(result.companyRoot).db);
+      migrate(db);
+      const row = db.query(
+        "SELECT fiscal_year_start_month AS m, fiscal_year_label_strategy AS s FROM companies WHERE id = 1",
+      ).get() as { m: number; s: string };
+      expect(row).toEqual({ m: 7, s: "span" });
+      db.close();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("slug resolution", () => {
+  test("resolves a known slug to its company directory", () => {
+    const root = tmpRoot("ws-resolve");
+    try {
+      initWorkspace(root);
+      const created = createCompany(root, { name: "Acme ApS" });
+      const resolved = resolveWorkspaceSlug(root, "acme-aps");
+      expect(resolved).toBe(created.companyRoot);
+      expect(resolved).toBe(join(root, "acme-aps"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("returns null for an unknown slug", () => {
+    const root = tmpRoot("ws-resolve-miss");
+    try {
+      initWorkspace(root);
+      expect(resolveWorkspaceSlug(root, "ghost")).toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("adoption of an unlisted company directory", () => {
+  test("adopts a present-but-unlisted company directory into the manifest", () => {
+    const root = tmpRoot("ws-adopt");
+    try {
+      initWorkspace(root);
+      // A company directory that exists on disk but is not in the manifest.
+      const orphanRoot = join(root, "orphan-co");
+      const p = companyPaths(orphanRoot);
+      mkdirSync(p.data, { recursive: true });
+      const db = openDb(p.db);
+      migrate(db);
+      db.run("INSERT INTO companies (id, name) VALUES (1, 'Orphan Co') ON CONFLICT(id) DO NOTHING");
+      db.close();
+
+      expect(listWorkspaceCompanies(root).map((c) => c.slug)).toEqual([]);
+      const adopted = adoptCompanyDir(root, "orphan-co");
+      expect(adopted.slug).toBe("orphan-co");
+      expect(listWorkspaceCompanies(root).map((c) => c.slug)).toEqual(["orphan-co"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses to adopt a directory without a ledger", () => {
+    const root = tmpRoot("ws-adopt-empty");
+    try {
+      initWorkspace(root);
+      mkdirSync(join(root, "not-a-company"), { recursive: true });
+      expect(() => adoptCompanyDir(root, "not-a-company")).toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
