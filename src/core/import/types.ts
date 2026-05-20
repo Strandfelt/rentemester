@@ -205,6 +205,12 @@ export type SourceParser = {
 export type ImportOptions = {
   createdBy?: string;
   createdByProgram?: string;
+  /**
+   * The company root directory — where `ingestDocument` stores receipt
+   * originals (#196). When omitted, `runImportFromSource` derives it from the
+   * open database's path. Pass it explicitly for an in-memory ledger.
+   */
+  companyRoot?: string;
 };
 
 /**
@@ -268,6 +274,17 @@ export type ImportResult = {
   chart?: ChartReconciliationResult;
   /** Company-master-data reconciliation outcome, when the source carried one. */
   company?: CompanyReconciliationResult;
+  /**
+   * Bilag (receipt) ingest outcome (#196), when the export shipped receipts:
+   * how many were ingested and linked to their voucher's journal entry, and
+   * how many unbooked receipts were flagged in the exception queue.
+   */
+  bilag?: {
+    linkedCount: number;
+    unmatchedCount: number;
+    duplicateCount: number;
+    unbookedCount: number;
+  };
   /** Ordered, deterministic human-readable description of what happened. */
   auditTrail: string[];
   appliedRules: string[];

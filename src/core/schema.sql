@@ -1156,3 +1156,45 @@ BEGIN
   SELECT RAISE(ABORT, 'import archive balances are append-only reference data and cannot be deleted');
 END;
 -- ===== END IMPORT ARCHIVE (#197) =====
+
+-- ===== IMPORT DOCUMENT LINKS (#196) =====
+-- A Dinero export ships the actual receipts (`<year>/Bilag/<year>-Bilag-<n>`).
+-- Each is ingested through the ordinary documents pipeline and must be linked
+-- back to the journal entry its voucher (#195) was posted as.
+--
+-- `journal_entries` is append-only and locked (journal_entries_no_update), so
+-- the entry's `document_id` cannot be set after the fact. Instead a posting and
+-- its receipt are connected through THIS dedicated link table — additive, never
+-- mutating a posted entry. One row per (document, journal entry) pair, carrying
+-- the source voucher number (`Bilag`) the link was matched on for audit.
+--
+-- Like the rest of Rentemester's audit data the rows are append-only: a
+-- re-import that re-ingests the same receipt by hash is a no-op (the documents
+-- pipeline dedupes on sha256) and so produces no duplicate link.
+CREATE TABLE IF NOT EXISTS import_document_links (
+  id INTEGER PRIMARY KEY,
+  source_system TEXT NOT NULL,
+  voucher_ref TEXT NOT NULL,
+  document_id INTEGER NOT NULL,
+  journal_entry_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(document_id, journal_entry_id),
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_document_links_entry
+  ON import_document_links(journal_entry_id);
+
+CREATE TRIGGER IF NOT EXISTS import_document_links_no_update
+BEFORE UPDATE ON import_document_links
+BEGIN
+  SELECT RAISE(ABORT, 'import document links are append-only audit links');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_document_links_no_delete
+BEFORE DELETE ON import_document_links
+BEGIN
+  SELECT RAISE(ABORT, 'import document links are append-only audit links and cannot be deleted');
+END;
+-- ===== END IMPORT DOCUMENT LINKS (#196) =====

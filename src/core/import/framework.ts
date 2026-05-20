@@ -18,6 +18,7 @@
 // owns idempotency (one primobalance per company). Failing fast here gives a
 // clear, source-shaped error; postOpeningBalance is the backstop.
 
+import { dirname } from "node:path";
 import type { Database } from "bun:sqlite";
 import { postOpeningBalance } from "../opening-balance";
 import { isValidIsoDate } from "../dates";
@@ -26,6 +27,7 @@ import { reconcileChartOfAccounts, reconcileCompanyMasterData } from "./reconcil
 import { postDineroPostings, IMPORT_POSTINGS_RULE } from "./dinero-postings";
 import { resolveSource } from "./source";
 import { archiveDineroYears, checkRollForward, describeRollForward } from "./dinero-archive";
+import { ingestDineroBilag } from "./dinero-bilag";
 import type {
   ImportOptions,
   ImportResult,
@@ -406,8 +408,63 @@ export function runImportFromSource(
   // is purely additive: it never affects whether the ledger import succeeded.
   if (result.ok && parser.system === "dinero" && typeof parser.parseSource === "function") {
     archivePreCutOverYears(db, resolved, result);
+    // --- bilag (receipts) ingest (#196) ------------------------------------
+    // A Dinero export ships the actual receipts. Ingest each cut-over-year
+    // bilag through the documents pipeline, link it to its voucher's journal
+    // entry, and flag every unbooked receipt in the exception queue. Like
+    // archiving this is purely additive — it never changes the ledger import
+    // outcome.
+    ingestBilag(db, resolved, result, companyRootFor(db, options));
   }
   return result;
+}
+
+/**
+ * Resolves the company root directory for receipt-originals storage (#196).
+ * An explicit `options.companyRoot` wins; otherwise it is derived from the open
+ * database's path (`<root>/data/ledger.sqlite` -> `<root>`). Returns `null`
+ * for an in-memory ledger with no explicit root — bilag ingest is then skipped.
+ */
+function companyRootFor(db: Database, options: ImportOptions): string | null {
+  if (typeof options.companyRoot === "string" && options.companyRoot.trim().length > 0) {
+    return options.companyRoot.trim();
+  }
+  const filename = (db as unknown as { filename?: string }).filename;
+  if (typeof filename === "string" && filename.length > 0 && filename !== ":memory:") {
+    return dirname(dirname(filename));
+  }
+  return null;
+}
+
+/**
+ * Ingests the Dinero export's bilag (receipts) and records the outcome on the
+ * `ImportResult` — `bilag` counts plus the bilag-ingest audit lines. A missing
+ * company root (in-memory ledger) skips ingest with an audit note; bilag ingest
+ * never changes whether the ledger import succeeded.
+ */
+function ingestBilag(
+  db: Database,
+  resolved: MultiArtifactSource,
+  result: ImportResult,
+  companyRoot: string | null,
+): void {
+  if (!companyRoot) {
+    result.auditTrail.push(
+      "Bilag ingest skipped: no company root available for receipt storage",
+    );
+    return;
+  }
+  const bilag = ingestDineroBilag(db, companyRoot, resolved, result);
+  for (const line of bilag.auditTrail) result.auditTrail.push(line);
+  for (const error of bilag.errors) {
+    result.auditTrail.push(`Bilag ingest warning: ${error}`);
+  }
+  result.bilag = {
+    linkedCount: bilag.linked.length,
+    unmatchedCount: bilag.unmatched.length,
+    duplicateCount: bilag.duplicates.length,
+    unbookedCount: bilag.unbooked.length,
+  };
 }
 
 /**
