@@ -1,3 +1,4 @@
+// Tests: src/core/system-backups.ts, src/core/system-restore.ts (backup security)
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -6,6 +7,7 @@ import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { ingestDocument } from "../../src/core/documents";
 import { backupManifestKeyPath, createSystemBackup } from "../../src/core/system-backups";
+import { verifyBackupSignature } from "../../src/core/system-restore";
 
 // These tests lock in the threat-model assumptions documented in
 // docs/backup-security.md. If any of them fail, the audit document is no
@@ -95,6 +97,30 @@ describe("backup signing chain-of-trust (issue #87)", () => {
     const backupFiles = listAllFiles(backup.backupDir!);
     const keyFiles = backupFiles.filter((p) => p.endsWith(".backup-manifest.key"));
     expect(keyFiles).toEqual([]);
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+  });
+
+  test("issue #131: HMAC-only verification is reported as integrity-only, not third-party authenticity", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-backup-trust-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+
+    const backup = createSystemBackup(db, companyRoot, { createdAt: "2026-05-17T02:09:00.000Z" });
+    expect(backup.ok).toBe(true);
+
+    // HMAC verification with the co-located symmetric key passes, but HMAC is
+    // symmetric: anyone who can read the key can forge. The result must NOT
+    // claim third-party authenticity.
+    const verify = verifyBackupSignature({
+      backupDir: backup.backupDir!,
+      verificationKeyPath: backupManifestKeyPath(companyRoot),
+    });
+    expect(verify.ok).toBe(true);
+    expect(verify.algorithms).toEqual(["hmac-sha256"]);
+    expect(verify.trustLevel).toBe("integrity-only");
 
     db.close();
     rmSync(companyRoot, { recursive: true, force: true });

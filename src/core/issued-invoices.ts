@@ -10,14 +10,20 @@ import { companySequenceScope, fiscalYearLabelFromDate, reserveSequenceValue, ne
 import { retainUntilForDate } from "./retention";
 import { requireCachedViesValidation } from "./vies";
 import { buildIssuedInvoicePdf } from "./invoice-pdf";
+import {
+  asDocumentId,
+  asInvoiceNumber,
+  type DocumentId,
+  type InvoiceNumber,
+} from "./ids";
 
 export type IssueInvoiceResult = {
   ok: boolean;
-  documentId?: number;
-  invoiceNumber?: string;
+  documentId?: DocumentId;
+  invoiceNumber?: InvoiceNumber;
   storedPath?: string;
   sha256?: string;
-  pdfDocumentId?: number;
+  pdfDocumentId?: DocumentId;
   pdfStoredPath?: string;
   pdfSha256?: string;
   appliedRules: string[];
@@ -39,8 +45,8 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function canonicalInvoiceNumber(scope: string, value: number) {
-  return `${scope}-${String(value).padStart(5, "0")}`;
+function canonicalInvoiceNumber(scope: string, value: number): InvoiceNumber {
+  return asInvoiceNumber(`${scope}-${String(value).padStart(5, "0")}`);
 }
 
 function invoiceSequenceState(db: Database, issueDate: string) {
@@ -49,10 +55,19 @@ function invoiceSequenceState(db: Database, issueDate: string) {
   return { scope, currentFloor: Number(row.n ?? 0), sequenceScope: companySequenceScope(db, scope) };
 }
 
+// Manual invoice numbers must be <scope>-<digits>: the scope is everything
+// before the final hyphen, the suffix is one or more decimal digits. The
+// numeric value of the suffix is what is reserved against the sequence — the
+// invoice-number string itself is always stored verbatim (no re-padding).
+const MANUAL_INVOICE_NUMBER_RE = /^(.+)-([0-9]+)$/;
+
 function validateManualInvoiceNumberScope(db: Database, issueDate: string, invoiceNumber: string) {
   const { scope } = invoiceSequenceState(db, issueDate);
-  const genericCanonical = /^(\d{4})-(\d{5})$/.exec(invoiceNumber);
-  if (genericCanonical && genericCanonical[1] !== scope) {
+  const match = MANUAL_INVOICE_NUMBER_RE.exec(invoiceNumber);
+  if (!match) {
+    return `manual invoiceNumber ${invoiceNumber} must be of the form <scope>-<number>`;
+  }
+  if (match[1] !== scope) {
     return `manual invoiceNumber ${invoiceNumber} does not match current fiscal scope ${scope}`;
   }
   return null;
@@ -60,9 +75,11 @@ function validateManualInvoiceNumberScope(db: Database, issueDate: string, invoi
 
 function reserveManualInvoiceNumber(db: Database, issueDate: string, invoiceNumber: string) {
   const { scope, currentFloor, sequenceScope } = invoiceSequenceState(db, issueDate);
-  const match = new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([0-9]{5})$`).exec(invoiceNumber);
-  if (!match) return { ok: true as const, invoiceNumber };
-  const requestedValue = Number(match[1]);
+  const match = MANUAL_INVOICE_NUMBER_RE.exec(invoiceNumber);
+  if (!match || match[1] !== scope) {
+    return { ok: false as const, error: `manual invoiceNumber ${invoiceNumber} must be of the form <scope>-<number>` };
+  }
+  const requestedValue = Number(match[2]);
   const reserved = reserveSequenceValue(db, "issued_invoice", sequenceScope, requestedValue, currentFloor);
   if (!reserved.ok) {
     return {
@@ -106,7 +123,8 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
 
   try {
     const result = db.transaction(() => {
-      let invoiceNumber = explicitInvoiceNumber;
+      let invoiceNumber: InvoiceNumber | undefined =
+        explicitInvoiceNumber === undefined ? undefined : asInvoiceNumber(explicitInvoiceNumber);
       if (invoiceNumber) {
         const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, invoiceNumber);
         if (!reserved.ok) return { ok: false as const, error: reserved.error };
@@ -206,7 +224,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
         message: `Rendered invoice PDF ${invoiceNumber}`,
       });
 
-      return { ok: true as const, documentId: inserted.id, invoiceNumber, sha256: hash, pdfDocumentId: pdfInserted.id, pdfSha256: pdfHash };
+      return { ok: true as const, documentId: asDocumentId(inserted.id), invoiceNumber, sha256: hash, pdfDocumentId: asDocumentId(pdfInserted.id), pdfSha256: pdfHash };
     }, { immediate: true })();
 
     if (!result.ok) return { ok: false, appliedRules, errors: [result.error] };

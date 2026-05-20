@@ -4,6 +4,7 @@ import { importBankCsv } from "../core/bank";
 import { suggestBankMatches } from "../core/bank-suggest-matches";
 import { buildBankReconciliationReport, listBankTransactions } from "../core/reconciliation";
 import { syncUnmatchedBankTransactionExceptions } from "../core/exceptions";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 function renderBankSuggestionsHuman(rows: any[]): void {
@@ -61,7 +62,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("--amount must be numeric when present");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = listBankTransactions(db, {
       status: ctx.arg("--status") as any,
@@ -86,7 +87,7 @@ export function register(dispatch: CommandDispatch): void {
     const max = ctx.parseOptionalNumber("--max");
     if (!bankTransactionId.ok) ctx.fatal(bankTransactionId.error);
     if (!max.ok) ctx.fatal(max.error);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = suggestBankMatches(db, {
       bankTransactionId:
@@ -117,7 +118,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("--amount must be numeric when present");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = buildBankReconciliationReport(db, from, to, {
       status: ctx.arg("--status") as any,

@@ -6,7 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { buildRetentionStatusReport } from "../../core/retention";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb } from "../helpers";
+import { withCompanyDb } from "../tool-runtime";
 
 export function registerRetentionTools(server: McpServer): void {
   server.registerTool(

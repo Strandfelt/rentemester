@@ -1,3 +1,4 @@
+// Tests: src/core/authority-export.ts
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";

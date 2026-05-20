@@ -1,3 +1,4 @@
+// Tests: src/cli/customer.ts, src/cli/vendor.ts, src/cli.ts (customer/vendor master-data CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ describe("master-data CLI", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-18",
-      invoiceNumber: "2026-0901",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
       totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },

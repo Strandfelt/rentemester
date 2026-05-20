@@ -1,7 +1,58 @@
+// Tests: src/cli/customer.ts, src/cli.ts (VIES validation CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { ensureCompanyDirs } from "../../src/core/paths";
+import { openDb, migrate } from "../../src/core/db";
+import { validateVatAgainstVies, lookupCachedViesValidation } from "../../src/core/vies";
+
+describe("VIES malformed-response handling", () => {
+  test("does not cache an ambiguous VIES response as an authoritative invalid result (#144)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-vies-ambiguous-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    // HTTP 200 with a body lacking any recognised validity field — VIES could
+    // not actually answer. This must NOT be cached as valid=0.
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ status: "degraded", message: "service unavailable" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+
+    const result = await validateVatAgainstVies(db, "DE123456789", { fetchImpl });
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+
+    // The cache must remain empty so a later genuine lookup is not blocked.
+    expect(lookupCachedViesValidation(db, "DE123456789")).toBeNull();
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("caches an unambiguous boolean VIES response (#144)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-vies-valid-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ valid: false, name: "Unknown", address: "" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+
+    const result = await validateVatAgainstVies(db, "DE999999999", { fetchImpl });
+    expect(result.ok).toBe(true);
+    expect(result.validation?.valid).toBe(false);
+    // An explicit boolean answer IS authoritative and is cached.
+    expect(lookupCachedViesValidation(db, "DE999999999")?.valid).toBe(false);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+});
 
 describe("customer validate-vat CLI", () => {
   test("validates an EU VAT number and caches the result", async () => {

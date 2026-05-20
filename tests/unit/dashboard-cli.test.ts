@@ -1,3 +1,4 @@
+// Tests: src/cli/dashboard.ts, src/cli.ts (dashboard CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, existsSync, statSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";

@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
-import { roundDkk } from "./money";
+import { addDkk, equalsDkk, roundDkk } from "./money";
 
 const RULE_ID = "DK-INVOICE-BOOKKEEPING-001";
 const REVERSE_RULE_ID = "DK-INVOICE-BOOKKEEPING-REVERSE-002";
@@ -81,6 +81,17 @@ export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoice
   if (netAmount <= 0) return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} produced invalid net amount`] };
   if (currency !== "DKK" && !(grossAmountDkk > 0 && netAmountDkk > 0 && Number.isFinite(fxRateToDkk) && fxRateToDkk! > 0)) {
     return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} is missing deterministic DKK conversion totals`] };
+  }
+
+  // Cross-check the amounts that are actually posted: the receivable line is
+  // gross while the revenue + output-VAT lines sum to net + vat. If a divergent
+  // payload makes those disagree the journal would be unbalanced in DKK, so
+  // fail loudly here rather than relying on the ledger balance check.
+  if (!equalsDkk(addDkk(netAmount, vatAmount), grossAmount)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} totals are inconsistent: net + vat (${addDkk(netAmount, vatAmount)}) does not equal gross (${grossAmount})`] };
+  }
+  if (currency !== "DKK" && !equalsDkk(addDkk(netAmountDkk, vatAmountDkk), grossAmountDkk)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`invoice ${doc.invoice_no} DKK totals are inconsistent: netDkk + vatDkk (${addDkk(netAmountDkk, vatAmountDkk)}) does not equal grossDkk (${grossAmountDkk})`] };
   }
 
   const posting = issuedInvoiceJournalLines(doc, payload, grossAmountDkk, netAmountDkk, vatAmountDkk, input);

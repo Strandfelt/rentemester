@@ -28,7 +28,7 @@ import {
   successEnvelope,
   wrapCoreResult,
 } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed, resolveJournalEntryId } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed, resolveJournalEntryId } from "../tool-runtime";
 
 const lineSchema = z.object({
   accountNo: z.string().min(1),

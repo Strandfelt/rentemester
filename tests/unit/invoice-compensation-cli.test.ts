@@ -1,3 +1,4 @@
+// Tests: src/cli/invoice.ts, src/cli.ts (invoice compensation CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ describe("invoice compensation CLI", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0952C",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -32,9 +33,9 @@ describe("invoice compensation CLI", () => {
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
-    await Bun.$`bun run src/cli.ts invoice claim-compensation --company ${company} --invoice-number 2026-0952C --as-of 2026-06-20`.quiet();
+    await Bun.$`bun run src/cli.ts invoice claim-compensation --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-compensation", "--company", company, "--invoice-number", "2026-0952C"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "post-compensation", "--company", company, "--invoice-number", "2026-0001"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -63,7 +64,7 @@ describe("invoice compensation CLI", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0952B",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -81,7 +82,7 @@ describe("invoice compensation CLI", () => {
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "claim-compensation", "--company", company, "--invoice-number", "2026-0952B", "--as-of", "2026-06-20"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "claim-compensation", "--company", company, "--invoice-number", "2026-0001", "--as-of", "2026-06-20"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",
@@ -110,7 +111,7 @@ describe("invoice compensation CLI", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0952",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -128,7 +129,7 @@ describe("invoice compensation CLI", () => {
     await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input ${invoiceInput}`.quiet();
     await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
 
-    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "compensation", "--company", company, "--invoice-number", "2026-0952", "--as-of", "2026-06-20"], {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "compensation", "--company", company, "--invoice-number", "2026-0001", "--as-of", "2026-06-20"], {
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

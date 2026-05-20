@@ -23,7 +23,7 @@ import {
 import { suggestBankMatches } from "../../core/bank-suggest-matches";
 import { syncUnmatchedBankTransactionExceptions } from "../../core/exceptions";
 import { wrapCoreResult, successEnvelope } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 const statusSchema = z.enum(["all", "matched", "unmatched"]).optional();
 

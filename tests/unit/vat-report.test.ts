@@ -1,3 +1,4 @@
+// Tests: src/core/vat.ts (VAT report)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -88,6 +89,59 @@ describe("vat report", () => {
     expect(june.linesConsidered).toBe(0);
     expect(june.reversalLinesConsidered).toBe(3);
     expect(june.totalLinesConsidered).toBe(3);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("does not warn on aggregate-vs-per-line rounding of correctly-booked odd-ore VAT (#142)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-vat-rounding-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-vat-rounding-inbox-"));
+    const sourceFile = join(inbox, "invoice.txt");
+    writeFileSync(sourceFile, "Invoice\n4.16 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-VAT-ODD",
+      deliveryDescription: "Odd-ore purchase",
+      amountIncVat: 4.16,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 0.83,
+      paymentDetails: "Bankoverførsel"
+    });
+    expect(doc.ok).toBe(true);
+
+    // Three purchases each with net 3.33 → per-entry VAT 0.83 (3.33 × 25%
+    // rounds to 0.8325 → 0.83). Booked input VAT total = 2.49.
+    // 25% of the summed base 9.99 = 2.4975 → 2.50. The 1-øre aggregate gap
+    // is a correct ledger and must NOT raise a reconciliation warning.
+    for (let i = 0; i < 3; i++) {
+      const purchase = postJournalEntry(db, {
+        transactionDate: "2026-05-16",
+        text: `Odd-ore purchase ${i + 1}`,
+        documentId: doc.documentId,
+        lines: [
+          { accountNo: "3000", debitAmount: 3.33, vatCode: "DK_PURCHASE_25" },
+          { accountNo: "4000", debitAmount: 0.83 },
+          { accountNo: "2000", creditAmount: 4.16 }
+        ]
+      });
+      expect(purchase.ok).toBe(true);
+    }
+
+    const report = buildVatReport(db, "2026-05-01", "2026-05-31");
+    expect(report.ok).toBe(true);
+    expect(report.purchaseBase25).toBe(9.99);
+    expect(report.inputVat).toBe(2.49);
+    expect(report.warnings).toEqual([]);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

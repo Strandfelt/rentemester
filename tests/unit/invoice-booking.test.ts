@@ -1,3 +1,4 @@
+// Tests: src/core/invoice-booking.ts
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -30,7 +31,7 @@ describe("invoice ledger posting", () => {
       reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
       reverseChargeNote: "Reverse charge",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0800RC",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
       lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -78,7 +79,7 @@ describe("invoice ledger posting", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0800-EUR",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde GmbH", address: "Berlin" },
       lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
@@ -111,6 +112,39 @@ describe("invoice ledger posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects an issued invoice whose DKK totals do not satisfy net + vat = gross", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoicebook-divergent-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    // A non-DKK invoice whose payload DKK totals diverge from net+vat: the
+    // stored vat/net DKK amounts do not sum to the gross DKK amount.
+    const payload = {
+      currency: "EUR",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      totals: {
+        netAmount: 100, vatAmount: 25, grossAmount: 125,
+        fxRateToDkk: 7.46,
+        netAmountDkk: 600, vatAmountDkk: 186.5, grossAmountDkk: 932.5,
+      },
+    };
+    const doc = db.query(
+      `INSERT INTO documents (source, sha256_hash, invoice_no, invoice_date, amount_inc_vat, currency, vat_amount, document_type, payload_json)
+       VALUES ('rentemester', 'divergent-booking-hash', '2026-0800X', '2026-05-16', 125, 'EUR', 25, 'issued_invoice', ?)
+       RETURNING id`
+    ).get(JSON.stringify(payload)) as { id: number };
+
+    const posted = postIssuedInvoiceToLedger(db, { invoiceDocumentId: doc.id });
+    expect(posted.ok).toBe(false);
+    expect(posted.errors.join(" ")).toContain("net");
+    expect(db.query("SELECT COUNT(*) AS n FROM journal_entries").get()).toEqual({ n: 0 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("posts issued invoice once to receivables, revenue, and output VAT", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoicebook-"));
     const db = openDb(ensureCompanyDirs(root).db);
@@ -121,7 +155,7 @@ describe("invoice ledger posting", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0800",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],

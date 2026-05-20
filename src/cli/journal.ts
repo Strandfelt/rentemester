@@ -1,21 +1,23 @@
 import { readFileSync } from "node:fs";
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import type { Database } from "bun:sqlite";
+import { migrate } from "../core/db";
 import { postJournalEntry, reverseJournalEntry } from "../core/ledger";
+import { asJournalEntryId, type JournalEntryId } from "../core/ids";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 function resolveJournalEntryId(
-  db: ReturnType<typeof openDb>,
+  db: Database,
   ctx: { arg(name: string): string | undefined; fatal(message: string): never; trimToNull(v: string | null | undefined): string | null },
-): number | null {
+): JournalEntryId | null {
   const entryId = Number(ctx.arg("--entry-id"));
-  if (Number.isInteger(entryId) && entryId > 0) return entryId;
+  if (Number.isInteger(entryId) && entryId > 0) return asJournalEntryId(entryId);
   const entryNo = ctx.arg("--entry-no")?.trim();
   if (entryNo) {
     const row = db
       .query(`SELECT id FROM journal_entries WHERE entry_no = ? LIMIT 1`)
       .get(entryNo) as { id: number } | null;
-    return row?.id ?? null;
+    return row?.id == null ? null : asJournalEntryId(row.id);
   }
   const matchText = ctx.trimToNull(ctx.arg("--match-text"));
   const matchDate = ctx.trimToNull(ctx.arg("--match-date"));
@@ -50,7 +52,7 @@ function resolveJournalEntryId(
       "Multiple journal entries matched --match-text; narrow with --match-date or --match-document-id",
     );
   }
-  return rows[0]?.id ?? null;
+  return rows[0]?.id == null ? null : asJournalEntryId(rows[0].id);
 }
 
 export function register(dispatch: CommandDispatch): void {
@@ -60,7 +62,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = JSON.parse(readFileSync(input, "utf8"));
     const result = postJournalEntry(db, payload);
@@ -71,7 +73,7 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("journal", "reverse", (ctx) => {
     const date = ctx.arg("--date");
     const reason = ctx.arg("--reason");
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const entryId = resolveJournalEntryId(db, ctx);
     if (!entryId || !date || !reason) {
@@ -86,7 +88,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("journal", "list", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const rows = db
       .query(

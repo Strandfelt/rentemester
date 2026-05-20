@@ -1,3 +1,4 @@
+// Tests: src/core/invoice.ts (invoice validation)
 import { describe, expect, test } from "bun:test";
 import { validateInvoice } from "../../src/core/invoice";
 

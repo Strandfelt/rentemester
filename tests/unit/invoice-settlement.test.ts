@@ -1,3 +1,4 @@
+// Tests: src/core/invoice-settlement.ts
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,7 +26,7 @@ describe("invoice bank settlement", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0900",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -80,7 +81,7 @@ describe("invoice bank settlement", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0900-EUR",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde GmbH", address: "Berlin" },
       lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
@@ -133,7 +134,7 @@ describe("invoice bank settlement", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0900B",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -172,7 +173,7 @@ describe("invoice bank settlement", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0901",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -236,7 +237,7 @@ describe("invoice bank settlement", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0902",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],

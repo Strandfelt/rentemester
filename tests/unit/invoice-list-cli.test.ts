@@ -1,3 +1,4 @@
+// Tests: src/cli/invoice.ts, src/cli.ts (invoice list CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -112,7 +113,7 @@ describe("invoice list/find/overdue CLI", () => {
 
     writeFileSync(invoice1, JSON.stringify(invoicePayload(), null, 2));
     writeFileSync(invoice3, JSON.stringify(invoicePayload({
-      invoiceNumber: "2026-0003",
+      invoiceNumber: "2026-0002",
       issueDate: "2026-05-19",
       dueDate: "2026-06-18",
       buyer: {
@@ -136,6 +137,6 @@ describe("invoice list/find/overdue CLI", () => {
     expect(proc.stderr).toBe("");
     expect(proc.stdout).toContain("Overdue invoices as of 2026-06-20 (1)");
     expect(proc.stdout).toContain("2026-0001");
-    expect(proc.stdout).not.toContain("2026-0003");
+    expect(proc.stdout).not.toContain("2026-0002");
   });
 });

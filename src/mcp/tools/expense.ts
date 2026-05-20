@@ -9,7 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { bookExpenseFromBank } from "../../core/expense-booking";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDbConfirmed } from "../tool-runtime";
 
 const vatTreatmentEnum = z
   .enum(["standard", "reverse_charge", "representation", "exempt"])

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { postEuServiceReverseChargePurchase, postRepresentationPurchase } from "./vat";
-import { compareDkk, roundDkk } from "./money";
+import { absDkk, compareDkk, percentOfDkk, roundDkk, subtractDkk } from "./money";
 
 export type ExpenseVatTreatment = "standard" | "reverse_charge" | "representation" | "exempt";
 
@@ -33,11 +33,18 @@ type FxBookingBasis = {
   fxRateToDkk: number;
 };
 
-function inferVatTreatment(defaultVatCode: string | null): ExpenseVatTreatment {
+// Internal-only union: "unknown" is never exposed via the public
+// ExpenseVatTreatment type — the caller is forced to pass an explicit
+// vatTreatment when the account's default_vat_code is null or unmapped.
+type InferredVatTreatment = ExpenseVatTreatment | "unknown";
+
+function inferVatTreatment(defaultVatCode: string | null): InferredVatTreatment {
   if (defaultVatCode === "EU_SERVICE_REVERSE_CHARGE") return "reverse_charge";
   if (defaultVatCode === "REPRESENTATION_SPECIAL") return "representation";
   if (defaultVatCode === "DK_PURCHASE_25") return "standard";
-  return "exempt";
+  // A null or unrecognised default_vat_code must not be silently downgraded
+  // to VAT-exempt — that would under-claim købsmoms with no warning.
+  return "unknown";
 }
 
 function resolveFxBookingBasis(document: { currency: string; amount_inc_vat: number | null }, bank: {
@@ -176,7 +183,15 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
   const existingJournal = db.query(`SELECT id FROM journal_entries WHERE source_bank_transaction_id = ? LIMIT 1`).get(bank.id) as { id: number } | null;
   if (existingJournal) return { ok: false, appliedRules: [], errors: [`bank transaction ${bank.id} is already linked to journal entry ${existingJournal.id}`] };
 
-  const vatTreatment = input.vatTreatment ?? inferVatTreatment(account.default_vat_code);
+  const inferredTreatment = input.vatTreatment ?? inferVatTreatment(account.default_vat_code);
+  if (inferredTreatment === "unknown") {
+    return {
+      ok: false,
+      appliedRules: [],
+      errors: [`account ${account.account_no} has an unmapped default_vat_code ${account.default_vat_code === null ? "(none)" : account.default_vat_code} — pass an explicit vatTreatment (standard, reverse_charge, representation, exempt)`],
+    };
+  }
+  const vatTreatment: ExpenseVatTreatment = inferredTreatment;
   const transactionDate = input.transactionDate ?? bank.transaction_date;
   const text = input.text?.trim() || `${document.sender_name ?? "Expense"} from bank transaction ${bank.id}`;
   const paymentAccountNo = input.paymentAccountNo ?? "2000";
@@ -199,6 +214,24 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
         amountDkk: fxBasis.basis.grossAmountDkk,
         fxRateToDkk: fxBasis.basis.fxRateToDkk,
       };
+
+  // For 25%-rated treatments the document vat_amount becomes deductible input
+  // VAT, so it must be consistent with a 25% rate rather than trusted blindly.
+  // A garbled or OCR-extracted vat_amount would otherwise be booked verbatim,
+  // over- or under-claiming købsmoms. Validate in the document's native
+  // currency (the 25% ratio is currency-independent), allowing 1 øre of
+  // rounding slack.
+  if (vatTreatment === "standard" || vatTreatment === "representation") {
+    const documentNetAmount = subtractDkk(grossAmount, vatAmount);
+    const expectedVatAmount = percentOfDkk(documentNetAmount, 25);
+    if (compareDkk(absDkk(subtractDkk(vatAmount, expectedVatAmount)), 0.01) > 0) {
+      return {
+        ok: false,
+        appliedRules: [],
+        errors: [`document ${input.documentId} vat_amount ${vatAmount} is inconsistent with the 25% rate (expected ~${expectedVatAmount} for net ${documentNetAmount})`],
+      };
+    }
+  }
 
   if (vatTreatment === "standard") {
     if (!(vatAmount > 0)) return { ok: false, appliedRules: [], errors: ["standard expense booking requires document vat_amount > 0"] };

@@ -1,3 +1,4 @@
+// Tests: src/core/expense-booking.ts
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -74,6 +75,56 @@ describe("expense booking", () => {
     expect(report.matchedCount).toBe(1);
     expect(report.unmatchedCount).toBe(0);
     expect(report.matched[0].bankTransactionId).toBe(bankRow.id);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("rejects a standard expense whose document vat_amount is inconsistent with the 25% rate (#143)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-badvat-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-badvat-inbox-"));
+    const csv = join(root, "transactions.csv");
+    const sourceFile = join(inbox, "vendor.txt");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-16,SOFTWARE APS,-1250,DKK,REF-BADVAT-1"
+    ].join("\n"));
+    writeFileSync(sourceFile, "Invoice\n1250 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = importBankCsv(db, root, csv);
+    expect(bank.ok).toBe(true);
+
+    // Document carries a garbled vat_amount (251) — gross 1250, so net would
+    // be 999 and 25% of 999 = 249.75 → 250, not 251. Must be rejected.
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "V-BADVAT-1",
+      deliveryDescription: "Softwareabonnement",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Software ApS", address: "SaaSvej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 251,
+      paymentDetails: "Bank transfer"
+    });
+    expect(doc.ok).toBe(true);
+
+    const bankRow = db.query("SELECT id FROM bank_transactions WHERE reference = 'REF-BADVAT-1'").get() as { id: number };
+    const booked = bookExpenseFromBank(db, {
+      documentId: doc.documentId!,
+      bankTransactionId: bankRow.id,
+      expenseAccountNo: "3000"
+    });
+
+    expect(booked.ok).toBe(false);
+    expect(booked.errors.join(" ")).toContain("vat_amount");
+    expect(booked.entryId).toBeUndefined();
 
     db.close();
     rmSync(root, { recursive: true, force: true });
@@ -176,6 +227,66 @@ describe("expense booking", () => {
 
     expect(booked.ok).toBe(false);
     expect(booked.errors).toContain("foreign-currency expense booking requires bank fx_rate_to_dkk for DKK-settled payments");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("surfaces an error instead of silently booking an unmapped VAT code as exempt (#153)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-expense-book-unknown-"));
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-expense-book-unknown-inbox-"));
+    const csv = join(root, "transactions.csv");
+    const sourceFile = join(inbox, "vendor.txt");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-16,VENDOR APS,-1250,DKK,REF-UNKNOWN-1"
+    ].join("\n"));
+    writeFileSync(sourceFile, "Invoice\n1250 DKK\n");
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const bank = importBankCsv(db, root, csv);
+    expect(bank.ok).toBe(true);
+
+    const doc = ingestDocument(db, root, sourceFile, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "V-UNKNOWN-1",
+      deliveryDescription: "Diverse",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Vendor ApS", address: "Vej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+      paymentDetails: "Bank transfer"
+    });
+    expect(doc.ok).toBe(true);
+
+    // Account 3080 has default_vat_code DK_BAD_DEBT_25, which inferVatTreatment
+    // does not map. It must not be silently treated as exempt; the caller must
+    // be forced to pass an explicit vatTreatment.
+    const bankRow = db.query("SELECT id FROM bank_transactions WHERE reference = 'REF-UNKNOWN-1'").get() as { id: number };
+    const booked = bookExpenseFromBank(db, {
+      documentId: doc.documentId!,
+      bankTransactionId: bankRow.id,
+      expenseAccountNo: "3080"
+    });
+
+    expect(booked.ok).toBe(false);
+    expect(booked.errors.join(" ")).toContain("DK_BAD_DEBT_25");
+    expect(booked.entryId).toBeUndefined();
+
+    // With an explicit vatTreatment the booking proceeds.
+    const explicit = bookExpenseFromBank(db, {
+      documentId: doc.documentId!,
+      bankTransactionId: bankRow.id,
+      expenseAccountNo: "3080",
+      vatTreatment: "standard"
+    });
+    expect(explicit.ok).toBe(true);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

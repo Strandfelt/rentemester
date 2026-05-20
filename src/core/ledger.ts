@@ -9,6 +9,7 @@ import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
 import { resolveOpenExceptionsForBankTransaction } from "./exceptions";
 import { compareDkk, fromOre, roundDkk, roundRate6, toOre } from "./money";
+import { asJournalEntryId, type JournalEntryId } from "./ids";
 
 export type JournalLineInput = {
   accountNo: string;
@@ -34,7 +35,7 @@ export type JournalEntryInput = {
 
 export type JournalPostResult = {
   ok: boolean;
-  entryId?: number;
+  entryId?: JournalEntryId;
   entryNo?: string;
   entryHash?: string;
   appliedRules: string[];
@@ -42,7 +43,7 @@ export type JournalPostResult = {
 };
 
 export type JournalReverseResult = JournalPostResult & {
-  originalEntryId?: number;
+  originalEntryId?: JournalEntryId;
 };
 
 const LEDGER_RULES = {
@@ -90,6 +91,14 @@ export function previousHash(db: Database) {
   return row?.entry_hash ?? "GENESIS";
 }
 
+// journal_entries is append-only (delete is blocked by trigger), so the id the
+// next inserted row receives is deterministically MAX(id) + 1. The id is bound
+// into the entry hash, so it must be predicted before the row is written.
+function nextEntryId(db: Database) {
+  const row = db.query("SELECT COALESCE(MAX(id), 0) AS n FROM journal_entries").get() as { n: number };
+  return Number(row.n) + 1;
+}
+
 export function hashEntry(data: unknown, prev: string) {
   return createHash("sha256").update(JSON.stringify(data)).update(prev).digest("hex");
 }
@@ -99,8 +108,13 @@ function normalizeAmount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? roundDkk(value) : 0;
 }
 
+// The canonical hash binds the row id and an explicit per-line ordinal so each
+// entry_hash attests its row identity and the insertion order of its lines.
+// The chain therefore attests the id-ordered insertion sequence: two rows
+// cannot be swapped in id order without invalidating their hashes.
 function canonicalEntryData(entry: any, lines: any[]) {
   return {
+    id: entry.id ?? null,
     entry_no: entry.entry_no,
     transaction_date: entry.transaction_date,
     text: entry.text,
@@ -115,7 +129,8 @@ function canonicalEntryData(entry: any, lines: any[]) {
     created_by_program: entry.created_by_program,
     status: entry.status,
     reversal_of_entry_id: entry.reversal_of_entry_id ?? null,
-    lines: lines.map((line) => ({
+    lines: lines.map((line, ordinal) => ({
+      ordinal,
       account_no: line.account_no,
       debit_amount: normalizeAmount(line.debit_amount),
       credit_amount: normalizeAmount(line.credit_amount),
@@ -159,7 +174,9 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
     }
     const account = accounts.get(line.accountNo)!;
     if (!account.active) errors.push(`lines[${idx}].accountNo refers to an inactive account`);
-    if ((debit > 0 && credit > 0) || (debit === 0 && credit === 0)) {
+    if (debit < 0 || credit < 0) {
+      errors.push(`lines[${idx}] debit and credit amounts must not be negative`);
+    } else if ((debit > 0 && credit > 0) || (debit === 0 && credit === 0)) {
       errors.push(`lines[${idx}] must have either debitAmount or creditAmount`);
     }
     debitSum += toOre(debit);
@@ -210,6 +227,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
   const accounts = accountMap(db);
 
   const result = db.transaction(() => {
+    const entryId = nextEntryId(db);
     const entryNo = nextEntryNo(db, payload.transactionDate);
     const prevHash = previousHash(db);
     const actor = resolveActor({ createdBy: payload.createdBy, createdByProgram: payload.createdByProgram });
@@ -221,6 +239,7 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       text: line.text ?? null,
     }));
     const entryDraft = {
+      id: entryId,
       entry_no: entryNo,
       transaction_date: payload.transactionDate,
       text: payload.text,
@@ -240,14 +259,15 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
 
     const insertEntry = db.query(
       `INSERT INTO journal_entries (
-        entry_no, transaction_date, text, source_bank_transaction_id, document_id,
+        id, entry_no, transaction_date, text, source_bank_transaction_id, document_id,
         currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
         rule_version, created_by, created_by_program, status, previous_hash, entry_hash, retain_until
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?)
       RETURNING id, entry_no`
     );
 
     const entry = insertEntry.get(
+      entryId,
       entryNo,
       payload.transactionDate,
       payload.text,
@@ -293,13 +313,13 @@ export function postJournalEntry(db: Database, payload: JournalEntryInput): Jour
       );
     }
 
-    return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
+    return { entryId: asJournalEntryId(entry.id), entryNo: entry.entry_no, entryHash };
   }, { immediate: true })();
 
   return { ok: true, appliedRules: validation.appliedRules, errors: [], ...result };
 }
 
-export function reverseJournalEntry(db: Database, input: { entryId: number; transactionDate: string; reason: string; createdBy?: string; createdByProgram?: string; }): JournalReverseResult {
+export function reverseJournalEntry(db: Database, input: { entryId: JournalEntryId; transactionDate: string; reason: string; createdBy?: string; createdByProgram?: string; }): JournalReverseResult {
   const appliedRules = [LEDGER_RULES.APPEND_ONLY, LEDGER_RULES.REVERSAL];
   const errors: string[] = [];
 
@@ -357,6 +377,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
   const accounts = accountMap(db);
 
   const result = db.transaction(() => {
+    const entryId = nextEntryId(db);
     const entryNo = nextEntryNo(db, reversalPayload.transactionDate);
     const prevHash = previousHash(db);
     const actor = resolveActor({ createdBy: reversalPayload.createdBy, createdByProgram: reversalPayload.createdByProgram });
@@ -368,6 +389,7 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       text: line.text ?? null,
     }));
     const entryDraft = {
+      id: entryId,
       entry_no: entryNo,
       transaction_date: reversalPayload.transactionDate,
       text: reversalPayload.text,
@@ -387,12 +409,13 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
 
     const entry = db.query(
       `INSERT INTO journal_entries (
-        entry_no, transaction_date, text, source_bank_transaction_id, document_id,
+        id, entry_no, transaction_date, text, source_bank_transaction_id, document_id,
         currency, amount_foreign, amount_dkk, fx_rate_to_dkk,
         rule_version, created_by, created_by_program, status, reversal_of_entry_id, previous_hash, entry_hash, retain_until
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reversed', ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reversed', ?, ?, ?, ?)
       RETURNING id, entry_no`
     ).get(
+      entryId,
       entryNo,
       reversalPayload.transactionDate,
       reversalPayload.text,
@@ -429,10 +452,10 @@ export function reverseJournalEntry(db: Database, input: { entryId: number; tran
       createdByProgram: actor.createdByProgram,
     });
 
-    return { entryId: entry.id, entryNo: entry.entry_no, entryHash };
+    return { entryId: asJournalEntryId(entry.id), entryNo: entry.entry_no, entryHash };
   }, { immediate: true })();
 
-  return { ok: true, originalEntryId: original.id, appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: [], ...result };
+  return { ok: true, originalEntryId: asJournalEntryId(original.id), appliedRules: [...new Set([...appliedRules, ...validation.appliedRules])], errors: [], ...result };
 }
 
 export function verifyAuditChain(db: Database) {
@@ -498,6 +521,30 @@ export function verifyAuditChain(db: Database) {
     }
 
     prev = e.entry_hash;
+  }
+
+  // Tail-truncation guard: the journal_entry sequence is monotonic and protected
+  // against rollback, so it records the highest entry number ever allocated for
+  // a fiscal scope. Deleting the most recent entries leaves a valid but shorter
+  // chain; cross-checking the count and highest entry_no against the issued
+  // sequence value detects those missing entries.
+  const journalSequences = db.query(
+    `SELECT scope, value FROM sequences WHERE kind = 'journal_entry'`
+  ).all() as Array<{ scope: string; value: number }>;
+  for (const sequence of journalSequences) {
+    const fiscalScope = sequence.scope.slice(sequence.scope.lastIndexOf(":") + 1);
+    if (!fiscalScope) continue;
+    const glob = `${fiscalScope}-[0-9][0-9][0-9][0-9][0-9]`;
+    const stats = db.query(
+      `SELECT COUNT(*) AS n, COALESCE(MAX(CAST(substr(entry_no, -5) AS INTEGER)), 0) AS max_no
+       FROM journal_entries WHERE entry_no GLOB ?`
+    ).get(glob) as { n: number; max_no: number };
+    const expected = Number(sequence.value);
+    if (Number(stats.max_no) < expected) {
+      errors.push(`fiscal scope ${fiscalScope}: highest journal entry ${fiscalScope}-${String(stats.max_no).padStart(5, "0")} is below issued sequence value ${expected} — entries are missing`);
+    } else if (Number(stats.n) < expected) {
+      errors.push(`fiscal scope ${fiscalScope}: ${stats.n} journal entries present but sequence issued ${expected} — entries are missing`);
+    }
   }
 
   const bankLinkedEntries = db.query(

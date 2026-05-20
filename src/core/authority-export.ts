@@ -1,10 +1,11 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, join, relative } from "node:path";
 import type { Database } from "bun:sqlite";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { effectiveRetainUntil } from "./retention";
+import { writeFileAtomic } from "./atomic-file";
 
 const RULE_ID = "DK-BOOKKEEPING-AUTHORITY-EXPORT-001";
 const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
@@ -250,7 +251,9 @@ function storedPathRelativeToCompany(companyRoot: string, storedPath: string | n
 
 function writeExportJson(exportDir: string, path: string, value: unknown, outputs: ExportedFileMeta[]) {
   const body = stringifyCanonicalJson(value);
-  writeFileSync(path, body);
+  // Atomic write (issue #151): stage to an exclusively-created temp file and
+  // rename into place so a crash never leaves a partial JSON file.
+  writeFileAtomic(path, body);
   outputs.push({
     path: packageRelativePath(exportDir, path),
     sha256: sha256Text(body),
@@ -560,7 +563,7 @@ export function exportAuthorityPackage(db: Database, companyRoot: string, input:
   }
 
   const readmePath = join(exportDir, "README.txt");
-  writeFileSync(readmePath, buildExportReadme({
+  writeFileAtomic(readmePath, buildExportReadme({
     title: profile.readmeTitle,
     scopeLines: profile.readmeScopeLines,
     periodStart: input.periodStart,

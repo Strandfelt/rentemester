@@ -23,7 +23,7 @@ import {
   withCompanyDb,
   withCompanyDbConfirmed,
   withDestructiveConfirm,
-} from "../helpers";
+} from "../tool-runtime";
 
 export function registerSystemTools(server: McpServer): void {
   server.registerTool(

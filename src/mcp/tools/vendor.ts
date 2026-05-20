@@ -13,7 +13,7 @@ import {
   type CreateVendorInput,
 } from "../../core/master-data";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 export function registerVendorTools(server: McpServer): void {
   server.registerTool(

@@ -60,7 +60,7 @@ import {
   withCompanyDb,
   withCompanyDbConfirmed,
   resolveIssuedInvoiceDocumentId,
-} from "../helpers";
+} from "../tool-runtime";
 
 const invoicePayloadSchema = z
   .object({})

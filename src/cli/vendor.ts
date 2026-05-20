@@ -1,11 +1,11 @@
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import { migrate } from "../core/db";
 import { createVendor, listVendors } from "../core/master-data";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("vendor", "create", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = createVendor(db, {
       name: ctx.arg("--name") ?? "",
@@ -21,7 +21,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("vendor", "list", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = listVendors(db, { archived: ctx.hasFlag("--archived") });
     ctx.emitResult(result as Record<string, unknown>);

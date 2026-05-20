@@ -1,3 +1,4 @@
+// Tests: src/core/issued-invoices.ts
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -37,7 +38,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0500",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -46,7 +47,7 @@ describe("invoice issue", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.invoiceNumber).toBe("2026-0500");
+    expect(result.invoiceNumber).toBe("2026-0001");
     expect(result.appliedRules).toContain("DK-INVOICE-ISSUE-001");
     expect(existsSync(result.storedPath!)).toBe(true);
     expect(existsSync(result.pdfStoredPath!)).toBe(true);
@@ -54,24 +55,24 @@ describe("invoice issue", () => {
     const stored = JSON.parse(readFileSync(result.storedPath!, "utf8"));
     expect(stored.status).toBe("issued");
     expect(stored.issuedAt).toBeTruthy();
-    expect(stored.invoiceNumber).toBe("2026-0500");
+    expect(stored.invoiceNumber).toBe("2026-0001");
 
     const row = db.query("SELECT document_type, invoice_no, status, payload_json FROM documents WHERE id = ?").get(result.documentId!) as any;
     expect(row.document_type).toBe("issued_invoice");
-    expect(row.invoice_no).toBe("2026-0500");
+    expect(row.invoice_no).toBe("2026-0001");
     expect(row.status).toBe("issued");
-    expect(JSON.parse(row.payload_json).invoiceNumber).toBe("2026-0500");
+    expect(JSON.parse(row.payload_json).invoiceNumber).toBe("2026-0001");
 
     const pdfRow = db.query("SELECT document_type, invoice_no, mime_type, stored_path FROM documents WHERE id = ?").get(result.pdfDocumentId!) as any;
     expect(pdfRow).toEqual({
       document_type: "issued_invoice_pdf",
-      invoice_no: "2026-0500",
+      invoice_no: "2026-0001",
       mime_type: "application/pdf",
       stored_path: result.pdfStoredPath,
     });
     const pdfText = readIssuedInvoicePdfText(result.pdfStoredPath!);
     expect(pdfText.startsWith("%PDF-")).toBe(true);
-    expect(pdfText).toContain("2026-0500");
+    expect(pdfText).toContain("2026-0001");
     expect(pdfText).toContain("DK12345678");
     expect(pdfText).toContain("250.00 DKK");
 
@@ -94,7 +95,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0500-EUR",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde GmbH", address: "Berlin" },
       lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 100, lineTotalExVat: 100 }],
@@ -122,7 +123,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "foreign_reverse_charge",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0500-RC-MISSING",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
       lines: [{ description: "EU consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
@@ -148,7 +149,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "foreign_reverse_charge",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0500-RC",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
       lines: [{ description: "EU consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
@@ -188,7 +189,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "foreign_reverse_charge",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0500-RC",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "EU Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
       lines: [{ description: "EU consulting", quantity: 1, unitPriceExVat: 8000, lineTotalExVat: 8000 }],
@@ -363,6 +364,82 @@ describe("invoice issue", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("routes non-five-digit manual invoice numbers through sequence reservation", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-short-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    // 4-digit suffix that skips the next sequence value (floor 0 -> next is 1).
+    const gap = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0500",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(gap.ok).toBe(false);
+    expect(gap.errors[0]).toContain("næste fortløbende nummer");
+
+    // 4-digit suffix matching the next sequence value is accepted and stored verbatim.
+    const first = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(first.ok).toBe(true);
+    expect(first.invoiceNumber).toBe("2026-0001");
+
+    // Re-using the same manual number must collide on the reserved sequence value.
+    const duplicate = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde B ApS", address: "Købervej 10" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 500, lineTotalExVat: 500 }],
+      totals: { netAmount: 500, vatRate: 0.25, vatAmount: 125, grossAmount: 625 },
+      currency: "DKK"
+    });
+    expect(duplicate.ok).toBe(false);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects manual invoice numbers that are not <scope>-<digits>", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-bad-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "INV-A",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]).toContain("INV-A");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects canonical manual invoice numbers from the wrong fiscal scope", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-scope-"));
     const db = openDb(ensureCompanyDirs(root).db);
@@ -435,7 +512,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0501",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -458,7 +535,7 @@ describe("invoice issue", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0502",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -477,7 +554,7 @@ describe("invoice issue", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors[0]).toContain("simulated insert failure");
-    expect(readdirSync(companyPaths(root).invoicesIssued).sort()).toEqual(["2026-0502.json", "2026-0502.pdf"].sort());
+    expect(readdirSync(companyPaths(root).invoicesIssued).sort()).toEqual(["2026-0001.json", "2026-0001.pdf"].sort());
 
     realDb.close();
     rmSync(root, { recursive: true, force: true });

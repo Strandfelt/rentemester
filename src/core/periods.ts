@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { insertAuditLog } from "./actor";
-import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { isValidIsoDate as looksLikeIsoDate, addDays, todayIsoDate } from "./dates";
 
 export type AccountingPeriodKind = "vat_quarter" | "fiscal_year" | "custom";
 export type AccountingPeriodStatus = "open" | "closed" | "reported";
@@ -32,23 +32,11 @@ const PERIOD_KINDS = new Set<AccountingPeriodKind>(["vat_quarter", "fiscal_year"
 const PERIOD_STATUSES = new Set<Exclude<AccountingPeriodStatus, "open">>(["closed", "reported"]);
 
 
-function todayIsoDate() {
-  const override = process.env.RENTEMESTER_TODAY;
-  if (looksLikeIsoDate(override)) return override!.trim();
-  return new Date().toISOString().slice(0, 10);
-}
-
 function maxFutureDays() {
   const raw = process.env.RENTEMESTER_MAX_FUTURE_DAYS;
   if (raw === undefined) return 45;
   const parsed = Number(raw);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : 45;
-}
-
-function addDays(isoDate: string, days: number) {
-  const date = new Date(`${isoDate}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 export function validateJournalTransactionDate(db: Database, transactionDate: string, fieldName = "transactionDate") {

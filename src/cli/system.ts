@@ -1,9 +1,9 @@
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import { migrate } from "../core/db";
 import { createSystemBackup, exportBackupPublicKey, getBackupComplianceStatus } from "../core/system-backups";
 import { restoreSystemBackup, verifyBackupSignature } from "../core/system-restore";
 import { exportAuthorityPackage } from "../core/authority-export";
 import { exportSaftPackage } from "../core/saft-export";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
 
 function runExportPackage(
@@ -17,7 +17,7 @@ function runExportPackage(
     console.error("Missing required --from <YYYY-MM-DD>, --to <YYYY-MM-DD>, or --out <dir>");
     process.exit(2);
   }
-  const db = openDb(companyPaths(ctx.companyRoot()).db);
+  const db = openCommandDb(ctx);
   migrate(db);
   const result = exportAuthorityPackage(db, ctx.companyRoot(), {
     periodStart: from,
@@ -33,7 +33,7 @@ function runExportPackage(
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("system", "backup", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = createSystemBackup(db, ctx.companyRoot(), {
       createdAt: ctx.arg("--at"),
@@ -68,7 +68,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("system", "backup-status", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = getBackupComplianceStatus(db, ctx.companyRoot(), ctx.arg("--as-of"));
     ctx.emitResult(result as Record<string, unknown>);
@@ -107,7 +107,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --from <YYYY-MM-DD>, --to <YYYY-MM-DD>, or --out <dir>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = exportSaftPackage(db, ctx.companyRoot(), {
       periodStart: from,

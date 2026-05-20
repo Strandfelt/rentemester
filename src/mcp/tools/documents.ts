@@ -11,7 +11,7 @@ import { ingestDocument, type DocumentMetadata } from "../../core/documents";
 import { resolveDocumentMasterData } from "../../core/master-data";
 import { recordException } from "../../core/exceptions";
 import { wrapCoreResult, successEnvelope, errorEnvelope } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 const documentMetadataSchema = z
   .object({})

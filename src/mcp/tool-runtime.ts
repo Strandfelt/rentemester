@@ -1,5 +1,5 @@
 /**
- * Fælles hjælpere til MCP-tool-adaptere.
+ * Kørselstids-laget (runtime) for MCP-tool-adaptere.
  *
  * Reducerer boilerplate omkring:
  *  - existsSync-tjek på `company`-stien
@@ -17,11 +17,39 @@ import { existsSync } from "node:fs";
 import { openDb, migrate } from "../core/db";
 import { companyPaths } from "../core/paths";
 import {
+  asDocumentId,
+  asJournalEntryId,
+  type DocumentId,
+  type JournalEntryId,
+} from "../core/ids";
+import {
   envelopeToCallResult,
   errorEnvelope,
   type Envelope,
 } from "./envelope";
 import { deriveMcpActor, type McpActor } from "./actor";
+
+/**
+ * Redacts absolute filesystem paths from a message destined for the
+ * MCP caller. Absolute POSIX paths (`/...`) and Windows drive paths
+ * (`C:\...`) are replaced with a `<path>` placeholder so host layout
+ * and key-file locations are not disclosed to the connected client.
+ * Full detail is kept in server-side stderr only.
+ */
+export function redactPaths(message: string): string {
+  return message
+    .replace(/[A-Za-z]:\\[^\s:]+/g, "<path>")
+    .replace(/(?<![\w<])\/[^\s:]+/g, "<path>");
+}
+
+/**
+ * Logs the full (unredacted) error to server-side stderr, then returns
+ * a path-redacted error envelope safe to hand back to the caller.
+ */
+function safeErrorEnvelope(context: string, message: string): Envelope {
+  console.error(`[mcp:${context}] ${message}`);
+  return errorEnvelope(redactPaths(message));
+}
 
 /**
  * Wraps en handler så MCP-callbacken får:
@@ -40,8 +68,9 @@ export function withCompanyDb<TArgs extends { company: string }>(
       return envelopeToCallResult(errorEnvelope("company path is required"));
     }
     if (!existsSync(args.company)) {
+      console.error(`[mcp:withCompanyDb] company path does not exist: ${args.company}`);
       return envelopeToCallResult(
-        errorEnvelope(`company path does not exist: ${args.company}`),
+        errorEnvelope("company path does not exist or is not initialized"),
       );
     }
     const actor = deriveMcpActor(server.server.getClientVersion());
@@ -52,7 +81,7 @@ export function withCompanyDb<TArgs extends { company: string }>(
       return envelopeToCallResult(envelope);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return envelopeToCallResult(errorEnvelope(message));
+      return envelopeToCallResult(safeErrorEnvelope("withCompanyDb", message));
     } finally {
       db.close();
     }
@@ -108,7 +137,7 @@ export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confir
       return envelopeToCallResult(envelope);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return envelopeToCallResult(errorEnvelope(message));
+      return envelopeToCallResult(safeErrorEnvelope(toolName, message));
     }
   };
 }
@@ -120,16 +149,16 @@ export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confir
 export function resolveIssuedInvoiceDocumentId(
   db: Database,
   args: { documentId?: number | null; invoiceNumber?: string | null },
-): number | null {
+): DocumentId | null {
   if (Number.isInteger(args.documentId) && Number(args.documentId) > 0) {
-    return Number(args.documentId);
+    return asDocumentId(Number(args.documentId));
   }
   const value = (args.invoiceNumber ?? "").trim();
   if (!value) return null;
   const row = db
     .query(`SELECT id FROM documents WHERE document_type = 'issued_invoice' AND invoice_no = ? LIMIT 1`)
     .get(value) as { id: number } | null;
-  return row?.id ?? null;
+  return row?.id == null ? null : asDocumentId(row.id);
 }
 
 /**
@@ -145,14 +174,16 @@ export function resolveJournalEntryId(
     matchDate?: string | null;
     matchDocumentId?: number | null;
   },
-): number | null {
-  if (Number.isInteger(args.entryId) && Number(args.entryId) > 0) return Number(args.entryId);
+): JournalEntryId | null {
+  if (Number.isInteger(args.entryId) && Number(args.entryId) > 0) {
+    return asJournalEntryId(Number(args.entryId));
+  }
   const entryNo = (args.entryNo ?? "").trim();
   if (entryNo) {
     const row = db.query(`SELECT id FROM journal_entries WHERE entry_no = ? LIMIT 1`).get(entryNo) as
       | { id: number }
       | null;
-    if (row) return row.id;
+    if (row) return asJournalEntryId(row.id);
   }
   const matchText = (args.matchText ?? "").trim();
   if (matchText) {
@@ -166,7 +197,7 @@ export function resolveJournalEntryId(
         `SELECT id FROM journal_entries WHERE text = ? ${dateClause} ${docClause} ORDER BY id DESC LIMIT 1`,
       )
       .get(...(params as [unknown])) as { id: number } | null;
-    if (row) return row.id;
+    if (row) return asJournalEntryId(row.id);
   }
   return null;
 }

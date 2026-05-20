@@ -1,3 +1,4 @@
+// Tests: src/core/invoice-refunds.ts
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,7 +26,7 @@ describe("invoice refunds", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0800B",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -72,7 +73,7 @@ describe("invoice refunds", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0800",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],

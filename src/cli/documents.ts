@@ -4,6 +4,7 @@ import { openDb, migrate } from "../core/db";
 import { ingestDocument } from "../core/documents";
 import { recordException } from "../core/exceptions";
 import { resolveDocumentMasterData } from "../core/master-data";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
@@ -53,7 +54,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("documents", "list", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const rows = db
       .query(

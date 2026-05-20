@@ -1,3 +1,4 @@
+// Tests: src/core/invoice-claim-settlement.ts
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ describe("invoice claim settlement", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0990",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -98,7 +99,7 @@ describe("invoice claim settlement", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0990B",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -139,7 +140,7 @@ describe("invoice claim settlement", () => {
       vatTreatment: "standard",
       issueDate: "2026-05-16",
       dueDate: "2026-06-15",
-      invoiceNumber: "2026-0991",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],

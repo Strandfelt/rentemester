@@ -32,12 +32,26 @@ function addDays(isoDateTime: string, days: number) {
   return date.toISOString();
 }
 
+// EU member-state VAT country codes recognised by VIES. EU service reverse
+// charge (momsloven §46) applies only to suppliers in *other* EU member
+// states, so DK and non-EU codes (NO, CH, GB, ...) must be rejected here.
+// EL is the VIES code for Greece.
+const EU_VAT_COUNTRY_CODES = new Set([
+  "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR",
+  "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO",
+  "SE", "SI", "SK",
+]);
+
 export function normalizeEuVatNumber(input?: string | null): NormalizedEuVat | null {
   const compact = input?.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!compact || compact.length < 3) return null;
   const countryCode = compact.slice(0, 2);
   const vatNumber = compact.slice(2);
   if (!/^[A-Z]{2}$/.test(countryCode) || !/^[A-Z0-9]{2,14}$/.test(vatNumber)) return null;
+  // Domestic (DK) numbers are valid EU VAT numbers for VIES caching but must
+  // not be treated as a foreign EU supplier — the reverse-charge path rejects
+  // them explicitly below.
+  if (!EU_VAT_COUNTRY_CODES.has(countryCode)) return null;
   return { countryCode, vatNumber, normalized: `${countryCode}${vatNumber}` };
 }
 
@@ -136,18 +150,43 @@ export function requireCachedViesValidation(db: Database, vatOrCvr: string | nul
   return { ok: true, validation: cached, appliedRules: [RULE_ID], errors: [] };
 }
 
-function parseValidationResponse(json: any, parsed: NormalizedEuVat, validatedAt: string): ViesValidationRecord {
-  const valid = Boolean(json?.valid ?? json?.isValid ?? json?.result?.valid ?? false);
+/**
+ * Pick the first recognised validity field that is an explicit boolean.
+ * Returns `undefined` when the response carries no unambiguous boolean
+ * validity field (schema change, partial outage, error body) — the caller
+ * must NOT treat such a response as authoritative.
+ */
+function extractValidity(json: any): boolean | undefined {
+  for (const candidate of [json?.valid, json?.isValid, json?.result?.valid]) {
+    if (typeof candidate === "boolean") return candidate;
+  }
+  return undefined;
+}
+
+type ParsedValidationResponse =
+  | { ok: true; record: ViesValidationRecord }
+  | { ok: false; error: string };
+
+function parseValidationResponse(json: any, parsed: NormalizedEuVat, validatedAt: string): ParsedValidationResponse {
+  const valid = extractValidity(json);
+  if (valid === undefined) {
+    // "VIES could not answer" must be distinguishable from "VIES says
+    // invalid" — refuse to cache an ambiguous body.
+    return { ok: false, error: `VIES response for ${parsed.normalized} did not contain a recognised boolean validity field` };
+  }
   const name = typeof (json?.name ?? json?.traderName ?? json?.result?.name) === "string" ? (json?.name ?? json?.traderName ?? json?.result?.name) : null;
   const address = typeof (json?.address ?? json?.traderAddress ?? json?.result?.address) === "string" ? (json?.address ?? json?.traderAddress ?? json?.result?.address) : null;
   return {
-    ...parsed,
-    valid,
-    name,
-    address,
-    validatedAt,
-    expiresAt: addDays(validatedAt, DEFAULT_TTL_DAYS),
-    rawResponse: JSON.stringify(json),
+    ok: true,
+    record: {
+      ...parsed,
+      valid,
+      name,
+      address,
+      validatedAt,
+      expiresAt: addDays(validatedAt, DEFAULT_TTL_DAYS),
+      rawResponse: JSON.stringify(json),
+    },
   };
 }
 
@@ -167,8 +206,18 @@ export async function validateVatAgainstVies(db: Database, vatOrCvr: string, opt
     return { ok: false, appliedRules: [RULE_ID], errors: [`VIES lookup failed with HTTP ${response.status}`] };
   }
 
-  const json = await response.json();
-  const validation = parseValidationResponse(json, parsed, new Date().toISOString());
-  const stored = storeViesValidation(db, validation);
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    return { ok: false, appliedRules: [RULE_ID], errors: ["VIES returned a non-JSON response body"] };
+  }
+  const parsedResponse = parseValidationResponse(json, parsed, new Date().toISOString());
+  if (!parsedResponse.ok) {
+    // Ambiguous / error body — do NOT write to vies_validations so a later
+    // genuine lookup is not blocked for the full TTL window.
+    return { ok: false, appliedRules: [RULE_ID], errors: [parsedResponse.error] };
+  }
+  const stored = storeViesValidation(db, parsedResponse.record);
   return { ok: true, validation: stored, appliedRules: [RULE_ID], errors: [] };
 }

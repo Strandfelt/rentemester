@@ -1,3 +1,4 @@
+// Tests: src/core/credit-notes.ts
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -42,7 +43,7 @@ describe("credit notes", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0950A",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Abonnement", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -93,7 +94,7 @@ describe("credit notes", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0950",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -126,7 +127,7 @@ describe("credit notes", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0950",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -180,7 +181,7 @@ describe("credit notes", () => {
       reverseChargeBasis: "EU_MOMSDIREKTIV_ART_196",
       reverseChargeNote: "Reverse charge",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0950RC",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde GmbH", address: "Berlin", vatOrCvr: "DE123456789" },
       lines: [{ description: "Consulting", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -224,7 +225,7 @@ describe("credit notes", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-16",
-      invoiceNumber: "2026-0950",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Kunde A/S", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
@@ -245,7 +246,7 @@ describe("credit notes", () => {
 
     const doc = db.query("SELECT document_type, invoice_no, payment_details FROM documents WHERE id = ?").get(credit.documentId!) as any;
     expect(doc.document_type).toBe("credit_note");
-    expect(doc.payment_details).toBe("2026-0950");
+    expect(doc.payment_details).toBe("2026-0001");
 
     const lines = db.query(
       `SELECT a.account_no, jl.debit_amount, jl.credit_amount, jl.vat_code

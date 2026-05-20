@@ -16,7 +16,7 @@ import {
   type RepresentationPurchaseInput,
 } from "../../core/vat";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 const payloadSchema = z.object({}).catchall(z.unknown());
 

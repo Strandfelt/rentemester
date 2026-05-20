@@ -4,6 +4,7 @@ import { createHash, createHmac, createPrivateKey, createPublicKey, generateKeyP
 import { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
+import { promoteTempFile, writeFileAtomic, writeTempFileFor } from "./atomic-file";
 
 const BACKUP_RULE_ID = "DK-BOOKKEEPING-BACKUP-001";
 const BACKUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -138,6 +139,18 @@ export function publicKeyHint(publicKeyPem: string) {
   return createHash("sha256").update(publicKeyPem.trim()).digest("hex").slice(0, 16);
 }
 
+// SECURITY NOTE (issues #131/#132): ed25519 here gives INTEGRITY for the
+// local restore path and 3rd-party AUTHENTICITY only for a verifier who holds
+// the genuine public key out-of-band. This function still generates a fresh
+// keypair on genuine first-time setup (neither key present). That is a known
+// residual risk: a local actor who deletes BOTH key files and re-signs a
+// tampered backup gets a self-consistent backup. The verify path mitigates
+// this — it refuses to treat an in-backup public key as authenticity and
+// fails closed against a supplied publicKeyHint — but a fully out-of-band
+// `genkey` step (separate from `system backup`) is the proper fix and is
+// tracked as follow-up. A PARTIAL keystate (exactly one of the two files
+// present) is rejected outright: that is a tamper signal, never a reason to
+// silently mint new keys.
 export function ensureEd25519Keypair(companyRoot: string): {
   privateKeyPem: string;
   publicKeyPem: string;
@@ -146,13 +159,21 @@ export function ensureEd25519Keypair(companyRoot: string): {
 } {
   const privPath = backupEd25519PrivateKeyPath(companyRoot);
   const pubPath = backupEd25519PublicKeyPath(companyRoot);
-  if (existsSync(privPath) && existsSync(pubPath)) {
+  const hasPriv = existsSync(privPath);
+  const hasPub = existsSync(pubPath);
+  if (hasPriv && hasPub) {
     return {
       privateKeyPem: readFileSync(privPath, "utf8"),
       publicKeyPem: readFileSync(pubPath, "utf8"),
       privateKeyPath: privPath,
       publicKeyPath: pubPath,
     };
+  }
+  if (hasPriv !== hasPub) {
+    const missing = hasPriv ? pubPath : privPath;
+    throw new Error(
+      `ed25519 backup signing key state is incomplete (missing ${missing}); refusing to regenerate — restore the missing key or remove both files deliberately`,
+    );
   }
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -312,7 +333,11 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
   // <companyRoot>/.backup-signing-key.pem (mode 0o600) and is never copied.
   let asymmetricKeypair: ReturnType<typeof ensureEd25519Keypair> | null = null;
   if (input.signWithEd25519) {
-    asymmetricKeypair = ensureEd25519Keypair(companyRoot);
+    try {
+      asymmetricKeypair = ensureEd25519Keypair(companyRoot);
+    } catch (error) {
+      return { ok: false, appliedRules: [BACKUP_RULE_ID], errors: [`failed to resolve ed25519 signing key: ${String(error)}`] };
+    }
   }
 
   const copiedConfig = copyDirWithManifest(paths.config, configBackupDir, backupDir);
@@ -349,13 +374,18 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
     ledgerStats,
   };
 
+  // Atomic, crash-safe ordering (issue #151): write every signature to disk
+  // FIRST, then promote the manifest LAST. A crash before the manifest rename
+  // leaves an unreferenced manifest-less directory (ignored by listing); a
+  // crash after it leaves a manifest whose signatures are already durable.
   const manifestPath = join(backupDir, "manifest.json");
   const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
-  writeFileSync(manifestPath, manifestText);
-  writeFileSync(backupManifestSignaturePath(backupDir), `${signManifestText(manifestText, manifestKey)}\n`);
+  writeFileAtomic(backupManifestSignaturePath(backupDir), `${signManifestText(manifestText, manifestKey)}\n`);
   if (asymmetricKeypair) {
-    writeFileSync(backupAsymmetricSignaturePath(backupDir), `${signManifestEd25519(manifestText, asymmetricKeypair.privateKeyPem)}\n`);
+    writeFileAtomic(backupAsymmetricSignaturePath(backupDir), `${signManifestEd25519(manifestText, asymmetricKeypair.privateKeyPem)}\n`);
   }
+  const manifestTemp = writeTempFileFor(manifestPath, manifestText);
+  promoteTempFile(manifestTemp, manifestPath);
 
   insertAuditLog(db, {
     eventType: "system_backup",

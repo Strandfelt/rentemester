@@ -1,3 +1,4 @@
+// Tests: src/legal-sources.ts
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

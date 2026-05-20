@@ -1,3 +1,4 @@
+// Tests: src/cli/documents.ts, src/cli.ts (document CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
