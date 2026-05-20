@@ -46,12 +46,18 @@ import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
 // ===== MAIL INTAKE (#122) =====
 import { registerMailIntakeTools } from "./tools/mail-intake";
+// ===== IMAP INTAKE (#181) =====
+import { registerImapIntakeTools } from "./tools/imap-intake";
+// ===== END IMAP INTAKE (#181) =====
 // ===== MILEAGE LOG (#123) =====
 import { registerMileageTools } from "./tools/mileage";
 // Fixed assets (#124, #125)
 import { registerAssetTools } from "./tools/asset";
 // Multi-company portfolio: company_add + portfolio_overview (#172)
 import { registerPortfolioTools } from "./tools/portfolio";
+// ===== EMAIL DELIVERY (#180) =====
+import { registerEmailTools } from "./tools/email";
+// ===== END EMAIL DELIVERY (#180) =====
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -75,10 +81,16 @@ export function registerAllTools(server: McpServer): void {
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   registerMailIntakeTools(server);
+  // ===== IMAP INTAKE (#181) =====
+  registerImapIntakeTools(server);
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   registerMileageTools(server);
   // Fixed assets (#124, #125)
   registerAssetTools(server);
   // Multi-company portfolio: company_add + portfolio_overview (#172)
   registerPortfolioTools(server);
+  // ===== EMAIL DELIVERY (#180) =====
+  registerEmailTools(server);
+  // ===== END EMAIL DELIVERY (#180) =====
 }

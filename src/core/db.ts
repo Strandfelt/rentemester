@@ -12,7 +12,11 @@ function hasColumn(db: Database, table: string, column: string) {
 export function openDb(path: string) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
-  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+  // busy_timeout must absorb transient contention when several short-lived
+  // processes open the same company ledger at once (the agent-demo pipeline,
+  // parallel test runs on a saturated CI host). 5s was too tight under load;
+  // 30s lets the single writer finish rather than erroring "database is locked".
+  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 30000;");
   return db;
 }
 
@@ -52,6 +56,20 @@ export function migrate(db: Database) {
   if (!hasColumn(db, "invoice_payments", "journal_entry_id")) db.exec("ALTER TABLE invoice_payments ADD COLUMN journal_entry_id INTEGER;");
   if (!hasColumn(db, "exceptions", "source_evidence")) db.exec("ALTER TABLE exceptions ADD COLUMN source_evidence TEXT;");
   if (!hasColumn(db, "exceptions", "posting_preview")) db.exec("ALTER TABLE exceptions ADD COLUMN posting_preview TEXT;");
+  // ===== BANK CLUSTER (#186-189,#182) =====
+  // New columns on the existing bank_transactions table are not picked up by
+  // CREATE TABLE IF NOT EXISTS, so older ledgers are upgraded here. Guards on
+  // PRAGMA table_info keep every ALTER idempotent.
+  if (!hasColumn(db, "bank_transactions", "bank_account_id")) db.exec("ALTER TABLE bank_transactions ADD COLUMN bank_account_id INTEGER REFERENCES bank_accounts(id);");
+  if (!hasColumn(db, "bank_transactions", "counterparty_name")) db.exec("ALTER TABLE bank_transactions ADD COLUMN counterparty_name TEXT;");
+  if (!hasColumn(db, "bank_transactions", "counterparty_account")) db.exec("ALTER TABLE bank_transactions ADD COLUMN counterparty_account TEXT;");
+  if (!hasColumn(db, "bank_transactions", "message")) db.exec("ALTER TABLE bank_transactions ADD COLUMN message TEXT;");
+  if (!hasColumn(db, "bank_transactions", "archive_reference")) db.exec("ALTER TABLE bank_transactions ADD COLUMN archive_reference TEXT;");
+  if (!hasColumn(db, "bank_transactions", "customer_reference")) db.exec("ALTER TABLE bank_transactions ADD COLUMN customer_reference TEXT;");
+  if (!hasColumn(db, "bank_transactions", "balance_after")) db.exec("ALTER TABLE bank_transactions ADD COLUMN balance_after NUMERIC;");
+  if (!hasColumn(db, "bank_transactions", "raw_json")) db.exec("ALTER TABLE bank_transactions ADD COLUMN raw_json TEXT;");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_bank_transactions_account ON bank_transactions(bank_account_id);");
+  // ===== END BANK CLUSTER (#186-189,#182) =====
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_payments_journal_entry ON invoice_payments(journal_entry_id) WHERE journal_entry_id IS NOT NULL;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_accounting_periods_covering_date ON accounting_periods(period_start, period_end, status);");
   backfillRetentionDeadlines(db);

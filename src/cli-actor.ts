@@ -27,6 +27,9 @@ export const MUTATING_COMMANDS = new Set([
   "invoice post-compensation",
   "documents ingest",
   "bank import",
+  // ===== BANK CLUSTER (#187) =====
+  "bank-account add",
+  // ===== END BANK CLUSTER (#187) =====
   "expense book",
   "vat post-eu-service-purchase",
   "vat post-representation-purchase",
@@ -40,6 +43,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   "mail-intake ingest",
+  // ===== IMAP INTAKE (#181) =====
+  "imap-intake poll",
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   "mileage log",
   "mileage export",
@@ -49,6 +55,21 @@ export const MUTATING_COMMANDS = new Set([
   "asset write-off",
   // PEPPOL submission (#128)
   "invoice submit-public-peppol",
+  // ===== OPENING BALANCE (#179) =====
+  "opening-balance post",
+  // ===== END OPENING BALANCE (#179) =====
+  // ===== EMAIL DELIVERY (#180) =====
+  "invoice send",
+  // ===== END EMAIL DELIVERY (#180) =====
+  // ===== GDPR (#184) =====
+  "gdpr erase",
+  // ===== END GDPR (#184) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  "import run",
+  // ===== END IMPORT FRAMEWORK (#185) =====
+  // ===== RUNTIME AGENT (#183) =====
+  "agent run",
+  // ===== END RUNTIME AGENT (#183) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

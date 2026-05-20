@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   importBankCsv,
+  resolveBankAccount,
   type BankImportResult,
 } from "../../core/bank";
 import {
@@ -41,6 +42,9 @@ export function registerBankTools(server: McpServer): void {
         to: z.string().optional(),
         textMatch: z.string().optional(),
         amount: z.number().optional(),
+        // ===== BANK CLUSTER (#187) =====
+        account: z.string().optional(),
+        // ===== END BANK CLUSTER (#187) =====
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -51,13 +55,25 @@ export function registerBankTools(server: McpServer): void {
       to?: string;
       textMatch?: string;
       amount?: number;
+      account?: string;
     }>(server, ({ db, args }) => {
+      // ===== BANK CLUSTER (#187) =====
+      let bankAccountId: number | undefined;
+      if (args.account && args.account.trim() !== "") {
+        const account = resolveBankAccount(db, args.account);
+        if (!account) {
+          return wrapCoreResult({ ok: false, count: 0, rows: [], errors: [`bank account '${args.account}' does not exist`] });
+        }
+        bankAccountId = account.id;
+      }
+      // ===== END BANK CLUSTER (#187) =====
       const result = listBankTransactions(db, {
         status: args.status,
         from: args.from,
         to: args.to,
         textMatch: args.textMatch,
         amount: args.amount,
+        bankAccountId,
       });
       return wrapCoreResult(result);
     }),
@@ -101,6 +117,9 @@ export function registerBankTools(server: McpServer): void {
         status: statusSchema,
         textMatch: z.string().optional(),
         amount: z.number().optional(),
+        // ===== BANK CLUSTER (#187) =====
+        account: z.string().optional(),
+        // ===== END BANK CLUSTER (#187) =====
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -111,11 +130,24 @@ export function registerBankTools(server: McpServer): void {
       status?: "all" | "matched" | "unmatched";
       textMatch?: string;
       amount?: number;
+      account?: string;
     }>(server, ({ db, args }) => {
+      // ===== BANK CLUSTER (#187) =====
+      let bankAccountId: number | undefined;
+      if (args.account && args.account.trim() !== "") {
+        const account = resolveBankAccount(db, args.account);
+        if (!account) {
+          const errorReport = buildBankReconciliationReport(db, args.from, args.to, {});
+          return wrapCoreResult({ ...errorReport, ok: false, errors: [`bank account '${args.account}' does not exist`] });
+        }
+        bankAccountId = account.id;
+      }
+      // ===== END BANK CLUSTER (#187) =====
       const result = buildBankReconciliationReport(db, args.from, args.to, {
         status: args.status,
         textMatch: args.textMatch,
         amount: args.amount,
+        bankAccountId,
       });
       return wrapCoreResult(result);
     }),
@@ -132,11 +164,15 @@ export function registerBankTools(server: McpServer): void {
         company: z.string().min(1),
         csvPath: z.string().optional(),
         csvContent: z.string().optional(),
+        // ===== BANK CLUSTER (#187,#186) =====
+        account: z.string().optional(),
+        profile: z.string().optional(),
+        // ===== END BANK CLUSTER (#187,#186) =====
         confirm: z.boolean(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; profile?: string; confirm: boolean }>(
       server,
       "bank_import",
       ({ db, args }) => {
@@ -153,7 +189,10 @@ export function registerBankTools(server: McpServer): void {
           path = join(tmpDir, "bank-import.csv");
           writeFileSync(path, args.csvContent, "utf8");
         }
-        const result = importBankCsv(db, args.company, path);
+        const result = importBankCsv(db, args.company, path, {
+          account: args.account && args.account.trim() !== "" ? args.account : undefined,
+          profile: args.profile && args.profile.trim() !== "" ? args.profile : undefined,
+        });
         const sync = result.ok
           ? syncUnmatchedBankTransactionExceptions(db)
           : { ok: true, created: 0, errors: [] };

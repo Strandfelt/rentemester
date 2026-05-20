@@ -130,10 +130,14 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "invoice post-compensation", usage: "invoice post-compensation --company <path> (--document-id <n> | --invoice-number <no>) [--date <YYYY-MM-DD>]", description: "Bogfører registreret kompensation.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--date"] },
   { key: "documents ingest", usage: "documents ingest --company <path> --file <path> --metadata <file.json> [--vendor-id <n>] [--force]", description: "Indlæser og validerer et bilag med metadata.", allowedFlags: ["--company", "--file", "--metadata", "--vendor-id", "--force"], examplePath: "examples/vendor-invoice.metadata.json" },
   { key: "documents list", usage: "documents list --company <path>", description: "Lister gemte bilag.", allowedFlags: ["--company"] },
-  { key: "bank import", usage: "bank import --company <path> --file <transactions.csv>", description: "Importerer banktransaktioner fra CSV.", allowedFlags: ["--company", "--file"], examplePath: "examples/bank-transactions.csv" },
-  { key: "bank list", usage: "bank list --company <path> [--status all|matched|unmatched] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--text-match <text>] [--amount <n>]", description: "Lister importerede banktransaktioner med filtre for afstemningsstatus.", allowedFlags: ["--company", "--status", "--from", "--to", "--text-match", "--amount"] },
+  // ===== BANK CLUSTER (#186-189) =====
+  { key: "bank-account add", usage: "bank-account add --company <path> --name <text> [--slug <slug>] [--bank-name <text>] [--registration-no <regnr>] [--account-no <kontonr>] [--iban <iban>] [--currency <ISO>] [--ledger-account <konto>]", description: "Opretter en bankkonto i virksomhedens ledger.", allowedFlags: ["--company", "--name", "--slug", "--bank-name", "--registration-no", "--account-no", "--iban", "--currency", "--ledger-account"] },
+  { key: "bank-account list", usage: "bank-account list --company <path>", description: "Lister registrerede bankkonti.", allowedFlags: ["--company"] },
+  { key: "bank import", usage: "bank import --company <path> --file <transactions.csv> [--account <id|slug>] [--profile danske-bank]", description: "Importerer banktransaktioner fra CSV.", allowedFlags: ["--company", "--file", "--account", "--profile"], examplePath: "examples/bank-transactions.csv" },
+  { key: "bank list", usage: "bank list --company <path> [--status all|matched|unmatched] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--text-match <text>] [--amount <n>] [--account <id|slug>]", description: "Lister importerede banktransaktioner med filtre for afstemningsstatus.", allowedFlags: ["--company", "--status", "--from", "--to", "--text-match", "--amount", "--account"] },
   { key: "bank suggest-matches", usage: "bank suggest-matches --company <path> [--bank-transaction-id <n>] [--max <n>]", description: "Foreslår deterministiske match mellem uafstemte banktransaktioner og fakturaer/bilag.", allowedFlags: ["--company", "--bank-transaction-id", "--max"] },
-  { key: "reconcile bank", usage: "reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--status all|matched|unmatched] [--text-match <text>] [--amount <n>]", description: "Viser afstemte og uafstemte banktransaktioner med filtre.", allowedFlags: ["--company", "--from", "--to", "--status", "--text-match", "--amount"] },
+  { key: "reconcile bank", usage: "reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--status all|matched|unmatched] [--text-match <text>] [--amount <n>] [--account <id|slug>]", description: "Viser afstemte og uafstemte banktransaktioner med filtre.", allowedFlags: ["--company", "--from", "--to", "--status", "--text-match", "--amount", "--account"] },
+  // ===== END BANK CLUSTER (#186-189) =====
   {
     key: "expense book",
     usage:
@@ -197,6 +201,26 @@ export const COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: ["--company", "--source", "--metadata", "--force"],
     examplePath: "examples/bilagsmail.metadata.json",
   },
+  // ===== IMAP INTAKE (#181) =====
+  {
+    key: "imap-intake poll",
+    usage:
+      "imap-intake poll --company <path> [--metadata <file.json>] [--imap-host <host>] [--imap-port <n>] [--imap-username <user>] [--imap-mailbox <name>] [--since-uid <n>] [--force]",
+    description:
+      "Poller en hosted IMAP-postkasse og videresender nye beskeder til den eksisterende bilagsmail-pipeline (#122). Dedup er rerun-stabil; gentaget poll skaber ingen dubletter.",
+    allowedFlags: [
+      "--company", "--metadata", "--imap-host", "--imap-port",
+      "--imap-username", "--imap-mailbox", "--since-uid", "--force",
+    ],
+    examplePath: "examples/bilagsmail.metadata.json",
+    inputNotes: [
+      "IMAP-credentials læses fra --imap-* flags eller RENTEMESTER_IMAP_* miljøvariabler",
+      "RENTEMESTER_IMAP_PASSWORD er kun miljøvariabel — aldrig et CLI-flag eller i ledger",
+      "Standard: TLS (IMAPS) på port 993, mailbox INBOX",
+      "Dedup deler mail_intake_messages-tabellen med 'mail-intake ingest' (#122)",
+    ],
+  },
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   {
     key: "mileage log",
@@ -239,6 +263,126 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
   { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
   // ===== END FIXED ASSETS (#124, #125) =====
+  // ===== FINANCIAL STATEMENTS (#176) =====
+  { key: "report trial-balance", usage: "report trial-balance --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en saldobalance med debet, kredit og saldo pr. konto for perioden.", allowedFlags: ["--company", "--from", "--to"] },
+  { key: "report profit-loss", usage: "report profit-loss --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en resultatopgørelse (indtægter minus omkostninger) for perioden.", allowedFlags: ["--company", "--from", "--to"] },
+  { key: "report balance", usage: "report balance --company <path> --as-of <YYYY-MM-DD>", description: "Bygger en balance (aktiver, passiver, egenkapital) på en given dato.", allowedFlags: ["--company", "--as-of"] },
+  // ===== END FINANCIAL STATEMENTS (#176) =====
+  // ===== VAT FILING (#178) =====
+  {
+    key: "vat momsangivelse",
+    usage: "vat momsangivelse --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en indberetningsklar momsangivelse (SKAT-rubrikker + momstilsvar) for en lukket momsperiode. Kræver en lukket/indberettet vat_quarter-periode.",
+    allowedFlags: ["--company", "--from", "--to"],
+  },
+  {
+    key: "vat filing",
+    usage: "vat filing --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Alias for 'vat momsangivelse': indberetningsklar momsangivelse for en lukket momsperiode.",
+    allowedFlags: ["--company", "--from", "--to"],
+  },
+  // ===== END VAT FILING (#178) =====
+  // ===== OPENING BALANCE (#179) =====
+  {
+    key: "opening-balance post",
+    usage: "opening-balance post --company <path> --input <file.json>",
+    description: "Bogfører virksomhedens primobalance som én balanceret, audited åbningspostering pr. en skæringsdato. Idempotent: præcis én primobalance pr. virksomhed.",
+    allowedFlags: ["--company", "--input"],
+    inputNotes: [
+      "cutOverDate: YYYY-MM-DD (skæringsdato)",
+      "lines: [{ accountNo, debitAmount | creditAmount, text? }]",
+      "Skal balancere: sum debet == sum kredit (heltal øre)",
+      "note: valgfri tekst",
+    ],
+  },
+  // ===== END OPENING BALANCE (#179) =====
+  // ===== EMAIL DELIVERY (#180) =====
+  {
+    key: "invoice send",
+    usage: "invoice send --company <path> (--document-id <n> | --invoice-number <no>) [--kind invoice|reminder] [--to <email>]",
+    description: "Sender en udstedt faktura eller en betalingspaamindelse til kundens email via SMTP med PDF'en vedhaeftet, og logger afsendelsen append-only. SMTP-config laeses fra config/smtp.json; credentials gemmes aldrig i bogføringstilstanden. Idempotent: en identisk afsendelse genudsendes ikke.",
+    allowedFlags: ["--company", "--document-id", "--invoice-number", "--kind", "--to"],
+    inputNotes: [
+      "SMTP-config (host, port, fromAddress, fromName, dryRun) laeses fra config/smtp.json",
+      "--to overstyrer modtageren; ellers slaaes kundens email op fra kundekartoteket",
+      "--kind reminder kraever at fakturaen er udstedt; standard er invoice",
+    ],
+  },
+  // ===== END EMAIL DELIVERY (#180) =====
+  // ===== GDPR (#184) =====
+  {
+    key: "gdpr export",
+    usage: "gdpr export --company <path> (--cvr <DK...> | --name <text>) [--as-of <YYYY-MM-DD>]",
+    description: "Samler alle persondata Rentemester har om en kunde/leverandør i én indsigtsrapport med opbevaringsvurdering. Read-only.",
+    allowedFlags: ["--company", "--cvr", "--name", "--as-of"],
+    inputNotes: [
+      "Den registrerede identificeres med --cvr og/eller --name",
+      "Hver post markeres med opbevaringsfrist og om den stadig er under bogføringspligt",
+    ],
+  },
+  {
+    key: "gdpr erase",
+    usage: "gdpr erase --company <path> (--cvr <DK...> | --name <text>) [--as-of <YYYY-MM-DD>]",
+    description: "Sletter/redigerer persondata der ikke længere er under bogføringsmæssig opbevaringspligt; afviser klart data der stadig skal opbevares. Append-only ledger og audit-kæde røres aldrig.",
+    allowedFlags: ["--company", "--cvr", "--name", "--as-of"],
+    inputNotes: [
+      "Den registrerede identificeres med --cvr og/eller --name",
+      "Poster under opbevaringsfrist afvises — bogføringsloven går forud for sletteret",
+      "Sletning skrives som append-only tombstone; finansposteringer ændres ikke",
+    ],
+  },
+  // ===== END GDPR (#184) =====
+  // ===== ANNUAL REPORT (#177) =====
+  {
+    key: "report annual",
+    usage: "report annual --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--ixbrl-out <file.xhtml>]",
+    description: "Samler en arsrapport for regnskabsklasse B (resultatopgørelse, balance, noteskelet og ledelsespategning) for et lukket regnskabsaar og kan skrive en deterministisk iXBRL-fil. Rentemester forbereder; ejer/revisor gennemgar og indberetter.",
+    allowedFlags: ["--company", "--from", "--to", "--ixbrl-out"],
+    inputNotes: [
+      "--from / --to afgrænser regnskabsaaret (skal være helt dækket af en lukket/indberettet periode)",
+      "Kræver registreret CVR og balancerede bøger",
+      "--ixbrl-out skriver en deterministisk iXBRL (inline-XBRL) XHTML-fil mod et afgrænset micro/small-taksonomi-udsnit",
+    ],
+  },
+  // ===== END ANNUAL REPORT (#177) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  {
+    key: "import run",
+    usage: "import run --company <path> --file <export-file> [--system <id>]",
+    description: "Migrerer en virksomhed fra et andet bogføringssystem ind i Rentemester. Parser eksportfilen med den valgte per-system-parser og bogfører resultatet som virksomhedens primobalance (#179). Idempotent: præcis én import/primobalance pr. virksomhed.",
+    allowedFlags: ["--company", "--file", "--system"],
+    examplePath: "examples/import-synthetic.csv",
+    exampleHint: "rentemester import run --example",
+    inputNotes: [
+      "--system vælger parseren; standard er 'synthetic-csv' (det indbyggede eksempel)",
+      "Brug 'import systems' for at se tilgængelige parsere",
+      "Eksportfilen skal balancere: sum debet == sum kredit (heltal øre)",
+      "De rigtige e-conomic/Billy-parsere er en opfølgning — de kræver rigtige eksportfiler",
+    ],
+  },
+  {
+    key: "import systems",
+    usage: "import systems [--format json|human]",
+    description: "Lister de bogføringssystemer import-frameworket har en parser til. Read-only.",
+    allowedFlags: [],
+  },
+  // ===== END IMPORT FRAMEWORK (#185) =====
+  // ===== RUNTIME AGENT (#183) =====
+  {
+    key: "agent run",
+    usage: "agent run --company <slug|path> --as-of <YYYY-MM-DD> [--inbox <dir>] [--metadata-dir <dir>] [--bank-csv <file.csv>]",
+    description:
+      "Kører én deterministisk bogføringsloop for virksomheden: ingest bilag → bogfør det entydige → rut det usikre til exception-køen → afstem bank → tjek moms-/regnskabsår-deadlines → udskriv en slutrapport. Agenten gætter aldrig; alt usikkert bliver en exception. Samme fixture + samme --as-of giver identisk output.",
+    allowedFlags: ["--company", "--as-of", "--inbox", "--metadata-dir", "--bank-csv"],
+    inputNotes: [
+      "--as-of er agentens eneste 'nu' — ingen wall-clock-afhængighed",
+      "--inbox: mappe med bilag (ét dokument pr. fil) med parallel <stem>.json metadata",
+      "--metadata-dir: hvor metadata-JSON ligger (standard: samme som --inbox)",
+      "--bank-csv: bankudtog der importeres før match/afstemning",
+      "Agenten bogfører som agent:rentemester-bookkeeper og handler kun inden for guardrails",
+    ],
+  },
+  // ===== END RUNTIME AGENT (#183) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));

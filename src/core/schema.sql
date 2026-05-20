@@ -111,6 +111,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_issued_invoice_no_unique
 ON documents(invoice_no)
 WHERE document_type = 'issued_invoice';
 
+-- ===== BANK CLUSTER (#186-189,#182) =====
+-- A company can hold several bank accounts (driftskonto, valutakonto,
+-- opsparingskonto, ...). Imported transactions are coupled to one of these so
+-- reconciliation can be scoped to a single account (#187).
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id INTEGER PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  bank_name TEXT,
+  registration_no TEXT,
+  account_no TEXT,
+  iban TEXT,
+  currency TEXT NOT NULL DEFAULT 'DKK',
+  ledger_account_no TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(ledger_account_no) REFERENCES accounts(account_no)
+);
+-- ===== END BANK CLUSTER (#186-189,#182) =====
+
 CREATE TABLE IF NOT EXISTS bank_transactions (
   id INTEGER PRIMARY KEY,
   transaction_date TEXT NOT NULL,
@@ -125,7 +145,20 @@ CREATE TABLE IF NOT EXISTS bank_transactions (
   import_batch_id TEXT,
   transaction_hash TEXT UNIQUE,
   status TEXT NOT NULL DEFAULT 'imported',
-  retain_until TEXT
+  retain_until TEXT,
+  -- ===== BANK CLUSTER (#186-189,#182) =====
+  -- bank_account_id is nullable for rows imported before #187; new imports
+  -- always set it. Extra structured columns (#188) and the running balance
+  -- (#189) are nullable and populated by import profiles that supply them.
+  bank_account_id INTEGER REFERENCES bank_accounts(id),
+  counterparty_name TEXT,
+  counterparty_account TEXT,
+  message TEXT,
+  archive_reference TEXT,
+  customer_reference TEXT,
+  balance_after NUMERIC,
+  raw_json TEXT
+  -- ===== END BANK CLUSTER (#186-189,#182) =====
 );
 
 CREATE TABLE IF NOT EXISTS journal_entries (
@@ -497,6 +530,32 @@ BEFORE DELETE ON bank_transactions
 BEGIN
   SELECT RAISE(ABORT, 'bank transactions are append-only; correct via journal reversal or new import');
 END;
+
+-- ===== BANK CLUSTER (#186-189,#182) =====
+-- Bank accounts are append-only identity records: only the `active` flag may
+-- change (to retire a closed account), everything else is immutable so
+-- already-imported transactions keep pointing at a stable account definition.
+CREATE TRIGGER IF NOT EXISTS bank_accounts_guard_update
+BEFORE UPDATE ON bank_accounts
+WHEN OLD.slug != NEW.slug
+   OR OLD.name != NEW.name
+   OR OLD.bank_name IS NOT NEW.bank_name
+   OR OLD.registration_no IS NOT NEW.registration_no
+   OR OLD.account_no IS NOT NEW.account_no
+   OR OLD.iban IS NOT NEW.iban
+   OR OLD.currency != NEW.currency
+   OR OLD.ledger_account_no IS NOT NEW.ledger_account_no
+   OR OLD.created_at != NEW.created_at
+BEGIN
+  SELECT RAISE(ABORT, 'bank accounts are append-only; only the active flag may change');
+END;
+
+CREATE TRIGGER IF NOT EXISTS bank_accounts_no_delete
+BEFORE DELETE ON bank_accounts
+BEGIN
+  SELECT RAISE(ABORT, 'bank accounts are append-only; deactivate them instead');
+END;
+-- ===== END BANK CLUSTER (#186-189,#182) =====
 
 CREATE TRIGGER IF NOT EXISTS invoice_payments_require_journal
 BEFORE INSERT ON invoice_payments
@@ -904,3 +963,102 @@ BEFORE DELETE ON peppol_submissions
 BEGIN
   SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
 END;
+-- ===== OPENING BALANCE (#179) =====
+-- Marks that a company's opening balance (primobalance) has been posted.
+-- The primobalance itself lives as a normal balanced journal entry in
+-- journal_entries (posted via postJournalEntry, hash-chained and audited);
+-- this table is only the idempotency marker — exactly one row per company.
+-- The single-row constraint enforces "one primobalance per company": the
+-- fixed CHECK(id = 1) primary key makes a second INSERT fail. The table is
+-- append-only audit data: never updated, never deleted.
+CREATE TABLE IF NOT EXISTS opening_balances (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  cut_over_date TEXT NOT NULL,
+  journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id),
+  journal_entry_no TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER IF NOT EXISTS opening_balances_no_update
+BEFORE UPDATE ON opening_balances
+BEGIN
+  SELECT RAISE(ABORT, 'opening balance is append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS opening_balances_no_delete
+BEFORE DELETE ON opening_balances
+BEGIN
+  SELECT RAISE(ABORT, 'opening balance is append-only; reverse the journal entry instead');
+END;
+-- ===== END OPENING BALANCE (#179) =====
+-- ===== END PEPPOL SUBMISSION (#128) =====
+-- ===== EMAIL DELIVERY (#180) =====
+-- Append-only SMTP send log: records that an issued invoice / a reminder was
+-- emailed to a customer, so a send is recorded and not silently repeated.
+-- This is audit data — never updated or deleted. The unique message_id is
+-- the idempotency key. SMTP CREDENTIALS are NEVER stored here; only the
+-- non-secret smtp_host used for the send is recorded for the audit trail.
+CREATE TABLE IF NOT EXISTS email_send_log (
+  id INTEGER PRIMARY KEY,
+  invoice_document_id INTEGER NOT NULL,
+  invoice_no TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('invoice','reminder')),
+  recipient TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  message_id TEXT NOT NULL UNIQUE,
+  body_sha256 TEXT NOT NULL,
+  smtp_host TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_send_log_invoice
+  ON email_send_log(invoice_document_id);
+
+CREATE TRIGGER IF NOT EXISTS email_send_log_no_update
+BEFORE UPDATE ON email_send_log
+BEGIN
+  SELECT RAISE(ABORT, 'email send log is append-only audit data; record a new send instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS email_send_log_no_delete
+BEFORE DELETE ON email_send_log
+BEGIN
+  SELECT RAISE(ABORT, 'email send log is append-only audit data; record a new send instead');
+END;
+-- ===== END EMAIL DELIVERY (#180) =====
+
+-- ===== GDPR (#184) =====
+-- Append-only erasure tombstones. A GDPR erasure never UPDATEs/DELETEs the
+-- append-only master-data rows or the ledger; instead it records one row per
+-- redacted source record here. The GDPR export layer overlays these tombstones
+-- so the redacted personal data never resurfaces. Keeping erasure as an
+-- append-only journal means the audit chain and bookkeeping integrity are
+-- untouched by a data-subject erasure.
+CREATE TABLE IF NOT EXISTS gdpr_erasures (
+  id INTEGER PRIMARY KEY,
+  subject_key TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('customers','vendors','documents','bank_transactions')),
+  source_row_id INTEGER NOT NULL,
+  redacted_fields TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  retained_until_at_erasure TEXT,
+  erased_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source, source_row_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gdpr_erasures_subject ON gdpr_erasures(subject_key);
+
+CREATE TRIGGER IF NOT EXISTS gdpr_erasures_no_update
+BEFORE UPDATE ON gdpr_erasures
+BEGIN
+  SELECT RAISE(ABORT, 'gdpr_erasures are append-only audit records; record a new erasure instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS gdpr_erasures_no_delete
+BEFORE DELETE ON gdpr_erasures
+BEGIN
+  SELECT RAISE(ABORT, 'gdpr_erasures are append-only audit records; an erasure cannot be revoked');
+END;
+-- ===== END GDPR (#184) =====

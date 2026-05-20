@@ -1,0 +1,19 @@
+version: dk-bank-v0.0.1
+sources:
+  - DK-BOGFORINGSLOVEN-2022-700
+rules:
+  - rule_id: DK-BANK-BALANCE-CONTINUITY-001
+    name: Imported bank statements are checked for running-balance continuity
+    category: bank_import_integrity
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: warning
+    machine_rule:
+      require: running_balance_continuity_after_import
+      forbid: [silent_balance_gap]
+    explanation: >-
+      When a bank-import profile supplies a running balance (Saldo), Rentemester
+      walks the imported batch in date order and asserts that each row's balance
+      equals the previous balance plus the row's amount. A break means rows are
+      missing, duplicated or misordered. Rentemester surfaces the break as a
+      warning and an exception-queue entry rather than failing silently; the
+      import is not hard-failed because a partial export is a legitimate input.

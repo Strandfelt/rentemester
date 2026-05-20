@@ -28,6 +28,9 @@ import { register as registerExceptions } from "./cli/exceptions";
 import { register as registerInvoice } from "./cli/invoice";
 import { register as registerDocuments } from "./cli/documents";
 import { register as registerBank } from "./cli/bank";
+// ===== BANK CLUSTER (#187) =====
+import { register as registerBankAccount } from "./cli/bank-account";
+// ===== END BANK CLUSTER (#187) =====
 import { register as registerVat } from "./cli/vat";
 import { register as registerJournal } from "./cli/journal";
 import { register as registerSystem } from "./cli/system";
@@ -42,6 +45,9 @@ import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
 // ===== MAIL INTAKE (#122) =====
 import { register as registerMailIntake } from "./cli/mail-intake";
+// ===== IMAP INTAKE (#181) =====
+import { register as registerImapIntake } from "./cli/imap-intake";
+// ===== END IMAP INTAKE (#181) =====
 // ===== MILEAGE LOG (#123) =====
 import { register as registerMileage } from "./cli/mileage";
 // Fixed assets (#124, #125)
@@ -49,6 +55,27 @@ import { register as registerAsset } from "./cli/asset";
 import { register as registerCompany } from "./cli/company";
 // ===== COCKPIT BACKEND (#170) =====
 import { register as registerServe } from "./cli/serve";
+// ===== FINANCIAL STATEMENTS (#176) =====
+import { register as registerReport } from "./cli/report";
+// ===== END FINANCIAL STATEMENTS (#176) =====
+// ===== OPENING BALANCE (#179) =====
+import { register as registerOpeningBalance } from "./cli/opening-balance";
+// ===== END OPENING BALANCE (#179) =====
+// ===== EMAIL DELIVERY (#180) =====
+import { register as registerEmail } from "./cli/email";
+// ===== END EMAIL DELIVERY (#180) =====
+// ===== GDPR (#184) =====
+import { register as registerGdpr } from "./cli/gdpr";
+// ===== END GDPR (#184) =====
+// ===== ANNUAL REPORT (#177) =====
+import { register as registerAnnualReport } from "./cli/annual-report";
+// ===== END ANNUAL REPORT (#177) =====
+// ===== IMPORT FRAMEWORK (#185) =====
+import { register as registerImport } from "./cli/import";
+// ===== END IMPORT FRAMEWORK (#185) =====
+// ===== RUNTIME AGENT (#183) =====
+import { register as registerAgent } from "./cli/agent";
+// ===== END RUNTIME AGENT (#183) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -178,6 +205,9 @@ for (const registerFn of [
   registerInvoice,
   registerDocuments,
   registerBank,
+  // ===== BANK CLUSTER (#187) =====
+  registerBankAccount,
+  // ===== END BANK CLUSTER (#187) =====
   registerVat,
   registerJournal,
   registerSystem,
@@ -192,6 +222,9 @@ for (const registerFn of [
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   registerMailIntake,
+  // ===== IMAP INTAKE (#181) =====
+  registerImapIntake,
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   registerMileage,
   // Fixed assets (#124, #125)
@@ -199,6 +232,27 @@ for (const registerFn of [
   registerCompany,
   // ===== COCKPIT BACKEND (#170) =====
   registerServe,
+  // ===== FINANCIAL STATEMENTS (#176) =====
+  registerReport,
+  // ===== END FINANCIAL STATEMENTS (#176) =====
+  // ===== OPENING BALANCE (#179) =====
+  registerOpeningBalance,
+  // ===== END OPENING BALANCE (#179) =====
+  // ===== EMAIL DELIVERY (#180) =====
+  registerEmail,
+  // ===== END EMAIL DELIVERY (#180) =====
+  // ===== GDPR (#184) =====
+  registerGdpr,
+  // ===== END GDPR (#184) =====
+  // ===== ANNUAL REPORT (#177) =====
+  registerAnnualReport,
+  // ===== END ANNUAL REPORT (#177) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  registerImport,
+  // ===== END IMPORT FRAMEWORK (#185) =====
+  // ===== RUNTIME AGENT (#183) =====
+  registerAgent,
+  // ===== END RUNTIME AGENT (#183) =====
 ]) {
   registerFn(dispatch);
 }

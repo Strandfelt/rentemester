@@ -1,0 +1,6 @@
+Dato;Rentedato;Tekst;Beløb;Valuta;Saldo;Afsender;Modtagerkonto;Besked;Arkivreference;Kundereference
+02.01.2026;02.01.2026;Indbetaling;5.000,00;DKK;5.000,00;ACME ApS;3000111122223333;Faktura 2026-001;ARK-100;KND-1
+05.02.2026;06.02.2026;Kortbetaling;-249,50;DKK;4.750,50;;;Kontorartikler;ARK-101;KND-2
+03.03.2026;04.03.2026;Overførsel;-1.200,00;DKK;3.550,50;Leverandør Nord ApS;9000444455556666;Bilag 5512;ARK-102;KND-3
+04.04.2026;04.04.2026;Indbetaling;2.500,00;DKK;6.050,50;Beta Handel ApS;3000777788889999;Faktura 2026-002;ARK-103;KND-4
+06.05.2026;07.05.2026;Gebyr;-45,00;DKK;6.005,50;;;Månedsgebyr;ARK-104;KND-5
