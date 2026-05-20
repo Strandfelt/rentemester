@@ -78,18 +78,27 @@ export type ImportOpeningBalanceLine = {
   creditAmount?: number;
   /** Optional per-line text; defaults to the account name when omitted. */
   text?: string;
+  /** Optional source-system VAT code/label carried for the audit trail. */
+  vatCode?: string;
 };
 
 /**
- * An optional historical journal entry from the source system. NOT posted by
- * the current framework — opening balances are the supported target. The shape
- * is defined now so a future iteration (or a parser that captures detail) has
- * a stable place to put it without a breaking change.
+ * A historical journal entry from the source system — one voucher's worth of
+ * activity AFTER the cut-over date. Posted by `runImport` (#195) as a balanced
+ * journal entry, marked as an imported migration posting.
+ *
+ * `voucherRef` is the source system's voucher (Dinero `Bilag`) number — the
+ * stable handle #196 uses to link an ingested receipt to its journal entry.
+ * `entryType` carries the source classification (Dinero `Bilagstype`).
  */
 export type ImportHistoricalEntry = {
   transactionDate: string;
   text: string;
   lines: ImportOpeningBalanceLine[];
+  /** Source-system voucher number (Dinero `Bilag`); links receipts in #196. */
+  voucherRef?: string;
+  /** Source-system entry classification (Dinero `Bilagstype`). */
+  entryType?: string;
 };
 
 /**
@@ -243,6 +252,18 @@ export type ImportResult = {
   openingBalanceLineCount: number;
   /** Count of historical entries seen but intentionally not posted. */
   historicalEntriesSkipped: number;
+  /**
+   * Year-to-date vouchers (#195) replayed as journal entries after the
+   * primobalance. Each carries the source voucher reference (Dinero `Bilag`)
+   * and the journal entry it landed as — the handle #196 uses to link a
+   * receipt to its voucher's journal entry.
+   */
+  historicalEntriesPosted?: Array<{
+    voucherRef: string;
+    entryId: number;
+    entryNo: string;
+    transactionDate: string;
+  }>;
   /** Chart-of-accounts reconciliation outcome, when the source carried one. */
   chart?: ChartReconciliationResult;
   /** Company-master-data reconciliation outcome, when the source carried one. */

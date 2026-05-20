@@ -23,6 +23,7 @@ import { postOpeningBalance } from "../opening-balance";
 import { isValidIsoDate } from "../dates";
 import { toOre } from "../money";
 import { reconcileChartOfAccounts, reconcileCompanyMasterData } from "./reconcile";
+import { postDineroPostings, IMPORT_POSTINGS_RULE } from "./dinero-postings";
 import { resolveSource } from "./source";
 import type {
   ImportOptions,
@@ -141,15 +142,45 @@ export function runImport(
     );
   }
 
-  // Historical entries are accepted in the IR but intentionally not posted by
-  // the current framework — opening balances are the supported target.
+  // Historical entries (#195) — year-to-date vouchers replayed AFTER the
+  // primobalance. Their per-voucher balance is checked up front so an
+  // unbalanced voucher rejects the WHOLE import before anything is posted.
   const historicalEntries = Array.isArray(source?.historicalEntries)
     ? source.historicalEntries
     : [];
-  if (historicalEntries.length > 0) {
-    auditTrail.push(
-      `${historicalEntries.length} historical entr${historicalEntries.length === 1 ? "y" : "ies"} present in source — not posted (opening balances are the import target)`,
-    );
+  for (let i = 0; i < historicalEntries.length; i += 1) {
+    const entry = historicalEntries[i]!;
+    const ref =
+      typeof entry?.voucherRef === "string" && entry.voucherRef.trim().length > 0
+        ? entry.voucherRef.trim()
+        : `#${i + 1}`;
+    const lines = Array.isArray(entry?.lines) ? entry.lines : [];
+    if (lines.length < 2) {
+      errors.push(`historical voucher ${ref} needs at least two lines`);
+    }
+    let voucherDebitOre = 0n;
+    let voucherCreditOre = 0n;
+    for (const line of lines) {
+      const accountNo = typeof line.accountNo === "string" ? line.accountNo.trim() : "";
+      if (!accountNo) {
+        errors.push(`historical voucher ${ref} has a line missing an accountNo`);
+        continue;
+      }
+      if (chartAccountNos.size > 0 && !chartAccountNos.has(accountNo)) {
+        errors.push(
+          `historical voucher ${ref} references account '${accountNo}' which is not in the source chart of accounts`,
+        );
+      }
+      const hasDebit = typeof line.debitAmount === "number" && Number.isFinite(line.debitAmount);
+      const hasCredit = typeof line.creditAmount === "number" && Number.isFinite(line.creditAmount);
+      voucherDebitOre += toOre(hasDebit ? line.debitAmount! : 0);
+      voucherCreditOre += toOre(hasCredit ? line.creditAmount! : 0);
+    }
+    if (lines.length >= 2 && voucherDebitOre !== voucherCreditOre) {
+      errors.push(
+        `historical voucher ${ref} does not balance: debits != credits (${voucherDebitOre} != ${voucherCreditOre} øre)`,
+      );
+    }
   }
 
   if (errors.length > 0) {
@@ -253,6 +284,42 @@ export function runImport(
 
   auditTrail.push(`Posted primobalance as journal entry ${result.entryNo}`);
 
+  // --- year-to-date postings (#195) ---------------------------------------
+  // After the primobalance the company sits at the cut-over date. The source's
+  // historical entries are the activity since then; replay each as a balanced
+  // journal entry, marked as an imported migration posting. Each voucher was
+  // already balance-checked above, so this should not fail — but if a voucher
+  // is still rejected by `postJournalEntry` the import is reported as failed
+  // with the primobalance left posted (it is valid and idempotent on its own).
+  let historicalEntriesPosted: ImportResult["historicalEntriesPosted"];
+  const appliedRules = new Set([IMPORT_RULE, ...result.appliedRules]);
+  if (historicalEntries.length > 0) {
+    const postings = postDineroPostings(db, historicalEntries, chartAccountNos, {
+      createdBy: options.createdBy,
+    });
+    for (const line of postings.auditTrail) auditTrail.push(line);
+    if (!postings.ok) {
+      return {
+        ok: false,
+        sourceSystem,
+        cutOverDate,
+        entryId: result.entryId,
+        entryNo: result.entryNo,
+        entryHash: result.entryHash,
+        openingBalanceLineCount: openingBalances.length,
+        historicalEntriesSkipped: historicalEntries.length,
+        historicalEntriesPosted: postings.posted,
+        chart: chartResult,
+        company: companyResult,
+        auditTrail,
+        appliedRules: [...appliedRules, IMPORT_POSTINGS_RULE],
+        errors: postings.errors,
+      };
+    }
+    appliedRules.add(IMPORT_POSTINGS_RULE);
+    historicalEntriesPosted = postings.posted;
+  }
+
   return {
     ok: true,
     sourceSystem,
@@ -261,11 +328,12 @@ export function runImport(
     entryNo: result.entryNo,
     entryHash: result.entryHash,
     openingBalanceLineCount: openingBalances.length,
-    historicalEntriesSkipped: historicalEntries.length,
+    historicalEntriesSkipped: 0,
+    ...(historicalEntriesPosted ? { historicalEntriesPosted } : {}),
     chart: chartResult,
     company: companyResult,
     auditTrail,
-    appliedRules: [...new Set([IMPORT_RULE, ...result.appliedRules])],
+    appliedRules: [...appliedRules],
     errors: [],
   };
 }
