@@ -86,30 +86,76 @@ function invoiceTextLines(payload: InvoicePayload & { invoiceNumber?: string; is
   return lines.map((line) => compact(line) ?? "");
 }
 
-export function buildIssuedInvoicePdf(payload: InvoicePayload & { invoiceNumber?: string; issuedAt?: string; status?: string }) {
-  const lines = invoiceTextLines(payload);
+const PDF_TOP_Y = 805;
+const PDF_BOTTOM_Y = 48;
+
+/**
+ * Paginate the rendered text lines so no content (totals, legal notes) is ever
+ * silently dropped. Each returned array becomes its own PDF page; a line is
+ * placed on the current page only while it still fits above PDF_BOTTOM_Y.
+ */
+function paginateInvoiceTextLines(lines: string[]) {
+  const pages: string[][] = [];
+  let current: string[] = [];
+  let y = PDF_TOP_Y;
+  for (const line of lines) {
+    const step = line === "" ? 10 : 16;
+    if (y - step < PDF_BOTTOM_Y && current.length > 0) {
+      pages.push(current);
+      current = [];
+      y = PDF_TOP_Y;
+    }
+    current.push(line);
+    y -= step;
+  }
+  if (current.length > 0 || pages.length === 0) pages.push(current);
+  return pages;
+}
+
+function pageContentStream(lines: string[]) {
   const streamLines = ["BT", "/F1 12 Tf"];
-  let y = 805;
+  let y = PDF_TOP_Y;
   for (const line of lines) {
     const text = escapePdfText(line);
     streamLines.push(`1 0 0 1 48 ${y} Tm (${text}) Tj`);
     y -= line === "" ? 10 : 16;
-    if (y < 48) break;
   }
   streamLines.push("ET");
-  const content = `${streamLines.join("\n")}\n`;
+  return `${streamLines.join("\n")}\n`;
+}
+
+export function buildIssuedInvoicePdf(payload: InvoicePayload & { invoiceNumber?: string; issuedAt?: string; status?: string }) {
+  const lines = invoiceTextLines(payload);
+  const pages = paginateInvoiceTextLines(lines);
   const issueDate = compact(payload.issueDate) ?? "1970-01-01";
   const pdfDate = `D:${issueDate.replace(/-/g, "")}000000Z`;
   const producer = escapePdfText("Rentemester deterministic invoice renderer");
   const title = escapePdfText(`Invoice ${payload.invoiceNumber ?? ""}`);
-  const objects = [
+
+  // Object layout: 1 Catalog, 2 Pages, then for each page a Page object and a
+  // Contents object, then the Font object and the Info object.
+  const pageCount = pages.length;
+  const fontObjectNo = 3 + pageCount * 2;
+  const infoObjectNo = fontObjectNo + 1;
+  const pageObjectNos = pages.map((_, i) => 3 + i * 2);
+
+  const objects: string[] = [
     "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-    "2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n",
-    `4 0 obj\n<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}endstream\nendobj\n`,
-    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
-    `6 0 obj\n<< /Producer (${producer}) /Title (${title}) /CreationDate (${pdfDate}) /ModDate (${pdfDate}) >>\nendobj\n`,
+    `2 0 obj\n<< /Type /Pages /Count ${pageCount} /Kids [${pageObjectNos.map((n) => `${n} 0 R`).join(" ")}] >>\nendobj\n`,
   ];
+  pages.forEach((pageLines, i) => {
+    const pageNo = pageObjectNos[i];
+    const contentNo = pageNo + 1;
+    const content = pageContentStream(pageLines);
+    objects.push(
+      `${pageNo} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontObjectNo} 0 R >> >> /Contents ${contentNo} 0 R >>\nendobj\n`,
+    );
+    objects.push(
+      `${contentNo} 0 obj\n<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}endstream\nendobj\n`,
+    );
+  });
+  objects.push(`${fontObjectNo} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`);
+  objects.push(`${infoObjectNo} 0 obj\n<< /Producer (${producer}) /Title (${title}) /CreationDate (${pdfDate}) /ModDate (${pdfDate}) >>\nendobj\n`);
 
   let pdf = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
   const offsets: number[] = [0];
@@ -123,7 +169,7 @@ export function buildIssuedInvoicePdf(payload: InvoicePayload & { invoiceNumber?
   for (let i = 1; i < offsets.length; i += 1) {
     pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
   }
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${infoObjectNo} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   return Buffer.from(pdf, "binary");
 }
 
