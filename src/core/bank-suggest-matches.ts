@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
 import { roundDkk } from "./money";
+import { daysBetween } from "./dates";
 
 export type BankMatchSuggestion = {
   kind: "issued_invoice" | "purchase_sale";
@@ -34,12 +35,6 @@ export type SuggestBankMatchesInput = {
   max?: number;
 };
 
-
-function daysBetween(a: string, b: string) {
-  const from = new Date(`${a}T00:00:00Z`).getTime();
-  const to = new Date(`${b}T00:00:00Z`).getTime();
-  return Math.abs(Math.round((to - from) / 86400000));
-}
 
 function tokenize(value: string | null | undefined) {
   return Array.from(new Set((value ?? "")
