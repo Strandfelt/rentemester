@@ -18,7 +18,7 @@ describe("public e-invoice preview export", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-20",
-      invoiceNumber: "2026-0700",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: {
         name: "Københavns Kommune",
@@ -57,7 +57,7 @@ describe("public e-invoice preview export", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-20",
-      invoiceNumber: "2026-0701",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: { name: "Privat Kunde", address: "Købervej 9" },
       lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1500, lineTotalExVat: 1500 }],
@@ -69,7 +69,7 @@ describe("public e-invoice preview export", () => {
     const exported = exportPublicEInvoicePreview(db, { invoiceDocumentId: issued.documentId! });
 
     expect(exported.ok).toBe(false);
-    expect(exported.errors).toContain("invoice 2026-0701 is not marked as a public-recipient e-invoice");
+    expect(exported.errors).toContain("invoice 2026-0001 is not marked as a public-recipient e-invoice");
 
     db.close();
     rmSync(root, { recursive: true, force: true });
@@ -85,7 +85,7 @@ describe("public e-invoice preview export", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-20",
-      invoiceNumber: "2026-0702",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: {
         name: "Københavns Kommune",
@@ -122,7 +122,7 @@ describe("public e-invoice preview export", () => {
       event_type: "public_einvoice_oioubl_export",
       entity_type: "document",
       entity_id: String(issued.documentId),
-      message: `Generated public OIOUBL handoff artifact for invoice 2026-0702 (sha256 ${first.sha256})`,
+      message: `Generated public OIOUBL handoff artifact for invoice 2026-0001 (sha256 ${first.sha256})`,
     });
 
     db.close();
@@ -138,7 +138,7 @@ describe("public e-invoice preview export", () => {
       invoiceType: "full",
       vatTreatment: "standard",
       issueDate: "2026-05-20",
-      invoiceNumber: "2026-0703",
+      invoiceNumber: "2026-0001",
       seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
       buyer: {
         name: "Københavns Kommune",
@@ -156,7 +156,7 @@ describe("public e-invoice preview export", () => {
     const exported = exportPublicEInvoiceOioUbl(db, { invoiceDocumentId: issued.documentId! });
 
     expect(exported.ok).toBe(false);
-    expect(exported.errors).toContain("invoice 2026-0703 is missing dueDate required for OIOUBL handoff");
+    expect(exported.errors).toContain("invoice 2026-0001 is missing dueDate required for OIOUBL handoff");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

@@ -152,7 +152,7 @@ describe("bank suggest-matches CLI", () => {
     expect(bankAmount).not.toBe(1250.15);
 
     const matchInvoice = issueInvoice(db, root, invoicePayload({
-      invoiceNumber: "2026-0050",
+      invoiceNumber: "2026-0002",
       lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 1000.12, lineTotalExVat: 1000.12 }],
       totals: { netAmount: 1000.12, vatRate: 0.25, vatAmount: 250.03, grossAmount: 1250.15 },
     }));
@@ -161,7 +161,7 @@ describe("bank suggest-matches CLI", () => {
     const csv = join(root, "transactions.csv");
     writeFileSync(csv, [
       "transaction_date,booking_date,text,amount,currency,reference",
-      `2026-05-20,2026-05-20,Customer payment 2026-0050 Kunde A/S,${bankAmount},DKK,INV-2026-0050`,
+      `2026-05-20,2026-05-20,Customer payment 2026-0002 Kunde A/S,${bankAmount},DKK,INV-2026-0002`,
     ].join("\n"));
     const imported = importBankCsv(db, root, csv);
     expect(imported.ok).toBe(true);
@@ -173,8 +173,8 @@ describe("bank suggest-matches CLI", () => {
     expect(listed.exitCode).toBe(0);
     expect(listed.stderr).toBe("");
     const listedJson = JSON.parse(listed.stdout);
-    const row = listedJson.rows.find((r: any) => r.reference === "INV-2026-0050");
-    expect(row.suggestions[0]).toMatchObject({ kind: "issued_invoice", invoiceNo: "2026-0050" });
+    const row = listedJson.rows.find((r: any) => r.reference === "INV-2026-0002");
+    expect(row.suggestions[0]).toMatchObject({ kind: "issued_invoice", invoiceNo: "2026-0002" });
     expect(row.suggestions[0].reasons.some((reason: string) => reason.includes("amount match"))).toBe(true);
   });
 
