@@ -9,7 +9,9 @@
 // The resolution is DETERMINISTIC: directory entries are read in sorted order
 // so the resulting `files` map and any derived ordering is reproducible.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ImportArtifact, MultiArtifactSource } from "./types";
 
@@ -44,10 +46,45 @@ function collect(rootDir: string, dir: string, into: Record<string, ImportArtifa
   }
 }
 
+/** True when `path` names a `.zip` file (case-insensitive). */
+function isZipPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".zip");
+}
+
+/**
+ * Extracts a `.zip` export into a fresh temporary directory and returns it.
+ *
+ * Uses the system `unzip` (dependency-free, present on macOS and Linux). A real
+ * export can carry entry names in a non-UTF-8 encoding — e.g. a Dinero export's
+ * `Ikke-bogførte-bilag/` folder — which cannot be created on a UTF-8
+ * filesystem; `unzip` then exits non-zero having still extracted every other
+ * entry. A non-zero exit is therefore TOLERATED as long as something was
+ * extracted: the per-system parser fails clearly later (via `requireFile`) if a
+ * file it actually requires was among the few that were skipped. Only a
+ * completely empty extraction — or `unzip` not running at all — is a hard error.
+ */
+function unzipToTempDir(zipPath: string): string {
+  const dest = mkdtempSync(join(tmpdir(), "rentemester-import-"));
+  const result = spawnSync("unzip", ["-q", "-o", zipPath, "-d", dest], { encoding: "utf8" });
+  if (result.error) {
+    throw new Error(`failed to run 'unzip' for '${zipPath}': ${result.error.message}`);
+  }
+  if (readdirSync(dest).length === 0) {
+    const detail = (result.stderr || "").trim().split(/\r?\n/)[0] ?? "";
+    throw new Error(
+      `unzip extracted nothing from '${zipPath}'` +
+        (typeof result.status === "number" ? ` (exit ${result.status})` : "") +
+        (detail ? `: ${detail}` : ""),
+    );
+  }
+  return dest;
+}
+
 /**
  * Resolves an export `path` into a `MultiArtifactSource`. `path` may point at
- * an export directory, or at a single file (which is wrapped as a one-artifact
- * source so a single-file format still works through the multi-file seam).
+ * an export directory, a `.zip` of one (extracted to a temp directory), or a
+ * single file (wrapped as a one-artifact source so a single-file format still
+ * works through the multi-file seam).
  *
  * Throws if `path` does not exist.
  */
@@ -57,6 +94,12 @@ export function resolveSource(path: string): MultiArtifactSource {
     const files: Record<string, ImportArtifact> = {};
     collect(path, path, files);
     return { rootDir: path, files };
+  }
+  if (stat.isFile() && isZipPath(path)) {
+    const rootDir = unzipToTempDir(path);
+    const files: Record<string, ImportArtifact> = {};
+    collect(rootDir, rootDir, files);
+    return { rootDir, files };
   }
   // A single file: expose it under its basename.
   const name = path.split(/[/\\]/).pop() ?? path;
