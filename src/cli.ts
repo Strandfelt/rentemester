@@ -42,6 +42,8 @@ import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
 // ===== MAIL INTAKE (#122) =====
 import { register as registerMailIntake } from "./cli/mail-intake";
+// ===== MILEAGE LOG (#123) =====
+import { register as registerMileage } from "./cli/mileage";
 
 function fatal(message: string): never {
   console.error(message);
@@ -151,6 +153,8 @@ for (const registerFn of [
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   registerMailIntake,
+  // ===== MILEAGE LOG (#123) =====
+  registerMileage,
 ]) {
   registerFn(dispatch);
 }

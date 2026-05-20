@@ -40,6 +40,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   "mail-intake ingest",
+  // ===== MILEAGE LOG (#123) =====
+  "mileage log",
+  "mileage export",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

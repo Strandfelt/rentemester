@@ -1,0 +1,31 @@
+version: dk-mileage-v0.0.1
+sources:
+  - DK-BOGFORINGSLOVEN-2022-700
+rules:
+  - rule_id: DK-MILEAGE-LOG-001
+    name: A mileage log entry must be a complete, source-backed record before it is stored
+    category: mileage_log
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - trip_date
+        - purpose
+        - from_location
+        - to_location
+        - kilometers_positive
+        - vehicle
+        - driver
+        - rate_per_km_positive
+        - rate_basis_user_supplied_and_source_backed
+      forbid:
+        - hardcoded_tax_rate
+        - posting_mileage_to_the_journal_or_ledger
+    explanation: >-
+      Rentemester records the kørselsregnskab (mileage log) as a standalone
+      append-only register. Each entry must carry the trip date, purpose,
+      route, distance, vehicle and driver, plus a user-supplied per-kilometre
+      rate with a source-backed basis. The mileage log is documentation only;
+      Rentemester does not post it to the journal/ledger and does not decide
+      tax treatment — that remains the user's and their advisor's
+      responsibility.

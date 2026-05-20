@@ -44,6 +44,8 @@ import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
 // ===== MAIL INTAKE (#122) =====
 import { registerMailIntakeTools } from "./tools/mail-intake";
+// ===== MILEAGE LOG (#123) =====
+import { registerMileageTools } from "./tools/mileage";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -65,4 +67,6 @@ export function registerAllTools(server: McpServer): void {
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   registerMailIntakeTools(server);
+  // ===== MILEAGE LOG (#123) =====
+  registerMileageTools(server);
 }
