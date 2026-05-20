@@ -13,3 +13,7 @@ graphify-out/.graphify_root
 graphify-out/.rebuild.lock
 graphify-out/manifest.json
 graphify-out/cost.json
+
+# Claude Code: track shared settings.json, ignore local state and agent worktrees
+.claude/*
+!.claude/settings.json
