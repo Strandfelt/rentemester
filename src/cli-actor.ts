@@ -49,6 +49,9 @@ export const MUTATING_COMMANDS = new Set([
   "asset write-off",
   // PEPPOL submission (#128)
   "invoice submit-public-peppol",
+  // ===== EMAIL DELIVERY (#180) =====
+  "invoice send",
+  // ===== END EMAIL DELIVERY (#180) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
