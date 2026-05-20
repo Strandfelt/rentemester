@@ -68,9 +68,9 @@ Skal designes så Rentemester aldrig opbevarer bank-credentials i klartekst — 
 
 ### PEPPOL / OIOUBL
 
-Første slice er nu landet som deterministisk EAN/GLN preview-eksport for offentlige kunder: fakturaen kan markeres med public-recipient metadata og eksporteres som et stabilt artifact til videre handoff.
+Første slices er nu landet som deterministisk EAN/GLN preview-eksport og et deterministisk OIOUBL-handoff-artifact for offentlige kunder: fakturaen kan markeres med public-recipient metadata, eksporteres som stabil preview og materialiseres som OIOUBL til videre handoff.
 
-Det næste trin er egentlig OIOUBL via PEPPOL-netværket. Det er ikke teknisk svært, men det kræver registrering hos et access point.
+Det næste trin er direkte PEPPOL-transport via access point. Det er ikke teknisk svært, men det kræver registrering hos et access point og en skarp trust-boundary omkring selve submission-leddet.
 
 Relevant når der er brugere der har offentlige kunder.
 

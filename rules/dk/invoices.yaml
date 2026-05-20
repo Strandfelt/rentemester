@@ -147,6 +147,27 @@ rules:
         - public_export_without_valid_ean_gln
         - transport_claim_without_access_point
     explanation: Rentemester may export a deterministic preview artifact for public-customer invoicing, but it must only do so from an immutable issued invoice snapshot, require valid EAN/GLN metadata, and avoid implying that PEPPOL transport has already happened.
+  - rule_id: DK-INVOICE-PUBLIC-OIOUBL-001
+    name: Public-recipient OIOUBL handoff export must be deterministic, auditable, and transport-scoped
+    category: invoice_integrity
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_snapshot_exists
+        - public_recipient_marker_or_ean_present
+        - buyer_ean_number_is_13_digits
+        - due_date_present
+        - seller_name_address_vat_present
+        - buyer_name_address_present
+        - invoice_lines_have_quantity_price_and_total
+        - oioubl_export_uses_stable_xml_content
+        - oioubl_export_records_audit_metadata
+        - oioubl_export_scope_declares_no_direct_peppol_submission
+      forbid:
+        - public_export_without_valid_ean_gln
+        - transport_claim_without_access_point
+    explanation: Rentemester may materialize a deterministic OIOUBL handoff artifact for a public-customer invoice when the issued snapshot contains the required sender, buyer, line, amount, and due-date metadata, and when the export is recorded as an auditable handoff rather than direct PEPPOL submission.
   - rule_id: DK-INVOICE-DUE-DATE-001
     name: Customer invoices must expose a deterministic due date and overdue classification
     category: invoice_lifecycle

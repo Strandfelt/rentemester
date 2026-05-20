@@ -188,7 +188,7 @@ Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
 - bedre automatisk match mellem bank og bilag
 - egentlig opgaveliste for undtagelser
 - bilagsmail med deterministisk intake uden provider-lock-in
-- egentlig PEPPOL-transport til offentlige kunder oven på den nuværende EAN/GLN-preview-eksport
+- egentlig PEPPOL-transport til offentlige kunder oven på den nuværende EAN/GLN-preview-eksport og det nye deterministiske OIOUBL-handoff-artifact
 - gentagne fakturaer via templates før egentlig abonnementsautomatik
 - udsendelse af fakturaer via mail
 - bredere SAF-T-dækning oven på den første afgrænsede eksport efter den nye bogføringslov
