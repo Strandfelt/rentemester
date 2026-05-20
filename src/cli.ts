@@ -70,6 +70,9 @@ import { register as registerGdpr } from "./cli/gdpr";
 // ===== ANNUAL REPORT (#177) =====
 import { register as registerAnnualReport } from "./cli/annual-report";
 // ===== END ANNUAL REPORT (#177) =====
+// ===== IMPORT FRAMEWORK (#185) =====
+import { register as registerImport } from "./cli/import";
+// ===== END IMPORT FRAMEWORK (#185) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -241,6 +244,9 @@ for (const registerFn of [
   // ===== ANNUAL REPORT (#177) =====
   registerAnnualReport,
   // ===== END ANNUAL REPORT (#177) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  registerImport,
+  // ===== END IMPORT FRAMEWORK (#185) =====
 ]) {
   registerFn(dispatch);
 }

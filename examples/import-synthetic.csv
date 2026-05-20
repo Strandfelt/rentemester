@@ -1,0 +1,12 @@
+# source: synthetic-csv
+# cutOverDate: 2026-01-01
+# note: Invented sample for the import-framework example (#185) — NOT a real e-conomic/Billy export
+section,accountNo,name,debit,credit
+account,2000,Bank,,
+account,1100,Debitorer,,
+account,5800,Driftsmidler og inventar,,
+account,5000,Egenkapital,,
+opening,2000,,150000,
+opening,1100,,40000,
+opening,5800,,60000,
+opening,5000,,,250000

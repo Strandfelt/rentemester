@@ -64,6 +64,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== GDPR (#184) =====
   "gdpr erase",
   // ===== END GDPR (#184) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  "import run",
+  // ===== END IMPORT FRAMEWORK (#185) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
