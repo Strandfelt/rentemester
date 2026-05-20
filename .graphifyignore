@@ -1,0 +1,25 @@
+.git/
+node_modules/
+www/node_modules/
+www/dist/
+www/.astro/
+graphify-out/cache/
+graphify-out/cost.json
+graphify-out/manifest.json
+
+# Local/generated company data and exports
+data/
+backups/
+documents/
+invoices/
+exports/
+*.sqlite
+*.sqlite-*
+*.db
+
+# Generated build/cache artifacts
+coverage/
+.turbo/
+.cache/
+tmp/
+*.log
