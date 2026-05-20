@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import { createHash, createHmac, createPublicKey, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
+import { createHash, createHmac, createPublicKey, randomBytes, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
 import { openDb } from "./db";
 import { verifyAuditChain } from "./ledger";
 import { companyPaths, ensureCompanyDirs } from "./paths";
@@ -168,9 +168,14 @@ function verifyManifestAuthenticity(
   return null;
 }
 
-function companyLooksEmpty(targetCompanyRoot: string) {
-  if (!existsSync(targetCompanyRoot)) return true;
-  return readdirSync(targetCompanyRoot).length === 0;
+// A restore target is "safe to write into" when it does not already hold a
+// live company ledger. Issue #139: the previous readdirSync(root).length === 0
+// check is TOCTOU-racy and also rejects benign empty-but-not-empty dirs. The
+// real thing we must never clobber is an existing ledger database, so we test
+// for that explicit company marker instead.
+function targetHoldsLiveCompany(targetCompanyRoot: string) {
+  if (!existsSync(targetCompanyRoot)) return false;
+  return existsSync(companyPaths(targetCompanyRoot).db);
 }
 
 function restoreFiles(backupDir: string, files: ManifestFile[], targetDir: string) {
@@ -320,39 +325,70 @@ export function restoreSystemBackup(input: RestoreSystemBackupInput): RestoreSys
   ].filter((value): value is string => Boolean(value));
   if (manifestErrors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors: manifestErrors };
 
-  if (!companyLooksEmpty(input.targetCompanyRoot)) {
-    return { ok: false, appliedRules: [RULE_ID], errors: [`targetCompanyRoot must be empty or absent: ${input.targetCompanyRoot}`] };
+  if (targetHoldsLiveCompany(input.targetCompanyRoot)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`targetCompanyRoot already contains a company ledger; refusing to overwrite: ${input.targetCompanyRoot}`] };
   }
 
-  const paths = ensureCompanyDirs(input.targetCompanyRoot);
   const snapshotPath = resolveManifestPath(input.backupDir, manifest.dbSnapshot.path);
   if (!snapshotPath) {
     return { ok: false, appliedRules: [RULE_ID], errors: [`manifest path escapes backup dir: ${manifest.dbSnapshot.path}`] };
   }
 
-  copyFileSync(snapshotPath, paths.db);
-  const restoredFiles = {
-    documentsOriginals: restoreFiles(input.backupDir, manifest.copiedFiles.documentsOriginals, paths.documentsOriginals),
-    invoicesIssued: restoreFiles(input.backupDir, manifest.copiedFiles.invoicesIssued, paths.invoicesIssued),
-    config: restoreFiles(input.backupDir, manifest.copiedFiles.config, paths.config),
-  };
-
-  const restoredAt = new Date().toISOString();
-  const validation = validateRestoredDb(paths.db, manifest);
-  if (!validation.ok) {
-    return { ok: false, appliedRules: [RULE_ID], errors: [validation.error] };
+  // Issue #139: build the entire restored company inside a temp staging
+  // directory, validate the database THERE, and only swap it into the target
+  // once validation passes. A backup that passes file-hash checks but fails
+  // validateRestoredDb (e.g. a broken audit chain) therefore never leaves a
+  // half-restored, unrecoverable target behind.
+  const resolvedTarget = resolve(input.targetCompanyRoot);
+  const stagingRoot = join(
+    dirname(resolvedTarget),
+    `.restore-${basename(resolvedTarget)}.${process.pid}.${Date.now()}.${randomBytes(8).toString("hex")}.tmp`,
+  );
+  if (existsSync(stagingRoot)) {
+    return { ok: false, appliedRules: [RULE_ID], errors: [`restore staging directory already exists: ${stagingRoot}`] };
   }
 
-  const db = openDb(paths.db);
+  const restoredAt = new Date().toISOString();
+  let restoredFiles: { documentsOriginals: number; invoicesIssued: number; config: number };
   try {
-    insertAuditLog(db, {
-      eventType: "system_restore",
-      entityType: "company",
-      entityId: 1,
-      message: `Restored from backup ${manifest.backupId} (created ${manifest.createdAt}) at ${restoredAt}`,
-    });
-  } finally {
-    db.close();
+    const stagingPaths = ensureCompanyDirs(stagingRoot);
+    copyFileSync(snapshotPath, stagingPaths.db);
+    restoredFiles = {
+      documentsOriginals: restoreFiles(input.backupDir, manifest.copiedFiles.documentsOriginals, stagingPaths.documentsOriginals),
+      invoicesIssued: restoreFiles(input.backupDir, manifest.copiedFiles.invoicesIssued, stagingPaths.invoicesIssued),
+      config: restoreFiles(input.backupDir, manifest.copiedFiles.config, stagingPaths.config),
+    };
+
+    const validation = validateRestoredDb(stagingPaths.db, manifest);
+    if (!validation.ok) {
+      rmSync(stagingRoot, { recursive: true, force: true });
+      return { ok: false, appliedRules: [RULE_ID], errors: [validation.error] };
+    }
+
+    const db = openDb(stagingPaths.db);
+    try {
+      insertAuditLog(db, {
+        eventType: "system_restore",
+        entityType: "company",
+        entityId: 1,
+        message: `Restored from backup ${manifest.backupId} (created ${manifest.createdAt}) at ${restoredAt}`,
+      });
+    } finally {
+      db.close();
+    }
+
+    // Atomic swap into place. The target must not yet hold a live company
+    // (checked above); if an empty placeholder dir exists, drop it so the
+    // rename lands cleanly.
+    if (existsSync(resolvedTarget)) {
+      rmSync(resolvedTarget, { recursive: true, force: true });
+    } else {
+      mkdirSync(dirname(resolvedTarget), { recursive: true });
+    }
+    renameSync(stagingRoot, resolvedTarget);
+  } catch (error) {
+    rmSync(stagingRoot, { recursive: true, force: true });
+    return { ok: false, appliedRules: [RULE_ID], errors: [`restore failed: ${String(error)}`] };
   }
 
   return {
