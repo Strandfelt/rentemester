@@ -130,6 +130,15 @@ function parseCsv(content: string): CsvParseResult {
   const header = headerParsed.values.map(canonicalHeader);
   const errors: string[] = [];
   if (headerParsed.unterminatedQuote) errors.push("CSV header has unterminated quoted field");
+  // Two source columns must not canonicalise to the same key, otherwise the
+  // row object silently keeps only the rightmost column (last wins).
+  const seenHeaders = new Set<string>();
+  for (const key of header) {
+    if (seenHeaders.has(key)) {
+      errors.push(`CSV header has duplicate canonical column: ${key}`);
+    }
+    seenHeaders.add(key);
+  }
   for (const required of REQUIRED_COLUMNS) {
     if (!header.includes(required)) {
       errors.push(`CSV header missing required column: ${required} (accepted: ${HEADER_ALIASES[required].join(", ")})`);

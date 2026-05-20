@@ -218,6 +218,25 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects CSV with duplicate canonical headers (issue #150)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-duphdr-"));
+    const csv = join(root, "dup.csv");
+    // both "dato" and "date" canonicalise to transaction_date
+    writeFileSync(csv, [
+      "dato,date,text,amount,currency,reference",
+      "2026-05-16,2026-05-17,Card payment,-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("duplicate canonical column: transaction_date"))).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");
