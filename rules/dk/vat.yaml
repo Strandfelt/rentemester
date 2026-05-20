@@ -95,3 +95,22 @@ rules:
         - bad_debt_vat_relief_on_non_vat_or_nonstandard_invoice
         - bad_debt_writeoff_above_open_principal_balance
     explanation: When an issued Danish standard-rated invoice becomes an established bad debt, Rentemester must write off the gross receivable, expense the deductible loss basis, and reduce output VAT deterministically for the same loss amount.
+  - rule_id: DK-VAT-FILING-001
+    name: A filing-ready momsangivelse may only be produced for a closed VAT period and must map data into the standard SKAT rubrikker
+    category: vat_reporting
+    source_id: DK-MOMSLOVEN-2024-209
+    severity: hard_stop
+    machine_rule:
+      condition: vat_period_status in ['closed', 'reported']
+      require:
+        - salgsmoms
+        - moms_af_varekob_udland
+        - moms_af_ydelseskob_udland
+        - kobsmoms
+        - momstilsvar_equals_salgsmoms_plus_udenlandsk_moms_minus_kobsmoms
+        - rubrik_a
+        - rubrik_b
+        - rubrik_c
+      forbid:
+        - momsangivelse_for_open_or_incomplete_vat_period
+    explanation: A momsangivelse must only be produced for a closed or reported vat_quarter period and must deterministically map the VAT settlement data into the standard SKAT rubrikker so the business can file via TastSelv with traceable numbers.

@@ -244,6 +244,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "report profit-loss", usage: "report profit-loss --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en resultatopgørelse (indtægter minus omkostninger) for perioden.", allowedFlags: ["--company", "--from", "--to"] },
   { key: "report balance", usage: "report balance --company <path> --as-of <YYYY-MM-DD>", description: "Bygger en balance (aktiver, passiver, egenkapital) på en given dato.", allowedFlags: ["--company", "--as-of"] },
   // ===== END FINANCIAL STATEMENTS (#176) =====
+  // ===== VAT FILING (#178) =====
+  {
+    key: "vat momsangivelse",
+    usage: "vat momsangivelse --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en indberetningsklar momsangivelse (SKAT-rubrikker + momstilsvar) for en lukket momsperiode. Kræver en lukket/indberettet vat_quarter-periode.",
+    allowedFlags: ["--company", "--from", "--to"],
+  },
+  {
+    key: "vat filing",
+    usage: "vat filing --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Alias for 'vat momsangivelse': indberetningsklar momsangivelse for en lukket momsperiode.",
+    allowedFlags: ["--company", "--from", "--to"],
+  },
+  // ===== END VAT FILING (#178) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
