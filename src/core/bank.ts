@@ -152,14 +152,43 @@ function parseCsv(content: string): CsvParseResult {
   return { rows, errors };
 }
 
+// Strict numeric token: optional sign, digits, optional single dot + fraction.
+// Rejects hex (0xff), scientific notation (1e3), Infinity, NaN, etc.
+const STRICT_NUMERIC = /^[+-]?\d+(\.\d+)?$/;
+
 function parseLocalizedNumber(value: string | undefined) {
   if (!value) return undefined;
-  const trimmed = value.trim();
+  let trimmed = value.trim();
   if (!trimmed) return undefined;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  return Number(normalized.replace(/\s/g, ""));
+  // Strip a trailing 3-letter ISO currency code that is whitespace-separated
+  // from the number (e.g. "1234,56 DKK"). The whitespace requirement avoids
+  // mangling garbage like "0xff" into a plausible amount.
+  trimmed = trimmed.replace(/\s+[A-Za-z]{3}$/, "").trim();
+  // Surrounding parentheses denote a negative amount in many bank exports.
+  let sign = "";
+  const paren = /^\((.*)\)$/.exec(trimmed);
+  if (paren) {
+    sign = "-";
+    trimmed = paren[1].trim();
+  }
+  const compact = trimmed.replace(/\s/g, "");
+
+  let normalized: string;
+  if (compact.includes(",")) {
+    // Comma present: comma is the decimal separator, dots are thousands.
+    normalized = compact.replace(/\./g, "").replace(",", ".");
+  } else if (/^[+-]?\d+(\.\d{3})+$/.test(compact)) {
+    // Only digits and dots, every dot followed by exactly 3 digits and no
+    // comma => Danish thousands grouping (e.g. "1.234" => 1234, "1.234.567").
+    normalized = compact.replace(/\./g, "");
+  } else {
+    // Otherwise treat a single dot as a decimal point ("1234.56", "1234").
+    normalized = compact;
+  }
+
+  normalized = sign + normalized;
+  if (!STRICT_NUMERIC.test(normalized)) return NaN;
+  return Number(normalized);
 }
 
 function normalizeDateText(value: string | undefined) {

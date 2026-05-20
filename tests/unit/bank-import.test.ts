@@ -142,6 +142,45 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("parses Danish thousands-only amounts as whole kroner (issue #130)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-thousands-"));
+    const csv = join(root, "thousands.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-17,Card payment,1.234,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT amount FROM bank_transactions ORDER BY id ASC LIMIT 1").get() as any;
+    expect(row.amount).toBe(1234);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects hex and scientific-notation amounts (issue #130)", () => {
+    for (const bad of ["0xff", "1e3"]) {
+      const root = mkdtempSync(join(tmpdir(), "rentemester-bank-garbage-"));
+      const csv = join(root, "garbage.csv");
+      writeFileSync(csv, [
+        "transaction_date,booking_date,text,amount,currency,reference",
+        `2026-05-16,2026-05-17,Card payment,${bad},DKK,REF-1`
+      ].join("\n"));
+
+      const db = openDb(ensureCompanyDirs(root).db);
+      migrate(db);
+      const result = importBankCsv(db, root, csv);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("amount"))).toBe(true);
+
+      db.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");
