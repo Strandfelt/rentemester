@@ -1,0 +1,18 @@
+Nummer;Navn;Type;Momstype;Total
+1000;Salg af ydelser;Indtægt;U25 - Dansk salgsmoms;-450000,00
+1010;Salg af varer til EU;Indtægt;UEUV - Varesalg EU - Indberettes (rubrik B - varer);-32000,50
+1020;Salg af ydelser til verden;Indtægt;UVY - Salg af ydelser til verden (rubrik C);-8000,00
+3000;Vareforbrug;Udgift;I25 - Dansk købsmoms;120000,00
+3010;Køb af AI-værktøjer i EU;Udgift;IEUY - Ydelseskøb EU (rubrik A - ydelser);24000,00
+3020;Køb af hardware fra verden;Udgift;IVV - Varekøb fra verden;9500,75
+3070;Repræsentation;Udgift;REP - Repræsentation (kvartmoms);4000,00
+3080;Underleverandør, omvendt betalingspligt;Udgift;OBPK - Dansk køb med omvendt betalingspligt;15000,00
+3090;Kontorartikler;Udgift;;1250,00
+5500;Driftsmidler;Aktiv;;65000,00
+5510;Bankkonto;Aktiv;;88200,00
+5520;Tilgodehavender fra salg;Aktiv;;42000,00
+55000;Skyldig moms;Passiv;;-31000,00
+55010;Anden gæld;Passiv;;-12000,00
+60000;Registreret kapital mv.;Passiv;;-40000,00
+60010;Overført resultat fra tidligere år;Passiv;;-180000,00
+60040;Udbytte;Passiv;;25000,00
