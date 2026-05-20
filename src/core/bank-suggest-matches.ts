@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { getInvoiceStatus } from "./invoice-payments";
-import { roundDkk } from "./money";
+import { roundDkk, equalsDkk } from "./money";
 import { daysBetween } from "./dates";
 
 export type BankMatchSuggestion = {
@@ -138,12 +138,15 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
   // indistinguishable and an agent could auto-apply the wrong one (#138).
   let corroborated = false;
 
-  if (roundDkk(Number(bank.amount)) === claimOpenBalance) {
+  // Integer-øre comparison (equalsDkk): bank.amount is a raw float that can be
+  // float-distinct from an øre-equal claim balance assembled via addDkk (#148).
+  const bankAmount = Number(bank.amount);
+  if (equalsDkk(bankAmount, claimOpenBalance)) {
     confidence += 0.6;
-    reasons.push(`amount match: ${roundDkk(Number(bank.amount))} vs claim open balance ${claimOpenBalance}`);
-  } else if (roundDkk(Number(bank.amount)) === openBalance) {
+    reasons.push(`amount match: ${roundDkk(bankAmount)} vs claim open balance ${claimOpenBalance}`);
+  } else if (equalsDkk(bankAmount, openBalance)) {
     confidence += 0.55;
-    reasons.push(`amount match: ${roundDkk(Number(bank.amount))} vs principal open balance ${openBalance}`);
+    reasons.push(`amount match: ${roundDkk(bankAmount)} vs principal open balance ${openBalance}`);
   }
 
   if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
@@ -191,7 +194,7 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
   if (!(Number(bank.amount) < 0)) return null;
   const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? 0));
   if (!(grossAmount > 0)) return null;
-  const paymentAmount = roundDkk(Math.abs(Number(bank.amount)));
+  const paymentAmount = Math.abs(Number(bank.amount));
   const bankText = combinedBankText(bank);
   let confidence = 0;
   const reasons: string[] = [];
@@ -199,9 +202,10 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
   // document this payment belongs to beyond the amount alone (#138).
   let corroborated = false;
 
-  if (paymentAmount === grossAmount) {
+  // Integer-øre comparison (equalsDkk) — see #148.
+  if (equalsDkk(paymentAmount, grossAmount)) {
     confidence += 0.55;
-    reasons.push(`amount match: ${paymentAmount} vs purchase gross amount ${grossAmount}`);
+    reasons.push(`amount match: ${roundDkk(paymentAmount)} vs purchase gross amount ${grossAmount}`);
   }
 
   if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
