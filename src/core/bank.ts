@@ -554,6 +554,59 @@ type BalanceContinuityResult = {
   lastBalance?: number;
 };
 
+type BalanceRow = {
+  id: number;
+  transaction_date: string;
+  text: string;
+  amount: number;
+  balance_after: number | null;
+};
+
+/**
+ * Reconstructs true intra-day order for one date's rows (#191).
+ *
+ * Bank exports are commonly ordered newest-first, so within a single date the
+ * file lists same-day rows in the reverse of their true sequence. The walk must
+ * not rely on insertion order. `balance_after` itself disambiguates: in a
+ * correct cluster each row's balance equals the previous balance ± its amount,
+ * so the rows form a chain `balance_after - amount == previous balance_after`.
+ *
+ * Starting from `incoming` (the balance carried in from the previous date, or
+ * `null` for the very first cluster), this greedily walks that chain. When the
+ * cluster chains cleanly the rows are returned in true order; when no clean
+ * chain exists (a genuine gap) the rows are returned in insertion order so the
+ * continuity walk still surfaces the break.
+ */
+function orderDayCluster(cluster: BalanceRow[], incoming: number | null): BalanceRow[] {
+  if (cluster.length < 2) return cluster;
+
+  const remaining = [...cluster];
+  const ordered: BalanceRow[] = [];
+
+  // For the first cluster there is no carried-in balance; the start row is the
+  // one whose pre-transaction balance matches no other row's balance_after.
+  let running = incoming;
+  if (running === null) {
+    const balancesAfter = cluster.map((row) => Number(row.balance_after));
+    const start = cluster.find(
+      (row) => !balancesAfter.some((bal) => equalsDkk(bal, subtractDkk(Number(row.balance_after), Number(row.amount)))),
+    );
+    if (!start) return cluster;
+    running = subtractDkk(Number(start.balance_after), Number(start.amount));
+  }
+
+  while (remaining.length > 0) {
+    const nextIdx = remaining.findIndex(
+      (row) => equalsDkk(subtractDkk(Number(row.balance_after), Number(row.amount)), running as number),
+    );
+    if (nextIdx === -1) return cluster; // no clean chain: keep insertion order
+    const [next] = remaining.splice(nextIdx, 1);
+    ordered.push(next);
+    running = Number(next.balance_after);
+  }
+  return ordered;
+}
+
 /**
  * Verifies running-balance continuity over a freshly-imported batch (#189).
  *
@@ -563,10 +616,13 @@ type BalanceContinuityResult = {
  * duplicated or misordered — a silent import error that would undermine a
  * ledger meant to be trusted.
  *
- * Rows are walked in transaction-date then insertion order. A break is surfaced
- * as a warning AND a `BANK_BALANCE_GAP` exception-queue entry; it never fails
- * the import, because a legitimately partial export is a valid input. Comparison
- * is integer-øre (`equalsDkk`) so float artefacts do not raise a false break.
+ * Rows are walked in transaction-date order. Within a date the file's insertion
+ * order is unreliable (newest-first exports list same-day rows reversed), so the
+ * true intra-day sequence is reconstructed from `balance_after` before the walk
+ * (#191). A break is surfaced as a warning AND a `BANK_BALANCE_GAP`
+ * exception-queue entry; it never fails the import, because a legitimately
+ * partial export is a valid input. Comparison is integer-øre (`equalsDkk`) so
+ * float artefacts do not raise a false break.
  *
  * Rows without a stored balance (generic CSV import, or a profile column the
  * file omitted) are skipped — there is nothing to check.
@@ -579,20 +635,35 @@ function verifyBatchBalanceContinuity(db: Database, importedRowIds: number[]): B
      FROM bank_transactions
      WHERE id IN (${placeholders})
      ORDER BY transaction_date ASC, id ASC`,
-  ).all(...importedRowIds) as Array<{
-    id: number;
-    transaction_date: string;
-    text: string;
-    amount: number;
-    balance_after: number | null;
-  }>;
+  ).all(...importedRowIds) as BalanceRow[];
 
-  const withBalance = rows.filter((row) => row.balance_after !== null && row.balance_after !== undefined);
-  if (withBalance.length < 2) {
+  const rowsWithBalance = rows.filter((row) => row.balance_after !== null && row.balance_after !== undefined);
+  if (rowsWithBalance.length < 2) {
     // 0 rows: nothing to report. 1 row: a single balance, no adjacency to check.
-    return withBalance.length === 1
-      ? { firstBalance: roundDkk(Number(withBalance[0].balance_after)), lastBalance: roundDkk(Number(withBalance[0].balance_after)) }
+    return rowsWithBalance.length === 1
+      ? { firstBalance: roundDkk(Number(rowsWithBalance[0].balance_after)), lastBalance: roundDkk(Number(rowsWithBalance[0].balance_after)) }
       : {};
+  }
+
+  // Reconstruct true intra-day order before the walk (#191). The DB query
+  // returns rows in (transaction_date, id) order; `id` is insertion order =
+  // file order, which is reversed within a date for a newest-first export.
+  // Each date's rows are re-chained from `balance_after`, carrying the running
+  // balance across date boundaries.
+  const withBalance: BalanceRow[] = [];
+  let clusterStart = 0;
+  while (clusterStart < rowsWithBalance.length) {
+    let clusterEnd = clusterStart + 1;
+    while (
+      clusterEnd < rowsWithBalance.length &&
+      rowsWithBalance[clusterEnd].transaction_date === rowsWithBalance[clusterStart].transaction_date
+    ) {
+      clusterEnd += 1;
+    }
+    const cluster = rowsWithBalance.slice(clusterStart, clusterEnd);
+    const incoming = withBalance.length > 0 ? Number(withBalance[withBalance.length - 1].balance_after) : null;
+    withBalance.push(...orderDayCluster(cluster, incoming));
+    clusterStart = clusterEnd;
   }
 
   const balanceWarnings: string[] = [];
