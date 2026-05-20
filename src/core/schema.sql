@@ -107,6 +107,10 @@ CREATE INDEX IF NOT EXISTS idx_documents_purchase_sale_logical_identity
 ON documents(sender_vat_cvr, invoice_no, invoice_date)
 WHERE document_type = 'purchase_sale';
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_issued_invoice_no_unique
+ON documents(invoice_no)
+WHERE document_type = 'issued_invoice';
+
 CREATE TABLE IF NOT EXISTS bank_transactions (
   id INTEGER PRIMARY KEY,
   transaction_date TEXT NOT NULL,
