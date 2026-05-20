@@ -67,6 +67,9 @@ import { register as registerEmail } from "./cli/email";
 // ===== GDPR (#184) =====
 import { register as registerGdpr } from "./cli/gdpr";
 // ===== END GDPR (#184) =====
+// ===== IMPORT FRAMEWORK (#185) =====
+import { register as registerImport } from "./cli/import";
+// ===== END IMPORT FRAMEWORK (#185) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -235,6 +238,9 @@ for (const registerFn of [
   // ===== GDPR (#184) =====
   registerGdpr,
   // ===== END GDPR (#184) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  registerImport,
+  // ===== END IMPORT FRAMEWORK (#185) =====
 ]) {
   registerFn(dispatch);
 }

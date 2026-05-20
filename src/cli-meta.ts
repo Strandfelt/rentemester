@@ -332,6 +332,28 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   // ===== END GDPR (#184) =====
+  // ===== IMPORT FRAMEWORK (#185) =====
+  {
+    key: "import run",
+    usage: "import run --company <path> --file <export-file> [--system <id>]",
+    description: "Migrerer en virksomhed fra et andet bogføringssystem ind i Rentemester. Parser eksportfilen med den valgte per-system-parser og bogfører resultatet som virksomhedens primobalance (#179). Idempotent: præcis én import/primobalance pr. virksomhed.",
+    allowedFlags: ["--company", "--file", "--system"],
+    examplePath: "examples/import-synthetic.csv",
+    exampleHint: "rentemester import run --example",
+    inputNotes: [
+      "--system vælger parseren; standard er 'synthetic-csv' (det indbyggede eksempel)",
+      "Brug 'import systems' for at se tilgængelige parsere",
+      "Eksportfilen skal balancere: sum debet == sum kredit (heltal øre)",
+      "De rigtige e-conomic/Billy-parsere er en opfølgning — de kræver rigtige eksportfiler",
+    ],
+  },
+  {
+    key: "import systems",
+    usage: "import systems [--format json|human]",
+    description: "Lister de bogføringssystemer import-frameworket har en parser til. Read-only.",
+    allowedFlags: [],
+  },
+  // ===== END IMPORT FRAMEWORK (#185) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
