@@ -15,7 +15,7 @@ import {
   type AccountingPeriodKind,
 } from "../../core/periods";
 import { wrapCoreResult, successEnvelope } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 export function registerPeriodTools(server: McpServer): void {
   server.registerTool(

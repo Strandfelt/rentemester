@@ -7,7 +7,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { successEnvelope } from "../envelope";
-import { withCompanyDb } from "../helpers";
+import { withCompanyDb } from "../tool-runtime";
 
 const inputSchema = {
   company: z.string().min(1, "company path is required"),

@@ -1,5 +1,5 @@
 /**
- * Fælles hjælpere til MCP-tool-adaptere.
+ * Kørselstids-laget (runtime) for MCP-tool-adaptere.
  *
  * Reducerer boilerplate omkring:
  *  - existsSync-tjek på `company`-stien
