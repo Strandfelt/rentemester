@@ -142,6 +142,129 @@ describe("bank import", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("parses Danish thousands-only amounts as whole kroner (issue #130)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-thousands-"));
+    const csv = join(root, "thousands.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-17,Card payment,1.234,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT amount FROM bank_transactions ORDER BY id ASC LIMIT 1").get() as any;
+    expect(row.amount).toBe(1234);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects hex and scientific-notation amounts (issue #130)", () => {
+    for (const bad of ["0xff", "1e3"]) {
+      const root = mkdtempSync(join(tmpdir(), "rentemester-bank-garbage-"));
+      const csv = join(root, "garbage.csv");
+      writeFileSync(csv, [
+        "transaction_date,booking_date,text,amount,currency,reference",
+        `2026-05-16,2026-05-17,Card payment,${bad},DKK,REF-1`
+      ].join("\n"));
+
+      const db = openDb(ensureCompanyDirs(root).db);
+      migrate(db);
+      const result = importBankCsv(db, root, csv);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("amount"))).toBe(true);
+
+      db.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects ambiguous dd-mm/mm-dd dates rather than guessing (issue #137)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-ambig-"));
+    const csv = join(root, "ambig.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "05/04/2026,05/04/2026,Card payment,-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("transactionDate"))).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("keeps reformatting unambiguous DD-MM-YYYY dates (issue #137)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-unambig-"));
+    const csv = join(root, "unambig.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "17-05-2026,16-05-2026,Card payment,-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT transaction_date, booking_date FROM bank_transactions ORDER BY id ASC LIMIT 1").get() as any;
+    expect(row).toEqual({ transaction_date: "2026-05-17", booking_date: "2026-05-16" });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("rejects CSV with duplicate canonical headers (issue #150)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-duphdr-"));
+    const csv = join(root, "dup.csv");
+    // both "dato" and "date" canonicalise to transaction_date
+    writeFileSync(csv, [
+      "dato,date,text,amount,currency,reference",
+      "2026-05-16,2026-05-17,Card payment,-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("duplicate canonical column: transaction_date"))).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("imports two legitimately-distinct identical same-day fees, still dedups re-import (issue #155)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-dedup-"));
+    const csv = join(root, "fees.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-16,2026-05-16,Fee,-50,DKK,",
+      "2026-05-16,2026-05-16,Fee,-50,DKK,"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const first = importBankCsv(db, root, csv);
+    expect(first.ok).toBe(true);
+    expect(first.imported).toBe(2);
+    expect(first.skippedDuplicates).toBe(0);
+    expect(first.skippedDuplicateRows ?? []).toEqual([]);
+
+    // re-importing the same file must still dedup deterministically
+    const second = importBankCsv(db, root, csv);
+    expect(second.ok).toBe(true);
+    expect(second.imported).toBe(0);
+    expect(second.skippedDuplicates).toBe(2);
+    expect((second.skippedDuplicateRows ?? []).length).toBe(2);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");

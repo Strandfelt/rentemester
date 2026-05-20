@@ -24,6 +24,8 @@ export type BankImportResult = {
   importBatchId?: string;
   imported?: number;
   skippedDuplicates?: number;
+  /** Human-readable descriptions of rows skipped as duplicates, for review. */
+  skippedDuplicateRows?: string[];
   sourceFileHash?: string;
   errors: string[];
 };
@@ -130,6 +132,15 @@ function parseCsv(content: string): CsvParseResult {
   const header = headerParsed.values.map(canonicalHeader);
   const errors: string[] = [];
   if (headerParsed.unterminatedQuote) errors.push("CSV header has unterminated quoted field");
+  // Two source columns must not canonicalise to the same key, otherwise the
+  // row object silently keeps only the rightmost column (last wins).
+  const seenHeaders = new Set<string>();
+  for (const key of header) {
+    if (seenHeaders.has(key)) {
+      errors.push(`CSV header has duplicate canonical column: ${key}`);
+    }
+    seenHeaders.add(key);
+  }
   for (const required of REQUIRED_COLUMNS) {
     if (!header.includes(required)) {
       errors.push(`CSV header missing required column: ${required} (accepted: ${HEADER_ALIASES[required].join(", ")})`);
@@ -152,14 +163,43 @@ function parseCsv(content: string): CsvParseResult {
   return { rows, errors };
 }
 
+// Strict numeric token: optional sign, digits, optional single dot + fraction.
+// Rejects hex (0xff), scientific notation (1e3), Infinity, NaN, etc.
+const STRICT_NUMERIC = /^[+-]?\d+(\.\d+)?$/;
+
 function parseLocalizedNumber(value: string | undefined) {
   if (!value) return undefined;
-  const trimmed = value.trim();
+  let trimmed = value.trim();
   if (!trimmed) return undefined;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  return Number(normalized.replace(/\s/g, ""));
+  // Strip a trailing 3-letter ISO currency code that is whitespace-separated
+  // from the number (e.g. "1234,56 DKK"). The whitespace requirement avoids
+  // mangling garbage like "0xff" into a plausible amount.
+  trimmed = trimmed.replace(/\s+[A-Za-z]{3}$/, "").trim();
+  // Surrounding parentheses denote a negative amount in many bank exports.
+  let sign = "";
+  const paren = /^\((.*)\)$/.exec(trimmed);
+  if (paren) {
+    sign = "-";
+    trimmed = paren[1].trim();
+  }
+  const compact = trimmed.replace(/\s/g, "");
+
+  let normalized: string;
+  if (compact.includes(",")) {
+    // Comma present: comma is the decimal separator, dots are thousands.
+    normalized = compact.replace(/\./g, "").replace(",", ".");
+  } else if (/^[+-]?\d+(\.\d{3})+$/.test(compact)) {
+    // Only digits and dots, every dot followed by exactly 3 digits and no
+    // comma => Danish thousands grouping (e.g. "1.234" => 1234, "1.234.567").
+    normalized = compact.replace(/\./g, "");
+  } else {
+    // Otherwise treat a single dot as a decimal point ("1234.56", "1234").
+    normalized = compact;
+  }
+
+  normalized = sign + normalized;
+  if (!STRICT_NUMERIC.test(normalized)) return NaN;
+  return Number(normalized);
 }
 
 function normalizeDateText(value: string | undefined) {
@@ -168,6 +208,13 @@ function normalizeDateText(value: string | undefined) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
   const match = /^(\d{2})[-/.](\d{2})[-/.](\d{4})$/.exec(trimmed);
   if (!match) return trimmed;
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  // dd?dd?dddd is only unambiguously DD-MM-YYYY when one of the first two
+  // components cannot be a month. If both are <= 12 the D/M order is a guess
+  // (e.g. 05/04/2026), so refuse to reformat and let date validation reject it
+  // rather than silently picking an interpretation.
+  if (first <= 12 && second <= 12 && first !== second) return trimmed;
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
@@ -216,7 +263,12 @@ export function validateBankImportRows(rows: BankImportRow[]) {
   return { ok: errors.length === 0, appliedRules: needsFxRule ? [RULE_ID, FX_RULE_ID] : [RULE_ID], errors };
 }
 
-function transactionFingerprint(row: BankImportRow) {
+// `occurrence` is the 0-based count of preceding rows in the SAME file with
+// identical field content. This keeps the fingerprint deterministic on
+// re-import while letting two legitimately-distinct identical transactions
+// (e.g. two 50 kr fees on the same day) both import instead of one being
+// wrongly skipped as a coarse-fingerprint duplicate.
+function transactionFingerprint(row: BankImportRow, occurrence: number) {
   return sha256Bytes(JSON.stringify({
     transaction_date: row.transactionDate,
     booking_date: row.bookingDate ?? null,
@@ -226,6 +278,7 @@ function transactionFingerprint(row: BankImportRow) {
     reference: row.reference ?? null,
     amount_dkk: normalizeAmountOrNull(row.amountDkk),
     fx_rate_to_dkk: row.fxRateToDkk == null ? null : roundRate6(row.fxRateToDkk),
+    occurrence,
   }));
 }
 
@@ -247,6 +300,10 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
 
   let imported = 0;
   let skippedDuplicates = 0;
+  const skippedDuplicateRows: string[] = [];
+  // Per-content-fingerprint counter: distinguishes repeated identical rows
+  // within this file so each gets a unique transaction_hash.
+  const occurrenceByContent = new Map<string, number>();
   const insert = db.prepare(
     `INSERT INTO bank_transactions (
       transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status, retain_until
@@ -255,10 +312,14 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
 
   db.transaction(() => {
     for (const row of rows) {
-      const hash = transactionFingerprint(row);
+      const contentHash = transactionFingerprint(row, 0);
+      const occurrence = occurrenceByContent.get(contentHash) ?? 0;
+      occurrenceByContent.set(contentHash, occurrence + 1);
+      const hash = transactionFingerprint(row, occurrence);
       const existing = db.query("SELECT id FROM bank_transactions WHERE transaction_hash = ?").get(hash) as { id: number } | null;
       if (existing) {
         skippedDuplicates += 1;
+        skippedDuplicateRows.push(`${row.transactionDate} ${row.text.trim()} ${normalizeAmount(row.amount)} ${(row.currency ?? "DKK").trim().toUpperCase()}`);
         continue;
       }
       insert.run(
@@ -285,5 +346,5 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
     });
   })();
 
-  return { ok: true, importBatchId, imported, skippedDuplicates, sourceFileHash, errors: [] };
+  return { ok: true, importBatchId, imported, skippedDuplicates, skippedDuplicateRows, sourceFileHash, errors: [] };
 }
