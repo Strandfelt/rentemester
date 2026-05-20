@@ -36,12 +36,24 @@ export type SuggestBankMatchesInput = {
 };
 
 
+// Stop-words and company-form tokens that carry no identifying signal. Two
+// unrelated "… ApS" customers both contain APS; keeping it as a token would
+// inflate confidence on a non-match (see #138). Generic prepositions and the
+// DKK currency code are dropped for the same reason.
+const STOP_TOKENS = new Set([
+  "APS", "A/S", "AS", "IVS", "P/S", "PS", "K/S", "KS", "I/S", "IS",
+  "AMBA", "FMBA", "SMBA", "GMBH", "LTD", "INC", "PLC", "LLC", "AB", "OY",
+  "DKK", "EUR", "USD", "SEK", "NOK", "GBP",
+  "FOR", "OG", "THE", "AND", "VED", "MED", "TIL", "FRA", "DEN", "DET",
+]);
+
 function tokenize(value: string | null | undefined) {
   return Array.from(new Set((value ?? "")
     .toUpperCase()
     .split(/[^\p{L}\p{N}-]+/u)
     .map((token) => token.trim())
-    .filter((token) => token.length >= 3)));
+    .filter((token) => token.length >= 3)
+    .filter((token) => !STOP_TOKENS.has(token))));
 }
 
 function overlapTokens(left: string | null | undefined, right: string | null | undefined) {
@@ -121,6 +133,10 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
   const bankText = combinedBankText(bank);
   let confidence = 0;
   const reasons: string[] = [];
+  // A corroborating signal identifies *which* invoice this is, beyond the
+  // amount alone. Without one, two open invoices with the same balance are
+  // indistinguishable and an agent could auto-apply the wrong one (#138).
+  let corroborated = false;
 
   if (roundDkk(Number(bank.amount)) === claimOpenBalance) {
     confidence += 0.6;
@@ -132,12 +148,16 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
 
   if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
     confidence += 0.25;
+    corroborated = true;
     reasons.push(`invoice number '${doc.invoice_no}' found in bank text/reference`);
   }
 
   const sharedCustomerTokens = overlapTokens(bankText, customerName).slice(0, 3);
   if (sharedCustomerTokens.length > 0) {
     confidence += Math.min(0.15, sharedCustomerTokens.length * 0.05);
+    // A single shared token is weak (a common word can collide); two or more
+    // is a strong name match that identifies the customer.
+    if (sharedCustomerTokens.length >= 2) corroborated = true;
     reasons.push(`customer token match: ${sharedCustomerTokens.join(", ")}`);
   }
 
@@ -147,6 +167,13 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
       confidence += 0.1;
       reasons.push(`date within ${days} days of invoice date`);
     }
+  }
+
+  // Amount + date proximity alone never crosses the threshold: without an
+  // invoice number or strong name match the suggestion stays low-confidence.
+  if (!corroborated && confidence >= 0.5) {
+    confidence = 0.45;
+    reasons.push("low confidence: amount-only match, no invoice number or name corroboration");
   }
 
   if (confidence < 0.5) return null;
@@ -168,6 +195,9 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
   const bankText = combinedBankText(bank);
   let confidence = 0;
   const reasons: string[] = [];
+  // See invoiceSuggestion: a corroborating signal identifies which purchase
+  // document this payment belongs to beyond the amount alone (#138).
+  let corroborated = false;
 
   if (paymentAmount === grossAmount) {
     confidence += 0.55;
@@ -176,18 +206,21 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
 
   if (doc.invoice_no && bankText.includes(doc.invoice_no.toUpperCase())) {
     confidence += 0.2;
+    corroborated = true;
     reasons.push(`invoice number '${doc.invoice_no}' found in bank text/reference`);
   }
 
   const paymentDetailsTokens = overlapTokens(bankText, doc.payment_details).slice(0, 2);
   if (paymentDetailsTokens.length > 0) {
     confidence += 0.1;
+    corroborated = true;
     reasons.push(`payment-details token match: ${paymentDetailsTokens.join(", ")}`);
   }
 
   const sharedSupplierTokens = overlapTokens(bankText, doc.sender_name).slice(0, 3);
   if (sharedSupplierTokens.length > 0) {
     confidence += Math.min(0.2, sharedSupplierTokens.length * 0.1);
+    if (sharedSupplierTokens.length >= 2) corroborated = true;
     reasons.push(`supplier token match: ${sharedSupplierTokens.join(", ")}`);
   }
 
@@ -197,6 +230,13 @@ function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[n
       confidence += 0.05;
       reasons.push(`date within ${days} days of purchase invoice date`);
     }
+  }
+
+  // Amount + date proximity alone never crosses the threshold without an
+  // invoice number, payment-reference token or strong supplier-name match.
+  if (!corroborated && confidence >= 0.5) {
+    confidence = 0.45;
+    reasons.push("low confidence: amount-only match, no invoice number or supplier corroboration");
   }
 
   if (confidence < 0.5) return null;

@@ -132,4 +132,46 @@ describe("bank suggest-matches CLI", () => {
     expect(filteredJson.rows[0].suggestions).toHaveLength(1);
     expect(filteredJson.rows[0].suggestions[0].invoiceNo).toBe("2026-0001");
   });
+
+  test("does not emit a crossing-threshold suggestion from an amount-only match", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-suggest-amt-"));
+    const paths = ensureCompanyDirs(root);
+    const db = openDb(paths.db);
+    migrate(db);
+    seedAccounts(db);
+
+    // Two distinct customers, both ApS-suffixed, same gross amount.
+    const first = issueInvoice(db, root, invoicePayload({
+      invoiceNumber: "2026-0001",
+      buyer: { name: "Alfa Bogforing ApS", address: "Alfavej 1, 1000 Kobenhavn", vatOrCvr: "DK11111111" },
+    }));
+    expect(first.ok).toBe(true);
+    const second = issueInvoice(db, root, invoicePayload({
+      invoiceNumber: "2026-0002",
+      buyer: { name: "Beta Revision ApS", address: "Betavej 2, 2000 Frederiksberg", vatOrCvr: "DK22222222" },
+    }));
+    expect(second.ok).toBe(true);
+
+    // A deposit equal to both invoice balances, with no invoice number and
+    // no customer-name overlap in the text/reference.
+    const csv = join(root, "transactions.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-20,2026-05-20,Indbetaling,1250,DKK,DEPOSIT-1",
+    ].join("\n"));
+    const imported = importBankCsv(db, root, csv);
+    expect(imported.ok).toBe(true);
+    db.close();
+
+    const listed = await runCli(["bank", "suggest-matches", "--company", root, "--format", "json"]);
+    rmSync(root, { recursive: true, force: true });
+
+    expect(listed.exitCode).toBe(0);
+    expect(listed.stderr).toBe("");
+    const listedJson = JSON.parse(listed.stdout);
+    const depositRow = listedJson.rows.find((row: any) => row.reference === "DEPOSIT-1");
+    // Amount alone must not produce a crossing-threshold suggestion that an
+    // agent would auto-apply: no corroborating invoice-no / name signal.
+    expect(depositRow.suggestions).toHaveLength(0);
+  });
 });
