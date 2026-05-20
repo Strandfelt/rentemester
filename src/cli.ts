@@ -49,6 +49,9 @@ import { register as registerAsset } from "./cli/asset";
 import { register as registerCompany } from "./cli/company";
 // ===== COCKPIT BACKEND (#170) =====
 import { register as registerServe } from "./cli/serve";
+// ===== GDPR (#184) =====
+import { register as registerGdpr } from "./cli/gdpr";
+// ===== END GDPR (#184) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -199,6 +202,9 @@ for (const registerFn of [
   registerCompany,
   // ===== COCKPIT BACKEND (#170) =====
   registerServe,
+  // ===== GDPR (#184) =====
+  registerGdpr,
+  // ===== END GDPR (#184) =====
 ]) {
   registerFn(dispatch);
 }

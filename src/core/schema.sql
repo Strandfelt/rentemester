@@ -904,3 +904,38 @@ BEFORE DELETE ON peppol_submissions
 BEGIN
   SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
 END;
+
+-- ===== GDPR (#184) =====
+-- Append-only erasure tombstones. A GDPR erasure never UPDATEs/DELETEs the
+-- append-only master-data rows or the ledger; instead it records one row per
+-- redacted source record here. The GDPR export layer overlays these tombstones
+-- so the redacted personal data never resurfaces. Keeping erasure as an
+-- append-only journal means the audit chain and bookkeeping integrity are
+-- untouched by a data-subject erasure.
+CREATE TABLE IF NOT EXISTS gdpr_erasures (
+  id INTEGER PRIMARY KEY,
+  subject_key TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('customers','vendors','documents','bank_transactions')),
+  source_row_id INTEGER NOT NULL,
+  redacted_fields TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  retained_until_at_erasure TEXT,
+  erased_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source, source_row_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gdpr_erasures_subject ON gdpr_erasures(subject_key);
+
+CREATE TRIGGER IF NOT EXISTS gdpr_erasures_no_update
+BEFORE UPDATE ON gdpr_erasures
+BEGIN
+  SELECT RAISE(ABORT, 'gdpr_erasures are append-only audit records; record a new erasure instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS gdpr_erasures_no_delete
+BEFORE DELETE ON gdpr_erasures
+BEGIN
+  SELECT RAISE(ABORT, 'gdpr_erasures are append-only audit records; an erasure cannot be revoked');
+END;
+-- ===== END GDPR (#184) =====

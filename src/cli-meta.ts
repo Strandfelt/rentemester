@@ -239,6 +239,29 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
   { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
   // ===== END FIXED ASSETS (#124, #125) =====
+  // ===== GDPR (#184) =====
+  {
+    key: "gdpr export",
+    usage: "gdpr export --company <path> (--cvr <DK...> | --name <text>) [--as-of <YYYY-MM-DD>]",
+    description: "Samler alle persondata Rentemester har om en kunde/leverandør i én indsigtsrapport med opbevaringsvurdering. Read-only.",
+    allowedFlags: ["--company", "--cvr", "--name", "--as-of"],
+    inputNotes: [
+      "Den registrerede identificeres med --cvr og/eller --name",
+      "Hver post markeres med opbevaringsfrist og om den stadig er under bogføringspligt",
+    ],
+  },
+  {
+    key: "gdpr erase",
+    usage: "gdpr erase --company <path> (--cvr <DK...> | --name <text>) [--as-of <YYYY-MM-DD>]",
+    description: "Sletter/redigerer persondata der ikke længere er under bogføringsmæssig opbevaringspligt; afviser klart data der stadig skal opbevares. Append-only ledger og audit-kæde røres aldrig.",
+    allowedFlags: ["--company", "--cvr", "--name", "--as-of"],
+    inputNotes: [
+      "Den registrerede identificeres med --cvr og/eller --name",
+      "Poster under opbevaringsfrist afvises — bogføringsloven går forud for sletteret",
+      "Sletning skrives som append-only tombstone; finansposteringer ændres ikke",
+    ],
+  },
+  // ===== END GDPR (#184) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
