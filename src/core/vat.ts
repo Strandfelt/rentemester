@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
-import { requireCachedViesValidation } from "./vies";
+import { requireCachedViesValidation, normalizeEuVatNumber } from "./vies";
 import { addDkk, compareDkk, fromOre, percentOfDkk, roundDkk, subtractDkk, sumDkk, toOre } from "./money";
 
 export type VatPeriodReport = {
@@ -78,6 +78,17 @@ export function postEuServiceReverseChargePurchase(db: Database, input: ReverseC
 
   const documentRow = db.query(`SELECT sender_vat_cvr FROM documents WHERE id = ?`).get(input.documentId) as { sender_vat_cvr: string | null } | null;
   if (!documentRow) return { ok: false, appliedRules: [REVERSE_CHARGE_RULE_ID], errors: [`documentId ${input.documentId} does not exist`] };
+  // EU service reverse charge (momsloven §46) applies only to suppliers in
+  // *other* EU member states. A Danish supplier is a domestic purchase and
+  // must not be booked as reverse charge.
+  const senderVat = normalizeEuVatNumber(documentRow.sender_vat_cvr);
+  if (senderVat && senderVat.countryCode === "DK") {
+    return {
+      ok: false,
+      appliedRules: [REVERSE_CHARGE_RULE_ID],
+      errors: [`document sender_vat_cvr ${senderVat.normalized} is a Danish supplier — EU service reverse charge applies only to other EU member states; book this as a domestic DK_PURCHASE_25 expense`],
+    };
+  }
   const viesCheck = requireCachedViesValidation(db, documentRow.sender_vat_cvr, "document sender_vat_cvr");
   if (!viesCheck.ok) return { ok: false, appliedRules: [...new Set([REVERSE_CHARGE_RULE_ID, ...viesCheck.appliedRules])], errors: viesCheck.errors };
 

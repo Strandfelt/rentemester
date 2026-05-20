@@ -32,12 +32,26 @@ function addDays(isoDateTime: string, days: number) {
   return date.toISOString();
 }
 
+// EU member-state VAT country codes recognised by VIES. EU service reverse
+// charge (momsloven §46) applies only to suppliers in *other* EU member
+// states, so DK and non-EU codes (NO, CH, GB, ...) must be rejected here.
+// EL is the VIES code for Greece.
+const EU_VAT_COUNTRY_CODES = new Set([
+  "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR",
+  "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO",
+  "SE", "SI", "SK",
+]);
+
 export function normalizeEuVatNumber(input?: string | null): NormalizedEuVat | null {
   const compact = input?.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!compact || compact.length < 3) return null;
   const countryCode = compact.slice(0, 2);
   const vatNumber = compact.slice(2);
   if (!/^[A-Z]{2}$/.test(countryCode) || !/^[A-Z0-9]{2,14}$/.test(vatNumber)) return null;
+  // Domestic (DK) numbers are valid EU VAT numbers for VIES caching but must
+  // not be treated as a foreign EU supplier — the reverse-charge path rejects
+  // them explicitly below.
+  if (!EU_VAT_COUNTRY_CODES.has(countryCode)) return null;
   return { countryCode, vatNumber, normalized: `${countryCode}${vatNumber}` };
 }
 
