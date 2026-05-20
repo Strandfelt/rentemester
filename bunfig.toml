@@ -1,0 +1,8 @@
+# Scope `bun test` to the backend test suite under `tests/`.
+#
+# The cockpit SPA in `app/` ships its own `*.test.tsx` files that run under
+# Vitest (`cd app && bun run test`) in a happy-dom environment — Bun's test
+# runner cannot execute them. Pinning the root here keeps a bare `bun test`
+# focused on the Bun/TypeScript backend and away from `app/`.
+[test]
+root = "tests"
