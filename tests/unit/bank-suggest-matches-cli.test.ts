@@ -178,6 +178,38 @@ describe("bank suggest-matches CLI", () => {
     expect(row.suggestions[0].reasons.some((reason: string) => reason.includes("amount match"))).toBe(true);
   });
 
+  test("does not match an outgoing customer refund against the issued invoice (#154 limitation)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-suggest-refund-"));
+    const paths = ensureCompanyDirs(root);
+    const db = openDb(paths.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const invoice = issueInvoice(db, root, invoicePayload({ invoiceNumber: "2026-0001" }));
+    expect(invoice.ok).toBe(true);
+
+    // A negative (outgoing) customer-refund row referencing the invoice number.
+    // Reconciliation deliberately has no refund/credit-note matching path, so
+    // this must produce zero suggestions rather than be mistaken for a bug.
+    const csv = join(root, "transactions.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "2026-05-22,2026-05-22,Customer refund 2026-0001 Kunde A/S,-1250,DKK,RFND-2026-0001",
+    ].join("\n"));
+    const imported = importBankCsv(db, root, csv);
+    expect(imported.ok).toBe(true);
+    db.close();
+
+    const listed = await runCli(["bank", "suggest-matches", "--company", root, "--format", "json"]);
+    rmSync(root, { recursive: true, force: true });
+
+    expect(listed.exitCode).toBe(0);
+    expect(listed.stderr).toBe("");
+    const listedJson = JSON.parse(listed.stdout);
+    const refundRow = listedJson.rows.find((r: any) => r.reference === "RFND-2026-0001");
+    expect(refundRow.suggestions).toHaveLength(0);
+  });
+
   test("does not emit a crossing-threshold suggestion from an amount-only match", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-suggest-amt-"));
     const paths = ensureCompanyDirs(root);

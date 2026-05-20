@@ -121,6 +121,13 @@ function openPurchaseDocuments(db: Database) {
 }
 
 function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof openIssuedInvoices>[number]): BankMatchSuggestion | null {
+  // KNOWN LIMITATION (#154): only incoming customer payments (amount > 0) are
+  // matched against issued invoices. An *outgoing* customer refund / credit-note
+  // payout (amount < 0) is not matched against the invoice it reverses — there
+  // is no refund/credit-note matching path here. Such negative rows fall
+  // through to purchaseSuggestion and, finding no purchase document, stay
+  // unmatched by design. An unmatched refund row is an unsupported case, not a
+  // bug; settle it explicitly via `invoice refund-bank`.
   if (!(Number(bank.amount) > 0)) return null;
   const status = getInvoiceStatus(db, doc.id, bank.transaction_date);
   if (!status.ok) return null;
@@ -191,6 +198,12 @@ function invoiceSuggestion(db: Database, bank: ReturnType<typeof unmatchedBankTr
 }
 
 function purchaseSuggestion(bank: ReturnType<typeof unmatchedBankTransactions>[number], doc: ReturnType<typeof openPurchaseDocuments>[number]): BankMatchSuggestion | null {
+  // KNOWN LIMITATION (#154): only outgoing supplier payments (amount < 0) are
+  // matched against purchase documents. An *incoming* supplier credit-note
+  // refund (amount > 0) is not matched against the purchase it reverses — there
+  // is no credit-note matching path here. Such positive rows fall through to
+  // invoiceSuggestion and, finding no issued invoice, stay unmatched by design.
+  // An unmatched supplier-refund row is an unsupported case, not a bug.
   if (!(Number(bank.amount) < 0)) return null;
   const grossAmount = roundDkk(Number(doc.amount_inc_vat ?? 0));
   if (!(grossAmount > 0)) return null;
