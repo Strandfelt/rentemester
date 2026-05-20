@@ -702,3 +702,34 @@ BEGIN
   SELECT RAISE(ABORT, 'recurring invoice generations are append-only audit links; issue a credit note on the generated invoice instead');
 END;
 -- ===== END RECURRING INVOICES (#118) =====
+-- ===== MAIL INTAKE (#122) =====
+-- Append-only dedup ledger for the first deterministic bilagsmail intake
+-- slice. One row per (message-id, attachment hash) pair that was ingested,
+-- so rerunning the same maildrop never creates duplicate documents.
+CREATE TABLE IF NOT EXISTS mail_intake_messages (
+  id INTEGER PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  attachment_sha256 TEXT NOT NULL,
+  attachment_filename TEXT,
+  document_id INTEGER,
+  sender TEXT,
+  subject TEXT,
+  mail_date TEXT,
+  ingested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (message_id, attachment_sha256)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_intake_messages_message_id
+ON mail_intake_messages(message_id);
+
+CREATE TRIGGER IF NOT EXISTS mail_intake_messages_no_update
+BEFORE UPDATE ON mail_intake_messages
+BEGIN
+  SELECT RAISE(ABORT, 'mail intake dedup rows are append-only; re-ingest creates a new row instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS mail_intake_messages_no_delete
+BEFORE DELETE ON mail_intake_messages
+BEGIN
+  SELECT RAISE(ABORT, 'mail intake dedup rows are append-only and cannot be deleted');
+END;

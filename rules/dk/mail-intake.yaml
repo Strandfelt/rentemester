@@ -1,0 +1,40 @@
+version: dk-mail-intake-v0.0.1
+sources:
+  - DK-BOGFORINGSLOVEN-2022-700
+  - DK-BILAG-OPBEVARING-2023-1383
+rules:
+  - rule_id: DK-MAIL-INTAKE-TRANSPORT-001
+    name: The first supported bilagsmail transport is a local maildrop directory or EML file, not a hosted mailbox
+    category: document_intake
+    source_id: DK-BILAG-OPBEVARING-2023-1383
+    severity: advisory
+    machine_rule:
+      require:
+        - intake_source_is_local_eml_file_or_maildrop_directory
+      forbid:
+        - promising_imap_or_hosted_mailbox_sync_in_this_slice
+    explanation: Rentemester's first deterministic bilagsmail intake slice accepts only a local maildrop directory or a single EML file; IMAP and provider/hosted-mailbox automation remain explicit follow-up work and must not be implied as available.
+  - rule_id: DK-MAIL-INTAKE-DEDUP-001
+    name: Mail intake must deduplicate on stable message-id plus attachment hash so reruns create no duplicate documents
+    category: document_integrity
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - dedup_key_is_message_id_plus_attachment_sha256
+        - append_only_mail_intake_dedup_ledger
+        - rerunning_same_maildrop_input_is_idempotent
+    explanation: Ingesting the same EML or maildrop input twice must not create duplicate stored documents; intake records every (message-id, attachment hash) pair in an append-only dedup ledger and skips any pair already seen.
+  - rule_id: DK-MAIL-INTAKE-EXCEPTION-001
+    name: Mail messages with no usable attachment or ambiguous metadata must be routed to the exception queue instead of guessing
+    category: document_intake
+    source_id: DK-BILAG-OPBEVARING-2023-1383
+    severity: hard_stop
+    machine_rule:
+      require:
+        - no_attachment_message_routed_to_exception_queue
+        - missing_message_id_routed_to_exception_queue
+        - blocked_attachment_ingest_routed_to_exception_queue
+      forbid:
+        - silently_guessing_document_metadata_from_an_uncertain_mail
+    explanation: When a forwarded mail has no PDF/JPG/PNG attachment, lacks a Message-ID, or its attachment cannot be ingested cleanly, Rentemester must surface a clear exception for human review rather than silently fabricating a stored document.

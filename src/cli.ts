@@ -40,6 +40,8 @@ import { register as registerDashboard } from "./cli/dashboard";
 // ===== RECURRING INVOICES (#118) =====
 import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
+// ===== MAIL INTAKE (#122) =====
+import { register as registerMailIntake } from "./cli/mail-intake";
 
 function fatal(message: string): never {
   console.error(message);
@@ -147,6 +149,8 @@ for (const registerFn of [
   // ===== RECURRING INVOICES (#118) =====
   registerRecurringInvoice,
   // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  registerMailIntake,
 ]) {
   registerFn(dispatch);
 }

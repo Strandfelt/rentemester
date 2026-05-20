@@ -42,6 +42,8 @@ import { registerVendorTools } from "./tools/vendor";
 // ===== RECURRING INVOICES (#118) =====
 import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
+// ===== MAIL INTAKE (#122) =====
+import { registerMailIntakeTools } from "./tools/mail-intake";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -61,4 +63,6 @@ export function registerAllTools(server: McpServer): void {
   // ===== RECURRING INVOICES (#118) =====
   registerRecurringInvoiceTools(server);
   // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  registerMailIntakeTools(server);
 }

@@ -38,6 +38,8 @@ export const MUTATING_COMMANDS = new Set([
   "recurring-invoice create",
   "recurring-invoice generate",
   // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  "mail-intake ingest",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

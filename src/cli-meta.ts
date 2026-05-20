@@ -164,6 +164,14 @@ export const COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: ["--company", "--include-inactive"],
   },
   // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  {
+    key: "mail-intake ingest",
+    usage: "mail-intake ingest --company <path> --source <eml-file-or-maildrop-dir> [--metadata <file.json>] [--force]",
+    description: "Indlæser bilag fra en lokal .eml-fil eller maildrop-mappe (første deterministiske intake-slice; ikke IMAP/hosted mailbox).",
+    allowedFlags: ["--company", "--source", "--metadata", "--force"],
+    examplePath: "examples/bilagsmail.metadata.json",
+  },
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
