@@ -12,7 +12,11 @@ function hasColumn(db: Database, table: string, column: string) {
 export function openDb(path: string) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
-  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+  // busy_timeout must absorb transient contention when several short-lived
+  // processes open the same company ledger at once (the agent-demo pipeline,
+  // parallel test runs on a saturated CI host). 5s was too tight under load;
+  // 30s lets the single writer finish rather than erroring "database is locked".
+  db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 30000;");
   return db;
 }
 
