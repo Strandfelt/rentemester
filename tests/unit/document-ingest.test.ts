@@ -214,6 +214,66 @@ describe("document ingest", () => {
     rmSync(inboxRoot, { recursive: true, force: true });
   });
 
+  test("rejects a file whose bytes contradict its .pdf extension", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-mime-"));
+    const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-mime-"));
+    const fakePdf = join(inboxRoot, "invoice.pdf");
+    // Plain text bytes, not a PDF — must not be stored as application/pdf.
+    writeFileSync(fakePdf, "this is not really a pdf\n");
+
+    const db = openDb(ensureCompanyDirs(companyRoot).db);
+    migrate(db);
+
+    const result = ingestDocument(db, companyRoot, fakePdf, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-FAKE",
+      deliveryDescription: "Bogføring",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors?.[0]).toContain("content does not match");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(inboxRoot, { recursive: true, force: true });
+  });
+
+  test("ingests a real PDF when the bytes match the .pdf extension", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-realpdf-"));
+    const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-realpdf-"));
+    const realPdf = join(inboxRoot, "invoice.pdf");
+    writeFileSync(realPdf, "%PDF-1.4\n%minimal pdf body\n");
+
+    const db = openDb(ensureCompanyDirs(companyRoot).db);
+    migrate(db);
+
+    const result = ingestDocument(db, companyRoot, realPdf, {
+      source: "email",
+      issueDate: "2026-05-16",
+      invoiceNo: "INV-REAL",
+      deliveryDescription: "Bogføring",
+      amountIncVat: 1250,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Sælgervej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      vatAmount: 250,
+    });
+
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT mime_type FROM documents WHERE id = ?").get(result.documentId!) as any;
+    expect(row.mime_type).toBe("application/pdf");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(inboxRoot, { recursive: true, force: true });
+  });
+
   test("ingests a compliant supporting document and blocks duplicate logical supplier invoices unless forced", () => {
     const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-company-"));
     const inboxRoot = mkdtempSync(join(tmpdir(), "rentemester-inbox-"));

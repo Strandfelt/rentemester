@@ -65,14 +65,83 @@ function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function detectMimeType(path: string) {
+/**
+ * Allow-list of ingestable document types. Plain-text receipts are
+ * legitimate (the smoke ingests several `.txt` files), so `text/plain`
+ * and `application/json` are included alongside PDF/PNG/JPEG.
+ */
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "text/plain",
+  "application/json",
+]);
+
+const EXTENSION_MIME: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".txt": "text/plain",
+  ".json": "application/json",
+};
+
+function startsWithBytes(buf: Buffer, signature: number[]): boolean {
+  if (buf.length < signature.length) return false;
+  for (let i = 0; i < signature.length; i += 1) {
+    if (buf[i] !== signature[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Sniffs the leading magic bytes of a file and returns the MIME type
+ * they indicate, or `null` for content with no recognised binary
+ * signature (treated as plain text).
+ */
+function sniffMimeType(path: string): string | null {
+  const buf = readFileSync(path).subarray(0, 16);
+  if (startsWithBytes(buf, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"; // %PDF-
+  if (startsWithBytes(buf, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+  if (startsWithBytes(buf, [0xff, 0xd8, 0xff])) return "image/jpeg";
+  return null;
+}
+
+const BINARY_MIME_TYPES = new Set(["application/pdf", "image/png", "image/jpeg"]);
+
+/**
+ * Resolves the MIME type for an ingested file by combining the file
+ * extension with magic-byte content sniffing. Throws if the bytes
+ * contradict the extension, or if the type is outside the allow-list.
+ */
+function detectMimeType(path: string): string {
   const ext = extname(path).toLowerCase();
-  if (ext === ".pdf") return "application/pdf";
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".txt") return "text/plain";
-  if (ext === ".json") return "application/json";
-  return "application/octet-stream";
+  const expected = EXTENSION_MIME[ext];
+  const sniffed = sniffMimeType(path);
+
+  if (!expected) {
+    throw new Error(`unsupported document type for extension '${ext || "(none)"}'`);
+  }
+
+  if (BINARY_MIME_TYPES.has(expected)) {
+    // Binary formats must carry their signature.
+    if (sniffed !== expected) {
+      throw new Error(
+        `file content does not match its '${ext}' extension (expected ${expected})`,
+      );
+    }
+  } else if (sniffed && sniffed !== expected) {
+    // A .txt/.json file must not actually contain binary document bytes.
+    throw new Error(
+      `file content does not match its '${ext}' extension (looks like ${sniffed})`,
+    );
+  }
+
+  if (!ALLOWED_MIME_TYPES.has(expected)) {
+    throw new Error(`document type ${expected} is not on the ingestion allow-list`);
+  }
+  return expected;
 }
 
 function nextDocumentNo(db: Database, issueDate?: string) {
@@ -115,6 +184,13 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
   const validation = validateDocumentMetadata(metadata);
   if (!validation.ok) return { ok: false, errors: validation.errors };
   if (!existsSync(filePath)) return { ok: false, errors: [`file does not exist: ${filePath}`] };
+
+  let mimeType: string;
+  try {
+    mimeType = detectMimeType(filePath);
+  } catch (error) {
+    return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
+  }
 
   const sha256 = sha256File(filePath);
   const existing = db.query("SELECT id, document_no, stored_path FROM documents WHERE sha256_hash = ?").get(sha256) as { id: number; document_no: string; stored_path: string } | null;
@@ -167,7 +243,7 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
         metadata.source,
         basename(filePath),
         storedPath,
-        detectMimeType(filePath),
+        mimeType,
         sha256,
         metadata.sender?.name ?? null,
         metadata.invoiceNo ?? null,
