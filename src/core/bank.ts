@@ -197,6 +197,13 @@ function normalizeDateText(value: string | undefined) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
   const match = /^(\d{2})[-/.](\d{2})[-/.](\d{4})$/.exec(trimmed);
   if (!match) return trimmed;
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  // dd?dd?dddd is only unambiguously DD-MM-YYYY when one of the first two
+  // components cannot be a month. If both are <= 12 the D/M order is a guess
+  // (e.g. 05/04/2026), so refuse to reformat and let date validation reject it
+  // rather than silently picking an interpretation.
+  if (first <= 12 && second <= 12 && first !== second) return trimmed;
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
 

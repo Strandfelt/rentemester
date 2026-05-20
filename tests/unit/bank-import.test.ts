@@ -181,6 +181,43 @@ describe("bank import", () => {
     }
   });
 
+  test("rejects ambiguous dd-mm/mm-dd dates rather than guessing (issue #137)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-ambig-"));
+    const csv = join(root, "ambig.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "05/04/2026,05/04/2026,Card payment,-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("transactionDate"))).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("keeps reformatting unambiguous DD-MM-YYYY dates (issue #137)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-bank-unambig-"));
+    const csv = join(root, "unambig.csv");
+    writeFileSync(csv, [
+      "transaction_date,booking_date,text,amount,currency,reference",
+      "17-05-2026,16-05-2026,Card payment,-1250,DKK,REF-1"
+    ].join("\n"));
+
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const result = importBankCsv(db, root, csv);
+    expect(result.ok).toBe(true);
+    const row = db.query("SELECT transaction_date, booking_date FROM bank_transactions ORDER BY id ASC LIMIT 1").get() as any;
+    expect(row).toEqual({ transaction_date: "2026-05-17", booking_date: "2026-05-16" });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("rejects malformed bank rows", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-bank-bad-"));
     const csv = join(root, "bad.csv");
