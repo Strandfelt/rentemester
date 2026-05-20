@@ -8,6 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createHash, createHmac, createPrivateKey, sign as cryptoSign } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
@@ -266,6 +267,133 @@ describe("asymmetric backup signatures (issue #99)", () => {
     db.close();
     rmSync(companyRoot, { recursive: true, force: true });
     rmSync(targetRoot, { recursive: true, force: true });
+  });
+
+  test("issue #132: an ed25519 key resolved from inside the backup is integrity-only, not third-party authenticity", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-ed25519-selfcert-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+    ensureEd25519Keypair(companyRoot);
+
+    const backup = createSystemBackup(db, companyRoot, {
+      createdAt: "2026-05-17T02:09:00.000Z",
+      signWithEd25519: true,
+    });
+    expect(backup.ok).toBe(true);
+
+    // Verifier holds ONLY the backup directory (no out-of-band public key).
+    // The signature checks out against the in-backup key, but a tamperer who
+    // re-signs with a fresh keypair would also pass — so this is integrity
+    // only, never third-party authenticity.
+    const verify = verifyBackupSignature({ backupDir: backup.backupDir! });
+    expect(verify.ok).toBe(true);
+    expect(verify.algorithms).toContain("ed25519");
+    expect(verify.trustLevel).toBe("integrity-only");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+  });
+
+  test("issue #132: an out-of-band public key elevates verification to third-party authenticity", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-ed25519-authentic-"));
+    const auditorRoot = mkdtempSync(join(tmpdir(), "rentemester-ed25519-authentic-auditor-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+    ensureEd25519Keypair(companyRoot);
+
+    const backup = createSystemBackup(db, companyRoot, {
+      createdAt: "2026-05-17T02:09:00.000Z",
+      signWithEd25519: true,
+    });
+    expect(backup.ok).toBe(true);
+
+    const auditorPub = join(auditorRoot, "company.pub");
+    expect(exportBackupPublicKey(companyRoot, auditorPub).ok).toBe(true);
+
+    const verify = verifyBackupSignature({ backupDir: backup.backupDir!, publicKeyPath: auditorPub });
+    expect(verify.ok).toBe(true);
+    expect(verify.algorithms).toContain("ed25519");
+    expect(verify.trustLevel).toBe("third-party-authenticity");
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+    rmSync(auditorRoot, { recursive: true, force: true });
+  });
+
+  test("issue #132: a forged keypair re-signed inside the backup is rejected when the verifier supplies the genuine public-key hint", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-ed25519-forge-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+    ensureEd25519Keypair(companyRoot);
+
+    const backup = createSystemBackup(db, companyRoot, {
+      createdAt: "2026-05-17T02:09:00.000Z",
+      signWithEd25519: true,
+    });
+    expect(backup.ok).toBe(true);
+
+    // The genuine public-key hint a 3rd-party holds out-of-band.
+    const genuineManifest = JSON.parse(readFileSync(join(backup.backupDir!, "manifest.json"), "utf8"));
+    const genuineHint: string = genuineManifest.asymmetricSignature.publicKeyHint;
+
+    // Attacker forges: replace the in-backup keypair, tamper the snapshot, and
+    // re-sign manifest + HMAC with the fresh keys so every co-located check
+    // passes. Without an out-of-band hint, restore/verify would trust it.
+    const forged = ensureEd25519Keypair(mkdtempSync(join(tmpdir(), "rentemester-ed25519-forge-src-")));
+    const shippedPub = join(backup.backupDir!, "config", "backup-manifest.pub");
+    writeFileSync(shippedPub, forged.publicKeyPem);
+
+    const dbSnap = join(backup.backupDir!, "ledger.sqlite");
+    writeFileSync(dbSnap, Buffer.concat([readFileSync(dbSnap), Buffer.from([0x00])]));
+
+    const tamperedManifest = JSON.parse(readFileSync(join(backup.backupDir!, "manifest.json"), "utf8"));
+    tamperedManifest.dbSnapshot.sha256 = createHash("sha256").update(readFileSync(dbSnap)).digest("hex");
+    tamperedManifest.dbSnapshot.sizeBytes = readFileSync(dbSnap).byteLength;
+    tamperedManifest.asymmetricSignature.publicKeyHint = publicKeyHint(forged.publicKeyPem);
+    const tamperedText = `${JSON.stringify(tamperedManifest, null, 2)}\n`;
+    writeFileSync(join(backup.backupDir!, "manifest.json"), tamperedText);
+
+    const reSig = cryptoSign(null, Buffer.from(tamperedText, "utf8"), createPrivateKey(forged.privateKeyPem));
+    writeFileSync(backupAsymmetricSignaturePath(backup.backupDir!), `${reSig.toString("base64")}\n`);
+    const hmacKey = readFileSync(join(companyRoot, ".backup-manifest.key"), "utf8").trim();
+    const reHmac = createHmac("sha256", Buffer.from(hmacKey, "hex")).update(tamperedText).digest("hex");
+    writeFileSync(join(backup.backupDir!, "manifest.json.hmac"), `${reHmac}\n`);
+
+    // Verifier supplies the genuine hint it received out-of-band: the forged
+    // in-backup key does not match, so verification must fail closed.
+    const verify = verifyBackupSignature({ backupDir: backup.backupDir!, publicKeyHint: genuineHint });
+    expect(verify.ok).toBe(false);
+    expect(verify.errors.some((e) => /public.?key/i.test(e) && /hint|mismatch/i.test(e))).toBe(true);
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+  });
+
+  test("issue #132: createSystemBackup refuses to regenerate over a partially-deleted keystate", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-ed25519-partial-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+    ensureEd25519Keypair(companyRoot);
+
+    // Attacker deletes ONLY the private key, hoping a backup silently mints a
+    // fresh keypair. createSystemBackup must instead fail closed: a missing
+    // half of an existing keystate is a tamper signal, never a reason to
+    // generate new keys.
+    rmSync(backupEd25519PrivateKeyPath(companyRoot), { force: true });
+
+    const backup = createSystemBackup(db, companyRoot, {
+      createdAt: "2026-05-17T02:09:00.000Z",
+      signWithEd25519: true,
+    });
+    expect(backup.ok).toBe(false);
+    expect(backup.errors.some((e) => /signing key/i.test(e))).toBe(true);
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
   });
 
   test("verify-backup-signature CLI runs end-to-end with only public key", async () => {
