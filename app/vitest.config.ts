@@ -1,0 +1,15 @@
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+
+// Vitest config — kept separate from `vite.config.ts` so the production build
+// is typed purely by Vite. Component tests run in a happy-dom environment with
+// the jest-dom matchers wired in via `src/test/setup.ts`.
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "happy-dom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    css: false,
+  },
+});

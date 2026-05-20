@@ -4,7 +4,13 @@ import { openDb, migrate } from "../core/db";
 import { validateInvoice } from "../core/invoice";
 import { issueInvoice } from "../core/issued-invoices";
 import { renderIssuedInvoicePdf } from "../core/invoice-pdf";
-import { exportPublicEInvoiceOioUbl, exportPublicEInvoicePreview } from "../core/public-einvoice";
+import {
+  exportPublicEInvoiceOioUbl,
+  exportPublicEInvoicePreview,
+  submitPublicEInvoicePeppol,
+  type PeppolAccessPointConfig,
+  type PeppolTransportAcknowledgement,
+} from "../core/public-einvoice";
 import { applyInvoicePayment, getInvoiceStatus } from "../core/invoice-payments";
 import { buildInvoiceList, buildOverdueInvoiceList, findInvoices } from "../core/invoice-list";
 import { postIssuedInvoiceToLedger } from "../core/invoice-booking";
@@ -178,6 +184,53 @@ export function register(dispatch: CommandDispatch): void {
     const result = exportPublicEInvoiceOioUbl(db, {
       invoiceDocumentId: documentId,
       outPath: out,
+    });
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
+    if (!result.ok) process.exit(1);
+  });
+
+  // PEPPOL submission (#128): builds a deterministic submission envelope on
+  // top of the OIOUBL handoff artifact. Access-point config is read from a
+  // file (--access-point) so credentials never enter core bookkeeping state.
+  dispatch.on("invoice", "submit-public-peppol", (ctx) => {
+    const accessPointPath = ctx.arg("--access-point");
+    if (!accessPointPath) {
+      console.error("Missing required --access-point <file.json>");
+      process.exit(2);
+    }
+    let accessPoint: PeppolAccessPointConfig;
+    let acknowledgement: PeppolTransportAcknowledgement | undefined;
+    try {
+      const parsed = JSON.parse(readFileSync(accessPointPath, "utf8")) as {
+        accessPointId?: string;
+        endpointUrl?: string;
+        senderEndpointId?: string;
+        acknowledgement?: PeppolTransportAcknowledgement;
+      };
+      accessPoint = {
+        accessPointId: parsed.accessPointId ?? "",
+        endpointUrl: parsed.endpointUrl ?? "",
+        senderEndpointId: parsed.senderEndpointId ?? "",
+      };
+      acknowledgement = parsed.acknowledgement;
+    } catch (error) {
+      console.error(`Could not read --access-point config: ${(error as Error).message}`);
+      process.exit(2);
+    }
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
+    if (!documentId) {
+      db.close();
+      console.error("Missing required --document-id <n> or --invoice-number <no>");
+      process.exit(2);
+    }
+    const result = submitPublicEInvoicePeppol(db, {
+      invoiceDocumentId: documentId,
+      accessPoint,
+      acknowledgement,
+      outPath: ctx.arg("--out"),
     });
     ctx.emitResult(result as Record<string, unknown>);
     db.close();

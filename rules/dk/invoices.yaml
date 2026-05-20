@@ -454,3 +454,29 @@ rules:
       forbid: [modify_issued_invoice, delete_issued_invoice]
       require: credit_note_for_correction
     explanation: Corrections to issued invoices are handled via credit note and new invoice, not mutation.
+  # ===== RECURRING INVOICES (#118) =====
+  - rule_id: DK-RECURRING-INVOICE-TEMPLATE-001
+    name: Recurring invoice templates store an immutable, pre-validated invoice specification
+    category: invoice_lifecycle
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - append_only_recurring_template
+        - prevalidated_embedded_invoice_payload
+      forbid:
+        - mutate_recurring_template_identity_or_payload
+    explanation: A recurring invoice template captures the repeating invoice (interval, customer, lines, VAT, delivery-period mode) as an append-only, pre-validated specification so every generated invoice is reproducible; the embedded payload must already satisfy the full-invoice rules before the template can be created.
+  - rule_id: DK-RECURRING-INVOICE-GENERATE-001
+    name: Recurring invoice generation is explicit, deterministic and idempotent per template period
+    category: invoice_lifecycle
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - deterministic_period_index_from_first_issue_date
+        - append_only_generation_audit_link
+      forbid:
+        - duplicate_generation_for_same_template_period
+        - background_recurring_invoice_scheduling
+    explanation: Rentemester materialises a recurring invoice only on an explicit generate call for a given as-of date; the issue date and delivery period are derived deterministically from the template's first issue date and interval, and a unique template/period audit link prevents duplicate generation across reruns.

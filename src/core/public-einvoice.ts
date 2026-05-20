@@ -11,6 +11,8 @@ const OIOUBL_RULE_ID = "DK-INVOICE-PUBLIC-OIOUBL-001";
 const OIOUBL_UBL_VERSION = "2.1";
 const OIOUBL_CUSTOMIZATION_ID = "urn:fdc:oioubl.dk:trns:billing:invoice:3.0";
 const OIOUBL_PROFILE_ID = "urn:fdc:oioubl.dk:bis:billing_with_response:3";
+const PEPPOL_SUBMIT_RULE_ID = "DK-PEPPOL-SUBMIT-001";
+const PEPPOL_ENVELOPE_VERSION = "rentemester:dk:peppol-submission:v1";
 
 type ExportedInvoiceRow = {
   id: number;
@@ -386,6 +388,307 @@ export function exportPublicEInvoiceOioUbl(
     sha256,
     xml,
     appliedRules: [OIOUBL_RULE_ID],
+    errors: [],
+  };
+}
+
+// ============================================================================
+// PEPPOL submission (#128)
+//
+// The next step on top of the OIOUBL handoff artifact: a deterministic
+// submission command that wraps an already-validated public-invoice OIOUBL
+// export in a stable PEPPOL submission envelope, records the attempt and is
+// idempotent on a derived idempotency key.
+//
+// Trust boundary: access-point CREDENTIALS never enter core bookkeeping
+// state. The caller supplies the (non-secret) access-point configuration —
+// id, endpoint URL, sender endpoint id — which is used only to derive the
+// envelope. No real network call is performed; this slice produces the
+// submission request artifact and records the attempt for the audit trail.
+// The preview/OIOUBL handoff exports remain the lower-trust fallback.
+// ============================================================================
+
+/**
+ * Non-secret access-point configuration. Credentials (certificates, API
+ * tokens) deliberately have no field here — they stay outside core state.
+ */
+export type PeppolAccessPointConfig = {
+  accessPointId: string;
+  endpointUrl: string;
+  senderEndpointId: string;
+};
+
+/**
+ * Optional transport acknowledgement metadata, recorded verbatim when the
+ * caller has confirmation that the access point accepted the transmission.
+ */
+export type PeppolTransportAcknowledgement = {
+  transmissionId: string;
+  acknowledgedAt: string;
+};
+
+export type SubmitPublicEInvoicePeppolInput = {
+  invoiceDocumentId: number;
+  accessPoint: PeppolAccessPointConfig;
+  acknowledgement?: PeppolTransportAcknowledgement;
+  /** Optional path to write the submission envelope artifact to. */
+  outPath?: string;
+};
+
+export type SubmitPublicEInvoicePeppolResult = {
+  ok: boolean;
+  invoiceNumber?: string;
+  /** Stable reference for this submission attempt. */
+  submissionReference?: string;
+  /** Derived idempotency key — duplicates collapse onto the same record. */
+  idempotencyKey?: string;
+  /** sha256 of the underlying OIOUBL handoff artifact. */
+  oioublSha256?: string;
+  /** sha256 of the generated submission envelope. */
+  envelopeSha256?: string;
+  /** The deterministic submission envelope XML. */
+  envelope?: string;
+  /** 'prepared' or 'acknowledged'. */
+  status?: "prepared" | "acknowledged";
+  /** True when an existing submission record was reused (idempotent re-run). */
+  duplicate?: boolean;
+  outPath?: string;
+  appliedRules: string[];
+  errors: string[];
+};
+
+type PeppolSubmissionRow = {
+  id: number;
+  invoice_document_id: number;
+  invoice_no: string | null;
+  idempotency_key: string;
+  submission_reference: string;
+  access_point_id: string;
+  receiver_endpoint_id: string;
+  oioubl_sha256: string;
+  envelope_sha256: string;
+  envelope_xml: string;
+  status: "prepared" | "acknowledged";
+  transmission_id: string | null;
+  acknowledged_at: string | null;
+};
+
+function validateAccessPointConfig(config: PeppolAccessPointConfig | undefined): string[] {
+  const errors: string[] = [];
+  if (!config) {
+    errors.push("PEPPOL submission requires access-point config (accessPointId, endpointUrl, senderEndpointId)");
+    return errors;
+  }
+  if (!hasText(config.accessPointId)) errors.push("PEPPOL submission requires a non-empty access-point id");
+  if (!hasText(config.endpointUrl)) errors.push("PEPPOL submission requires a non-empty access-point endpointUrl");
+  if (!hasText(config.senderEndpointId)) errors.push("PEPPOL submission requires a non-empty access-point senderEndpointId");
+  return errors;
+}
+
+function buildPeppolSubmissionEnvelope(args: {
+  submissionReference: string;
+  idempotencyKey: string;
+  invoiceNumber: string;
+  accessPoint: PeppolAccessPointConfig;
+  receiverEndpointId: string;
+  oioublSha256: string;
+  status: "prepared" | "acknowledged";
+  acknowledgement?: PeppolTransportAcknowledgement;
+}) {
+  // The envelope is fully derived from deterministic inputs (no timestamps,
+  // no random ids) so re-running on identical inputs yields an identical
+  // artifact. It references the OIOUBL handoff by hash rather than embedding
+  // (and thus risking mutation of) the original invoice payload.
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<PeppolSubmission xmlns="urn:${PEPPOL_ENVELOPE_VERSION}">`,
+    xmlTag("SubmissionReference", args.submissionReference, "  "),
+    xmlTag("IdempotencyKey", args.idempotencyKey, "  "),
+    xmlTag("Status", args.status, "  "),
+    "  <Document>",
+    xmlTag("InvoiceNumber", args.invoiceNumber, "    "),
+    xmlTag("Format", "OIOUBL", "    "),
+    xmlTag("Profile", OIOUBL_CUSTOMIZATION_ID, "    "),
+    xmlTag("HandoffArtifactSha256", args.oioublSha256, "    "),
+    "  </Document>",
+    "  <AccessPoint>",
+    xmlTag("AccessPointId", args.accessPoint.accessPointId, "    "),
+    xmlTag("EndpointUrl", args.accessPoint.endpointUrl, "    "),
+    xmlTag("SenderEndpointId", args.accessPoint.senderEndpointId, "    "),
+    xmlTag("ReceiverEndpointId", args.receiverEndpointId, "    "),
+    "  </AccessPoint>",
+    args.acknowledgement
+      ? [
+          "  <Acknowledgement>",
+          xmlTag("TransmissionId", args.acknowledgement.transmissionId, "    "),
+          xmlTag("AcknowledgedAt", args.acknowledgement.acknowledgedAt, "    "),
+          "  </Acknowledgement>",
+        ].join("\n")
+      : "",
+    "</PeppolSubmission>",
+    "",
+  ].filter((line) => line !== "").join("\n");
+}
+
+function rowToSubmissionResult(
+  row: PeppolSubmissionRow,
+  invoiceNumber: string,
+  duplicate: boolean,
+  outPath?: string,
+): SubmitPublicEInvoicePeppolResult {
+  if (outPath) writeFileSync(outPath, row.envelope_xml);
+  return {
+    ok: true,
+    invoiceNumber,
+    submissionReference: row.submission_reference,
+    idempotencyKey: row.idempotency_key,
+    oioublSha256: row.oioubl_sha256,
+    envelopeSha256: row.envelope_sha256,
+    envelope: row.envelope_xml,
+    status: row.status,
+    duplicate,
+    outPath,
+    appliedRules: [PEPPOL_SUBMIT_RULE_ID],
+    errors: [],
+  };
+}
+
+/**
+ * Produces a deterministic PEPPOL submission envelope for an already-validated
+ * public-recipient invoice, building on the existing OIOUBL handoff artifact.
+ *
+ * Idempotent: the idempotency key is derived from the invoice number, the
+ * OIOUBL artifact hash and the access-point/receiver identifiers, so a
+ * duplicate submission collapses onto the existing record without writing a
+ * new row or audit event. Fails clearly when the OIOUBL handoff validation
+ * fails (missing public-recipient metadata) or when access-point config is
+ * missing. The original invoice payload is never mutated.
+ */
+export function submitPublicEInvoicePeppol(
+  db: Database,
+  input: SubmitPublicEInvoicePeppolInput,
+): SubmitPublicEInvoicePeppolResult {
+  const configErrors = validateAccessPointConfig(input.accessPoint);
+  if (configErrors.length > 0) {
+    return { ok: false, appliedRules: [PEPPOL_SUBMIT_RULE_ID], errors: configErrors };
+  }
+  if (input.acknowledgement) {
+    const ackErrors: string[] = [];
+    if (!hasText(input.acknowledgement.transmissionId)) {
+      ackErrors.push("PEPPOL acknowledgement requires a non-empty transmissionId");
+    }
+    if (!hasText(input.acknowledgement.acknowledgedAt)) {
+      ackErrors.push("PEPPOL acknowledgement requires a non-empty acknowledgedAt timestamp");
+    }
+    if (ackErrors.length > 0) {
+      return { ok: false, appliedRules: [PEPPOL_SUBMIT_RULE_ID], errors: ackErrors };
+    }
+  }
+
+  // Reuse the shipped OIOUBL handoff slice unchanged as the validated input
+  // package. Its own validation surfaces missing public-recipient metadata.
+  const oioubl = exportPublicEInvoiceOioUbl(db, { invoiceDocumentId: input.invoiceDocumentId });
+  if (!oioubl.ok || !oioubl.sha256) {
+    return {
+      ok: false,
+      invoiceNumber: oioubl.invoiceNumber,
+      appliedRules: [PEPPOL_SUBMIT_RULE_ID, ...oioubl.appliedRules],
+      errors: oioubl.errors.length > 0
+        ? oioubl.errors
+        : ["PEPPOL submission could not generate the required OIOUBL handoff artifact"],
+    };
+  }
+
+  const invoiceNumber = oioubl.invoiceNumber ?? String(input.invoiceDocumentId);
+
+  // Derive the receiver endpoint id from the OIOUBL artifact (EndpointID),
+  // so the submission envelope stays consistent with the validated handoff.
+  const endpointMatch = oioubl.xml?.match(/<cbc:EndpointID schemeID="0188">([^<]+)<\/cbc:EndpointID>/);
+  const receiver = endpointMatch ? `0188:${endpointMatch[1]}` : "0188:unknown";
+
+  const idempotencyKey = createHash("sha256")
+    .update(
+      [
+        invoiceNumber,
+        oioubl.sha256,
+        input.accessPoint.accessPointId.trim(),
+        input.accessPoint.senderEndpointId.trim(),
+        receiver,
+      ].join("|"),
+    )
+    .digest("hex");
+
+  // Idempotent fast-path: an identical submission already exists.
+  const existing = db
+    .query(
+      `SELECT id, invoice_document_id, invoice_no, idempotency_key, submission_reference,
+              access_point_id, receiver_endpoint_id, oioubl_sha256, envelope_sha256,
+              envelope_xml, status, transmission_id, acknowledged_at
+       FROM peppol_submissions WHERE idempotency_key = ? LIMIT 1`,
+    )
+    .get(idempotencyKey) as PeppolSubmissionRow | null;
+  if (existing) {
+    return rowToSubmissionResult(existing, invoiceNumber, true, input.outPath);
+  }
+
+  const submissionReference = `PEPPOL-${invoiceNumber}-${idempotencyKey.slice(0, 12)}`;
+  const status: "prepared" | "acknowledged" = input.acknowledgement ? "acknowledged" : "prepared";
+  const envelope = buildPeppolSubmissionEnvelope({
+    submissionReference,
+    idempotencyKey,
+    invoiceNumber,
+    accessPoint: input.accessPoint,
+    receiverEndpointId: receiver,
+    oioublSha256: oioubl.sha256,
+    status,
+    acknowledgement: input.acknowledgement,
+  });
+  const envelopeSha256 = createHash("sha256").update(envelope).digest("hex");
+
+  db.run(
+    `INSERT INTO peppol_submissions
+       (invoice_document_id, invoice_no, idempotency_key, submission_reference,
+        access_point_id, receiver_endpoint_id, oioubl_sha256, envelope_sha256,
+        envelope_xml, status, transmission_id, acknowledged_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    input.invoiceDocumentId,
+    invoiceNumber,
+    idempotencyKey,
+    submissionReference,
+    input.accessPoint.accessPointId.trim(),
+    receiver,
+    oioubl.sha256,
+    envelopeSha256,
+    envelope,
+    status,
+    input.acknowledgement?.transmissionId ?? null,
+    input.acknowledgement?.acknowledgedAt ?? null,
+  );
+
+  insertAuditLog(db, {
+    eventType: "public_einvoice_peppol_submission",
+    entityType: "document",
+    entityId: input.invoiceDocumentId,
+    message:
+      `Recorded PEPPOL submission ${submissionReference} for invoice ${invoiceNumber} ` +
+      `via access point ${input.accessPoint.accessPointId.trim()} ` +
+      `(oioubl ${oioubl.sha256}, envelope ${envelopeSha256}, status ${status})`,
+  });
+
+  if (input.outPath) writeFileSync(input.outPath, envelope);
+
+  return {
+    ok: true,
+    invoiceNumber,
+    submissionReference,
+    idempotencyKey,
+    oioublSha256: oioubl.sha256,
+    envelopeSha256,
+    envelope,
+    status,
+    duplicate: false,
+    outPath: input.outPath,
+    appliedRules: [PEPPOL_SUBMIT_RULE_ID],
     errors: [],
   };
 }

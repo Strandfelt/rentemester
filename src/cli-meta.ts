@@ -17,7 +17,30 @@ export const COMMAND_SPECS: CommandSpec[] = [
     description: "Initialiserer en virksomhed og opretter standardkontoplan.",
     allowedFlags: ["--company", "--cvr", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
   },
-  { key: "system healthcheck", usage: "system healthcheck --company <path>", description: "Tjekker at virksomhedsmappen og kernefiler findes.", allowedFlags: ["--company"] },
+  {
+    key: "company add",
+    usage: "company add [--workspace <dir>] --name <text> [--slug <slug>] [--cvr <DK12345678>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
+    description: "Opretter en ny virksomhed i workspacet (opretter workspacet ved første kørsel).",
+    allowedFlags: ["--workspace", "--name", "--slug", "--cvr", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+  },
+  {
+    key: "company list",
+    usage: "company list [--workspace <dir>]",
+    description: "Lister virksomheder i workspacet.",
+    allowedFlags: ["--workspace"],
+  },
+  {
+    key: "serve",
+    usage: "serve [--workspace <dir>] [--host <addr>] [--port <n>]",
+    description: "Starter cockpit-backenden: en lokal JSON-API over workspacet (kun læsning + workspace-styring).",
+    allowedFlags: ["--workspace", "--host", "--port"],
+    inputNotes: [
+      "Bind-adressen er konfigurations-styret: standard 127.0.0.1 (kun localhost)",
+      "Miljøvariabler: RENTEMESTER_APP_HOST, RENTEMESTER_APP_PORT, RENTEMESTER_WORKSPACE",
+      "Ingen bogføringsmutationer — dem ejer agent/CLI-stien",
+    ],
+  },
+  { key: "system healthcheck", usage: "system healthcheck --company <slug|path>", description: "Tjekker at virksomhedsmappen og kernefiler findes.", allowedFlags: ["--company"] },
   { key: "system backup", usage: "system backup --company <path> [--at <ISO-8601>] [--sign-with-ed25519]", description: "Opretter en revisionsklar backup. Med --sign-with-ed25519 tilføjes en asymmetrisk signatur som 3.-part kan verificere uafhængigt.", allowedFlags: ["--company", "--at", "--sign-with-ed25519"] },
   { key: "system backup-status", usage: "system backup-status --company <path> [--as-of <ISO-8601>]", description: "Viser om backup-pligten er opfyldt.", allowedFlags: ["--company", "--as-of"] },
   { key: "system restore-backup", usage: "system restore-backup --backup-dir <dir> --target-company <path> [--verify-key <path>] [--public-key <path>]", description: "Gendanner en backup til en ny virksomhedssti.", allowedFlags: ["--backup-dir", "--target-company", "--verify-key", "--public-key"] },
@@ -78,6 +101,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "invoice render", usage: "invoice render --company <path> (--document-id <n> | --invoice-number <no>)", description: "Renderer eller genskaber en deterministisk PDF for en udstedt faktura.", allowedFlags: ["--company", "--document-id", "--invoice-number"] },
   { key: "invoice export-public", usage: "invoice export-public --company <path> (--document-id <n> | --invoice-number <no>) --out <file.xml>", description: "Eksporterer en deterministisk preview-artifact til offentlig EAN/GLN e-faktura uden PEPPOL-transport.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--out"] },
   { key: "invoice export-public-oioubl", usage: "invoice export-public-oioubl --company <path> (--document-id <n> | --invoice-number <no>) --out <file.xml>", description: "Eksporterer et deterministisk OIOUBL-handoff-artifact til offentlig e-faktura uden direkte PEPPOL-submission.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--out"] },
+  // PEPPOL submission (#128)
+  { key: "invoice submit-public-peppol", usage: "invoice submit-public-peppol --company <path> (--document-id <n> | --invoice-number <no>) --access-point <file.json> [--out <file.xml>]", description: "Bygger en deterministisk, idempotent PEPPOL-submission-envelope oven på OIOUBL-handoff-artifaktet. Access-point-config læses fra fil; credentials gemmes aldrig i bogføringstilstanden.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--access-point", "--out"] },
   { key: "invoice credit-note", usage: "invoice credit-note --company <path> --input <file.json>", description: "Udsteder en kreditnota mod en eksisterende faktura.", allowedFlags: ["--company", "--input"], examplePath: "examples/credit-note.json" },
   { key: "invoice post", usage: "invoice post --company <path> (--document-id <n> | --invoice-number <no>)", description: "Bogfører en udstedt faktura i finansen.", allowedFlags: ["--company", "--document-id", "--invoice-number"] },
   { key: "invoice settle-bank", usage: "invoice settle-bank --company <path> --input <file.json>", description: "Matcher en bankbetaling mod en faktura.", allowedFlags: ["--company", "--input"], examplePath: "examples/invoice-settlement.json" },
@@ -136,6 +161,84 @@ export const COMMAND_SPECS: CommandSpec[] = [
     description: "Genererer et statisk HTML-dashboard over virksomhedens nuværende bogføringsstatus.",
     allowedFlags: ["--company", "--out", "--as-of", "--open"],
   },
+  // ===== RECURRING INVOICES (#118) =====
+  {
+    key: "recurring-invoice create",
+    usage: "recurring-invoice create --company <path> --input <file.json>",
+    description: "Opretter en gentagende fakturaskabelon (interval, kunde, linjer, moms, leveringsperiode).",
+    allowedFlags: ["--company", "--input"],
+    inputNotes: [
+      "name: tekst",
+      'interval: "monthly" | "quarterly" | "yearly"',
+      "firstIssueDate: YYYY-MM-DD",
+      "paymentTermsDays: heltal 0-365 (standard 30)",
+      'deliveryPeriodMode: "issue_month" | "interval_window" | "none"',
+      "invoice: faktura-payload (samme felter som invoice issue, uden issueDate/invoiceNumber)",
+    ],
+  },
+  {
+    key: "recurring-invoice generate",
+    usage: "recurring-invoice generate --company <path> --template-id <n> --as-of <YYYY-MM-DD>",
+    description: "Materialiserer deterministisk den faktura der er forfalden for skabelonen pr. --as-of (idempotent pr. periode).",
+    allowedFlags: ["--company", "--template-id", "--as-of"],
+  },
+  {
+    key: "recurring-invoice list",
+    usage: "recurring-invoice list --company <path> [--include-inactive]",
+    description: "Lister gentagende fakturaskabeloner.",
+    allowedFlags: ["--company", "--include-inactive"],
+  },
+  // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  {
+    key: "mail-intake ingest",
+    usage: "mail-intake ingest --company <path> --source <eml-file-or-maildrop-dir> [--metadata <file.json>] [--force]",
+    description: "Indlæser bilag fra en lokal .eml-fil eller maildrop-mappe (første deterministiske intake-slice; ikke IMAP/hosted mailbox).",
+    allowedFlags: ["--company", "--source", "--metadata", "--force"],
+    examplePath: "examples/bilagsmail.metadata.json",
+  },
+  // ===== MILEAGE LOG (#123) =====
+  {
+    key: "mileage log",
+    usage:
+      "mileage log --company <path> --date <YYYY-MM-DD> --purpose <text> --from <text> --to <text> --km <n> --vehicle <text> --driver <text> --rate-per-km <n> --rate-basis <text> [--rate-source <text>] [--notes <text>]",
+    description:
+      "Registrerer en append-only kørselspost i kørselsregnskabet. Satsen er bruger-oplyst og kilde-bakket; intet bogføres i finansen.",
+    allowedFlags: [
+      "--company", "--date", "--purpose", "--from", "--to", "--km", "--vehicle",
+      "--driver", "--rate-per-km", "--rate-basis", "--rate-source", "--notes",
+    ],
+    inputNotes: [
+      "rate-per-km og rate-basis skal være bruger-oplyst / kilde-bakket",
+      "Rentemester fører kun loggen — skattemæssig behandling er brugerens/rådgiverens ansvar",
+    ],
+  },
+  { key: "mileage list", usage: "mileage list --company <path>", description: "Lister registrerede kørselsposter.", allowedFlags: ["--company"] },
+  { key: "mileage report", usage: "mileage report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Deterministisk periode-rapport over kilometer og beløbsgrundlag.", allowedFlags: ["--company", "--from", "--to"] },
+  { key: "mileage export", usage: "mileage export --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir>", description: "Skriver et deterministisk eksport-artifact (JSON + CSV) over kørselsregnskabet.", allowedFlags: ["--company", "--from", "--to", "--out"] },
+  // ===== FIXED ASSETS (#124, #125) =====
+  {
+    key: "asset register",
+    usage:
+      "asset register --company <path> --name <text> --category <text> --acquisition-date <YYYY-MM-DD> --cost <n> --useful-life-months <n> --document-id <n> [--asset-account <konto>] [--depreciation-account <konto>] [--accumulated-account <konto>] [--note <text>]",
+    description: "Registrerer et aktiv til afskrivning over tid med en lineær afskrivningsplan.",
+    allowedFlags: ["--company", "--name", "--category", "--acquisition-date", "--cost", "--useful-life-months", "--document-id", "--asset-account", "--depreciation-account", "--accumulated-account", "--note"],
+  },
+  {
+    key: "asset depreciate",
+    usage: "asset depreciate --company <path> --asset-id <n> --period <n> --date <YYYY-MM-DD>",
+    description: "Bogfører en periodes afskrivning for et aktiv (debet afskrivninger, kredit akkumulerede afskrivninger).",
+    allowedFlags: ["--company", "--asset-id", "--period", "--date"],
+  },
+  {
+    key: "asset write-off",
+    usage:
+      "asset write-off --company <path> --name <text> --category <text> --acquisition-date <YYYY-MM-DD> --cost <n> --document-id <n> --expense-account <konto> --date <YYYY-MM-DD> --threshold-source <text> --confirm yes [--payment-account <konto>] [--note <text>]",
+    description: "Bogfører straksafskrivning af et mindre aktiv. Kræver --confirm yes og kildehenvisning til reglen; bruger/revisor ejer den skattemæssige vurdering.",
+    allowedFlags: ["--company", "--name", "--category", "--acquisition-date", "--cost", "--document-id", "--expense-account", "--date", "--threshold-source", "--confirm", "--payment-account", "--note"],
+  },
+  { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
+  // ===== END FIXED ASSETS (#124, #125) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));

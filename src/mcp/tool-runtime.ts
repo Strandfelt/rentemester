@@ -14,8 +14,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
+import { isAbsolute, resolve, sep } from "node:path";
 import { openDb, migrate } from "../core/db";
 import { companyPaths } from "../core/paths";
+import { isValidSlug, resolveConfiguredWorkspaceRoot, resolveWorkspaceSlug } from "../core/workspace";
 import {
   asDocumentId,
   asJournalEntryId,
@@ -52,10 +54,67 @@ function safeErrorEnvelope(context: string, message: string): Envelope {
 }
 
 /**
+ * Result of resolving the `company` tool argument: either a concrete company
+ * directory, or a caller-safe error message (already path-redacted).
+ */
+type CompanyArgResolution =
+  | { ok: true; companyRoot: string }
+  | { ok: false; error: string };
+
+/**
+ * Resolves the `company` argument of an MCP tool to a concrete company
+ * directory. The argument may be EITHER:
+ *
+ *   - a workspace *slug* — a bare, separator-free, slug-shaped token. When
+ *     `RENTEMESTER_WORKSPACE` is configured it is looked up in that workspace's
+ *     manifest; an unknown slug is an error.
+ *   - a raw filesystem *path* — resolved and `..`-guarded, mirroring the
+ *     `--company` guard in `src/cli.ts`.
+ *
+ * Doing this in the single `withCompanyDb` helper means every existing tool
+ * accepts a slug with zero per-tool changes — no endpoint or schema churn.
+ */
+export function resolveCompanyArg(raw: string): CompanyArgResolution {
+  // Only a bare, separator-free, slug-shaped value is a slug candidate, so a
+  // real path can never be misread as a slug.
+  const looksLikeBareSlug = !raw.includes("/") && !raw.includes("\\") && isValidSlug(raw);
+  if (looksLikeBareSlug) {
+    let workspaceRoot: string | null;
+    try {
+      workspaceRoot = resolveConfiguredWorkspaceRoot();
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (workspaceRoot) {
+      const fromSlug = resolveWorkspaceSlug(workspaceRoot, raw);
+      if (fromSlug) return { ok: true, companyRoot: fromSlug };
+      return {
+        ok: false,
+        error: `no company with slug '${raw}' in the configured workspace`,
+      };
+    }
+    // No workspace configured: fall through and treat the value as a path.
+  }
+
+  const segments = raw.split(/[\\/]+/);
+  if (segments.includes("..")) {
+    return { ok: false, error: "company must not contain parent-directory ('..') segments" };
+  }
+  const resolved = resolve(raw);
+  if (!isAbsolute(resolved) || resolved.split(sep).includes("..")) {
+    return { ok: false, error: "company resolved to an unsafe path" };
+  }
+  return { ok: true, companyRoot: resolved };
+}
+
+/**
  * Wraps en handler så MCP-callbacken får:
  *   - en åben + migreret database for `args.company`
  *   - et resolvet actor-objekt fra MCP-klient-handshake
  *   - automatisk close() på db (også ved exceptions)
+ *
+ * `args.company` accepterer både en workspace-slug og en rå sti — opslaget
+ * sker centralt her, så alle eksisterende tools får slug-support gratis.
  *
  * Handleren returnerer kun envelope; resultatet pakkes til MCP call-result her.
  */
@@ -67,17 +126,27 @@ export function withCompanyDb<TArgs extends { company: string }>(
     if (!args || typeof args.company !== "string" || args.company.length === 0) {
       return envelopeToCallResult(errorEnvelope("company path is required"));
     }
-    if (!existsSync(args.company)) {
-      console.error(`[mcp:withCompanyDb] company path does not exist: ${args.company}`);
+    const resolution = resolveCompanyArg(args.company);
+    if (!resolution.ok) {
+      console.error(`[mcp:withCompanyDb] ${resolution.error}: ${args.company}`);
+      return envelopeToCallResult(errorEnvelope(redactPaths(resolution.error)));
+    }
+    const companyRoot = resolution.companyRoot;
+    if (!existsSync(companyRoot)) {
+      console.error(`[mcp:withCompanyDb] company path does not exist: ${companyRoot}`);
       return envelopeToCallResult(
         errorEnvelope("company path does not exist or is not initialized"),
       );
     }
     const actor = deriveMcpActor(server.server.getClientVersion());
-    const db = openDb(companyPaths(args.company).db);
+    const db = openDb(companyPaths(companyRoot).db);
     try {
       migrate(db);
-      const envelope = await handler({ db, actor, args });
+      // Hand the handler the *resolved* company directory under `args.company`
+      // so tools that pass it on to core APIs (e.g. `getBackupComplianceStatus`,
+      // `issueInvoice`) keep working whether a slug or a raw path was supplied.
+      const resolvedArgs = { ...args, company: companyRoot };
+      const envelope = await handler({ db, actor, args: resolvedArgs });
       return envelopeToCallResult(envelope);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

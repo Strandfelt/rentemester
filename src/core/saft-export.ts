@@ -4,7 +4,7 @@ import { basename, join, relative } from "node:path";
 import type { Database } from "bun:sqlite";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
-import { formatAmount, sumDkk } from "./money";
+import { formatAmount, roundDkk, sumDkk } from "./money";
 
 type CanonicalJson = null | boolean | number | string | CanonicalJson[] | { [key: string]: CanonicalJson };
 
@@ -93,19 +93,49 @@ export type ExportSaftPackageResult = {
   periodEnd?: string;
   journalEntryCount?: number;
   salesInvoiceCount?: number;
+  purchaseInvoiceCount?: number;
   appliedRules: string[];
   errors: string[];
 };
 
 const RULE_ID = "DK-BOOKKEEPING-SAFT-EXPORT-001";
-const PROFILE_ID = "rentemester-dk-saft-v1-ledger-sales";
+
+// ===== Second deterministic slice: purchase records, VAT summary, document references (#127) =====
+// The export covers ledger + sales (slice 1) plus purchase-side invoices, a
+// VAT-summary section aggregated from journal-line tax codes, and document
+// references linking ledger transactions to their source document. The profile
+// identifier is bumped to v2 and remains explicit so the export is never
+// mistaken for a complete/generic SAF-T implementation.
+const PROFILE_ID = "rentemester-dk-saft-v2-ledger-sales-purchases";
+const AUDIT_FILE_VERSION = "2.0";
 const OUT_OF_SCOPE = [
-  "purchase_documents",
   "bank_statement_transport",
   "supplier_master_files",
+  "customer_master_files",
   "payments_collections",
+  "fixed_assets",
+  "stock_movements",
   "official_schema_submission",
 ] as const;
+
+type PurchaseInvoiceRow = {
+  documentNo: string;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  supplierName: string | null;
+  supplierVatOrCvr: string | null;
+  currency: string;
+  netAmount: number | null;
+  vatAmount: number | null;
+  grossAmount: number | null;
+};
+
+type VatSummaryRow = {
+  taxCode: string;
+  debitAmount: number;
+  creditAmount: number;
+  lineCount: number;
+};
 
 function resolveIsoDateTime(value?: string) {
   if (!value) return null;
@@ -267,24 +297,87 @@ function fetchSalesInvoices(db: Database, periodStart: string, periodEnd: string
   });
 }
 
+// ===== Purchase-side records for the second slice (#127) =====
+// Purchase invoices are read directly from deterministic `documents` rows
+// (document_type = 'purchase_sale'); no derived or speculative fields are added.
+function fetchPurchaseInvoices(db: Database, periodStart: string, periodEnd: string): PurchaseInvoiceRow[] {
+  return (db.query(
+    `SELECT document_no, invoice_no, invoice_date, supplier_name, sender_vat_cvr,
+            currency, amount_inc_vat, vat_amount
+     FROM documents
+     WHERE document_type = 'purchase_sale'
+       AND invoice_date BETWEEN ? AND ?
+     ORDER BY invoice_date ASC, document_no ASC, id ASC`
+  ).all(periodStart, periodEnd) as any[]).map((row) => {
+    const gross = row.amount_inc_vat == null ? null : Number(row.amount_inc_vat);
+    const vat = row.vat_amount == null ? null : Number(row.vat_amount);
+    return {
+      documentNo: row.document_no,
+      invoiceNo: row.invoice_no ?? null,
+      invoiceDate: row.invoice_date ?? null,
+      supplierName: row.supplier_name ?? null,
+      supplierVatOrCvr: row.sender_vat_cvr ?? null,
+      currency: row.currency ?? "DKK",
+      netAmount: gross == null || vat == null ? null : roundDkk(gross - vat),
+      vatAmount: vat,
+      grossAmount: gross,
+    };
+  });
+}
+
+// ===== VAT summary aggregated from deterministic journal-line tax codes (#127) =====
+function summarizeVat(journalEntries: JournalEntryRow[]): VatSummaryRow[] {
+  const byCode = new Map<string, VatSummaryRow>();
+  for (const entry of journalEntries) {
+    for (const line of entry.lines) {
+      if (!line.vatCode) continue;
+      const existing = byCode.get(line.vatCode) ?? { taxCode: line.vatCode, debitAmount: 0, creditAmount: 0, lineCount: 0 };
+      existing.debitAmount = roundDkk(existing.debitAmount + line.debitAmount);
+      existing.creditAmount = roundDkk(existing.creditAmount + line.creditAmount);
+      existing.lineCount += 1;
+      byCode.set(line.vatCode, existing);
+    }
+  }
+  return [...byCode.values()].sort((a, b) => a.taxCode.localeCompare(b.taxCode));
+}
+
 function buildReadme(input: { periodStart: string; periodEnd: string; generatedAt: string }) {
   return [
-    "Rentemester SAF-T export (first deterministic slice)",
+    "Rentemester SAF-T export (second deterministic slice)",
+    "",
+    "This is a bounded, profile-scoped export. It is NOT a complete or generic",
+    "SAF-T implementation and must not be treated as one. See ProfileID below.",
     "",
     `Profile: ${PROFILE_ID}`,
+    `AuditFileVersion: ${AUDIT_FILE_VERSION}`,
     `Period: ${input.periodStart}..${input.periodEnd}`,
     `Generated at: ${input.generatedAt}`,
     "",
     "Included:",
     "- Header/company metadata",
     "- Chart of accounts",
-    "- General ledger entries with lines",
+    "- General ledger entries with lines and source-document references",
     "- Sales invoices issued in the selected period",
+    "- Purchase invoices (purchase_sale documents) dated in the selected period",
+    "- VAT summary aggregated from journal-line tax codes",
     "",
-    "Out of scope in this first slice:",
+    "Out of scope in this slice:",
     ...OUT_OF_SCOPE.map((item) => `- ${item}`),
     "",
   ].join("\n");
+}
+
+// ===== Resolve a journal entry's document_id to its document number (#127) =====
+// document_id is already part of deterministic core ledger state; this only
+// surfaces an explicit, stable reference, never inventing data.
+function fetchDocumentNumbers(db: Database, ids: number[]): Map<number, string> {
+  const map = new Map<number, string>();
+  const stmt = db.query(`SELECT document_no FROM documents WHERE id = ?`);
+  for (const id of ids) {
+    const row = stmt.get(id) as { document_no: string } | null;
+    if (row) map.set(id, row.document_no);
+  }
+  return map;
 }
 
 function renderSaftXml(input: {
@@ -292,17 +385,29 @@ function renderSaftXml(input: {
   accounts: AccountRow[];
   journalEntries: JournalEntryRow[];
   salesInvoices: SalesInvoiceRow[];
+  purchaseInvoices: PurchaseInvoiceRow[];
+  vatSummary: VatSummaryRow[];
+  documentNumbersById: Map<number, string>;
   periodStart: string;
   periodEnd: string;
   generatedAt: string;
   companyRoot: string;
 }) {
   const invoiceTotals = sumDkk(input.salesInvoices.map((invoice) => invoice.grossAmount));
+  const purchaseTotals = sumDkk(input.purchaseInvoices.map((invoice) => invoice.grossAmount));
   const journalBlocks = input.journalEntries.map((entry) => [
     "      <Transaction>",
     xmlTag("TransactionID", entry.entryNo, "        "),
     xmlTag("TransactionDate", entry.transactionDate, "        "),
     xmlTag("Description", entry.text, "        "),
+    // ===== Document reference linking the transaction to its source document (#127) =====
+    ...(entry.documentId != null && input.documentNumbersById.has(entry.documentId)
+      ? [
+          "        <DocumentReference>",
+          xmlTag("SourceDocumentID", input.documentNumbersById.get(entry.documentId), "          "),
+          "        </DocumentReference>",
+        ]
+      : []),
     ...entry.lines.flatMap((line) => [
       "        <Line>",
       xmlTag("AccountID", line.accountNo, "          "),
@@ -347,12 +452,37 @@ function renderSaftXml(input: {
     ].filter(Boolean).join("\n");
   }).join("\n");
 
+  // ===== Purchase-invoice blocks for the second slice (#127) =====
+  const purchaseBlocks = input.purchaseInvoices.map((invoice) => [
+    "      <Invoice>",
+    xmlTag("InvoiceNo", invoice.invoiceNo, "        "),
+    xmlTag("DocumentNo", invoice.documentNo, "        "),
+    xmlTag("InvoiceDate", invoice.invoiceDate, "        "),
+    xmlTag("SupplierName", invoice.supplierName, "        "),
+    xmlTag("SupplierTaxID", invoice.supplierVatOrCvr, "        "),
+    xmlTag("DocumentCurrencyCode", invoice.currency, "        "),
+    xmlTag("NetTotal", money(invoice.netAmount), "        "),
+    xmlTag("TaxPayable", money(invoice.vatAmount), "        "),
+    xmlTag("GrossTotal", money(invoice.grossAmount), "        "),
+    "      </Invoice>",
+  ].filter(Boolean).join("\n")).join("\n");
+
+  // ===== VAT-summary blocks for the second slice (#127) =====
+  const vatSummaryBlocks = input.vatSummary.map((row) => [
+    "      <TaxCodeDetail>",
+    xmlTag("TaxCode", row.taxCode, "        "),
+    xmlTag("DebitAmount", money(row.debitAmount), "        "),
+    xmlTag("CreditAmount", money(row.creditAmount), "        "),
+    xmlTag("NumberOfLines", row.lineCount, "        "),
+    "      </TaxCodeDetail>",
+  ].filter(Boolean).join("\n")).join("\n");
+
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<AuditFile xmlns="urn:rentemester:dk:saft:v1" sourceCompanyRoot="${escapeXml(basename(input.companyRoot))}">`,
     "  <Header>",
     xmlTag("ProfileID", PROFILE_ID, "    "),
-    xmlTag("AuditFileVersion", "1.0", "    "),
+    xmlTag("AuditFileVersion", AUDIT_FILE_VERSION, "    "),
     xmlTag("CompanyName", input.company.name, "    "),
     xmlTag("RegistrationNumber", input.company.cvr, "    "),
     xmlTag("TaxRegistrationNumber", input.company.cvr, "    "),
@@ -391,7 +521,19 @@ function renderSaftXml(input: {
     xmlTag("TotalCredit", formatAmount(invoiceTotals), "      "),
     invoiceBlocks,
     "    </SalesInvoices>",
+    // ===== Purchase invoices section for the second slice (#127) =====
+    "    <PurchaseInvoices>",
+    xmlTag("NumberOfEntries", input.purchaseInvoices.length, "      "),
+    xmlTag("TotalDebit", formatAmount(purchaseTotals), "      "),
+    xmlTag("TotalCredit", "0.00", "      "),
+    purchaseBlocks,
+    "    </PurchaseInvoices>",
     "  </SourceDocuments>",
+    // ===== VAT-summary (tax table) section for the second slice (#127) =====
+    "  <TaxSummary>",
+    xmlTag("NumberOfTaxCodes", input.vatSummary.length, "    "),
+    vatSummaryBlocks,
+    "  </TaxSummary>",
     "</AuditFile>",
     "",
   ].filter(Boolean).join("\n");
@@ -416,6 +558,30 @@ export function exportSaftPackage(db: Database, companyRoot: string, input: Expo
   const journalEntries = fetchJournalEntries(db, input.periodStart, input.periodEnd);
   const salesInvoices = fetchSalesInvoices(db, input.periodStart, input.periodEnd);
 
+  // ===== Second slice: purchase records + VAT summary + document references (#127) =====
+  const purchaseInvoices = fetchPurchaseInvoices(db, input.periodStart, input.periodEnd);
+  // The purchase profile requires explicit, deterministic source fields. Fail
+  // clearly (before writing anything) when a purchase document in the period
+  // cannot be represented, rather than emitting a silently incomplete record.
+  for (const purchase of purchaseInvoices) {
+    if (!purchase.supplierVatOrCvr) {
+      errors.push(`purchase document ${purchase.documentNo} is missing supplier tax id (sender_vat_cvr) required for the SAF-T purchase profile`);
+    }
+    if (purchase.grossAmount == null) {
+      errors.push(`purchase document ${purchase.documentNo} is missing amount_inc_vat required for the SAF-T purchase profile`);
+    }
+    if (purchase.vatAmount == null) {
+      errors.push(`purchase document ${purchase.documentNo} is missing vat_amount required for the SAF-T purchase profile`);
+    }
+  }
+  if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
+
+  const vatSummary = summarizeVat(journalEntries);
+  const documentNumbersById = fetchDocumentNumbers(
+    db,
+    [...new Set(journalEntries.map((entry) => entry.documentId).filter((id): id is number => id != null))],
+  );
+
   const exportDir = join(input.outputDir, packageName(input.periodStart, input.periodEnd, generatedAt));
   mkdirSync(exportDir, { recursive: true });
 
@@ -429,6 +595,9 @@ export function exportSaftPackage(db: Database, companyRoot: string, input: Expo
     accounts,
     journalEntries,
     salesInvoices,
+    purchaseInvoices,
+    vatSummary,
+    documentNumbersById,
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     generatedAt,
@@ -453,6 +622,10 @@ export function exportSaftPackage(db: Database, companyRoot: string, input: Expo
       accounts: accounts.length,
       journalEntries: journalEntries.length,
       salesInvoices: salesInvoices.length,
+      // ===== Second slice manifest counts (#127) =====
+      purchaseInvoices: purchaseInvoices.length,
+      vatSummaryCodes: vatSummary.length,
+      documentReferences: documentNumbersById.size,
     },
     outOfScope: [...OUT_OF_SCOPE],
     outputs,
@@ -476,6 +649,7 @@ export function exportSaftPackage(db: Database, companyRoot: string, input: Expo
     periodEnd: input.periodEnd,
     journalEntryCount: journalEntries.length,
     salesInvoiceCount: salesInvoices.length,
+    purchaseInvoiceCount: purchaseInvoices.length,
     appliedRules: [RULE_ID],
     errors: [],
   };

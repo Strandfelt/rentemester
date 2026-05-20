@@ -624,3 +624,283 @@ BEFORE DELETE ON invoice_bad_debt_writeoffs
 BEGIN
   SELECT RAISE(ABORT, 'invoice bad-debt writeoffs are append-only; add a correcting journal entry instead');
 END;
+
+-- ===== RECURRING INVOICES (#118) =====
+-- Recurring-invoice templates and their explicit, deterministic generations.
+-- A template captures the repeating invoice spec (interval, customer, lines,
+-- VAT, delivery-period mode). Generation is an explicit step keyed by an
+-- integer period_index counted from first_issue_date — no background
+-- scheduling. UNIQUE(template_id, period_index) prevents duplicate generation
+-- for the same template/period. Reminders/settlement live on the generated
+-- documents row, never on the template.
+
+CREATE TABLE IF NOT EXISTS recurring_invoice_templates (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  interval TEXT NOT NULL CHECK(interval IN ('monthly', 'quarterly', 'yearly')),
+  first_issue_date TEXT NOT NULL,
+  next_issue_date TEXT NOT NULL,
+  payment_terms_days INTEGER NOT NULL DEFAULT 30 CHECK(payment_terms_days BETWEEN 0 AND 365),
+  delivery_period_mode TEXT NOT NULL DEFAULT 'issue_month'
+    CHECK(delivery_period_mode IN ('issue_month', 'interval_window', 'none')),
+  payload_json TEXT NOT NULL,
+  notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS recurring_invoice_generations (
+  id INTEGER PRIMARY KEY,
+  template_id INTEGER NOT NULL,
+  period_index INTEGER NOT NULL CHECK(period_index >= 0),
+  document_id INTEGER NOT NULL,
+  invoice_number TEXT NOT NULL,
+  issue_date TEXT NOT NULL,
+  delivery_period_start TEXT,
+  delivery_period_end TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(template_id) REFERENCES recurring_invoice_templates(id),
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  UNIQUE(template_id, period_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recurring_invoice_generations_template
+  ON recurring_invoice_generations(template_id, period_index);
+
+-- Template identity and the embedded payload are immutable; only the
+-- next_issue_date marker may advance and active may be retired (1 -> 0).
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_templates_guard_update
+BEFORE UPDATE ON recurring_invoice_templates
+WHEN OLD.name != NEW.name
+   OR OLD.interval != NEW.interval
+   OR OLD.first_issue_date != NEW.first_issue_date
+   OR OLD.payment_terms_days != NEW.payment_terms_days
+   OR OLD.delivery_period_mode != NEW.delivery_period_mode
+   OR OLD.payload_json != NEW.payload_json
+   OR OLD.created_at != NEW.created_at
+   OR NEW.next_issue_date < OLD.next_issue_date
+   OR (OLD.active = 0 AND NEW.active = 1)
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice templates are append-only; only next_issue_date may advance and active may be retired');
+END;
+
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_templates_no_delete
+BEFORE DELETE ON recurring_invoice_templates
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice templates are append-only; retire them with active = 0 instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_generations_no_update
+BEFORE UPDATE ON recurring_invoice_generations
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice generations are append-only audit links; issue a credit note on the generated invoice instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS recurring_invoice_generations_no_delete
+BEFORE DELETE ON recurring_invoice_generations
+BEGIN
+  SELECT RAISE(ABORT, 'recurring invoice generations are append-only audit links; issue a credit note on the generated invoice instead');
+END;
+-- ===== END RECURRING INVOICES (#118) =====
+-- ===== MAIL INTAKE (#122) =====
+-- Append-only dedup ledger for the first deterministic bilagsmail intake
+-- slice. One row per (message-id, attachment hash) pair that was ingested,
+-- so rerunning the same maildrop never creates duplicate documents.
+CREATE TABLE IF NOT EXISTS mail_intake_messages (
+  id INTEGER PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  attachment_sha256 TEXT NOT NULL,
+  attachment_filename TEXT,
+  document_id INTEGER,
+  sender TEXT,
+  subject TEXT,
+  mail_date TEXT,
+  ingested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (message_id, attachment_sha256)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_intake_messages_message_id
+ON mail_intake_messages(message_id);
+
+CREATE TRIGGER IF NOT EXISTS mail_intake_messages_no_update
+BEFORE UPDATE ON mail_intake_messages
+BEGIN
+  SELECT RAISE(ABORT, 'mail intake dedup rows are append-only; re-ingest creates a new row instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS mail_intake_messages_no_delete
+BEFORE DELETE ON mail_intake_messages
+BEGIN
+  SELECT RAISE(ABORT, 'mail intake dedup rows are append-only and cannot be deleted');
+END;
+-- ===== MILEAGE LOG (#123) =====
+-- Standalone kørselsregnskab register. Mileage entries are documentation/audit
+-- data only; nothing here is posted to the journal/ledger. The per-kilometre
+-- rate is user-supplied and source-backed (rate_basis), never a hardcoded tax
+-- rate. Entries are append-only audit data.
+CREATE TABLE IF NOT EXISTS mileage_entries (
+  id INTEGER PRIMARY KEY,
+  entry_no TEXT NOT NULL UNIQUE,
+  trip_date TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  from_location TEXT NOT NULL,
+  to_location TEXT NOT NULL,
+  kilometers NUMERIC NOT NULL CHECK(kilometers > 0),
+  vehicle TEXT NOT NULL,
+  driver TEXT NOT NULL,
+  rate_per_km NUMERIC NOT NULL CHECK(rate_per_km > 0),
+  amount_basis NUMERIC NOT NULL CHECK(amount_basis >= 0),
+  rate_basis TEXT NOT NULL,
+  rate_source TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mileage_entries_trip_date
+ON mileage_entries(trip_date);
+
+CREATE TRIGGER IF NOT EXISTS mileage_entries_no_update
+BEFORE UPDATE ON mileage_entries
+BEGIN
+  SELECT RAISE(ABORT, 'mileage_entries are append-only audit data; record a correcting entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS mileage_entries_no_delete
+BEFORE DELETE ON mileage_entries
+BEGIN
+  SELECT RAISE(ABORT, 'mileage_entries are append-only audit data; record a correcting entry instead');
+END;
+-- ===== FIXED ASSETS (#124, #125) =====
+-- Append-only fixed-asset register plus its depreciation entries (#124) and
+-- immediate small-asset write-offs / straksafskrivning (#125). Money is stored
+-- in DKK with 2 decimals; the workflow assists bookkeeping while the
+-- user/advisor remains responsible for the tax treatment.
+
+CREATE TABLE IF NOT EXISTS assets (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  acquisition_date TEXT NOT NULL,
+  cost NUMERIC NOT NULL CHECK(cost > 0),
+  depreciation_method TEXT NOT NULL DEFAULT 'linear' CHECK(depreciation_method IN ('linear')),
+  useful_life_months INTEGER NOT NULL CHECK(useful_life_months > 0),
+  asset_account_no TEXT NOT NULL,
+  depreciation_expense_account_no TEXT NOT NULL,
+  accumulated_depreciation_account_no TEXT NOT NULL,
+  purchase_document_id INTEGER NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(purchase_document_id) REFERENCES documents(id)
+);
+
+CREATE TABLE IF NOT EXISTS asset_depreciation_entries (
+  id INTEGER PRIMARY KEY,
+  asset_id INTEGER NOT NULL,
+  period_index INTEGER NOT NULL CHECK(period_index > 0),
+  transaction_date TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK(amount > 0),
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(asset_id, period_index),
+  FOREIGN KEY(asset_id) REFERENCES assets(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE TABLE IF NOT EXISTS asset_writeoffs (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  acquisition_date TEXT NOT NULL,
+  writeoff_date TEXT NOT NULL,
+  cost NUMERIC NOT NULL CHECK(cost > 0),
+  purchase_document_id INTEGER NOT NULL UNIQUE,
+  expense_account_no TEXT NOT NULL,
+  confirmed INTEGER NOT NULL DEFAULT 0 CHECK(confirmed IN (0,1)),
+  threshold_dkk NUMERIC NOT NULL,
+  threshold_rule_source TEXT NOT NULL,
+  note TEXT,
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(purchase_document_id) REFERENCES documents(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_asset_depreciation_entries_asset ON asset_depreciation_entries(asset_id);
+CREATE INDEX IF NOT EXISTS idx_assets_purchase_document ON assets(purchase_document_id);
+
+CREATE TRIGGER IF NOT EXISTS assets_no_update
+BEFORE UPDATE ON assets
+BEGIN
+  SELECT RAISE(ABORT, 'assets are append-only; register a correcting asset record instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS assets_no_delete
+BEFORE DELETE ON assets
+BEGIN
+  SELECT RAISE(ABORT, 'assets are append-only; register a correcting asset record instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_depreciation_entries_no_update
+BEFORE UPDATE ON asset_depreciation_entries
+BEGIN
+  SELECT RAISE(ABORT, 'asset depreciation entries are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_depreciation_entries_no_delete
+BEFORE DELETE ON asset_depreciation_entries
+BEGIN
+  SELECT RAISE(ABORT, 'asset depreciation entries are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_writeoffs_no_update
+BEFORE UPDATE ON asset_writeoffs
+BEGIN
+  SELECT RAISE(ABORT, 'asset writeoffs are append-only; add a correcting journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_writeoffs_no_delete
+BEFORE DELETE ON asset_writeoffs
+BEGIN
+  SELECT RAISE(ABORT, 'asset writeoffs are append-only; add a correcting journal entry instead');
+END;
+-- ===== END FIXED ASSETS (#124, #125) =====
+-- ===== PEPPOL SUBMISSION (#128) =====
+-- Records a deterministic PEPPOL submission attempt built on top of an
+-- existing OIOUBL handoff artifact. Submission records are audit data:
+-- append-only, never updated or deleted. The idempotency key protects
+-- against duplicate submissions. Access-point credentials are NEVER
+-- stored here — only the non-secret access-point id used to derive the
+-- submission envelope. The original invoice payload is not mutated.
+CREATE TABLE IF NOT EXISTS peppol_submissions (
+  id INTEGER PRIMARY KEY,
+  invoice_document_id INTEGER NOT NULL,
+  invoice_no TEXT,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  submission_reference TEXT NOT NULL UNIQUE,
+  access_point_id TEXT NOT NULL,
+  receiver_endpoint_id TEXT NOT NULL,
+  oioubl_sha256 TEXT NOT NULL,
+  envelope_sha256 TEXT NOT NULL,
+  envelope_xml TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('prepared','acknowledged')),
+  transmission_id TEXT,
+  acknowledged_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_peppol_submissions_invoice
+  ON peppol_submissions(invoice_document_id);
+CREATE INDEX IF NOT EXISTS idx_peppol_submissions_reference
+  ON peppol_submissions(submission_reference);
+
+CREATE TRIGGER IF NOT EXISTS peppol_submissions_no_update
+BEFORE UPDATE ON peppol_submissions
+BEGIN
+  SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS peppol_submissions_no_delete
+BEFORE DELETE ON peppol_submissions
+BEGIN
+  SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
+END;

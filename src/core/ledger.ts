@@ -73,7 +73,13 @@ export function seedAccounts(db: Database) {
     ["3120", "Hardware og udstyr", "expense", "debit", "DK_PURCHASE_25"],
     ["4000", "Købsmoms", "vat", "debit", null],
     ["4500", "Momsafregning", "liability", "credit", null],
-    ["5000", "Egenkapital", "equity", "credit", null]
+    ["5000", "Egenkapital", "equity", "credit", null],
+    // Fixed-asset accounts (#124, #125), 5800-5899 range. 5800 capitalises
+    // driftsmidler; 5810 is the contra-asset accumulated-depreciation account
+    // (credit-normal); 5820 carries the period depreciation expense.
+    ["5800", "Driftsmidler og inventar", "asset", "debit", null],
+    ["5810", "Akkumulerede afskrivninger", "asset", "credit", null],
+    ["5820", "Afskrivninger", "expense", "debit", null]
   ];
   const insert = db.prepare("INSERT OR IGNORE INTO accounts (account_no,name,type,normal_balance,default_vat_code) VALUES (?,?,?,?,?)");
   db.transaction(() => rows.forEach((r) => insert.run(...r)))();

@@ -34,11 +34,24 @@ import { registerExceptionTools } from "./tools/exceptions";
 import { registerExpenseTools } from "./tools/expense";
 import { registerInvoiceTools } from "./tools/invoice";
 import { registerJournalTools } from "./tools/journal";
+// PEPPOL submission (#128)
+import { registerPeppolTools } from "./tools/peppol";
 import { registerPeriodTools } from "./tools/period";
 import { registerRetentionTools } from "./tools/retention";
 import { registerSystemTools } from "./tools/system";
 import { registerVatTools } from "./tools/vat";
 import { registerVendorTools } from "./tools/vendor";
+// ===== RECURRING INVOICES (#118) =====
+import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
+// ===== END RECURRING INVOICES (#118) =====
+// ===== MAIL INTAKE (#122) =====
+import { registerMailIntakeTools } from "./tools/mail-intake";
+// ===== MILEAGE LOG (#123) =====
+import { registerMileageTools } from "./tools/mileage";
+// Fixed assets (#124, #125)
+import { registerAssetTools } from "./tools/asset";
+// Multi-company portfolio: company_add + portfolio_overview (#172)
+import { registerPortfolioTools } from "./tools/portfolio";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -50,9 +63,22 @@ export function registerAllTools(server: McpServer): void {
   registerExpenseTools(server);
   registerInvoiceTools(server);
   registerJournalTools(server);
+  // PEPPOL submission (#128)
+  registerPeppolTools(server);
   registerPeriodTools(server);
   registerRetentionTools(server);
   registerSystemTools(server);
   registerVatTools(server);
   registerVendorTools(server);
+  // ===== RECURRING INVOICES (#118) =====
+  registerRecurringInvoiceTools(server);
+  // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  registerMailIntakeTools(server);
+  // ===== MILEAGE LOG (#123) =====
+  registerMileageTools(server);
+  // Fixed assets (#124, #125)
+  registerAssetTools(server);
+  // Multi-company portfolio: company_add + portfolio_overview (#172)
+  registerPortfolioTools(server);
 }

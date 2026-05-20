@@ -34,6 +34,21 @@ export const MUTATING_COMMANDS = new Set([
   "journal post",
   "journal reverse",
   "exceptions resolve",
+  // ===== RECURRING INVOICES (#118) =====
+  "recurring-invoice create",
+  "recurring-invoice generate",
+  // ===== END RECURRING INVOICES (#118) =====
+  // ===== MAIL INTAKE (#122) =====
+  "mail-intake ingest",
+  // ===== MILEAGE LOG (#123) =====
+  "mileage log",
+  "mileage export",
+  // Fixed assets (#124, #125)
+  "asset register",
+  "asset depreciate",
+  "asset write-off",
+  // PEPPOL submission (#128)
+  "invoice submit-public-peppol",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

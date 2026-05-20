@@ -1,0 +1,20 @@
+From: Leverandør ApS <faktura@leverandor.dk>
+To: bogholderi@rentemester.dk
+Subject: Faktura INV-1001
+Date: Sat, 16 May 2026 09:00:00 +0000
+Message-ID: <inv-1001@leverandor.dk>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="rmboundary"
+
+--rmboundary
+Content-Type: text/plain; charset=utf-8
+
+Hej, hermed fremsendes faktura INV-1001. Bilaget er vedhæftet som PDF.
+--rmboundary
+Content-Type: application/pdf; name="faktura-inv-1001.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="faktura-inv-1001.pdf"
+
+JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZz4+ZW5kb2JqCnRyYWlsZXI8PC9Sb290IDEg
+MCBSPj4KJSVFT0YK
+--rmboundary--
