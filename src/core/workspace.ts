@@ -251,6 +251,51 @@ export function adoptCompanyDir(
   });
 }
 
+/**
+ * Updates the display name of a registered company in the manifest. The slug
+ * (and therefore the on-disk directory + ledger) is never touched — only the
+ * human-readable label changes. Throws when the slug is not registered.
+ */
+export function renameWorkspaceCompany(
+  workspaceRoot: string,
+  slug: string,
+  name: string,
+): WorkspaceCompanyEntry {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new Error("company display name must not be empty");
+  }
+  const manifest = loadWorkspaceManifest(workspaceRoot);
+  const entry = manifest.companies.find((c) => c.slug === slug);
+  if (!entry) {
+    throw new Error(`no company with slug '${slug}' in the workspace`);
+  }
+  entry.name = trimmed;
+  saveWorkspaceManifest(workspaceRoot, manifest);
+  return entry;
+}
+
+/**
+ * Sets the soft-deletion (`archived`) flag of a registered company. Archiving
+ * is non-destructive: the company directory and its ledger stay on disk, the
+ * entry is only flagged so the cockpit can hide/segregate it. Throws when the
+ * slug is not registered.
+ */
+export function setWorkspaceCompanyArchived(
+  workspaceRoot: string,
+  slug: string,
+  archived: boolean,
+): WorkspaceCompanyEntry {
+  const manifest = loadWorkspaceManifest(workspaceRoot);
+  const entry = manifest.companies.find((c) => c.slug === slug);
+  if (!entry) {
+    throw new Error(`no company with slug '${slug}' in the workspace`);
+  }
+  entry.archived = archived;
+  saveWorkspaceManifest(workspaceRoot, manifest);
+  return entry;
+}
+
 function readCompanyName(dbPath: string): string | null {
   try {
     // Lazy import keeps the module dependency-light for callers that only

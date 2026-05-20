@@ -15,7 +15,10 @@
 
 import { createCompany } from "../core/company";
 import {
+  findWorkspaceCompany,
   listWorkspaceCompanies,
+  renameWorkspaceCompany,
+  setWorkspaceCompanyArchived,
   workspaceExists,
 } from "../core/workspace";
 import type { ServerConfig } from "./config";
@@ -26,6 +29,7 @@ import {
   buildPortfolioOverview,
   resolveAsOfDate,
 } from "./data";
+import { serveStatic } from "./static";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -153,6 +157,50 @@ async function handleCompanyCreate(
   );
 }
 
+/**
+ * Updates a registered company's mutable workspace metadata: the display
+ * `name` and/or the `archived` flag. This never touches the slug or the
+ * ledger — there is deliberately NO destructive delete of ledger data.
+ */
+async function handleCompanyUpdate(
+  config: ServerConfig,
+  slug: string,
+  request: Request,
+): Promise<Response> {
+  if (!findWorkspaceCompany(config.workspaceRoot, slug)) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const body = await readJsonBody(request);
+  const name = optionalString(body, "name");
+  const archivedRaw = body.archived;
+  if (archivedRaw !== undefined && typeof archivedRaw !== "boolean") {
+    throw ApiError.badRequest("'archived' must be a boolean when present");
+  }
+  if (name === undefined && archivedRaw === undefined) {
+    throw ApiError.badRequest("provide 'name' and/or 'archived' to update");
+  }
+  try {
+    let entry = findWorkspaceCompany(config.workspaceRoot, slug)!;
+    if (name !== undefined) {
+      entry = renameWorkspaceCompany(config.workspaceRoot, slug, name);
+    }
+    if (typeof archivedRaw === "boolean") {
+      entry = setWorkspaceCompanyArchived(config.workspaceRoot, slug, archivedRaw);
+    }
+    return okResponse({
+      company: {
+        slug: entry.slug,
+        name: entry.name,
+        createdAt: entry.createdAt,
+        archived: entry.archived,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw ApiError.badRequest(message);
+  }
+}
+
 // --------------------------------------------------------------------------
 // Dispatch
 // --------------------------------------------------------------------------
@@ -175,7 +223,7 @@ export async function handleRequest(
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = request.method.toUpperCase();
 
-    if (path === "/" || path === "/api" || path === "/api/health") {
+    if (path === "/api" || path === "/api/health") {
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       return handleHealth(config);
     }
@@ -196,6 +244,25 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(dashboardMatch[1]!);
       return handleCompanyDashboard(config, slug, url);
+    }
+
+    const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);
+    if (companyMatch) {
+      const slug = decodeURIComponent(companyMatch[1]!);
+      if (method === "PATCH") return await handleCompanyUpdate(config, slug, request);
+      throw ApiError.methodNotAllowed("PATCH required");
+    }
+
+    // Anything under /api that did not match a route is a JSON 404. Any other
+    // path is a cockpit-SPA route: serve the built app (with the index.html
+    // fallback) when it exists, else fall through to the JSON 404.
+    if (!path.startsWith("/api")) {
+      if (method === "GET" || method === "HEAD") {
+        const asset = serveStatic(config.staticRoot, path);
+        if (asset) return asset;
+        // No SPA built — keep `/` a friendly health probe for API-only runs.
+        if (path === "/") return handleHealth(config);
+      }
     }
 
     throw ApiError.notFound("no such endpoint");
