@@ -1,3 +1,4 @@
+// Tests: src/core/system-backups.ts
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHmac } from "node:crypto";

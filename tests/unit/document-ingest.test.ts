@@ -1,3 +1,4 @@
+// Tests: src/core/documents.ts (document ingestion)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";

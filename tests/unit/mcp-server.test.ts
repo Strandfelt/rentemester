@@ -1,3 +1,4 @@
+// Tests: src/mcp/server.ts, src/mcp/tools (MCP server end-to-end)
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";

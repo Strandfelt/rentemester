@@ -1,3 +1,4 @@
+// Tests: src/cli/invoice.ts, src/cli.ts (invoice render CLI)
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";

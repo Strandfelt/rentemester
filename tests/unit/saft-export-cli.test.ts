@@ -1,3 +1,4 @@
+// Tests: src/cli/system.ts, src/cli.ts (SAF-T export CLI)
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";

@@ -1,3 +1,4 @@
+// Tests: src/cli/system.ts, src/cli.ts (system restore CLI)
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

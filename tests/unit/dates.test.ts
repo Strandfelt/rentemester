@@ -1,3 +1,4 @@
+// Tests: src/core/dates.ts
 import { describe, expect, test } from "bun:test";
 import { isValidIsoDate, addDays, diffDays, daysBetween, todayIsoDate } from "../../src/core/dates";
 

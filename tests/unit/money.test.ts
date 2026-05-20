@@ -1,3 +1,4 @@
+// Tests: src/core/money.ts
 import { describe, expect, test } from "bun:test";
 import { accrueInterestDkk, multiplyDkk, percentOfDkk, roundDkk, roundRate6, sumDkk } from "../../src/core/money";
 

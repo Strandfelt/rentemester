@@ -1,3 +1,4 @@
+// Tests: src/core/fiscal-year.ts
 import { describe, expect, test } from "bun:test";
 import { fiscalYearForDate } from "../../src/core/fiscal-year";
 

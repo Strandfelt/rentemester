@@ -1,3 +1,4 @@
+// Tests: src/core/system-backups.ts, src/core/system-restore.ts (asymmetric backup signatures)
 import { describe, expect, test } from "bun:test";
 import {
   existsSync,

@@ -1,3 +1,4 @@
+// Tests: src/core/system-backups.ts, src/core/system-restore.ts (backup security)
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
