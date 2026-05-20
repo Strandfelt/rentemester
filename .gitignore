@@ -21,3 +21,6 @@ app/dist/
 # Claude Code: track shared settings.json, ignore local state and agent worktrees
 .claude/*
 !.claude/settings.json
+
+# Local scratch — private migration data, kept out of git
+helheim/
