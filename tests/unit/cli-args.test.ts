@@ -1,3 +1,4 @@
+// Tests: src/cli-args.ts
 import { describe, expect, test } from "bun:test";
 import { parseCliArgs } from "../../src/cli-args";
 

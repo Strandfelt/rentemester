@@ -1,3 +1,4 @@
+// Tests: src/core/system-restore.ts
 import { describe, expect, test } from "bun:test";
 import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

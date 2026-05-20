@@ -1,3 +1,4 @@
+// Tests: src/core/ledger.ts, src/core/exceptions.ts (end-to-end agent workflow demo)
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

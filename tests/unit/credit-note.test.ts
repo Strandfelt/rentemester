@@ -1,3 +1,4 @@
+// Tests: src/core/credit-notes.ts
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

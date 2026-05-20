@@ -1,3 +1,4 @@
+// Tests: src/cli/customer.ts, src/cli.ts (VIES validation CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

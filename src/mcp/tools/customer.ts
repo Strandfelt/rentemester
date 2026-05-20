@@ -15,7 +15,7 @@ import {
 } from "../../core/master-data";
 import { validateVatAgainstVies } from "../../core/vies";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 export function registerCustomerTools(server: McpServer): void {
   server.registerTool(

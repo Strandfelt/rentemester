@@ -1,3 +1,4 @@
+// Tests: src/cli/invoice.ts, src/cli.ts (invoice bad-debt CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

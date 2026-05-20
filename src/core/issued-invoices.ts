@@ -10,14 +10,20 @@ import { companySequenceScope, fiscalYearLabelFromDate, reserveSequenceValue, ne
 import { retainUntilForDate } from "./retention";
 import { requireCachedViesValidation } from "./vies";
 import { buildIssuedInvoicePdf } from "./invoice-pdf";
+import {
+  asDocumentId,
+  asInvoiceNumber,
+  type DocumentId,
+  type InvoiceNumber,
+} from "./ids";
 
 export type IssueInvoiceResult = {
   ok: boolean;
-  documentId?: number;
-  invoiceNumber?: string;
+  documentId?: DocumentId;
+  invoiceNumber?: InvoiceNumber;
   storedPath?: string;
   sha256?: string;
-  pdfDocumentId?: number;
+  pdfDocumentId?: DocumentId;
   pdfStoredPath?: string;
   pdfSha256?: string;
   appliedRules: string[];
@@ -39,8 +45,8 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function canonicalInvoiceNumber(scope: string, value: number) {
-  return `${scope}-${String(value).padStart(5, "0")}`;
+function canonicalInvoiceNumber(scope: string, value: number): InvoiceNumber {
+  return asInvoiceNumber(`${scope}-${String(value).padStart(5, "0")}`);
 }
 
 function invoiceSequenceState(db: Database, issueDate: string) {
@@ -117,7 +123,8 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
 
   try {
     const result = db.transaction(() => {
-      let invoiceNumber = explicitInvoiceNumber;
+      let invoiceNumber: InvoiceNumber | undefined =
+        explicitInvoiceNumber === undefined ? undefined : asInvoiceNumber(explicitInvoiceNumber);
       if (invoiceNumber) {
         const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, invoiceNumber);
         if (!reserved.ok) return { ok: false as const, error: reserved.error };
@@ -217,7 +224,7 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
         message: `Rendered invoice PDF ${invoiceNumber}`,
       });
 
-      return { ok: true as const, documentId: inserted.id, invoiceNumber, sha256: hash, pdfDocumentId: pdfInserted.id, pdfSha256: pdfHash };
+      return { ok: true as const, documentId: asDocumentId(inserted.id), invoiceNumber, sha256: hash, pdfDocumentId: asDocumentId(pdfInserted.id), pdfSha256: pdfHash };
     }, { immediate: true })();
 
     if (!result.ok) return { ok: false, appliedRules, errors: [result.error] };

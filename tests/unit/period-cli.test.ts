@@ -1,3 +1,4 @@
+// Tests: src/cli/period.ts, src/cli.ts (period CLI)
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";

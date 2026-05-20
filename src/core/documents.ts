@@ -7,6 +7,7 @@ import { insertAuditLog } from "./actor";
 import { companySequenceScope, currentUtcIsoDate, fiscalYearLabelFromDate, nextSequenceValue } from "./sequences";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
+import { asDocumentId, type DocumentId } from "./ids";
 
 export type DocumentType = "purchase_sale" | "cash_register_receipt";
 export type DocumentExemptionCode = "FOREIGN_PHYSICAL_ONLY" | null;
@@ -34,7 +35,7 @@ export type DocumentValidationResult = {
 
 export type IngestDocumentResult = {
   ok: boolean;
-  documentId?: number;
+  documentId?: DocumentId;
   documentNo?: string;
   sha256?: string;
   storedPath?: string;
@@ -271,7 +272,7 @@ export function ingestDocument(db: Database, companyRoot: string, filePath: stri
         message: `Ingested supporting document ${documentNo} (${sha256})`,
       });
 
-      return { id: inserted.id, documentNo };
+      return { id: asDocumentId(inserted.id), documentNo };
     }, { immediate: true })();
 
     return { ok: true, documentId: result.id, documentNo: result.documentNo, sha256, storedPath };

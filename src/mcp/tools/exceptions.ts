@@ -13,7 +13,7 @@ import {
   type ExceptionStatus,
 } from "../../core/exceptions";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../helpers";
+import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
 
 export function registerExceptionTools(server: McpServer): void {
   server.registerTool(

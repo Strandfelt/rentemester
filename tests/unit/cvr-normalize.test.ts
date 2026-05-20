@@ -1,3 +1,4 @@
+// Tests: src/core/company.ts (CVR normalization)
 import { describe, expect, test } from "bun:test";
 import { normalizeCvr } from "../../src/core/company";
 

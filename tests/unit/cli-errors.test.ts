@@ -1,3 +1,4 @@
+// Tests: src/cli.ts, src/cli-args.ts (CLI input boundary errors)
 import { describe, expect, test } from "bun:test";
 
 describe("CLI input boundary errors", () => {

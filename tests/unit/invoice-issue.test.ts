@@ -1,3 +1,4 @@
+// Tests: src/core/issued-invoices.ts
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
