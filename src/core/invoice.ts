@@ -1,5 +1,6 @@
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { roundDkk, roundRate6 } from "./money";
+import { normalizeEanNumber } from "./ean";
 export type InvoiceType = "full" | "simplified";
 export type VatTreatment = "standard" | "domestic_reverse_charge" | "foreign_reverse_charge";
 export type ReverseChargeBasis =
@@ -9,13 +10,21 @@ export type ReverseChargeBasis =
   | "EU_MOMSDIREKTIV_ART_196"
   | "EU_MOMSDIREKTIV_ART_199";
 
+export type InvoiceBuyer = {
+  name?: string;
+  address?: string;
+  vatOrCvr?: string;
+  eanNumber?: string;
+  publicRecipient?: boolean;
+};
+
 export type InvoicePayload = {
   invoiceType: InvoiceType;
   vatTreatment?: VatTreatment;
   issueDate?: string;
   invoiceNumber?: string;
   seller?: { name?: string; address?: string; vatOrCvr?: string };
-  buyer?: { name?: string; address?: string; vatOrCvr?: string };
+  buyer?: InvoiceBuyer;
   lines?: Array<{ description?: string; quantity?: number; unitPriceExVat?: number; lineTotalExVat?: number }>;
   totals?: {
     netAmount?: number;
@@ -53,6 +62,7 @@ const RULES = {
   DELIVERY_DATE: "DK-INVOICE-DELIVERY-DATE-001",
   ARITHMETIC: "DK-INVOICE-ARITHMETIC-001",
   VAT_SEPARATE_AMOUNT: "DK-VAT-SEPARATE-AMOUNT-001",
+  PUBLIC_RECIPIENT: "DK-INVOICE-PUBLIC-RECIPIENT-001",
 } as const;
 
 const FOREIGN_REVERSE_CHARGE_BASES: ReverseChargeBasis[] = [
@@ -126,6 +136,18 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
     if (!hasText(payload.buyer?.name)) errors.push("buyer.name is required for full invoices");
     if (!hasText(payload.buyer?.address)) errors.push("buyer.address is required for full invoices");
     if (!hasPositiveNumber(payload.totals?.netAmount)) errors.push("totals.netAmount is required for full invoices");
+  }
+
+  const buyerEanNumber = normalizeEanNumber(payload.buyer?.eanNumber);
+  const publicRecipient = payload.buyer?.publicRecipient === true || buyerEanNumber !== null;
+  if (publicRecipient) {
+    appliedRules.push(RULES.PUBLIC_RECIPIENT);
+    if (invoiceType !== "full") {
+      errors.push("public-recipient invoices must use invoiceType full");
+    }
+    if (!buyerEanNumber) {
+      errors.push("public-recipient invoices must include buyer.eanNumber as 13 digits");
+    }
   }
 
   if (invoiceType === "simplified") {

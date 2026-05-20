@@ -4,6 +4,7 @@ import { openDb, migrate } from "../core/db";
 import { validateInvoice } from "../core/invoice";
 import { issueInvoice } from "../core/issued-invoices";
 import { renderIssuedInvoicePdf } from "../core/invoice-pdf";
+import { exportPublicEInvoicePreview } from "../core/public-einvoice";
 import { applyInvoicePayment, getInvoiceStatus } from "../core/invoice-payments";
 import { buildInvoiceList, buildOverdueInvoiceList, findInvoices } from "../core/invoice-list";
 import { postIssuedInvoiceToLedger } from "../core/invoice-booking";
@@ -134,6 +135,29 @@ export function register(dispatch: CommandDispatch): void {
     const result = renderIssuedInvoicePdf(db, ctx.companyRoot(), { invoiceDocumentId: documentId });
     ctx.emitResult(result as Record<string, unknown>);
     db.close();
+  });
+
+  dispatch.on("invoice", "export-public", (ctx) => {
+    const out = ctx.arg("--out");
+    if (!out) {
+      console.error("Missing required --out <file.xml>");
+      process.exit(2);
+    }
+    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
+    if (!documentId) {
+      db.close();
+      console.error("Missing required --document-id <n> or --invoice-number <no>");
+      process.exit(2);
+    }
+    const result = exportPublicEInvoicePreview(db, {
+      invoiceDocumentId: documentId,
+      outPath: out,
+    });
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
+    if (!result.ok) process.exit(1);
   });
 
   dispatch.on("invoice", "credit-note", (ctx) => {

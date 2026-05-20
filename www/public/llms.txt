@@ -128,7 +128,7 @@ If a human points you at this site or repository and asks you to contribute:
 - Roadmap: deterministic bilagsmail intake and richer customer/company master data around invoices, purchases and documents
 - CSV bank import and transaction matching
 - Invoice issuing, reminders, interest, compensation fees, credit notes and bad-debt handling
-- Roadmap: EAN/GLN e-invoicing and recurring invoice templates before full subscription automation
+- Current public-customer slice: deterministic EAN/GLN e-invoice preview export; roadmap: actual PEPPOL/OIOUBL transport and recurring invoice templates before full subscription automation
 - Foreign-currency purchase documents and expense booking, including DKK bank settlement with preserved FX basis
 - Current export: first deterministic SAF-T (Standard Audit File-Tax) slice for ledger + sales-invoice authority data exchange; roadmap: broader coverage, stricter profile support, and any official submission-specific follow-up
 - Current local handoff: deterministic accountant export package via `system export-accountant` with explicit file-handoff trust boundary

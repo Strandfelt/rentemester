@@ -36,7 +36,7 @@ describe("master-data CLI", () => {
     }, null, 2));
 
     await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
-    const created = await runCli(["customer", "create", "--company", company, "--name", "Kunde A/S", "--address", "Købervej 9, 8000 Aarhus C", "--cvr", "DK87654321", "--email", "kunde@example.com", "--payment-terms", "14"]);
+    const created = await runCli(["customer", "create", "--company", company, "--name", "Kunde A/S", "--address", "Købervej 9, 8000 Aarhus C", "--cvr", "DK87654321", "--email", "kunde@example.com", "--ean", "5790000000001", "--payment-terms", "14"]);
     expect(created.exitCode).toBe(0);
     const createdJson = JSON.parse(created.stdout);
     expect(createdJson.ok).toBe(true);
@@ -46,7 +46,7 @@ describe("master-data CLI", () => {
     expect(listed.exitCode).toBe(0);
     const listedJson = JSON.parse(listed.stdout);
     expect(listedJson.count).toBe(1);
-    expect(listedJson.rows[0]).toMatchObject({ name: "Kunde A/S", vatOrCvr: "DK87654321", paymentTermsDays: 14 });
+    expect(listedJson.rows[0]).toMatchObject({ name: "Kunde A/S", vatOrCvr: "DK87654321", eanNumber: "5790000000001", paymentTermsDays: 14 });
 
     const issued = await runCli(["invoice", "issue", "--company", company, "--input", invoiceInput, "--customer-id", String(customerId)]);
     expect(issued.exitCode).toBe(0);
@@ -64,8 +64,25 @@ describe("master-data CLI", () => {
       name: "Kunde A/S",
       address: "Købervej 9, 8000 Aarhus C",
       vatOrCvr: "DK87654321",
+      eanNumber: "5790000000001",
+      publicRecipient: true,
     });
     expect(payload.dueDate).toBe("2026-06-17");
+  });
+
+  test("rejects invalid customer EAN numbers", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-customer-cli-bad-ean-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    const created = await runCli(["customer", "create", "--company", company, "--name", "Kunde A/S", "--ean", "57900012"]);
+
+    rmSync(root, { recursive: true, force: true });
+    expect(created.exitCode).toBe(1);
+    expect(JSON.parse(created.stdout)).toMatchObject({
+      ok: false,
+      errors: ["eanNumber must be 13 digits"],
+    });
   });
 
   test("creates a vendor and ingests a document via --vendor-id", async () => {

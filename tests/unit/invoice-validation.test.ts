@@ -22,6 +22,42 @@ describe("invoice validator", () => {
     expect(result.appliedRules).toContain("DK-INVOICE-ARITHMETIC-001");
   });
 
+  test("rejects public-recipient invoices without a valid 13-digit EAN/GLN number", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0042-PUB",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Aarhus Kommune", address: "Rådhuspladsen 2, 8000 Aarhus C", publicRecipient: true, eanNumber: "57900012" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("public-recipient invoices must include buyer.eanNumber as 13 digits");
+    expect(result.appliedRules).toContain("DK-INVOICE-PUBLIC-RECIPIENT-001");
+  });
+
+  test("accepts full public-recipient invoices with EAN/GLN metadata", () => {
+    const result = validateInvoice({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0042-PUB-OK",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Aarhus Kommune", address: "Rådhuspladsen 2, 8000 Aarhus C", publicRecipient: true, eanNumber: "5790000000001" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.appliedRules).toContain("DK-INVOICE-PUBLIC-RECIPIENT-001");
+  });
+
   test("rejects simplified invoice above the DKK 3,000 limit", () => {
     const result = validateInvoice({
       invoiceType: "simplified",

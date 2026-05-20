@@ -1,4 +1,4 @@
-version: dk-invoices-v0.0.4
+version: dk-invoices-v0.0.5
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
   - DK-MOMSLOVEN-2024-209
@@ -118,6 +118,35 @@ rules:
       forbid:
         - issuing_invoice_with_missing_customer_lookup
     explanation: Rentemester may reuse stored customer master data, but the buyer fields used for an issued invoice must resolve deterministically at issue time and be materialized into the immutable invoice snapshot.
+  - rule_id: DK-INVOICE-PUBLIC-RECIPIENT-001
+    name: Public-recipient invoices must carry valid EAN/GLN metadata in the immutable buyer snapshot
+    category: invoice_validation
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      condition: buyer_public_recipient == true or buyer_ean_number_present == true
+      require:
+        - full_invoice_type
+        - buyer_ean_number_is_13_digits
+        - buyer_name_address
+      forbid:
+        - public_recipient_without_valid_ean_gln
+    explanation: When an invoice is prepared for a Danish public recipient, Rentemester must keep the buyer EAN/GLN metadata deterministic in the issued snapshot and block malformed values before any downstream handoff/export.
+  - rule_id: DK-INVOICE-PUBLIC-EXPORT-001
+    name: Public-recipient invoice export preview must be deterministic and clearly scoped as transport-free handoff
+    category: invoice_integrity
+    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    severity: hard_stop
+    machine_rule:
+      require:
+        - issued_invoice_snapshot_exists
+        - public_recipient_marker_or_ean_present
+        - export_preview_uses_stable_xml_content
+        - export_scope_declares_no_peppol_transport
+      forbid:
+        - public_export_without_valid_ean_gln
+        - transport_claim_without_access_point
+    explanation: Rentemester may export a deterministic preview artifact for public-customer invoicing, but it must only do so from an immutable issued invoice snapshot, require valid EAN/GLN metadata, and avoid implying that PEPPOL transport has already happened.
   - rule_id: DK-INVOICE-DUE-DATE-001
     name: Customer invoices must expose a deterministic due date and overdue classification
     category: invoice_lifecycle

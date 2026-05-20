@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { InvoicePayload } from "./invoice";
 import type { DocumentMetadata } from "./documents";
 import { insertAuditLog } from "./actor";
+import { normalizeEanNumber, trimToNull } from "./ean";
 
 export type CustomerRecord = {
   id: number;
@@ -49,12 +50,6 @@ export type CreateVendorInput = {
   notes?: string;
 };
 
-function trimToNull(value: unknown) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 function normalizeCurrency(value: string | null | undefined) {
   return (trimToNull(value) ?? "DKK").toUpperCase();
 }
@@ -62,6 +57,9 @@ function normalizeCurrency(value: string | null | undefined) {
 export function createCustomer(db: Database, input: CreateCustomerInput) {
   const name = trimToNull(input.name);
   if (!name) return { ok: false, errors: ["name is required"] };
+  const rawEanNumber = trimToNull(input.eanNumber);
+  const eanNumber = rawEanNumber ? normalizeEanNumber(rawEanNumber) : null;
+  if (rawEanNumber && !eanNumber) return { ok: false, errors: ["eanNumber must be 13 digits"] };
   const paymentTermsDays = Number.isInteger(input.paymentTermsDays) && Number(input.paymentTermsDays) > 0 ? Number(input.paymentTermsDays) : 30;
   const defaultCurrency = normalizeCurrency(input.defaultCurrency);
   if (!/^[A-Z]{3}$/.test(defaultCurrency)) return { ok: false, errors: ["defaultCurrency must be a 3-letter ISO code"] };
@@ -76,7 +74,7 @@ export function createCustomer(db: Database, input: CreateCustomerInput) {
       trimToNull(input.address),
       trimToNull(input.vatOrCvr),
       trimToNull(input.email),
-      trimToNull(input.eanNumber),
+      eanNumber,
       paymentTermsDays,
       defaultCurrency,
       trimToNull(input.notes),
@@ -214,6 +212,8 @@ export function resolveInvoiceMasterData(db: Database, payload: InvoicePayload, 
         name: trimToNull(payload.buyer?.name) ?? customer.name,
         address: trimToNull(payload.buyer?.address) ?? customer.address ?? undefined,
         vatOrCvr: trimToNull(payload.buyer?.vatOrCvr) ?? customer.vat_or_cvr ?? undefined,
+        eanNumber: normalizeEanNumber(payload.buyer?.eanNumber) ?? customer.ean_number ?? undefined,
+        publicRecipient: payload.buyer?.publicRecipient ?? Boolean(normalizeEanNumber(payload.buyer?.eanNumber) ?? customer.ean_number),
       },
       currency: trimToNull(payload.currency) ?? customer.default_currency,
       dueDate: trimToNull(payload.dueDate) ?? (trimToNull(payload.issueDate) && customer.payment_terms_days > 0 ? addDays(payload.issueDate!, customer.payment_terms_days) : undefined),

@@ -68,7 +68,9 @@ Skal designes så Rentemester aldrig opbevarer bank-credentials i klartekst — 
 
 ### PEPPOL / OIOUBL
 
-For at fakturere offentlige kunder skal fakturaen sendes som OIOUBL via PEPPOL-netværket. Det er ikke teknisk svært, men det kræver registrering hos et access point.
+Første slice er nu landet som deterministisk EAN/GLN preview-eksport for offentlige kunder: fakturaen kan markeres med public-recipient metadata og eksporteres som et stabilt artifact til videre handoff.
+
+Det næste trin er egentlig OIOUBL via PEPPOL-netværket. Det er ikke teknisk svært, men det kræver registrering hos et access point.
 
 Relevant når der er brugere der har offentlige kunder.
 
