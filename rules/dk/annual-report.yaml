@@ -1,0 +1,82 @@
+version: dk-annual-report-v0.0.1
+# Year-end close, arsrapport (annual report) and iXBRL generation for Danish
+# regnskabsklasse B (micro / small). This bundle declares the BOUNDED
+# Erhvervsstyrelsen taxonomy subset Rentemester maps to — it is deliberately a
+# small, deterministic, well-tested slice, NOT the full taxonomy.
+sources:
+  - DK-AARSREGNSKABSLOVEN-2024-1140
+# The iXBRL taxonomy subset. Each element is a single arsrapport fact that
+# Rentemester emits as an ix:nonFraction (monetary) or ix:nonNumeric (text)
+# tag. The full set of element names is the authoritative subset; the iXBRL
+# generator emits nothing outside it. Element names are namespaced under the
+# rentemester-local arsrapport prefix `ar` so the output is unambiguous and is
+# never mistaken for an official Erhvervsstyrelsen submission.
+taxonomy_subset:
+  scope: regnskabsklasse B (micro/small) — bounded subset
+  prefix: ar
+  namespace: urn:rentemester:dk:arsrapport:v1
+  elements:
+    - name: ar:CompanyName
+      kind: text
+      label: Virksomhedsnavn
+    - name: ar:RegistreredCvr
+      kind: text
+      label: CVR-nummer
+    - name: ar:ReportingPeriodStartDate
+      kind: text
+      label: Regnskabsaar start
+    - name: ar:ReportingPeriodEndDate
+      kind: text
+      label: Regnskabsaar slut
+    - name: ar:Revenue
+      kind: monetary
+      label: Nettoomsaetning
+    - name: ar:OtherOperatingExpenses
+      kind: monetary
+      label: Andre eksterne omkostninger
+    - name: ar:ProfitLossForYear
+      kind: monetary
+      label: Aarets resultat
+    - name: ar:Assets
+      kind: monetary
+      label: Aktiver i alt
+    - name: ar:Liabilities
+      kind: monetary
+      label: Gaeldsforpligtelser i alt
+    - name: ar:Equity
+      kind: monetary
+      label: Egenkapital i alt
+rules:
+  - rule_id: DK-ANNUAL-REPORT-CLASS-B-001
+    name: An arsrapport may only be assembled for a fully locked fiscal year with complete company master data
+    category: annual_report
+    source_id: DK-AARSREGNSKABSLOVEN-2024-1140
+    severity: hard_stop
+    machine_rule:
+      condition: regnskabsklasse == 'B'
+      require:
+        - fiscal_year_start
+        - fiscal_year_end
+        - company_cvr
+        - fiscal_year_fully_covered_by_locked_period
+        - books_balanced
+        - resultatopgorelse
+        - balance
+      forbid:
+        - arsrapport_for_open_or_partially_locked_fiscal_year
+        - arsrapport_without_registered_cvr
+    explanation: Rentemester assembles a regnskabsklasse-B arsrapport only when the fiscal year is fully locked, the books balance, and the company CVR is registered, so the prepared report rests on final, traceable data.
+  - rule_id: DK-ANNUAL-REPORT-IXBRL-002
+    name: iXBRL output must be deterministic and restricted to the declared micro/small taxonomy subset
+    category: annual_report
+    source_id: DK-AARSREGNSKABSLOVEN-2024-1140
+    severity: hard_stop
+    machine_rule:
+      require:
+        - byte_stable_output_across_reruns
+        - only_declared_taxonomy_subset_elements
+        - xbrli_context_with_registered_cvr_identifier
+      forbid:
+        - ixbrl_for_failed_annual_report
+        - taxonomy_elements_outside_the_declared_subset
+    explanation: Rentemester generates iXBRL only against a bounded, declared regnskabsklasse-B taxonomy subset and byte-stably, so the prepared file is verifiable; the owner or advisor reviews and is responsible for the actual Erhvervsstyrelsen filing.

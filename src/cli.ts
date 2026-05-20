@@ -67,6 +67,9 @@ import { register as registerEmail } from "./cli/email";
 // ===== GDPR (#184) =====
 import { register as registerGdpr } from "./cli/gdpr";
 // ===== END GDPR (#184) =====
+// ===== ANNUAL REPORT (#177) =====
+import { register as registerAnnualReport } from "./cli/annual-report";
+// ===== END ANNUAL REPORT (#177) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -235,6 +238,9 @@ for (const registerFn of [
   // ===== GDPR (#184) =====
   registerGdpr,
   // ===== END GDPR (#184) =====
+  // ===== ANNUAL REPORT (#177) =====
+  registerAnnualReport,
+  // ===== END ANNUAL REPORT (#177) =====
 ]) {
   registerFn(dispatch);
 }
