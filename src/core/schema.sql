@@ -904,3 +904,31 @@ BEFORE DELETE ON peppol_submissions
 BEGIN
   SELECT RAISE(ABORT, 'peppol submissions are append-only audit records; record a new submission attempt instead');
 END;
+-- ===== OPENING BALANCE (#179) =====
+-- Marks that a company's opening balance (primobalance) has been posted.
+-- The primobalance itself lives as a normal balanced journal entry in
+-- journal_entries (posted via postJournalEntry, hash-chained and audited);
+-- this table is only the idempotency marker — exactly one row per company.
+-- The single-row constraint enforces "one primobalance per company": the
+-- fixed CHECK(id = 1) primary key makes a second INSERT fail. The table is
+-- append-only audit data: never updated, never deleted.
+CREATE TABLE IF NOT EXISTS opening_balances (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  cut_over_date TEXT NOT NULL,
+  journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id),
+  journal_entry_no TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER IF NOT EXISTS opening_balances_no_update
+BEFORE UPDATE ON opening_balances
+BEGIN
+  SELECT RAISE(ABORT, 'opening balance is append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS opening_balances_no_delete
+BEFORE DELETE ON opening_balances
+BEGIN
+  SELECT RAISE(ABORT, 'opening balance is append-only; reverse the journal entry instead');
+END;
+-- ===== END OPENING BALANCE (#179) =====

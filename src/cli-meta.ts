@@ -258,6 +258,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: ["--company", "--from", "--to"],
   },
   // ===== END VAT FILING (#178) =====
+  // ===== OPENING BALANCE (#179) =====
+  {
+    key: "opening-balance post",
+    usage: "opening-balance post --company <path> --input <file.json>",
+    description: "Bogfører virksomhedens primobalance som én balanceret, audited åbningspostering pr. en skæringsdato. Idempotent: præcis én primobalance pr. virksomhed.",
+    allowedFlags: ["--company", "--input"],
+    inputNotes: [
+      "cutOverDate: YYYY-MM-DD (skæringsdato)",
+      "lines: [{ accountNo, debitAmount | creditAmount, text? }]",
+      "Skal balancere: sum debet == sum kredit (heltal øre)",
+      "note: valgfri tekst",
+    ],
+  },
+  // ===== END OPENING BALANCE (#179) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));

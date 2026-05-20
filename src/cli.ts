@@ -52,6 +52,9 @@ import { register as registerServe } from "./cli/serve";
 // ===== FINANCIAL STATEMENTS (#176) =====
 import { register as registerReport } from "./cli/report";
 // ===== END FINANCIAL STATEMENTS (#176) =====
+// ===== OPENING BALANCE (#179) =====
+import { register as registerOpeningBalance } from "./cli/opening-balance";
+// ===== END OPENING BALANCE (#179) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -205,6 +208,9 @@ for (const registerFn of [
   // ===== FINANCIAL STATEMENTS (#176) =====
   registerReport,
   // ===== END FINANCIAL STATEMENTS (#176) =====
+  // ===== OPENING BALANCE (#179) =====
+  registerOpeningBalance,
+  // ===== END OPENING BALANCE (#179) =====
 ]) {
   registerFn(dispatch);
 }
