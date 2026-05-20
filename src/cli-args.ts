@@ -12,16 +12,38 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
   const flags = new Map<string, string | true>();
   const errors: string[] = [];
 
+  let optionsTerminated = false;
+
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i]!;
-    if (!token.startsWith("--")) {
+
+    if (!optionsTerminated && token === "--") {
+      optionsTerminated = true;
+      continue;
+    }
+
+    if (optionsTerminated || !token.startsWith("--")) {
       positionals.push(token);
+      continue;
+    }
+
+    // `--flag=value` form: value is attached, so it may begin with dashes
+    // or be empty without being confused for a missing-value error.
+    const eq = token.indexOf("=");
+    if (eq !== -1) {
+      const name = token.slice(0, eq);
+      const value = token.slice(eq + 1);
+      if (BOOLEAN_FLAGS.has(name)) {
+        errors.push(`Flag ${name} does not take a value`);
+        continue;
+      }
+      flags.set(name, value);
       continue;
     }
 
     if (BOOLEAN_FLAGS.has(token)) {
       const next = tokens[i + 1];
-      if (next && !next.startsWith("--")) {
+      if (next && next !== "--" && !next.startsWith("--")) {
         errors.push(`Flag ${token} does not take a value`);
         i += 1;
         continue;
@@ -31,7 +53,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     }
 
     const value = tokens[i + 1];
-    if (!value || value.startsWith("--")) {
+    if (value === undefined || value === "--" || value.startsWith("--")) {
       errors.push(`Flag ${token} requires a value`);
       continue;
     }
