@@ -34,6 +34,10 @@ export const MUTATING_COMMANDS = new Set([
   "journal post",
   "journal reverse",
   "exceptions resolve",
+  // Fixed assets (#124, #125)
+  "asset register",
+  "asset depreciate",
+  "asset write-off",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

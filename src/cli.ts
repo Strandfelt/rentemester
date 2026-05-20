@@ -37,6 +37,8 @@ import { register as registerExpense } from "./cli/expense";
 import { register as registerRetention } from "./cli/retention";
 import { register as registerPeriod } from "./cli/period";
 import { register as registerDashboard } from "./cli/dashboard";
+// Fixed assets (#124, #125)
+import { register as registerAsset } from "./cli/asset";
 
 function fatal(message: string): never {
   console.error(message);
@@ -141,6 +143,8 @@ for (const registerFn of [
   registerRetention,
   registerPeriod,
   registerDashboard,
+  // Fixed assets (#124, #125)
+  registerAsset,
 ]) {
   registerFn(dispatch);
 }

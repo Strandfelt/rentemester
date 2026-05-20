@@ -39,6 +39,8 @@ import { registerRetentionTools } from "./tools/retention";
 import { registerSystemTools } from "./tools/system";
 import { registerVatTools } from "./tools/vat";
 import { registerVendorTools } from "./tools/vendor";
+// Fixed assets (#124, #125)
+import { registerAssetTools } from "./tools/asset";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -55,4 +57,6 @@ export function registerAllTools(server: McpServer): void {
   registerSystemTools(server);
   registerVatTools(server);
   registerVendorTools(server);
+  // Fixed assets (#124, #125)
+  registerAssetTools(server);
 }
