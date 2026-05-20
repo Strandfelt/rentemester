@@ -26,6 +26,7 @@ import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
 import {
   buildCompanyDashboardData,
+  buildCompanyFiscalYears,
   buildPortfolioOverview,
   resolveAsOfDate,
 } from "./data";
@@ -121,6 +122,11 @@ function handleCompanyDashboard(
   const asOf = resolveAsOfDate(url.searchParams.get("asOf"));
   const data = buildCompanyDashboardData(config.workspaceRoot, slug, asOf);
   return okResponse({ dashboard: data });
+}
+
+function handleCompanyFiscalYears(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyFiscalYears(config.workspaceRoot, slug);
+  return okResponse({ fiscalYears: data });
 }
 
 async function handleCompanyCreate(
@@ -244,6 +250,13 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(dashboardMatch[1]!);
       return handleCompanyDashboard(config, slug, url);
+    }
+
+    const fiscalYearsMatch = /^\/api\/companies\/([^/]+)\/fiscal-years$/.exec(path);
+    if (fiscalYearsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(fiscalYearsMatch[1]!);
+      return handleCompanyFiscalYears(config, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

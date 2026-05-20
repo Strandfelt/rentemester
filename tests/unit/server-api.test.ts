@@ -7,7 +7,10 @@ import { tmpdir } from "node:os";
 import { handleRequest } from "../../src/server/router";
 import { resolveServerConfig, type ServerConfig } from "../../src/server/config";
 import { createCompany } from "../../src/core/company";
-import { initWorkspace } from "../../src/core/workspace";
+import { initWorkspace, companyRootForSlug } from "../../src/core/workspace";
+import { companyPaths } from "../../src/core/paths";
+import { openDb, migrate } from "../../src/core/db";
+import { postJournalEntry } from "../../src/core/ledger";
 
 function tmpRoot(label: string) {
   return mkdtempSync(join(tmpdir(), `rentemester-${label}-`));
@@ -213,6 +216,78 @@ describe("cockpit API — endpoint contracts", () => {
       const res = await get(config({ workspaceRoot: ws }), "/api/companies/ghost/dashboard");
       expect(JSON.stringify(res.body)).not.toContain(ws);
       expect(JSON.stringify(res.body)).not.toContain("/");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+/** Posts one balanced entry into a workspace company's ledger. */
+function postEntry(ws: string, slug: string, transactionDate: string) {
+  const dbPath = companyPaths(companyRootForSlug(ws, slug)).db;
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    // Two asset accounts keep the entry document-free (no income/expense line).
+    const res = postJournalEntry(db, {
+      transactionDate,
+      text: "Test posting",
+      lines: [
+        { accountNo: "1100", debitAmount: 100 },
+        { accountNo: "2000", creditAmount: 100 },
+      ],
+    });
+    if (!res.ok) throw new Error(res.errors.join("; "));
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — fiscal years (GET /api/companies/:slug/fiscal-years)", () => {
+  test("an empty ledger has no fiscal years", async () => {
+    const ws = makeWorkspace("fy-empty", ["Acme ApS"]);
+    try {
+      const res = await get(config({ workspaceRoot: ws }), "/api/companies/acme-aps/fiscal-years");
+      expect(res.status).toBe(200);
+      expect(res.body.fiscalYears.slug).toBe("acme-aps");
+      expect(res.body.fiscalYears.years).toEqual([]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a posted entry surfaces its fiscal year as a live year", async () => {
+    const ws = makeWorkspace("fy-live", ["Acme ApS"]);
+    try {
+      postEntry(ws, "acme-aps", "2026-03-15");
+      const res = await get(config({ workspaceRoot: ws }), "/api/companies/acme-aps/fiscal-years");
+      expect(res.status).toBe(200);
+      expect(res.body.fiscalYears.years).toEqual([
+        { label: "2026", start: "2026-01-01", end: "2026-12-31", source: "live" },
+      ]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("multiple years are returned newest-first", async () => {
+    const ws = makeWorkspace("fy-multi", ["Acme ApS"]);
+    try {
+      postEntry(ws, "acme-aps", "2025-06-01");
+      postEntry(ws, "acme-aps", "2026-02-01");
+      const res = await get(config({ workspaceRoot: ws }), "/api/companies/acme-aps/fiscal-years");
+      expect(res.body.fiscalYears.years.map((y: any) => y.label)).toEqual(["2026", "2025"]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("fiscal-years for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("fy-404", ["Acme ApS"]);
+    try {
+      const res = await get(config({ workspaceRoot: ws }), "/api/companies/ghost/fiscal-years");
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

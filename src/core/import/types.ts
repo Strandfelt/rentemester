@@ -215,19 +215,30 @@ export type ImportOptions = {
 
 /**
  * The outcome of reconciling a source chart of accounts into the live
- * `accounts` table. Existing accounts are left intact; missing accounts are
- * created. Deterministic and audited — see `reconcileChartOfAccounts`.
+ * `accounts` table. Missing accounts are created; an existing account that
+ * carries no journal lines yet is RECLASSIFIED to the source's definition
+ * (the source chart is authoritative for a system migration); an existing
+ * account that already has journal lines must NOT be reclassified and is
+ * reported as a `conflict`. Deterministic and audited — see
+ * `reconcileChartOfAccounts`.
  */
 export type ChartReconciliationResult = {
   /** Account numbers created in the `accounts` table by this import. */
   created: string[];
   /** Account numbers that already existed and were left untouched. */
   existing: string[];
+  /** Account numbers reclassified to the source definition (had no postings). */
+  updated: string[];
   /**
-   * Human-readable differences between a source account and the existing live
-   * account of the same number (name / type / VAT code mismatches).
+   * Human-readable differences applied: each describes how an existing
+   * postings-free account was reclassified to match the source.
    */
   differences: string[];
+  /**
+   * Account numbers that differ from the source but already carry journal
+   * lines, so they could NOT be reclassified — human-readable conflict lines.
+   */
+  conflicts: string[];
   /** Source VAT-code labels that could not be mapped to a Rentemester code. */
   unmappedVatCodes: string[];
 };

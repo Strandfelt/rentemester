@@ -1,33 +1,135 @@
+/* ==========================================================================
+   Rentemester Cockpit — design tokens
+   --------------------------------------------------------------------------
+   The single source of design truth for the cockpit SPA. Grounded in the
+   repo-level DESIGN.md: warm, paper-near, sober — a modern Danish statutory
+   document rather than a generic SaaS dashboard. No shadows, no gradients,
+   near-square shapes, sparing accent. Amounts use a tabular monospace.
+
+   This is the FOUNDATION token layer (cockpit-redesign iteration 0). Views are
+   redesigned in later iterations; here we only establish tokens + base styles.
+   ========================================================================== */
+
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface-2: #1c2230;
-  --border: #2d333b;
-  --text: #e6edf3;
-  --text-dim: #8b949e;
-  --accent: #1f6feb;
-  --accent-hover: #388bfd;
-  --critical: #f85149;
-  --warning: #d29922;
-  --ok: #3fb950;
-  --radius: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  /* ---- colour (DESIGN.md palette) ------------------------------------- */
+  --color-paper: #f4f1eb;
+  --color-paper-raised: #fbf8f3;
+  --color-ink: #1b1a17;
+  --color-ink-muted: #4c4740;
+  --color-accent: #a6332a;
+  --color-on-accent: #f4f1eb;
+  --color-danger: #8f2a22;
+  --color-success: #2e5e4e;
+  --color-warning: #8a5a12;
+  --color-info: #2d5673;
+  --color-accent-soft: #e8d7d3;
+  --color-danger-soft: #eed9d6;
+  --color-success-soft: #dce8e1;
+  --color-warning-soft: #eee3d1;
+  --color-info-soft: #d9e4eb;
+  /* Hairline borders are an ink-muted tint, not a hard line. */
+  --color-border: #d8d2c6;
+  --color-border-strong: #b7af9f;
+
+  /* ---- typography ----------------------------------------------------- */
+  --font-headline: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-size-body: 16px;
+  --text-line-height: 1.5;
+  --text-size-xs: 11px;
+  --text-size-sm: 13px;
+  --text-size-md: 14px;
+  --text-size-lg: 18px;
+  --text-size-xl: 22px;
+  --text-size-2xl: 28px;
+  --text-weight-regular: 400;
+  --text-weight-medium: 500;
+  --text-weight-semibold: 600;
+  --text-weight-bold: 700;
+
+  /* ---- spacing (8px grid, DESIGN.md) ---------------------------------- */
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* ---- radius (near-square, DESIGN.md) -------------------------------- */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+
+  /* ---- elevation -----------------------------------------------------
+     DESIGN.md: no shadows or glass in v1 — hierarchy comes from spacing,
+     borders and paper tones. The token exists so depth stays centralised. */
+  --shadow-none: none;
+
+  /* ---- layout --------------------------------------------------------- */
+  --layout-max-width: 1100px;
+
+  /* ---- semantic role aliases -----------------------------------------
+     The rest of the stylesheet references these roles, never raw colours,
+     so a future theme is a single edit here. */
+  --bg: var(--color-paper);
+  --surface: var(--color-paper-raised);
+  --surface-2: var(--color-paper);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --text: var(--color-ink);
+  --text-dim: var(--color-ink-muted);
+  --accent: var(--color-accent);
+  --on-accent: var(--color-on-accent);
+  --critical: var(--color-danger);
+  --warning: var(--color-warning);
+  --ok: var(--color-success);
+  --info: var(--color-info);
+  --radius: var(--radius-md);
+
+  color-scheme: light;
+  font-family: var(--font-body);
+  font-size: var(--text-size-body);
+  line-height: var(--text-line-height);
 }
+
+/* ==========================================================================
+   Base element styles
+   ========================================================================== */
 
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+}
+
+body {
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-size-body);
+  line-height: var(--text-line-height);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-headline);
+  font-weight: var(--text-weight-semibold);
+  color: var(--text);
+  line-height: 1.25;
 }
 
 a {
-  color: var(--accent-hover);
+  color: var(--accent);
   text-decoration: none;
 }
 a:hover {
@@ -39,23 +141,50 @@ button {
   cursor: pointer;
 }
 
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* Accounting figures: monospace with tabular figures, everywhere. */
+.amount,
+.num,
+td.num,
+.t-value,
+.m-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ==========================================================================
+   App shell
+   ========================================================================== */
+
 .app-shell {
-  max-width: 1100px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
-  padding: 0 24px 64px;
+  padding: 0 var(--space-lg) var(--space-2xl);
 }
 
 /* ---- header / nav ---- */
 .topbar {
   display: flex;
   align-items: baseline;
-  gap: 16px;
-  padding: 20px 0 18px;
+  gap: var(--space-md);
+  padding: var(--space-lg) 0 var(--space-md);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 28px;
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
 }
 .topbar h1 {
-  font-size: 18px;
+  font-size: var(--text-size-lg);
   margin: 0;
   letter-spacing: 0.2px;
 }
@@ -64,21 +193,21 @@ button {
 }
 .topbar nav {
   display: flex;
-  gap: 14px;
+  gap: var(--space-md);
   margin-left: auto;
-  font-size: 14px;
+  font-size: var(--text-size-md);
 }
 .topbar nav a {
   color: var(--text-dim);
 }
 .topbar nav a.active {
   color: var(--text);
-  font-weight: 600;
+  font-weight: var(--text-weight-semibold);
 }
 .workspace-path {
-  font-size: 12px;
+  font-size: var(--text-size-sm);
   color: var(--text-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 /* ---- generic ---- */
@@ -86,94 +215,112 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  gap: 16px;
+  margin-bottom: var(--space-lg);
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 .page-head h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--text-size-xl);
 }
 .muted {
   color: var(--text-dim);
 }
 .row-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-xs);
   align-items: center;
 }
 
+/* ==========================================================================
+   Buttons (DESIGN.md: near-square, no pill buttons)
+   ========================================================================== */
+
 .btn {
-  background: var(--accent);
-  color: #fff;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  padding: 8px 14px;
-  font-size: 14px;
-  font-weight: 500;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--text-size-md);
+  font-weight: var(--text-weight-medium);
 }
 .btn:hover {
-  background: var(--accent-hover);
+  background: var(--color-ink-muted);
+  border-color: var(--color-ink-muted);
 }
 .btn.secondary {
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--text);
-  border-color: var(--border);
+  border-color: var(--border-strong);
 }
 .btn.secondary:hover {
-  background: var(--surface);
+  background: var(--bg);
+}
+.btn.danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-paper);
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* ==========================================================================
+   Banners & state
+   ========================================================================== */
+
 .banner {
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  font-size: 14px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-size-md);
+  margin-bottom: var(--space-md);
+  border: 1px solid var(--border);
 }
 .banner.error {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid rgba(248, 81, 73, 0.4);
-  color: #ffb3ad;
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+  color: var(--text);
 }
 .banner.success {
-  background: rgba(63, 185, 80, 0.12);
-  border: 1px solid rgba(63, 185, 80, 0.4);
-  color: #84e29a;
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+  color: var(--text);
 }
 
 .state-msg {
-  padding: 48px 0;
+  padding: var(--space-2xl) 0;
   text-align: center;
   color: var(--text-dim);
 }
 
-/* ---- cards ---- */
+/* ==========================================================================
+   Cards
+   ========================================================================== */
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-md);
 }
 
 .company-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  gap: var(--space-md);
 }
 
 .company-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  border-left: 4px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-sm);
 }
 .company-card.level-critical {
   border-left-color: var(--critical);
@@ -191,90 +338,100 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-xs);
 }
 .company-card h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-size-lg);
 }
 .company-card .cc-cvr {
-  font-size: 12px;
+  font-size: var(--text-size-sm);
   color: var(--text-dim);
+  font-family: var(--font-mono);
 }
 
 .metric-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px 16px;
+  gap: var(--space-xs) var(--space-md);
 }
 .metric {
   display: flex;
   flex-direction: column;
 }
 .metric .m-label {
-  font-size: 11px;
+  font-size: var(--text-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: var(--text-dim);
 }
 .metric .m-value {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-size-md);
+  font-weight: var(--text-weight-semibold);
 }
+
+/* ==========================================================================
+   Flags & badges
+   ========================================================================== */
 
 .flags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-xxs);
 }
 .flag {
-  font-size: 12px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-weight: 500;
+  font-size: var(--text-size-sm);
+  padding: 3px var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-weight: var(--text-weight-medium);
 }
 .flag.critical {
-  background: rgba(248, 81, 73, 0.15);
-  color: #ff9c95;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .flag.warning {
-  background: rgba(210, 153, 34, 0.15);
-  color: #e3b341;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 .flag.ok {
-  background: rgba(63, 185, 80, 0.15);
-  color: #56d364;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge {
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--surface-2);
+  font-size: var(--text-size-xs);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
   color: var(--text-dim);
 }
 
-/* ---- forms ---- */
+/* ==========================================================================
+   Forms
+   ========================================================================== */
+
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-md);
   max-width: 460px;
 }
 .form label {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 13px;
+  gap: var(--space-xxs);
+  font-size: var(--text-size-sm);
   color: var(--text-dim);
 }
 .form input,
 .form select {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   color: var(--text);
-  padding: 9px 11px;
-  font-size: 14px;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-size-md);
+  font-family: var(--font-body);
 }
 .form input:focus,
 .form select:focus {
@@ -282,79 +439,104 @@ button {
   outline-offset: -1px;
 }
 .field-hint {
-  font-size: 12px;
+  font-size: var(--text-size-sm);
   color: var(--text-dim);
 }
 
-/* ---- dashboard ---- */
+/* ==========================================================================
+   Dashboard tiles & sections
+   ========================================================================== */
+
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
 }
 .tile {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm) var(--space-md);
 }
 .tile .t-label {
-  font-size: 12px;
+  font-size: var(--text-size-sm);
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
 .tile .t-value {
-  font-size: 24px;
-  font-weight: 700;
-  margin-top: 4px;
+  font-size: var(--text-size-2xl);
+  font-weight: var(--text-weight-bold);
+  margin-top: var(--space-xxs);
 }
 .tile .t-sub {
-  font-size: 12px;
+  font-size: var(--text-size-sm);
   color: var(--text-dim);
   margin-top: 2px;
 }
 .tile.alert {
-  border-color: rgba(248, 81, 73, 0.5);
+  border-color: var(--critical);
 }
 .tile.warn {
-  border-color: rgba(210, 153, 34, 0.5);
+  border-color: var(--warning);
 }
 
 .section {
-  margin-bottom: 28px;
+  margin-bottom: var(--space-lg);
 }
 .section h3 {
-  font-size: 15px;
-  margin: 0 0 10px;
+  font-size: var(--text-size-lg);
+  margin: 0 0 var(--space-sm);
 }
+
+/* ==========================================================================
+   Data tables
+   ========================================================================== */
 
 table.data {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--text-size-sm);
 }
 table.data th,
 table.data td {
   text-align: left;
-  padding: 8px 10px;
+  padding: var(--space-xs) var(--space-sm);
   border-bottom: 1px solid var(--border);
 }
 table.data th {
   color: var(--text-dim);
-  font-weight: 600;
-  font-size: 11px;
+  font-weight: var(--text-weight-semibold);
+  font-size: var(--text-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
 table.data td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
 }
 
 .empty-inline {
   color: var(--text-dim);
-  font-size: 13px;
-  padding: 8px 0;
+  font-size: var(--text-size-sm);
+  padding: var(--space-xs) 0;
+}
+
+/* ==========================================================================
+   Responsive — narrow viewport
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0 var(--space-md) var(--space-xl);
+  }
+  .topbar nav {
+    margin-left: 0;
+    width: 100%;
+  }
+  .metric-row {
+    grid-template-columns: 1fr;
+  }
 }

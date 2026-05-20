@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { companyPaths } from "../core/paths";
 import { openDb, migrate } from "../core/db";
 import { getCompanySettings } from "../core/company";
+import { fiscalYearForDate } from "../core/fiscal-year";
 import { buildInvoiceList, buildOverdueInvoiceList } from "../core/invoice-list";
 import { listBankTransactions } from "../core/reconciliation";
 import { listExceptions } from "../core/exceptions";
@@ -288,6 +289,100 @@ export function buildCompanyDashboardData(
       },
       recentActivity,
     };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company fiscal years
+// --------------------------------------------------------------------------
+
+/** One fiscal year available for a company. */
+export type FiscalYearEntry = {
+  /** Stable, sortable label for the year, e.g. "2026" or "2025-26". */
+  label: string;
+  /** Fiscal-year start date (YYYY-MM-DD); null for an archived year. */
+  start: string | null;
+  /** Fiscal-year end date (YYYY-MM-DD); null for an archived year. */
+  end: string | null;
+  /** Where the year's data lives: the live hash-chained ledger or the archive. */
+  source: "live" | "archive";
+};
+
+export type CompanyFiscalYears = {
+  slug: string;
+  /** Fiscal years, descending by label — newest first. */
+  years: FiscalYearEntry[];
+};
+
+/**
+ * The fiscal years available for a company: the live ledger's year(s) — every
+ * distinct fiscal year touched by a posted `journal_entries` row — plus any
+ * read-only archived years from the `import_archive_years` table (#197).
+ *
+ * Years are deduplicated by label (a live year wins over an archived one of
+ * the same label) and returned newest-first. Throws `ApiError.notFound` when
+ * the slug is not registered or the ledger is missing on disk.
+ */
+export function buildCompanyFiscalYears(
+  workspaceRoot: string,
+  slug: string,
+): CompanyFiscalYears {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+    const byLabel = new Map<string, FiscalYearEntry>();
+
+    // Live ledger: one fiscal year per distinct transaction_date, collapsed.
+    const dateRows = db
+      .query(
+        "SELECT DISTINCT transaction_date AS d FROM journal_entries WHERE status = 'posted'",
+      )
+      .all() as Array<{ d: string }>;
+    for (const row of dateRows) {
+      if (!ISO_DATE_RE.test(row.d)) continue;
+      const fy = fiscalYearForDate(
+        row.d,
+        company.fiscalYearStartMonth,
+        company.fiscalYearLabelStrategy,
+      );
+      byLabel.set(fy.identifierLabel, {
+        label: fy.identifierLabel,
+        start: fy.start,
+        end: fy.end,
+        source: "live",
+      });
+    }
+
+    // Archived years (#197) — read-only reference data, outside the ledger.
+    const archiveRows = db
+      .query(
+        "SELECT DISTINCT fiscal_year AS y FROM import_archive_years ORDER BY fiscal_year",
+      )
+      .all() as Array<{ y: number }>;
+    for (const row of archiveRows) {
+      const label = String(row.y);
+      // A live year of the same label is authoritative — never shadow it.
+      if (byLabel.has(label)) continue;
+      byLabel.set(label, { label, start: null, end: null, source: "archive" });
+    }
+
+    const years = [...byLabel.values()].sort((a, b) =>
+      b.label.localeCompare(a.label),
+    );
+    return { slug: entry.slug, years };
   } finally {
     db.close();
   }

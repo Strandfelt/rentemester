@@ -206,7 +206,8 @@ export function runImport(
     auditTrail.push(
       `Reconciled chart of accounts: ${chartResult.created.length} created, ` +
         `${chartResult.existing.length} already present, ` +
-        `${chartResult.differences.length} difference(s)`,
+        `${chartResult.updated.length} reclassified, ` +
+        `${chartResult.conflicts.length} conflict(s)`,
     );
     if (chartResult.unmappedVatCodes.length > 0) {
       auditTrail.push(
@@ -214,6 +215,9 @@ export function runImport(
       );
     }
     for (const diff of chartResult.differences) auditTrail.push(`Chart difference: ${diff}`);
+    for (const conflict of chartResult.conflicts) {
+      auditTrail.push(`Chart conflict — review required: ${conflict}`);
+    }
   }
   if (source?.companyMasterData) {
     companyResult = reconcileCompanyMasterData(db, source, {
