@@ -4,6 +4,7 @@ import { createHash, createHmac, createPrivateKey, createPublicKey, generateKeyP
 import { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
+import { promoteTempFile, writeFileAtomic, writeTempFileFor } from "./atomic-file";
 
 const BACKUP_RULE_ID = "DK-BOOKKEEPING-BACKUP-001";
 const BACKUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -349,13 +350,18 @@ export function createSystemBackup(db: Database, companyRoot: string, input: Cre
     ledgerStats,
   };
 
+  // Atomic, crash-safe ordering (issue #151): write every signature to disk
+  // FIRST, then promote the manifest LAST. A crash before the manifest rename
+  // leaves an unreferenced manifest-less directory (ignored by listing); a
+  // crash after it leaves a manifest whose signatures are already durable.
   const manifestPath = join(backupDir, "manifest.json");
   const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
-  writeFileSync(manifestPath, manifestText);
-  writeFileSync(backupManifestSignaturePath(backupDir), `${signManifestText(manifestText, manifestKey)}\n`);
+  writeFileAtomic(backupManifestSignaturePath(backupDir), `${signManifestText(manifestText, manifestKey)}\n`);
   if (asymmetricKeypair) {
-    writeFileSync(backupAsymmetricSignaturePath(backupDir), `${signManifestEd25519(manifestText, asymmetricKeypair.privateKeyPem)}\n`);
+    writeFileAtomic(backupAsymmetricSignaturePath(backupDir), `${signManifestEd25519(manifestText, asymmetricKeypair.privateKeyPem)}\n`);
   }
+  const manifestTemp = writeTempFileFor(manifestPath, manifestText);
+  promoteTempFile(manifestTemp, manifestPath);
 
   insertAuditLog(db, {
     eventType: "system_backup",

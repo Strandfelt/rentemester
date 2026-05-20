@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHmac } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { ingestDocument } from "../../src/core/documents";
-import { createSystemBackup, getBackupComplianceStatus } from "../../src/core/system-backups";
+import { backupManifestKeyPath, createSystemBackup, getBackupComplianceStatus } from "../../src/core/system-backups";
+import { writeFileAtomic } from "../../src/core/atomic-file";
 
 describe("system backups", () => {
   test("creates a full backup snapshot with manifest and copied documents", () => {
@@ -103,6 +105,52 @@ describe("system backups", () => {
 
     db.close();
     rmSync(companyRoot, { recursive: true, force: true });
+  });
+
+  test("issue #151: backup leaves no half-written temp files and the manifest matches its signature", () => {
+    const companyRoot = mkdtempSync(join(tmpdir(), "rentemester-backup-atomic-"));
+    const paths = ensureCompanyDirs(companyRoot);
+    const db = openDb(paths.db);
+    migrate(db);
+
+    const backup = createSystemBackup(db, companyRoot, { createdAt: "2026-05-17T02:09:00.000Z" });
+    expect(backup.ok).toBe(true);
+
+    // No leftover atomic-write temp files anywhere in the backup directory.
+    const leftoverTemps = readdirSync(backup.backupDir!).filter((name) => name.endsWith(".tmp"));
+    expect(leftoverTemps).toEqual([]);
+
+    // The HMAC signature on disk must match the manifest bytes on disk — if
+    // the signature were written before the final manifest text was promoted,
+    // or the manifest promoted without its signature, this would diverge.
+    const manifestText = readFileSync(join(backup.backupDir!, "manifest.json"), "utf8");
+    const signature = readFileSync(join(backup.backupDir!, "manifest.json.hmac"), "utf8").trim();
+    const keyHex = readFileSync(backupManifestKeyPath(companyRoot), "utf8").trim();
+    const expected = createHmac("sha256", Buffer.from(keyHex, "hex")).update(manifestText).digest("hex");
+    expect(signature).toBe(expected);
+
+    db.close();
+    rmSync(companyRoot, { recursive: true, force: true });
+  });
+
+  test("issue #151: writeFileAtomic refuses to follow a pre-planted same-directory symlink", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rentemester-atomic-symlink-"));
+    const finalPath = join(dir, "manifest.json");
+    const victim = join(dir, "victim.json");
+    writeFileSync(victim, "original-victim\n");
+
+    // An attacker pre-plants a predictable temp name as a symlink pointing at
+    // a victim file. An exclusive-create temp open must NOT follow it.
+    const guessedTemp = join(dir, `.manifest.json.${process.pid}.0.0000000000000000.tmp`);
+    symlinkSync(victim, guessedTemp);
+
+    writeFileAtomic(finalPath, "real-content\n");
+
+    // The victim is untouched; the real write landed at finalPath.
+    expect(readFileSync(victim, "utf8")).toBe("original-victim\n");
+    expect(readFileSync(finalPath, "utf8")).toBe("real-content\n");
+
+    rmSync(dir, { recursive: true, force: true });
   });
 
   test("treats same-day bank activity as newer than an earlier same-day backup", () => {
