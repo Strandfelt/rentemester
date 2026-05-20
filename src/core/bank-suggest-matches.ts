@@ -61,13 +61,30 @@ function overlapTokens(left: string | null | undefined, right: string | null | u
   return tokenize(right).filter((token) => leftTokens.has(token));
 }
 
-function combinedBankText(row: { text: string; reference: string | null }) {
-  return `${row.text} ${row.reference ?? ""}`.trim().toUpperCase();
+// ===== BANK CLUSTER (#188) =====
+// The match string is built from every column that names WHO paid or WHICH
+// invoice a payment belongs to: the free text, the bank's reference, the
+// counterparty name and the free-text payment message. A profile (#186)
+// populates the latter two; generic imports leave them null and the string
+// degrades to text + reference, as before.
+function combinedBankText(row: {
+  text: string;
+  reference: string | null;
+  counterparty_name?: string | null;
+  message?: string | null;
+}) {
+  return [row.text, row.reference, row.counterparty_name, row.message]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join(" ")
+    .trim()
+    .toUpperCase();
 }
+// ===== END BANK CLUSTER (#188) =====
 
 function unmatchedBankTransactions(db: Database, bankTransactionId?: number) {
   return db.query(
-    `SELECT bt.id, bt.transaction_date, bt.text, bt.amount, bt.currency, bt.reference
+    `SELECT bt.id, bt.transaction_date, bt.text, bt.amount, bt.currency, bt.reference,
+            bt.counterparty_name, bt.counterparty_account, bt.message
      FROM bank_transactions bt
      LEFT JOIN journal_entries je
        ON je.source_bank_transaction_id = bt.id
@@ -82,6 +99,9 @@ function unmatchedBankTransactions(db: Database, bankTransactionId?: number) {
     amount: number;
     currency: string;
     reference: string | null;
+    counterparty_name: string | null;
+    counterparty_account: string | null;
+    message: string | null;
   }>;
 }
 
