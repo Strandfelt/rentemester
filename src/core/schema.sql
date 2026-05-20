@@ -1062,3 +1062,97 @@ BEGIN
   SELECT RAISE(ABORT, 'gdpr_erasures are append-only audit records; an erasure cannot be revoked');
 END;
 -- ===== END GDPR (#184) =====
+
+-- ===== IMPORT ARCHIVE (#197) =====
+-- A multi-year accounting-system export (Dinero #173) covers several fiscal
+-- years; only the cut-over year is posted to the live ledger. The earlier,
+-- pre-cut-over years are NOT posted — but discarding them loses audit history
+-- and matching context. They are kept here as a READ-ONLY ARCHIVE: prior-year
+-- Posteringer and SaldoBalance rows, tagged by source system and fiscal year.
+--
+-- This is reference data, deliberately OUTSIDE the live ledger: nothing here is
+-- part of the hash-chained journal (journal_entries / journal_lines) and the
+-- archive is never posted. Like the rest of Rentemester's audit data the rows
+-- are append-only — re-importing creates a fresh batch row instead.
+--
+-- `import_archive_years` is the per-(source_system, fiscal_year) header; its
+-- detail rows live in `import_archive_postings` (one per archived Posteringer
+-- line) and `import_archive_balances` (one per archived SaldoBalance line).
+-- Amounts are stored in KRONER (decimal), exactly as Dinero exports them.
+CREATE TABLE IF NOT EXISTS import_archive_years (
+  id INTEGER PRIMARY KEY,
+  source_system TEXT NOT NULL,
+  fiscal_year INTEGER NOT NULL,
+  posting_count INTEGER NOT NULL DEFAULT 0 CHECK(posting_count >= 0),
+  balance_count INTEGER NOT NULL DEFAULT 0 CHECK(balance_count >= 0),
+  imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source_system, fiscal_year)
+);
+
+CREATE TABLE IF NOT EXISTS import_archive_postings (
+  id INTEGER PRIMARY KEY,
+  archive_year_id INTEGER NOT NULL,
+  line_no INTEGER NOT NULL CHECK(line_no >= 0),
+  account_no TEXT NOT NULL,
+  account_name TEXT,
+  transaction_date TEXT,
+  voucher TEXT,
+  voucher_type TEXT,
+  text TEXT,
+  vat_type TEXT,
+  amount NUMERIC NOT NULL,
+  running_balance NUMERIC,
+  FOREIGN KEY(archive_year_id) REFERENCES import_archive_years(id)
+);
+
+CREATE TABLE IF NOT EXISTS import_archive_balances (
+  id INTEGER PRIMARY KEY,
+  archive_year_id INTEGER NOT NULL,
+  line_no INTEGER NOT NULL CHECK(line_no >= 0),
+  account_no TEXT NOT NULL,
+  account_name TEXT,
+  amount NUMERIC NOT NULL,
+  FOREIGN KEY(archive_year_id) REFERENCES import_archive_years(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_archive_postings_year
+  ON import_archive_postings(archive_year_id);
+CREATE INDEX IF NOT EXISTS idx_import_archive_balances_year
+  ON import_archive_balances(archive_year_id);
+
+CREATE TRIGGER IF NOT EXISTS import_archive_years_no_update
+BEFORE UPDATE ON import_archive_years
+BEGIN
+  SELECT RAISE(ABORT, 'import archive years are append-only reference data; re-import creates a new batch instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_archive_years_no_delete
+BEFORE DELETE ON import_archive_years
+BEGIN
+  SELECT RAISE(ABORT, 'import archive years are append-only reference data and cannot be deleted');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_archive_postings_no_update
+BEFORE UPDATE ON import_archive_postings
+BEGIN
+  SELECT RAISE(ABORT, 'import archive postings are append-only reference data');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_archive_postings_no_delete
+BEFORE DELETE ON import_archive_postings
+BEGIN
+  SELECT RAISE(ABORT, 'import archive postings are append-only reference data and cannot be deleted');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_archive_balances_no_update
+BEFORE UPDATE ON import_archive_balances
+BEGIN
+  SELECT RAISE(ABORT, 'import archive balances are append-only reference data');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_archive_balances_no_delete
+BEFORE DELETE ON import_archive_balances
+BEGIN
+  SELECT RAISE(ABORT, 'import archive balances are append-only reference data and cannot be deleted');
+END;
+-- ===== END IMPORT ARCHIVE (#197) =====

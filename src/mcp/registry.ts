@@ -58,6 +58,9 @@ import { registerPortfolioTools } from "./tools/portfolio";
 // ===== EMAIL DELIVERY (#180) =====
 import { registerEmailTools } from "./tools/email";
 // ===== END EMAIL DELIVERY (#180) =====
+// ===== IMPORT ARCHIVE (#197) =====
+import { registerImportTools } from "./tools/import";
+// ===== END IMPORT ARCHIVE (#197) =====
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -93,4 +96,7 @@ export function registerAllTools(server: McpServer): void {
   // ===== EMAIL DELIVERY (#180) =====
   registerEmailTools(server);
   // ===== END EMAIL DELIVERY (#180) =====
+  // ===== IMPORT ARCHIVE (#197) =====
+  registerImportTools(server);
+  // ===== END IMPORT ARCHIVE (#197) =====
 }

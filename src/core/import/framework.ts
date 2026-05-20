@@ -24,10 +24,12 @@ import { isValidIsoDate } from "../dates";
 import { toOre } from "../money";
 import { reconcileChartOfAccounts, reconcileCompanyMasterData } from "./reconcile";
 import { resolveSource } from "./source";
+import { archiveDineroYears, checkRollForward, describeRollForward } from "./dinero-archive";
 import type {
   ImportOptions,
   ImportResult,
   ImportSource,
+  MultiArtifactSource,
   ParseResult,
   SourceParser,
 } from "./types";
@@ -326,5 +328,46 @@ export function runImportFromSource(
   if (!parsed.ok || !parsed.source) {
     return failParse(parsed.errors);
   }
-  return runImport(db, parsed.source as ImportSource, options);
+  const result = runImport(db, parsed.source as ImportSource, options);
+
+  // --- pre-cut-over fiscal-year archive (#197) -----------------------------
+  // A Dinero export spans several fiscal years; only the cut-over year was
+  // posted above. The EARLIER years are archived as read-only reference data
+  // (outside the live ledger) and their closing `SaldoBalance` is checked for
+  // roll-forward consistency into the next year's opening balance. Archiving
+  // is purely additive: it never affects whether the ledger import succeeded.
+  if (result.ok && parser.system === "dinero" && typeof parser.parseSource === "function") {
+    archivePreCutOverYears(db, resolved, result);
+  }
+  return result;
+}
+
+/**
+ * Archives the pre-cut-over fiscal years of a resolved Dinero export and runs
+ * the closing-balance roll-forward consistency check, appending both outcomes
+ * to the `ImportResult.auditTrail`. The archive lives in the `import_archive_*`
+ * tables, entirely outside the hash-chained live journal (#197).
+ */
+function archivePreCutOverYears(
+  db: Database,
+  resolved: MultiArtifactSource,
+  result: ImportResult,
+): void {
+  const archive = archiveDineroYears(db, resolved);
+  for (const line of archive.auditTrail) result.auditTrail.push(line);
+  if (!archive.ok) {
+    for (const error of archive.errors) {
+      result.auditTrail.push(`Archive warning: ${error}`);
+    }
+    return;
+  }
+  const rollForward = checkRollForward(db, resolved);
+  for (const line of describeRollForward(rollForward)) result.auditTrail.push(line);
+  if (!rollForward.ok) {
+    result.auditTrail.push(
+      `Roll-forward check FAILED: ${rollForward.breaks.length} break(s) flagged — review required`,
+    );
+  } else if (rollForward.steps.length > 0) {
+    result.auditTrail.push("Roll-forward check passed: archived years carry forward consistently");
+  }
 }
