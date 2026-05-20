@@ -4,6 +4,12 @@ import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { requireCachedViesValidation, normalizeEuVatNumber } from "./vies";
 import { addDkk, compareDkk, fromOre, percentOfDkk, roundDkk, subtractDkk, sumDkk, toOre } from "./money";
 
+/** Absolute difference between two DKK amounts, expressed in whole øre. */
+function oreDifference(left: number, right: number): number {
+  const delta = toOre(left) - toOre(right);
+  return Number(delta < 0n ? -delta : delta);
+}
+
 export type VatPeriodReport = {
   ok: boolean;
   appliedRules: string[];
@@ -224,6 +230,12 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   let reverseChargePurchaseBase = 0;
   let representationPurchaseBase = 0;
   let badDebtReliefBase25 = 0;
+  // Count VAT-bearing base lines per category. 25% of a period-summed base is
+  // not equal to the sum of per-line 25%-rounded VAT when amounts have odd
+  // øre, so each base line can drift the aggregate by up to 1 øre. We allow a
+  // (lineCount - 1)-øre tolerance on the reconciliation cross-check below.
+  let outputVatBaseLines = 0;
+  let inputVatBaseLines = 0;
   const activeEntryIds = new Set<number>();
   const reversedEntryIds = new Set<number>();
   const reversalEntryIds = new Set<number>();
@@ -253,12 +265,17 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
     if (row.account_no === "1200") outputVat += credit - debit;
     if (row.account_no === "4000") inputVat += debit - credit;
 
-    if (row.vat_code === "DK_PURCHASE_25") purchaseBase25 += debit - credit;
-    if (row.vat_code === "DK_SALE_25") salesBase25 += credit - debit;
+    if (row.vat_code === "DK_PURCHASE_25") { purchaseBase25 += debit - credit; inputVatBaseLines += 1; }
+    if (row.vat_code === "DK_SALE_25") { salesBase25 += credit - debit; outputVatBaseLines += 1; }
     if (row.vat_code === "REVERSE_CHARGE_EXEMPT") reverseChargeSalesBase += credit - debit;
-    if (row.vat_code === "EU_SERVICE_REVERSE_CHARGE") reverseChargePurchaseBase += debit - credit;
-    if (row.vat_code === "REPRESENTATION_SPECIAL") representationPurchaseBase += debit - credit;
-    if (row.vat_code === "DK_BAD_DEBT_25") badDebtReliefBase25 += debit - credit;
+    if (row.vat_code === "EU_SERVICE_REVERSE_CHARGE") {
+      reverseChargePurchaseBase += debit - credit;
+      // Reverse charge contributes to both output and input VAT.
+      inputVatBaseLines += 1;
+      outputVatBaseLines += 1;
+    }
+    if (row.vat_code === "REPRESENTATION_SPECIAL") { representationPurchaseBase += debit - credit; inputVatBaseLines += 1; }
+    if (row.vat_code === "DK_BAD_DEBT_25") { badDebtReliefBase25 += debit - credit; outputVatBaseLines += 1; }
   }
 
   outputVat = roundDkk(outputVat);
@@ -273,10 +290,17 @@ export function buildVatReport(db: Database, periodStart: string, periodEnd: str
   const expectedOutputVat = subtractDkk(addDkk(percentOfDkk(salesBase25, 25), percentOfDkk(reverseChargePurchaseBase, 25)), percentOfDkk(badDebtReliefBase25, 25));
   const expectedInputVat = addDkk(addDkk(percentOfDkk(purchaseBase25, 25), percentOfDkk(reverseChargePurchaseBase, 25)), percentOfDkk(percentOfDkk(representationPurchaseBase, 25), 25));
   const warnings: string[] = [];
-  if (compareDkk(outputVat, expectedOutputVat) !== 0) {
+  // Each VAT-bearing base line is rounded to øre independently when booked,
+  // so the booked aggregate can differ from "25% of the summed base" by up to
+  // 1 øre per line. Only the *first* line establishes the aggregate; the
+  // remaining (n-1) lines can each drift it, so the tolerance is (n-1) øre.
+  // A genuine mis-booking exceeds this small bound and still warns.
+  const outputVatTolerance = Math.max(0, outputVatBaseLines - 1);
+  const inputVatTolerance = Math.max(0, inputVatBaseLines - 1);
+  if (oreDifference(outputVat, expectedOutputVat) > outputVatTolerance) {
     warnings.push(`output VAT mismatch: booked ${outputVat}, expected from base × rate ${expectedOutputVat}`);
   }
-  if (compareDkk(inputVat, expectedInputVat) !== 0) {
+  if (oreDifference(inputVat, expectedInputVat) > inputVatTolerance) {
     warnings.push(`input VAT mismatch: booked ${inputVat}, expected from base × rate ${expectedInputVat}`);
   }
 
