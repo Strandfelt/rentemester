@@ -15,6 +15,10 @@ export type RestoreSystemBackupInput = {
   targetCompanyRoot: string;
   verificationKeyPath?: string;
   publicKeyPath?: string;
+  // Optional out-of-band public-key hint. When set, an ed25519 public key
+  // resolved from inside the backup must match it or restore fails closed
+  // (issue #132). Backward-compatible: omitted -> previous behaviour.
+  publicKeyHint?: string;
 };
 
 export type RestoreSystemBackupResult = {
@@ -105,28 +109,47 @@ function verifyManifestHmac(backupDir: string, manifestText: string, verificatio
   return null;
 }
 
+function publicKeyHint(publicKeyPem: string) {
+  return createHash("sha256").update(publicKeyPem.trim()).digest("hex").slice(0, 16);
+}
+
+type Ed25519VerifyResult =
+  | { error: string }
+  // keySource distinguishes a key the verifier supplied out-of-band (genuine
+  // 3rd-party authenticity) from one resolved inside the backup itself. An
+  // in-backup key only proves the backup is internally self-consistent — a
+  // local actor who re-signs with a fresh keypair would also pass — so it is
+  // INTEGRITY-ONLY, never authenticity (issue #132).
+  | { ok: true; keySource: "out-of-band" | "in-backup"; publicKeyHint: string };
+
 function verifyManifestEd25519(
   backupDir: string,
   manifest: BackupManifest,
   manifestText: string,
   overridePublicKeyPath?: string,
-): string | null {
+  expectedPublicKeyHint?: string,
+): Ed25519VerifyResult | null {
   if (!manifest.asymmetricSignature) return null; // nothing to verify
   const sigPath = backupAsymmetricSignaturePath(backupDir);
-  if (!existsSync(sigPath)) return "missing ed25519 backup manifest signature: manifest.json.ed25519.sig";
+  if (!existsSync(sigPath)) return { error: "missing ed25519 backup manifest signature: manifest.json.ed25519.sig" };
   const sigBase64 = readFileSync(sigPath, "utf8").trim();
   let sigBytes: Buffer;
   try {
     sigBytes = Buffer.from(sigBase64, "base64");
   } catch {
-    return "invalid ed25519 signature encoding";
+    return { error: "invalid ed25519 signature encoding" };
   }
-  if (sigBytes.length !== 64) return `invalid ed25519 signature length: ${sigBytes.length} (expected 64)`;
+  if (sigBytes.length !== 64) return { error: `invalid ed25519 signature length: ${sigBytes.length} (expected 64)` };
 
-  // Resolve public key: explicit override > path embedded in manifest > <backupDir>/config/backup-manifest.pub
+  // Resolve public key: explicit override (out-of-band) > path embedded in
+  // manifest > <backupDir>/config/backup-manifest.pub. Only the override is
+  // trusted for authenticity; manifest-declared / config keys ship INSIDE the
+  // backup and are integrity-only.
   let publicKeyPath: string | null = null;
+  let keySource: "out-of-band" | "in-backup" = "in-backup";
   if (overridePublicKeyPath) {
     publicKeyPath = overridePublicKeyPath;
+    keySource = "out-of-band";
   } else {
     const declared = resolveManifestPath(backupDir, manifest.asymmetricSignature.publicKeyPath);
     if (declared && existsSync(declared)) {
@@ -137,18 +160,28 @@ function verifyManifestEd25519(
     }
   }
   if (!publicKeyPath || !existsSync(publicKeyPath)) {
-    return "ed25519 public key not found; pass publicKeyPath or restore from a backup that ships the key under config/backup-manifest.pub";
+    return { error: "ed25519 public key not found; pass publicKeyPath or restore from a backup that ships the key under config/backup-manifest.pub" };
   }
   const pem = readFileSync(publicKeyPath, "utf8");
   let key;
   try {
     key = createPublicKey(pem);
   } catch (error) {
-    return `failed to parse ed25519 public key: ${String(error)}`;
+    return { error: `failed to parse ed25519 public key: ${String(error)}` };
   }
+
+  // Fail-closed hint check (issue #132): if the verifier supplied a public-key
+  // hint out-of-band, the key actually used MUST match it. This defeats an
+  // attacker who deletes the keypair, re-signs a tampered backup with a fresh
+  // keypair, and ships the forged public key inside the backup.
+  const resolvedHint = publicKeyHint(pem);
+  if (expectedPublicKeyHint && resolvedHint !== expectedPublicKeyHint) {
+    return { error: `ed25519 public key hint mismatch: resolved ${resolvedHint}, expected ${expectedPublicKeyHint}` };
+  }
+
   const ok = cryptoVerify(null, Buffer.from(manifestText, "utf8"), key, sigBytes);
-  if (!ok) return "ed25519 manifest signature verification failed";
-  return null;
+  if (!ok) return { error: "ed25519 manifest signature verification failed" };
+  return { ok: true, keySource, publicKeyHint: resolvedHint };
 }
 
 function verifyManifestAuthenticity(
@@ -157,14 +190,16 @@ function verifyManifestAuthenticity(
   manifestText: string,
   verificationKeyPath?: string,
   publicKeyPath?: string,
+  publicKeyHintExpected?: string,
 ) {
   const hmacError = verifyManifestHmac(backupDir, manifestText, verificationKeyPath);
   if (hmacError) return hmacError;
   // If the manifest advertises an ed25519 signature, it MUST also verify.
   // This means: opting in to asymmetric signing strengthens the guarantee
-  // (both HMAC and ed25519 must agree); it never weakens HMAC.
-  const ed25519Error = verifyManifestEd25519(backupDir, manifest, manifestText, publicKeyPath);
-  if (ed25519Error) return ed25519Error;
+  // (both HMAC and ed25519 must agree); it never weakens HMAC. Verification
+  // is fail-closed: any non-null result that is not {ok:true} blocks restore.
+  const ed25519 = verifyManifestEd25519(backupDir, manifest, manifestText, publicKeyPath, publicKeyHintExpected);
+  if (ed25519 && "error" in ed25519) return ed25519.error;
   return null;
 }
 
@@ -225,12 +260,28 @@ export type VerifyBackupSignatureInput = {
   backupDir: string;
   verificationKeyPath?: string;
   publicKeyPath?: string;
+  // Out-of-band public-key hint. When set, an ed25519 key resolved from inside
+  // the backup must match it or verification fails closed (issue #132).
+  publicKeyHint?: string;
 };
+
+// trustLevel makes the integrity-vs-authenticity distinction explicit
+// (issues #131/#132):
+//  - "third-party-authenticity": an ed25519 signature verified against a
+//    public key supplied OUT-OF-BAND. A 3rd party can rely on this.
+//  - "integrity-only": something verified, but only with key material that
+//    ships alongside the backup (the symmetric HMAC key, or an in-backup
+//    ed25519 public key). This catches accidental corruption and tampering
+//    by an actor without the key, but NOT a forge by a local actor who can
+//    read/rewrite the co-located key.
+//  - "none": nothing could be verified.
+export type BackupTrustLevel = "third-party-authenticity" | "integrity-only" | "none";
 
 export type VerifyBackupSignatureResult = {
   ok: boolean;
   backupId?: string;
   algorithms: string[];
+  trustLevel: BackupTrustLevel;
   publicKeyHint?: string;
   hmacKeyHint?: string;
   errors: string[];
@@ -242,25 +293,31 @@ export type VerifyBackupSignatureResult = {
 // file received out-of-band.
 export function verifyBackupSignature(input: VerifyBackupSignatureInput): VerifyBackupSignatureResult {
   if (!input.backupDir || !existsSync(input.backupDir)) {
-    return { ok: false, algorithms: [], errors: [`backupDir does not exist: ${input.backupDir}`] };
+    return { ok: false, algorithms: [], trustLevel: "none", errors: [`backupDir does not exist: ${input.backupDir}`] };
   }
   const manifestText = readManifestText(input.backupDir);
-  if (!manifestText) return { ok: false, algorithms: [], errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
+  if (!manifestText) return { ok: false, algorithms: [], trustLevel: "none", errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
   const manifest = readManifest(input.backupDir);
-  if (!manifest) return { ok: false, algorithms: [], errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
+  if (!manifest) return { ok: false, algorithms: [], trustLevel: "none", errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
 
   const algorithms: string[] = [];
   const errors: string[] = [];
+  let sawOutOfBandAuthenticity = false;
+  let sawIntegrity = false;
 
   // Ed25519 is the 3rd-party-friendly path. Try it first, but only if the
   // manifest advertises it. If the verifier only has a public key (no HMAC
   // key) and the manifest has no ed25519 signature, we cannot verify.
   if (manifest.asymmetricSignature) {
-    const ed25519Error = verifyManifestEd25519(input.backupDir, manifest, manifestText, input.publicKeyPath);
-    if (ed25519Error) {
-      errors.push(ed25519Error);
-    } else {
+    const ed25519 = verifyManifestEd25519(input.backupDir, manifest, manifestText, input.publicKeyPath, input.publicKeyHint);
+    if (ed25519 && "error" in ed25519) {
+      errors.push(ed25519.error);
+    } else if (ed25519) {
       algorithms.push("ed25519");
+      // An ed25519 signature is third-party authenticity ONLY when the key
+      // came from out-of-band. An in-backup key proves integrity only.
+      if (ed25519.keySource === "out-of-band") sawOutOfBandAuthenticity = true;
+      else sawIntegrity = true;
     }
   }
 
@@ -274,6 +331,9 @@ export function verifyBackupSignature(input: VerifyBackupSignatureInput): Verify
       errors.push(hmacError);
     } else {
       algorithms.push("hmac-sha256");
+      // HMAC is symmetric — the key can re-sign — so it is integrity-only,
+      // never third-party authenticity (issue #131).
+      sawIntegrity = true;
     }
   }
 
@@ -294,10 +354,22 @@ export function verifyBackupSignature(input: VerifyBackupSignatureInput): Verify
   ].filter((value): value is string => Boolean(value));
   errors.push(...fileErrors);
 
+  const ok = errors.length === 0 && algorithms.length > 0;
+  // trustLevel reflects the STRONGEST guarantee that actually held. If
+  // anything failed, the backup is not trustworthy at all -> "none".
+  const trustLevel: BackupTrustLevel = !ok
+    ? "none"
+    : sawOutOfBandAuthenticity
+      ? "third-party-authenticity"
+      : sawIntegrity
+        ? "integrity-only"
+        : "none";
+
   return {
-    ok: errors.length === 0 && algorithms.length > 0,
+    ok,
     backupId: manifest.backupId,
     algorithms,
+    trustLevel,
     publicKeyHint: manifest.asymmetricSignature?.publicKeyHint,
     hmacKeyHint: manifest.manifestSignature?.keyHint,
     errors,
@@ -314,7 +386,7 @@ export function restoreSystemBackup(input: RestoreSystemBackupInput): RestoreSys
   if (!manifestText) return { ok: false, appliedRules: [RULE_ID], errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
   const manifest = readManifest(input.backupDir);
   if (!manifest) return { ok: false, appliedRules: [RULE_ID], errors: [`invalid or missing backup manifest in ${input.backupDir}`] };
-  const authenticityError = verifyManifestAuthenticity(input.backupDir, manifest, manifestText, input.verificationKeyPath, input.publicKeyPath);
+  const authenticityError = verifyManifestAuthenticity(input.backupDir, manifest, manifestText, input.verificationKeyPath, input.publicKeyPath, input.publicKeyHint);
   if (authenticityError) return { ok: false, appliedRules: [RULE_ID], errors: [authenticityError] };
 
   const manifestErrors = [
