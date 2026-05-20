@@ -49,6 +49,9 @@ import { register as registerAsset } from "./cli/asset";
 import { register as registerCompany } from "./cli/company";
 // ===== COCKPIT BACKEND (#170) =====
 import { register as registerServe } from "./cli/serve";
+// ===== FINANCIAL STATEMENTS (#176) =====
+import { register as registerReport } from "./cli/report";
+// ===== END FINANCIAL STATEMENTS (#176) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -199,6 +202,9 @@ for (const registerFn of [
   registerCompany,
   // ===== COCKPIT BACKEND (#170) =====
   registerServe,
+  // ===== FINANCIAL STATEMENTS (#176) =====
+  registerReport,
+  // ===== END FINANCIAL STATEMENTS (#176) =====
 ]) {
   registerFn(dispatch);
 }

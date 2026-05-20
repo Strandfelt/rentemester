@@ -239,6 +239,11 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
   { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
   // ===== END FIXED ASSETS (#124, #125) =====
+  // ===== FINANCIAL STATEMENTS (#176) =====
+  { key: "report trial-balance", usage: "report trial-balance --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en saldobalance med debet, kredit og saldo pr. konto for perioden.", allowedFlags: ["--company", "--from", "--to"] },
+  { key: "report profit-loss", usage: "report profit-loss --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en resultatopgørelse (indtægter minus omkostninger) for perioden.", allowedFlags: ["--company", "--from", "--to"] },
+  { key: "report balance", usage: "report balance --company <path> --as-of <YYYY-MM-DD>", description: "Bygger en balance (aktiver, passiver, egenkapital) på en given dato.", allowedFlags: ["--company", "--as-of"] },
+  // ===== END FINANCIAL STATEMENTS (#176) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
