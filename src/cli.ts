@@ -42,6 +42,9 @@ import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
 // ===== MAIL INTAKE (#122) =====
 import { register as registerMailIntake } from "./cli/mail-intake";
+// ===== IMAP INTAKE (#181) =====
+import { register as registerImapIntake } from "./cli/imap-intake";
+// ===== END IMAP INTAKE (#181) =====
 // ===== MILEAGE LOG (#123) =====
 import { register as registerMileage } from "./cli/mileage";
 // Fixed assets (#124, #125)
@@ -192,6 +195,9 @@ for (const registerFn of [
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   registerMailIntake,
+  // ===== IMAP INTAKE (#181) =====
+  registerImapIntake,
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   registerMileage,
   // Fixed assets (#124, #125)

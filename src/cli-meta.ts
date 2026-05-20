@@ -197,6 +197,26 @@ export const COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: ["--company", "--source", "--metadata", "--force"],
     examplePath: "examples/bilagsmail.metadata.json",
   },
+  // ===== IMAP INTAKE (#181) =====
+  {
+    key: "imap-intake poll",
+    usage:
+      "imap-intake poll --company <path> [--metadata <file.json>] [--imap-host <host>] [--imap-port <n>] [--imap-username <user>] [--imap-mailbox <name>] [--since-uid <n>] [--force]",
+    description:
+      "Poller en hosted IMAP-postkasse og videresender nye beskeder til den eksisterende bilagsmail-pipeline (#122). Dedup er rerun-stabil; gentaget poll skaber ingen dubletter.",
+    allowedFlags: [
+      "--company", "--metadata", "--imap-host", "--imap-port",
+      "--imap-username", "--imap-mailbox", "--since-uid", "--force",
+    ],
+    examplePath: "examples/bilagsmail.metadata.json",
+    inputNotes: [
+      "IMAP-credentials læses fra --imap-* flags eller RENTEMESTER_IMAP_* miljøvariabler",
+      "RENTEMESTER_IMAP_PASSWORD er kun miljøvariabel — aldrig et CLI-flag eller i ledger",
+      "Standard: TLS (IMAPS) på port 993, mailbox INBOX",
+      "Dedup deler mail_intake_messages-tabellen med 'mail-intake ingest' (#122)",
+    ],
+  },
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   {
     key: "mileage log",

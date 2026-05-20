@@ -40,6 +40,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== END RECURRING INVOICES (#118) =====
   // ===== MAIL INTAKE (#122) =====
   "mail-intake ingest",
+  // ===== IMAP INTAKE (#181) =====
+  "imap-intake poll",
+  // ===== END IMAP INTAKE (#181) =====
   // ===== MILEAGE LOG (#123) =====
   "mileage log",
   "mileage export",
