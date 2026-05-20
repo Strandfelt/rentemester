@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
+import { isAbsolute, resolve, sep } from "node:path";
 import { parseCliArgs } from "./cli-args";
 import { resolveOutputFormat } from "./cli-format";
 import {
@@ -15,6 +16,7 @@ import {
   type CommandContext,
 } from "./cli-dispatch";
 import {
+  MUTATING_COMMANDS,
   enforceMutationActorPolicy,
   inferredMutationActor,
   trimToNull,
@@ -39,6 +41,35 @@ import { register as registerDashboard } from "./cli/dashboard";
 function fatal(message: string): never {
   console.error(message);
   process.exit(2);
+}
+
+/**
+ * Resolves the company root from `--company` / `RENTEMESTER_COMPANY`.
+ *
+ * There is no silent default: a command that needs a company but was
+ * given none fails with a clear error. The path is rejected if it
+ * contains parent-directory (`..`) segments, then `resolve()`d to an
+ * absolute path so the ledger/backup tree cannot be relocated by a
+ * traversal payload.
+ */
+function resolveCompanyRoot(): string {
+  const raw =
+    trimToNull(parsedArgs.flags.get("--company") as string | undefined) ??
+    trimToNull(process.env.RENTEMESTER_COMPANY);
+  if (!raw) {
+    fatal(
+      "--company is required: pass --company <path> or set RENTEMESTER_COMPANY",
+    );
+  }
+  const segments = raw.split(/[\\/]+/);
+  if (segments.includes("..")) {
+    fatal("--company must not contain parent-directory ('..') segments");
+  }
+  const resolved = resolve(raw);
+  if (!isAbsolute(resolved) || resolved.split(sep).includes("..")) {
+    fatal("--company resolved to an unsafe path");
+  }
+  return resolved;
 }
 
 const parsedArgs = parseCliArgs(Bun.argv);
@@ -74,7 +105,7 @@ const ctx: CommandContext = {
     return parsedArgs.flags.has(name);
   },
   companyRoot() {
-    return this.arg("--company", process.env.RENTEMESTER_COMPANY ?? "/company")!;
+    return resolveCompanyRoot();
   },
   cliActor,
   cliActorVia,
@@ -114,7 +145,11 @@ for (const registerFn of [
   registerFn(dispatch);
 }
 
-enforceMutationActorPolicy(commandKey, ctx.companyRoot(), cliActor, cliActorVia, fatal);
+// Resolve the company root only for mutating commands — non-mutating
+// commands (e.g. `invoice validate`) legitimately run without --company.
+if (MUTATING_COMMANDS.has(commandKey)) {
+  enforceMutationActorPolicy(commandKey, ctx.companyRoot(), cliActor, cliActorVia, fatal);
+}
 
 if (!cmd || cmd === "help") {
   console.log(renderGlobalUsage());
