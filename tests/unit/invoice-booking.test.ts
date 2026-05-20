@@ -111,6 +111,39 @@ describe("invoice ledger posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects an issued invoice whose DKK totals do not satisfy net + vat = gross", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoicebook-divergent-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    // A non-DKK invoice whose payload DKK totals diverge from net+vat: the
+    // stored vat/net DKK amounts do not sum to the gross DKK amount.
+    const payload = {
+      currency: "EUR",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      totals: {
+        netAmount: 100, vatAmount: 25, grossAmount: 125,
+        fxRateToDkk: 7.46,
+        netAmountDkk: 600, vatAmountDkk: 186.5, grossAmountDkk: 932.5,
+      },
+    };
+    const doc = db.query(
+      `INSERT INTO documents (source, sha256_hash, invoice_no, invoice_date, amount_inc_vat, currency, vat_amount, document_type, payload_json)
+       VALUES ('rentemester', 'divergent-booking-hash', '2026-0800X', '2026-05-16', 125, 'EUR', 25, 'issued_invoice', ?)
+       RETURNING id`
+    ).get(JSON.stringify(payload)) as { id: number };
+
+    const posted = postIssuedInvoiceToLedger(db, { invoiceDocumentId: doc.id });
+    expect(posted.ok).toBe(false);
+    expect(posted.errors.join(" ")).toContain("net");
+    expect(db.query("SELECT COUNT(*) AS n FROM journal_entries").get()).toEqual({ n: 0 });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("posts issued invoice once to receivables, revenue, and output VAT", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-invoicebook-"));
     const db = openDb(ensureCompanyDirs(root).db);

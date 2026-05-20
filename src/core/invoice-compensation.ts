@@ -64,11 +64,28 @@ export type PostInvoiceLateCompensationToLedgerResult = JournalPostResult & {
 const STATUTORY_COMPENSATION_DKK = 310;
 const STATUTORY_COMPENSATION_START_DATE = "2013-03-01";
 
+/**
+ * A commercial buyer identifier is a Danish CVR (8 digits, optionally DK-prefixed)
+ * or an EU-style VAT number (two-letter country code followed by 2-12 alphanumerics).
+ * A free-text string that merely happens to be non-empty is not proof of a
+ * commercial transaction.
+ */
+function looksLikeCommercialVatOrCvr(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toUpperCase().replace(/\s+/g, "");
+  if (!normalized) return false;
+  if (/^(DK)?\d{8}$/.test(normalized)) return true;
+  return /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(normalized);
+}
+
 export function calculateInvoiceLateCompensation(db: Database, input: CalculateInvoiceLateCompensationInput): CalculateInvoiceLateCompensationResult {
   const errors: string[] = [];
   if (!Number.isInteger(input.invoiceDocumentId) || input.invoiceDocumentId <= 0) errors.push("invoiceDocumentId must be a positive integer");
   if (!looksLikeIsoDate(input.asOfDate)) errors.push("asOfDate must be YYYY-MM-DD");
   if (input.compensationAmountDkk !== undefined && (!Number.isFinite(input.compensationAmountDkk) || input.compensationAmountDkk < 0)) errors.push("compensationAmountDkk must be a non-negative number when present");
+  if (input.compensationAmountDkk !== undefined && roundDkk(input.compensationAmountDkk) > STATUTORY_COMPENSATION_DKK) {
+    errors.push(`compensationAmountDkk must not exceed the statutory amount DKK ${STATUTORY_COMPENSATION_DKK}`);
+  }
   if (errors.length > 0) return { ok: false, appliedRules: [RULE_ID], errors };
 
   const invoice = db.query(`SELECT invoice_no, payload_json, document_type, invoice_date FROM documents WHERE id = ?`).get(input.invoiceDocumentId) as { invoice_no: string; payload_json: string | null; document_type: string; invoice_date: string | null } | null;
@@ -79,7 +96,7 @@ export function calculateInvoiceLateCompensation(db: Database, input: CalculateI
   if (!status.ok) return { ok: false, appliedRules: [RULE_ID], errors: status.errors };
 
   const payload = invoice.payload_json ? JSON.parse(invoice.payload_json) : null;
-  const isCommercialTransaction = typeof payload?.buyer?.vatOrCvr === "string" && payload.buyer.vatOrCvr.trim().length > 0;
+  const isCommercialTransaction = looksLikeCommercialVatOrCvr(payload?.buyer?.vatOrCvr);
   const principalOpenBalance = roundDkk(Number(status.openBalance ?? 0));
   const overdueDays = Number(status.overdueDays ?? 0);
   const compensationAmountDkk = roundDkk(input.compensationAmountDkk ?? STATUTORY_COMPENSATION_DKK);

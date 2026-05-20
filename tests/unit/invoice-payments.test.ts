@@ -8,6 +8,8 @@ import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { applyInvoicePayment, getInvoiceStatus } from "../../src/core/invoice-payments";
 import { issueCreditNote } from "../../src/core/credit-notes";
+import { postIssuedInvoiceToLedger } from "../../src/core/invoice-booking";
+import { writeOffInvoiceBadDebt } from "../../src/core/invoice-bad-debt";
 
 describe("invoice payments", () => {
   test("applies payment to issued invoice and tracks open balance without over-application", () => {
@@ -221,6 +223,103 @@ describe("invoice payments", () => {
     expect(payment.ok).toBe(false);
     expect(payment.errors[0]).toContain("exceeds open invoice balance 0");
     expect(payment.appliedRules).toContain("DK-INVOICE-CORRECTION-BALANCE-001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("labels a part-paid then fully written-off invoice as written_off, not paid", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-status-writeoff-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-06-15",
+      invoiceNumber: "2026-1400",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+    expect(applyInvoicePayment(db, {
+      invoiceDocumentId: issued.documentId!,
+      paymentDate: "2026-05-20",
+      amount: 250,
+      note: "Partial payment"
+    }).ok).toBe(true);
+    expect(writeOffInvoiceBadDebt(db, {
+      invoiceDocumentId: issued.documentId!,
+      writeOffDate: "2026-07-01",
+    }).ok).toBe(true);
+
+    const status = getInvoiceStatus(db, issued.documentId!, "2026-07-01");
+    expect(status.ok).toBe(true);
+    expect(status.openBalance).toBe(0);
+    expect(status.paidAmount).toBe(250);
+    expect(status.totalBadDebtWrittenOff).toBe(1000);
+    // Write-off must take precedence over a "paid" label even when a payment exists.
+    expect(status.status).toBe("written_off");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("labels a refunded zero-balance invoice as refunded even without a credit note", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-status-refund-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      dueDate: "2026-06-15",
+      invoiceNumber: "2026-1401",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    const booking = postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! });
+    expect(booking.ok).toBe(true);
+    const firstPayment = applyInvoicePayment(db, {
+      invoiceDocumentId: issued.documentId!,
+      paymentDate: "2026-05-20",
+      amount: 1250,
+      note: "Full payment"
+    });
+    expect(firstPayment.ok).toBe(true);
+
+    // Simulate an overpayment (no credit note involved): a second 250 DKK
+    // payment linked to the invoice booking entry, then a 250 DKK refund of it.
+    db.run(
+      `INSERT INTO invoice_payments (invoice_document_id, journal_entry_id, payment_date, amount, currency, note)
+       VALUES (?, ?, '2026-05-21', 250, 'DKK', 'Overpayment')`,
+      issued.documentId!, booking.entryId!,
+    );
+    db.run(
+      `INSERT INTO invoice_refunds (invoice_document_id, refund_date, amount, currency, note)
+       VALUES (?, '2026-05-22', 250, 'DKK', 'Overpayment refund')`,
+      issued.documentId!,
+    );
+
+    const status = getInvoiceStatus(db, issued.documentId!, "2026-05-25");
+    expect(status.ok).toBe(true);
+    expect(status.openBalance).toBe(0);
+    expect(status.creditedAmount).toBe(0);
+    expect(status.refunds).toHaveLength(1);
+    // Refund must label the invoice "refunded" even though creditedAmount is 0.
+    expect(status.status).toBe("refunded");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

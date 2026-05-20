@@ -116,6 +116,25 @@ export function registerInvoiceLateInterest(db: Database, input: RegisterInvoice
     };
   }
 
+  // Interest is always recomputed over the full window from the due date, so a
+  // second claim at a later as-of date would re-bill the days already covered
+  // by an earlier claim. Forbid more than one unposted (open) interest claim
+  // per invoice to prevent that double-charge.
+  const openClaim = db.query(
+    `SELECT c.id FROM invoice_interest_claims c
+     LEFT JOIN invoice_interest_postings p ON p.interest_claim_id = c.id
+     WHERE c.invoice_document_id = ? AND p.id IS NULL
+     LIMIT 1`
+  ).get(input.invoiceDocumentId) as { id: number } | null;
+  if (openClaim) {
+    return {
+      ...calculation,
+      ok: false,
+      appliedRules: [RULE_ID, REGISTER_RULE_ID],
+      errors: [`invoice ${input.invoiceDocumentId} already has an open (unposted) late-interest claim; post or settle it before registering another`],
+    };
+  }
+
   const inserted = db.query(
     `INSERT INTO invoice_interest_claims (
       invoice_document_id, claim_date, reference_rate_percent, annual_interest_rate_percent,
