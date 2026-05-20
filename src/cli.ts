@@ -49,6 +49,9 @@ import { register as registerAsset } from "./cli/asset";
 import { register as registerCompany } from "./cli/company";
 // ===== COCKPIT BACKEND (#170) =====
 import { register as registerServe } from "./cli/serve";
+// ===== OPENING BALANCE (#179) =====
+import { register as registerOpeningBalance } from "./cli/opening-balance";
+// ===== END OPENING BALANCE (#179) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -199,6 +202,9 @@ for (const registerFn of [
   registerCompany,
   // ===== COCKPIT BACKEND (#170) =====
   registerServe,
+  // ===== OPENING BALANCE (#179) =====
+  registerOpeningBalance,
+  // ===== END OPENING BALANCE (#179) =====
 ]) {
   registerFn(dispatch);
 }
