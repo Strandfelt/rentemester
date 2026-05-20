@@ -43,6 +43,10 @@ export const MUTATING_COMMANDS = new Set([
   // ===== MILEAGE LOG (#123) =====
   "mileage log",
   "mileage export",
+  // Fixed assets (#124, #125)
+  "asset register",
+  "asset depreciate",
+  "asset write-off",
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

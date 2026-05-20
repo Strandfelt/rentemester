@@ -769,3 +769,97 @@ BEFORE DELETE ON mileage_entries
 BEGIN
   SELECT RAISE(ABORT, 'mileage_entries are append-only audit data; record a correcting entry instead');
 END;
+-- ===== FIXED ASSETS (#124, #125) =====
+-- Append-only fixed-asset register plus its depreciation entries (#124) and
+-- immediate small-asset write-offs / straksafskrivning (#125). Money is stored
+-- in DKK with 2 decimals; the workflow assists bookkeeping while the
+-- user/advisor remains responsible for the tax treatment.
+
+CREATE TABLE IF NOT EXISTS assets (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  acquisition_date TEXT NOT NULL,
+  cost NUMERIC NOT NULL CHECK(cost > 0),
+  depreciation_method TEXT NOT NULL DEFAULT 'linear' CHECK(depreciation_method IN ('linear')),
+  useful_life_months INTEGER NOT NULL CHECK(useful_life_months > 0),
+  asset_account_no TEXT NOT NULL,
+  depreciation_expense_account_no TEXT NOT NULL,
+  accumulated_depreciation_account_no TEXT NOT NULL,
+  purchase_document_id INTEGER NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(purchase_document_id) REFERENCES documents(id)
+);
+
+CREATE TABLE IF NOT EXISTS asset_depreciation_entries (
+  id INTEGER PRIMARY KEY,
+  asset_id INTEGER NOT NULL,
+  period_index INTEGER NOT NULL CHECK(period_index > 0),
+  transaction_date TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK(amount > 0),
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(asset_id, period_index),
+  FOREIGN KEY(asset_id) REFERENCES assets(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE TABLE IF NOT EXISTS asset_writeoffs (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  acquisition_date TEXT NOT NULL,
+  writeoff_date TEXT NOT NULL,
+  cost NUMERIC NOT NULL CHECK(cost > 0),
+  purchase_document_id INTEGER NOT NULL UNIQUE,
+  expense_account_no TEXT NOT NULL,
+  confirmed INTEGER NOT NULL DEFAULT 0 CHECK(confirmed IN (0,1)),
+  threshold_dkk NUMERIC NOT NULL,
+  threshold_rule_source TEXT NOT NULL,
+  note TEXT,
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(purchase_document_id) REFERENCES documents(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_asset_depreciation_entries_asset ON asset_depreciation_entries(asset_id);
+CREATE INDEX IF NOT EXISTS idx_assets_purchase_document ON assets(purchase_document_id);
+
+CREATE TRIGGER IF NOT EXISTS assets_no_update
+BEFORE UPDATE ON assets
+BEGIN
+  SELECT RAISE(ABORT, 'assets are append-only; register a correcting asset record instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS assets_no_delete
+BEFORE DELETE ON assets
+BEGIN
+  SELECT RAISE(ABORT, 'assets are append-only; register a correcting asset record instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_depreciation_entries_no_update
+BEFORE UPDATE ON asset_depreciation_entries
+BEGIN
+  SELECT RAISE(ABORT, 'asset depreciation entries are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_depreciation_entries_no_delete
+BEFORE DELETE ON asset_depreciation_entries
+BEGIN
+  SELECT RAISE(ABORT, 'asset depreciation entries are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_writeoffs_no_update
+BEFORE UPDATE ON asset_writeoffs
+BEGIN
+  SELECT RAISE(ABORT, 'asset writeoffs are append-only; add a correcting journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS asset_writeoffs_no_delete
+BEFORE DELETE ON asset_writeoffs
+BEGIN
+  SELECT RAISE(ABORT, 'asset writeoffs are append-only; add a correcting journal entry instead');
+END;
+-- ===== END FIXED ASSETS (#124, #125) =====

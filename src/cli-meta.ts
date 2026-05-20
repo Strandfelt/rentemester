@@ -191,6 +191,29 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "mileage list", usage: "mileage list --company <path>", description: "Lister registrerede kørselsposter.", allowedFlags: ["--company"] },
   { key: "mileage report", usage: "mileage report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Deterministisk periode-rapport over kilometer og beløbsgrundlag.", allowedFlags: ["--company", "--from", "--to"] },
   { key: "mileage export", usage: "mileage export --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir>", description: "Skriver et deterministisk eksport-artifact (JSON + CSV) over kørselsregnskabet.", allowedFlags: ["--company", "--from", "--to", "--out"] },
+  // ===== FIXED ASSETS (#124, #125) =====
+  {
+    key: "asset register",
+    usage:
+      "asset register --company <path> --name <text> --category <text> --acquisition-date <YYYY-MM-DD> --cost <n> --useful-life-months <n> --document-id <n> [--asset-account <konto>] [--depreciation-account <konto>] [--accumulated-account <konto>] [--note <text>]",
+    description: "Registrerer et aktiv til afskrivning over tid med en lineær afskrivningsplan.",
+    allowedFlags: ["--company", "--name", "--category", "--acquisition-date", "--cost", "--useful-life-months", "--document-id", "--asset-account", "--depreciation-account", "--accumulated-account", "--note"],
+  },
+  {
+    key: "asset depreciate",
+    usage: "asset depreciate --company <path> --asset-id <n> --period <n> --date <YYYY-MM-DD>",
+    description: "Bogfører en periodes afskrivning for et aktiv (debet afskrivninger, kredit akkumulerede afskrivninger).",
+    allowedFlags: ["--company", "--asset-id", "--period", "--date"],
+  },
+  {
+    key: "asset write-off",
+    usage:
+      "asset write-off --company <path> --name <text> --category <text> --acquisition-date <YYYY-MM-DD> --cost <n> --document-id <n> --expense-account <konto> --date <YYYY-MM-DD> --threshold-source <text> --confirm yes [--payment-account <konto>] [--note <text>]",
+    description: "Bogfører straksafskrivning af et mindre aktiv. Kræver --confirm yes og kildehenvisning til reglen; bruger/revisor ejer den skattemæssige vurdering.",
+    allowedFlags: ["--company", "--name", "--category", "--acquisition-date", "--cost", "--document-id", "--expense-account", "--date", "--threshold-source", "--confirm", "--payment-account", "--note"],
+  },
+  { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
+  // ===== END FIXED ASSETS (#124, #125) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));

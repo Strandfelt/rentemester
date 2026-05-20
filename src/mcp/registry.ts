@@ -46,6 +46,8 @@ import { registerRecurringInvoiceTools } from "./tools/recurring-invoice";
 import { registerMailIntakeTools } from "./tools/mail-intake";
 // ===== MILEAGE LOG (#123) =====
 import { registerMileageTools } from "./tools/mileage";
+// Fixed assets (#124, #125)
+import { registerAssetTools } from "./tools/asset";
 
 export function registerAllTools(server: McpServer): void {
   registerAccountsTools(server);
@@ -69,4 +71,6 @@ export function registerAllTools(server: McpServer): void {
   registerMailIntakeTools(server);
   // ===== MILEAGE LOG (#123) =====
   registerMileageTools(server);
+  // Fixed assets (#124, #125)
+  registerAssetTools(server);
 }

@@ -169,3 +169,32 @@ rules:
       forbid:
         - silent_missing_retention_deadline
     explanation: Rentemester must track a deterministic retention deadline for bookkeeping material based on the end of the fiscal year the material relates to, and surface overdue material without deleting it automatically.
+  # ===== FIXED ASSETS (#124, #125) =====
+  - rule_id: DK-ASSET-DEPR-001
+    name: Fixed-asset depreciation must post deterministic, balanced period entries linked to the purchase
+    category: ledger_validation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - deterministic_linear_depreciation_schedule
+        - balanced_depreciation_journal_entry
+        - depreciation_entry_linked_to_purchase_document
+      forbid:
+        - duplicate_period_depreciation_posting
+    explanation: Rentemester assists the bookkeeping workflow by capitalising an asset and posting deterministic, balanced depreciation entries that stay linked to the original purchase documentation; the user/advisor remains responsible for choosing the depreciation plan and tax treatment.
+  - rule_id: DK-ASSET-WRITEOFF-001
+    name: Immediate small-asset write-off requires explicit confirmation and source-backed rule metadata
+    category: ledger_validation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - explicit_immediate_writeoff_confirmation
+        - source_backed_threshold_rule_metadata
+        - balanced_writeoff_journal_entry
+        - purchase_documentation_attached
+      forbid:
+        - immediate_writeoff_without_confirmation
+        - immediate_writeoff_when_eligibility_uncertain_without_exception
+    explanation: Rentemester assists the straksafskrivning workflow by booking a balanced write-off entry only when the user/advisor explicitly confirms it and supplies a source for the applied threshold rule; when documentation is missing or eligibility is uncertain it raises an exception instead of posting, and the user/advisor owns the tax treatment.

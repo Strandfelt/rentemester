@@ -44,6 +44,8 @@ import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
 import { register as registerMailIntake } from "./cli/mail-intake";
 // ===== MILEAGE LOG (#123) =====
 import { register as registerMileage } from "./cli/mileage";
+// Fixed assets (#124, #125)
+import { register as registerAsset } from "./cli/asset";
 
 function fatal(message: string): never {
   console.error(message);
@@ -155,6 +157,8 @@ for (const registerFn of [
   registerMailIntake,
   // ===== MILEAGE LOG (#123) =====
   registerMileage,
+  // Fixed assets (#124, #125)
+  registerAsset,
 ]) {
   registerFn(dispatch);
 }
