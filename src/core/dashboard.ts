@@ -211,16 +211,6 @@ function quarterPeriod(asOfDate: string): { label: string; start: string; end: s
   return { label, start, end, quarter, year };
 }
 
-/** Days between two YYYY-MM-DD dates (b - a). Pure UTC math, no env. */
-function daysBetween(a: string, b: string): number {
-  const pa = /^(\d{4})-(\d{2})-(\d{2})/.exec(a);
-  const pb = /^(\d{4})-(\d{2})-(\d{2})/.exec(b);
-  if (!pa || !pb) return 0;
-  const da = Date.UTC(parseInt(pa[1]!, 10), parseInt(pa[2]!, 10) - 1, parseInt(pa[3]!, 10));
-  const db = Date.UTC(parseInt(pb[1]!, 10), parseInt(pb[2]!, 10) - 1, parseInt(pb[3]!, 10));
-  return Math.round((db - da) / 86400000);
-}
-
 function daysAgoLabel(days: number | null): string {
   if (days == null) return "ingen registreret";
   if (days <= 0) return "i dag";
