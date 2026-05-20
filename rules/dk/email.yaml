@@ -1,0 +1,25 @@
+version: dk-email-v0.0.1
+sources:
+  - DK-BOGFORINGSLOVEN-2022-700
+rules:
+  - rule_id: DK-EMAIL-DELIVERY-001
+    name: Emailing an invoice or reminder must be deterministic, idempotent, and recorded in an append-only send log
+    category: invoice_integrity
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - smtp_config_present
+        - recipient_email_present
+        - deterministic_email_message
+        - rendered_invoice_pdf_attached
+        - append_only_email_send_log
+        - message_id_protects_duplicates
+        - email_send_audit_event
+      forbid:
+        - send_without_smtp_config
+        - send_without_recipient_email
+        - smtp_credentials_in_bookkeeping_state
+        - duplicate_send_for_same_message_id
+        - send_log_row_on_transport_failure
+    explanation: Rentemester may email an issued invoice or a payment reminder to the customer with the rendered PDF attached, but only deterministically and idempotently. The MIME message and its message-id must be fully derived from the content so an identical send collapses onto the existing append-only send-log row instead of silently re-transmitting. A send is recorded in the send log (recipient, document, message-id, timestamp) and audit-linked; a transport failure writes no success row. SMTP credentials and SMTP configuration stay outside core bookkeeping state — they are sourced from a config file or environment, never persisted to the ledger. The send must fail clearly on a missing customer email or missing SMTP config.

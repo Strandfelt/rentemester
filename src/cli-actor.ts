@@ -52,6 +52,9 @@ export const MUTATING_COMMANDS = new Set([
   // ===== OPENING BALANCE (#179) =====
   "opening-balance post",
   // ===== END OPENING BALANCE (#179) =====
+  // ===== EMAIL DELIVERY (#180) =====
+  "invoice send",
+  // ===== END EMAIL DELIVERY (#180) =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

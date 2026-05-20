@@ -55,6 +55,9 @@ import { register as registerReport } from "./cli/report";
 // ===== OPENING BALANCE (#179) =====
 import { register as registerOpeningBalance } from "./cli/opening-balance";
 // ===== END OPENING BALANCE (#179) =====
+// ===== EMAIL DELIVERY (#180) =====
+import { register as registerEmail } from "./cli/email";
+// ===== END EMAIL DELIVERY (#180) =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -211,6 +214,9 @@ for (const registerFn of [
   // ===== OPENING BALANCE (#179) =====
   registerOpeningBalance,
   // ===== END OPENING BALANCE (#179) =====
+  // ===== EMAIL DELIVERY (#180) =====
+  registerEmail,
+  // ===== END EMAIL DELIVERY (#180) =====
 ]) {
   registerFn(dispatch);
 }

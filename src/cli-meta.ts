@@ -272,6 +272,19 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   // ===== END OPENING BALANCE (#179) =====
+  // ===== EMAIL DELIVERY (#180) =====
+  {
+    key: "invoice send",
+    usage: "invoice send --company <path> (--document-id <n> | --invoice-number <no>) [--kind invoice|reminder] [--to <email>]",
+    description: "Sender en udstedt faktura eller en betalingspaamindelse til kundens email via SMTP med PDF'en vedhaeftet, og logger afsendelsen append-only. SMTP-config laeses fra config/smtp.json; credentials gemmes aldrig i bogføringstilstanden. Idempotent: en identisk afsendelse genudsendes ikke.",
+    allowedFlags: ["--company", "--document-id", "--invoice-number", "--kind", "--to"],
+    inputNotes: [
+      "SMTP-config (host, port, fromAddress, fromName, dryRun) laeses fra config/smtp.json",
+      "--to overstyrer modtageren; ellers slaaes kundens email op fra kundekartoteket",
+      "--kind reminder kraever at fakturaen er udstedt; standard er invoice",
+    ],
+  },
+  // ===== END EMAIL DELIVERY (#180) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));

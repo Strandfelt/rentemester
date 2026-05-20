@@ -932,3 +932,39 @@ BEGIN
   SELECT RAISE(ABORT, 'opening balance is append-only; reverse the journal entry instead');
 END;
 -- ===== END OPENING BALANCE (#179) =====
+-- ===== END PEPPOL SUBMISSION (#128) =====
+-- ===== EMAIL DELIVERY (#180) =====
+-- Append-only SMTP send log: records that an issued invoice / a reminder was
+-- emailed to a customer, so a send is recorded and not silently repeated.
+-- This is audit data — never updated or deleted. The unique message_id is
+-- the idempotency key. SMTP CREDENTIALS are NEVER stored here; only the
+-- non-secret smtp_host used for the send is recorded for the audit trail.
+CREATE TABLE IF NOT EXISTS email_send_log (
+  id INTEGER PRIMARY KEY,
+  invoice_document_id INTEGER NOT NULL,
+  invoice_no TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('invoice','reminder')),
+  recipient TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  message_id TEXT NOT NULL UNIQUE,
+  body_sha256 TEXT NOT NULL,
+  smtp_host TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_send_log_invoice
+  ON email_send_log(invoice_document_id);
+
+CREATE TRIGGER IF NOT EXISTS email_send_log_no_update
+BEFORE UPDATE ON email_send_log
+BEGIN
+  SELECT RAISE(ABORT, 'email send log is append-only audit data; record a new send instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS email_send_log_no_delete
+BEFORE DELETE ON email_send_log
+BEGIN
+  SELECT RAISE(ABORT, 'email send log is append-only audit data; record a new send instead');
+END;
+-- ===== END EMAIL DELIVERY (#180) =====
