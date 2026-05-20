@@ -1,11 +1,27 @@
 import { companyPaths } from "../core/paths";
 import { openDb, migrate } from "../core/db";
-import { importBankCsv } from "../core/bank";
+import { importBankCsv, resolveBankAccount } from "../core/bank";
 import { suggestBankMatches } from "../core/bank-suggest-matches";
 import { buildBankReconciliationReport, listBankTransactions } from "../core/reconciliation";
 import { syncUnmatchedBankTransactionExceptions } from "../core/exceptions";
 import { openCommandDb } from "../cli-dispatch";
-import type { CommandDispatch } from "../cli-dispatch";
+import type { Database } from "bun:sqlite";
+import type { CommandContext, CommandDispatch } from "../cli-dispatch";
+
+// ===== BANK CLUSTER (#187) =====
+// Resolves an optional `--account <id|slug>` filter to a numeric bank-account
+// id. A given-but-unknown account is a fatal CLI error.
+function resolveAccountFilter(ctx: CommandContext, db: Database): number | undefined {
+  const raw = ctx.trimToNull(ctx.arg("--account"));
+  if (!raw) return undefined;
+  const account = resolveBankAccount(db, raw);
+  if (!account) {
+    console.error(`--account '${raw}' does not match any registered bank account`);
+    process.exit(2);
+  }
+  return account.id;
+}
+// ===== END BANK CLUSTER (#187) =====
 
 function renderBankSuggestionsHuman(rows: any[]): void {
   if (rows.length === 0) {
@@ -44,7 +60,9 @@ export function register(dispatch: CommandDispatch): void {
     const root = ctx.companyRoot();
     const db = openDb(companyPaths(root).db);
     migrate(db);
-    const result = importBankCsv(db, root, file);
+    const result = importBankCsv(db, root, file, {
+      account: ctx.trimToNull(ctx.arg("--account")) ?? undefined,
+    });
     const sync = result.ok
       ? syncUnmatchedBankTransactionExceptions(db)
       : { ok: true, created: 0, errors: [] };
@@ -64,12 +82,14 @@ export function register(dispatch: CommandDispatch): void {
     }
     const db = openCommandDb(ctx);
     migrate(db);
+    const bankAccountId = resolveAccountFilter(ctx, db);
     const result = listBankTransactions(db, {
       status: ctx.arg("--status") as any,
       from: ctx.arg("--from") ?? undefined,
       to: ctx.arg("--to") ?? undefined,
       textMatch: ctx.arg("--text-match") ?? undefined,
       amount,
+      bankAccountId,
     });
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
@@ -120,10 +140,12 @@ export function register(dispatch: CommandDispatch): void {
     }
     const db = openCommandDb(ctx);
     migrate(db);
+    const bankAccountId = resolveAccountFilter(ctx, db);
     const result = buildBankReconciliationReport(db, from, to, {
       status: ctx.arg("--status") as any,
       textMatch: ctx.arg("--text-match") ?? undefined,
       amount,
+      bankAccountId,
     });
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);

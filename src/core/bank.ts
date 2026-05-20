@@ -17,7 +17,130 @@ export type BankImportRow = {
   reference?: string;
   amountDkk?: number;
   fxRateToDkk?: number;
+  // ===== BANK CLUSTER (#188,#189) =====
+  // Extra columns preserved from the source export when a profile supplies
+  // them. All optional; generic CSV imports leave them undefined.
+  counterpartyName?: string;
+  counterpartyAccount?: string;
+  message?: string;
+  archiveReference?: string;
+  customerReference?: string;
+  balanceAfter?: number;
+  raw?: Record<string, string>;
+  // ===== END BANK CLUSTER (#188,#189) =====
 };
+
+// ===== BANK CLUSTER (#187) =====
+export type BankAccount = {
+  id: number;
+  slug: string;
+  name: string;
+  bankName: string | null;
+  registrationNo: string | null;
+  accountNo: string | null;
+  iban: string | null;
+  currency: string;
+  ledgerAccountNo: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
+export type AddBankAccountInput = {
+  name: string;
+  slug?: string;
+  bankName?: string;
+  registrationNo?: string;
+  accountNo?: string;
+  iban?: string;
+  currency?: string;
+  ledgerAccountNo?: string;
+};
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function mapBankAccountRow(row: any): BankAccount {
+  return {
+    id: Number(row.id),
+    slug: row.slug,
+    name: row.name,
+    bankName: row.bank_name ?? null,
+    registrationNo: row.registration_no ?? null,
+    accountNo: row.account_no ?? null,
+    iban: row.iban ?? null,
+    currency: row.currency,
+    ledgerAccountNo: row.ledger_account_no ?? null,
+    active: Number(row.active) === 1,
+    createdAt: row.created_at,
+  };
+}
+
+/** Resolves a bank account by numeric id or slug. Returns null when absent. */
+export function resolveBankAccount(db: Database, idOrSlug: string | number): BankAccount | null {
+  const asNumber = typeof idOrSlug === "number" ? idOrSlug : Number(idOrSlug);
+  const byId = Number.isInteger(asNumber) && asNumber > 0
+    ? db.query("SELECT * FROM bank_accounts WHERE id = ?").get(asNumber)
+    : null;
+  if (byId) return mapBankAccountRow(byId);
+  const slug = String(idOrSlug).trim();
+  const bySlug = slug ? db.query("SELECT * FROM bank_accounts WHERE slug = ?").get(slug) : null;
+  return bySlug ? mapBankAccountRow(bySlug) : null;
+}
+
+export function listBankAccounts(db: Database, includeInactive = true) {
+  const rows = db.query(
+    `SELECT * FROM bank_accounts ${includeInactive ? "" : "WHERE active = 1"} ORDER BY id ASC`,
+  ).all() as any[];
+  return { ok: true as const, count: rows.length, accounts: rows.map(mapBankAccountRow), errors: [] as string[] };
+}
+
+export function addBankAccount(db: Database, input: AddBankAccountInput) {
+  const errors: string[] = [];
+  const name = input.name?.trim();
+  if (!name) errors.push("name is required");
+  const slug = (input.slug?.trim() ? slugify(input.slug) : slugify(name ?? "")) || "";
+  if (!slug) errors.push("slug could not be derived; pass an explicit --slug");
+  const currency = (input.currency ?? "DKK").trim().toUpperCase();
+  if (currency.length !== 3) errors.push("currency must be a 3-letter ISO currency code");
+  if (errors.length > 0) return { ok: false as const, account: undefined, errors };
+
+  if (db.query("SELECT id FROM bank_accounts WHERE slug = ?").get(slug)) {
+    return { ok: false as const, account: undefined, errors: [`a bank account with slug '${slug}' already exists`] };
+  }
+  const ledgerAccountNo = input.ledgerAccountNo?.trim() || null;
+  if (ledgerAccountNo && !db.query("SELECT account_no FROM accounts WHERE account_no = ?").get(ledgerAccountNo)) {
+    return { ok: false as const, account: undefined, errors: [`ledger account ${ledgerAccountNo} does not exist`] };
+  }
+
+  const row = db.query(
+    `INSERT INTO bank_accounts (slug, name, bank_name, registration_no, account_no, iban, currency, ledger_account_no)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+  ).get(
+    slug,
+    name,
+    input.bankName?.trim() || null,
+    input.registrationNo?.trim() || null,
+    input.accountNo?.trim() || null,
+    input.iban?.trim() || null,
+    currency,
+    ledgerAccountNo,
+  );
+  insertAuditLog(db, {
+    eventType: "bank_account_add",
+    entityType: "bank_account",
+    entityId: String((row as any).id),
+    message: `Added bank account '${slug}' (${name})`,
+  });
+  return { ok: true as const, account: mapBankAccountRow(row), errors: [] as string[] };
+}
+// ===== END BANK CLUSTER (#187) =====
 
 export type BankImportResult = {
   ok: boolean;
@@ -27,6 +150,19 @@ export type BankImportResult = {
   /** Human-readable descriptions of rows skipped as duplicates, for review. */
   skippedDuplicateRows?: string[];
   sourceFileHash?: string;
+  // ===== BANK CLUSTER (#186-189) =====
+  /** Numeric id of the bank account these rows were imported into (#187). */
+  bankAccountId?: number;
+  /** Slug of the bank account these rows were imported into (#187). */
+  bankAccountSlug?: string;
+  /** Name of the CSV import profile used, when one was supplied (#186). */
+  profile?: string;
+  /** Running-balance continuity warnings detected after import (#189). */
+  balanceWarnings?: string[];
+  /** First/last running balance of the batch when a profile supplied it (#189). */
+  firstBalance?: number;
+  lastBalance?: number;
+  // ===== END BANK CLUSTER (#186-189) =====
   errors: string[];
 };
 
@@ -268,8 +404,13 @@ export function validateBankImportRows(rows: BankImportRow[]) {
 // re-import while letting two legitimately-distinct identical transactions
 // (e.g. two 50 kr fees on the same day) both import instead of one being
 // wrongly skipped as a coarse-fingerprint duplicate.
-function transactionFingerprint(row: BankImportRow, occurrence: number) {
+//
+// bank_account_id (#187) is part of the fingerprint so an identical
+// transaction (same date/text/amount) in two different accounts is not
+// wrongly skipped as a cross-account duplicate.
+function transactionFingerprint(row: BankImportRow, occurrence: number, bankAccountId: number | null) {
   return sha256Bytes(JSON.stringify({
+    bank_account_id: bankAccountId,
     transaction_date: row.transactionDate,
     booking_date: row.bookingDate ?? null,
     text: row.text.trim(),
@@ -282,8 +423,33 @@ function transactionFingerprint(row: BankImportRow, occurrence: number) {
   }));
 }
 
-export function importBankCsv(db: Database, companyRoot: string, csvPath: string): BankImportResult {
+// ===== BANK CLUSTER (#186-189) =====
+export type ImportBankCsvOptions = {
+  /** Numeric id or slug of the target bank account (#187). */
+  account?: string | number;
+  /** Named CSV import profile, e.g. "danske-bank" (#186). */
+  profile?: string;
+};
+// ===== END BANK CLUSTER (#186-189) =====
+
+export function importBankCsv(
+  db: Database,
+  companyRoot: string,
+  csvPath: string,
+  options: ImportBankCsvOptions = {},
+): BankImportResult {
   if (!existsSync(csvPath)) return { ok: false, errors: [`file does not exist: ${csvPath}`] };
+
+  // ===== BANK CLUSTER (#187) =====
+  // Resolve the target account up front: new imports couple their rows to a
+  // bank account. A given-but-unknown account aborts before any parsing.
+  let bankAccount: BankAccount | null = null;
+  if (options.account !== undefined && String(options.account).trim() !== "") {
+    bankAccount = resolveBankAccount(db, options.account);
+    if (!bankAccount) return { ok: false, errors: [`bank account '${options.account}' does not exist`] };
+  }
+  const bankAccountId = bankAccount?.id ?? null;
+  // ===== END BANK CLUSTER (#187) =====
 
   const fileBytes = readFileSync(csvPath);
   const sourceFileHash = sha256Bytes(fileBytes);
@@ -301,28 +467,31 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
   let imported = 0;
   let skippedDuplicates = 0;
   const skippedDuplicateRows: string[] = [];
+  const importedRowIds: number[] = [];
   // Per-content-fingerprint counter: distinguishes repeated identical rows
   // within this file so each gets a unique transaction_hash.
   const occurrenceByContent = new Map<string, number>();
   const insert = db.prepare(
     `INSERT INTO bank_transactions (
-      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk, source_file_hash, import_batch_id, transaction_hash, status, retain_until
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', ?)`
+      transaction_date, booking_date, text, amount, currency, reference, amount_dkk, fx_rate_to_dkk,
+      source_file_hash, import_batch_id, transaction_hash, status, retain_until,
+      bank_account_id, counterparty_name, counterparty_account, message, archive_reference, customer_reference, balance_after, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   db.transaction(() => {
     for (const row of rows) {
-      const contentHash = transactionFingerprint(row, 0);
+      const contentHash = transactionFingerprint(row, 0, bankAccountId);
       const occurrence = occurrenceByContent.get(contentHash) ?? 0;
       occurrenceByContent.set(contentHash, occurrence + 1);
-      const hash = transactionFingerprint(row, occurrence);
+      const hash = transactionFingerprint(row, occurrence, bankAccountId);
       const existing = db.query("SELECT id FROM bank_transactions WHERE transaction_hash = ?").get(hash) as { id: number } | null;
       if (existing) {
         skippedDuplicates += 1;
         skippedDuplicateRows.push(`${row.transactionDate} ${row.text.trim()} ${normalizeAmount(row.amount)} ${(row.currency ?? "DKK").trim().toUpperCase()}`);
         continue;
       }
-      insert.run(
+      const result = insert.run(
         row.transactionDate,
         row.bookingDate ?? null,
         row.text.trim(),
@@ -335,7 +504,16 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
         importBatchId,
         hash,
         retainUntilForDate(db, row.bookingDate ?? row.transactionDate),
+        bankAccountId,
+        row.counterpartyName?.trim() || null,
+        row.counterpartyAccount?.trim() || null,
+        row.message?.trim() || null,
+        row.archiveReference?.trim() || null,
+        row.customerReference?.trim() || null,
+        row.balanceAfter == null ? null : normalizeAmount(row.balanceAfter),
+        row.raw ? JSON.stringify(row.raw) : null,
       );
+      importedRowIds.push(Number(result.lastInsertRowid));
       imported += 1;
     }
     insertAuditLog(db, {
@@ -346,5 +524,16 @@ export function importBankCsv(db: Database, companyRoot: string, csvPath: string
     });
   })();
 
-  return { ok: true, importBatchId, imported, skippedDuplicates, skippedDuplicateRows, sourceFileHash, errors: [] };
+  void importedRowIds;
+  return {
+    ok: true,
+    importBatchId,
+    imported,
+    skippedDuplicates,
+    skippedDuplicateRows,
+    sourceFileHash,
+    bankAccountId: bankAccountId ?? undefined,
+    bankAccountSlug: bankAccount?.slug,
+    errors: [],
+  };
 }

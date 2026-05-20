@@ -111,6 +111,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_issued_invoice_no_unique
 ON documents(invoice_no)
 WHERE document_type = 'issued_invoice';
 
+-- ===== BANK CLUSTER (#186-189,#182) =====
+-- A company can hold several bank accounts (driftskonto, valutakonto,
+-- opsparingskonto, ...). Imported transactions are coupled to one of these so
+-- reconciliation can be scoped to a single account (#187).
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id INTEGER PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  bank_name TEXT,
+  registration_no TEXT,
+  account_no TEXT,
+  iban TEXT,
+  currency TEXT NOT NULL DEFAULT 'DKK',
+  ledger_account_no TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(ledger_account_no) REFERENCES accounts(account_no)
+);
+-- ===== END BANK CLUSTER (#186-189,#182) =====
+
 CREATE TABLE IF NOT EXISTS bank_transactions (
   id INTEGER PRIMARY KEY,
   transaction_date TEXT NOT NULL,
@@ -125,7 +145,20 @@ CREATE TABLE IF NOT EXISTS bank_transactions (
   import_batch_id TEXT,
   transaction_hash TEXT UNIQUE,
   status TEXT NOT NULL DEFAULT 'imported',
-  retain_until TEXT
+  retain_until TEXT,
+  -- ===== BANK CLUSTER (#186-189,#182) =====
+  -- bank_account_id is nullable for rows imported before #187; new imports
+  -- always set it. Extra structured columns (#188) and the running balance
+  -- (#189) are nullable and populated by import profiles that supply them.
+  bank_account_id INTEGER REFERENCES bank_accounts(id),
+  counterparty_name TEXT,
+  counterparty_account TEXT,
+  message TEXT,
+  archive_reference TEXT,
+  customer_reference TEXT,
+  balance_after NUMERIC,
+  raw_json TEXT
+  -- ===== END BANK CLUSTER (#186-189,#182) =====
 );
 
 CREATE TABLE IF NOT EXISTS journal_entries (
@@ -497,6 +530,32 @@ BEFORE DELETE ON bank_transactions
 BEGIN
   SELECT RAISE(ABORT, 'bank transactions are append-only; correct via journal reversal or new import');
 END;
+
+-- ===== BANK CLUSTER (#186-189,#182) =====
+-- Bank accounts are append-only identity records: only the `active` flag may
+-- change (to retire a closed account), everything else is immutable so
+-- already-imported transactions keep pointing at a stable account definition.
+CREATE TRIGGER IF NOT EXISTS bank_accounts_guard_update
+BEFORE UPDATE ON bank_accounts
+WHEN OLD.slug != NEW.slug
+   OR OLD.name != NEW.name
+   OR OLD.bank_name IS NOT NEW.bank_name
+   OR OLD.registration_no IS NOT NEW.registration_no
+   OR OLD.account_no IS NOT NEW.account_no
+   OR OLD.iban IS NOT NEW.iban
+   OR OLD.currency != NEW.currency
+   OR OLD.ledger_account_no IS NOT NEW.ledger_account_no
+   OR OLD.created_at != NEW.created_at
+BEGIN
+  SELECT RAISE(ABORT, 'bank accounts are append-only; only the active flag may change');
+END;
+
+CREATE TRIGGER IF NOT EXISTS bank_accounts_no_delete
+BEFORE DELETE ON bank_accounts
+BEGIN
+  SELECT RAISE(ABORT, 'bank accounts are append-only; deactivate them instead');
+END;
+-- ===== END BANK CLUSTER (#186-189,#182) =====
 
 CREATE TRIGGER IF NOT EXISTS invoice_payments_require_journal
 BEFORE INSERT ON invoice_payments
