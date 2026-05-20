@@ -1,0 +1,9 @@
+Konto;Kontonavn;Dato;Bilag;Bilagstype;Tekst;Momstype;Beløb;Saldo
+5500;Driftsmidler;2025-01-01;0;;Primobeholdning;;65000,000000;65000,000000
+5510;Bankkonto;2025-01-01;0;;Primobeholdning;;88200,500000;88200,500000
+5520;Tilgodehavender fra salg;2025-01-01;0;;Primobeholdning;;42000,000000;42000,000000
+55000;Skyldig moms;2025-01-01;0;;Primobeholdning;;-31000,000000;-31000,000000
+55010;Anden gæld;2025-01-01;0;;Primobeholdning;;-12000,000000;-12000,000000
+60000;Registreret kapital mv.;2025-01-01;0;;Primobeholdning;;-40000,000000;-40000,000000
+60010;Overført resultat fra tidligere år;2025-01-01;0;;Primobeholdning;;-87200,500000;-87200,500000
+60040;Udbytte;2025-01-01;0;;Primobeholdning;;-25000,000000;-25000,000000

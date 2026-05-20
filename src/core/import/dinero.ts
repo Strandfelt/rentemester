@@ -1,37 +1,50 @@
-// Import framework — the Dinero export parser. Issue #193 (epic #173).
+// Import framework — the Dinero export parser. Issues #193 / #194 (epic #173).
 //
-// A Dinero data export is a directory tree. This parser reads the two files
-// that carry the company's chart of accounts and master data:
+// A Dinero data export is a directory tree. This parser reads the files that
+// carry the company's chart of accounts, master data and opening balance:
 //
 //  - `Firmaoplysninger.csv` — one row of company master data.
 //  - `<year>/Kontoplan.csv`  — the chart of accounts, one row per account.
+//  - `<year>/Posteringer.csv` — the year's postings; its leading rows are the
+//    fiscal-year opening balance (the primobalance, #194).
 //
-// Both are semicolon-delimited UTF-8 CSV (a real export may carry a BOM, which
+// All are semicolon-delimited UTF-8 CSV (a real export may carry a BOM, which
 // `resolveSource` strips). The parser produces a normalised `ImportSource`:
 // the chart classified onto Rentemester account types, every account's Dinero
-// `Momstype` mapped onto a Rentemester VAT code, and the company master data.
+// `Momstype` mapped onto a Rentemester VAT code, the company master data, and —
+// when a `Posteringer.csv` is present — the cut-over year's opening balance.
 //
-// Opening balances and historical postings are intentionally NOT produced here
-// — they are issues #194 / #195 and read `Posteringer.csv` / `SaldoBalance.csv`.
+// The opening balance is the set of `Posteringer.csv` rows with `Bilag = 0`
+// and `Tekst = Primobeholdning`, all dated the fiscal-year's first day. `Beløb`
+// is a signed amount (comma decimal): positive = debit, negative = credit. The
+// balance-sheet primobeholdning rows sum to zero. Historical postings AFTER the
+// cut-over date are still out of scope (#195).
 //
 // The parser is PURE and DETERMINISTIC: the same export always yields the same
-// `ImportSource`, including the order of `chartOfAccounts` and `unmappedVatCodes`.
+// `ImportSource`, including the order of `chartOfAccounts`, `openingBalances`
+// and `unmappedVatCodes`.
 
 import { requireFile } from "./source";
+import { isValidIsoDate } from "../dates";
 import type {
   ImportAccount,
   ImportAccountType,
   ImportCompanyMasterData,
   ImportNormalBalance,
+  ImportOpeningBalanceLine,
   MultiArtifactSource,
   ParseResult,
   SourceParser,
 } from "./types";
 
 const SYSTEM = "dinero";
-const LABEL = "Dinero (data export — chart of accounts & master data)";
+const LABEL = "Dinero (data export — chart of accounts, master data & opening balance)";
 
 const FIRMAOPLYSNINGER = "Firmaoplysninger.csv";
+
+// The Dinero marker for an opening-balance row: voucher number 0, voucher text
+// `Primobeholdning`. Such rows carry the fiscal year's opening balance.
+const PRIMOBEHOLDNING_TEXT = "primobeholdning";
 
 // --- Dinero Momstype -> Rentemester VAT code -------------------------------
 //
@@ -224,6 +237,119 @@ function parseKontoplan(
   return { accounts, unmappedVatCodes: [...unmapped].sort() };
 }
 
+/**
+ * Resolves the cut-over year's `<year>/Posteringer.csv` artifact. A Dinero
+ * export holds one per fiscal year; the opening balance is imported for the
+ * LATEST year present (the same deterministic rule `findKontoplan` uses for
+ * the chart), so a Rentemester migration continues from the most recent year.
+ */
+function findPosteringer(input: MultiArtifactSource): { name: string; text: string } | null {
+  const matches = Object.keys(input.files)
+    .filter((n) => /(^|\/)Posteringer\.csv$/i.test(n))
+    .sort();
+  if (matches.length === 0) return null;
+  const name = matches[matches.length - 1]!;
+  return { name, text: input.files[name]!.text };
+}
+
+/**
+ * Parses a Dinero `Beløb` cell — a signed decimal with a comma decimal
+ * separator and up to six decimal places, e.g. `30116,010000` or
+ * `-40000,000000` — into a kroner Number. Returns `null` on a malformed cell.
+ *
+ * The result is a kroner amount: `ImportOpeningBalanceLine` debit/credit feed
+ * straight into `postOpeningBalance` -> `postJournalEntry`, which stores the
+ * kroner value (and converts to øre internally only for the balance check).
+ */
+function parseBelob(cell: string): number | null {
+  const trimmed = cell.trim().replace(",", ".");
+  if (trimmed.length === 0 || !/^-?\d+(\.\d+)?$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Parses the cut-over year's `Posteringer.csv` opening balance. It extracts
+ * the `Primobeholdning` rows (voucher `Bilag = 0`, `Tekst = Primobeholdning`):
+ * each becomes an `ImportOpeningBalanceLine` with `Beløb > 0` -> `debitAmount`
+ * and `Beløb < 0` -> `creditAmount` (absolute value), in kroner.
+ *
+ * `cutOverDate` is the (single) date the Primobeholdning rows carry — the
+ * fiscal-year's first day. A file with NO Primobeholdning rows is not an error:
+ * it yields an empty opening balance and an empty cut-over date, so the import
+ * falls back to the chart-only behaviour (#193).
+ */
+function parsePosteringer(
+  text: string,
+  sourceName: string,
+  errors: string[],
+): { openingBalances: ImportOpeningBalanceLine[]; cutOverDate: string } {
+  const openingBalances: ImportOpeningBalanceLine[] = [];
+  const lines = text.split(/\r?\n/);
+  let sawHeader = false;
+  const cutOverDates = new Set<string>();
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!.trim();
+    if (line.length === 0) continue;
+    const cells = splitRecord(line);
+    // The column-header row:
+    // `Konto;Kontonavn;Dato;Bilag;Bilagstype;Tekst;Momstype;Beløb;Saldo`.
+    if (!sawHeader) {
+      if ((cells[0] ?? "").toLowerCase() === "konto") {
+        sawHeader = true;
+        continue;
+      }
+      errors.push(`${sourceName}: missing the 'Konto;Kontonavn;Dato;...' header row`);
+      return { openingBalances: [], cutOverDate: "" };
+    }
+    const accountNo = cells[0] ?? "";
+    const date = (cells[2] ?? "").trim();
+    const bilag = (cells[3] ?? "").trim();
+    const tekst = (cells[5] ?? "").trim();
+    const belob = cells[7] ?? "";
+    // Only the opening-balance (Primobeholdning) rows are in scope for #194.
+    if (bilag !== "0" || tekst.toLowerCase() !== PRIMOBEHOLDNING_TEXT) continue;
+    if (!accountNo) {
+      errors.push(`${sourceName} line ${i + 1}: Primobeholdning row is missing a Konto`);
+      continue;
+    }
+    if (!isValidIsoDate(date)) {
+      errors.push(
+        `${sourceName} line ${i + 1}: Primobeholdning row for account '${accountNo}' has an invalid Dato '${date}'`,
+      );
+      continue;
+    }
+    const amount = parseBelob(belob);
+    if (amount === null) {
+      errors.push(
+        `${sourceName} line ${i + 1}: Primobeholdning row for account '${accountNo}' has an invalid Beløb '${belob}'`,
+      );
+      continue;
+    }
+    cutOverDates.add(date);
+    // Sign convention: positive Beløb is a debit, negative is a credit. A zero
+    // Beløb carries no balance and is skipped.
+    if (amount > 0) {
+      openingBalances.push({ accountNo, debitAmount: amount });
+    } else if (amount < 0) {
+      openingBalances.push({ accountNo, creditAmount: -amount });
+    }
+  }
+  if (!sawHeader) {
+    errors.push(`${sourceName}: missing the 'Konto;Kontonavn;Dato;...' header row`);
+    return { openingBalances: [], cutOverDate: "" };
+  }
+  if (cutOverDates.size > 1) {
+    errors.push(
+      `${sourceName}: Primobeholdning rows carry more than one date (${[...cutOverDates].sort().join(", ")}) — expected the fiscal-year start`,
+    );
+    return { openingBalances: [], cutOverDate: "" };
+  }
+  // No Primobeholdning rows: not an error — fall back to a chart-only import.
+  const cutOverDate = openingBalances.length > 0 ? [...cutOverDates][0]! : "";
+  return { openingBalances, cutOverDate };
+}
+
 function parseDineroSource(input: MultiArtifactSource): ParseResult {
   const errors: string[] = [];
 
@@ -243,6 +369,15 @@ function parseDineroSource(input: MultiArtifactSource): ParseResult {
     errors.push(`${kontoplan.name}: no accounts parsed from the chart of accounts`);
   }
 
+  // Opening balance (#194): the cut-over year's `Posteringer.csv` Primobeholdning
+  // rows. An export with no `Posteringer.csv` — or one with no Primobeholdning
+  // rows — keeps the chart-only behaviour (an empty cut-over date / opening
+  // balance), exactly as before.
+  const posteringer = findPosteringer(input);
+  const { openingBalances, cutOverDate } = posteringer
+    ? parsePosteringer(posteringer.text, posteringer.name, errors)
+    : { openingBalances: [] as ImportOpeningBalanceLine[], cutOverDate: "" };
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -252,13 +387,12 @@ function parseDineroSource(input: MultiArtifactSource): ParseResult {
     errors: [],
     source: {
       sourceSystem: SYSTEM,
-      // The chart-of-accounts import (#193) does not post a primobalance — the
-      // cut-over date and opening balances are #194's job. An empty cut-over
-      // date keeps the IR honest: this source only reconciles the chart and
-      // master data, it is not a postable opening balance.
-      cutOverDate: "",
+      // A non-empty cut-over date marks this as a postable primobalance import
+      // (#194); an empty one keeps the IR honest as a chart/master-data-only
+      // import (#193). The framework dispatches on exactly this.
+      cutOverDate,
       chartOfAccounts: accounts,
-      openingBalances: [],
+      openingBalances,
       ...(companyMasterData ? { companyMasterData } : {}),
       ...(unmappedVatCodes.length > 0 ? { unmappedVatCodes } : {}),
     },

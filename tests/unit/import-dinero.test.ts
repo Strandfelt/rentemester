@@ -1,10 +1,13 @@
-// Tests: src/core/import/dinero.ts — the Dinero export parser (#193).
+// Tests: src/core/import/dinero.ts — the Dinero export parser, chart of
+// accounts & company master data (#193).
 //
 // A Dinero data export carries the company's full chart of accounts and master
 // data. The parser turns the multi-file export (`Firmaoplysninger.csv` +
 // `<year>/Kontoplan.csv`) into a normalised `ImportSource`; the reconciler
-// lands the chart in `accounts` and the master data in `companies`. Opening
-// balances and postings are out of scope (#194/#195).
+// lands the chart in `accounts` and the master data in `companies`. The
+// opening balance from `<year>/Posteringer.csv` is covered separately by
+// import-dinero-opening.test.ts (#194); postings after the cut-over date
+// remain out of scope (#195).
 //
 // Tests run against the synthetic fixture in examples/import-dinero/ — the real
 // Dinero export is private and is never committed.

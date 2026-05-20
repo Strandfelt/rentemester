@@ -87,7 +87,7 @@ describe("import run CLI", () => {
     expect(parsed.systems.some((s: { system: string }) => s.system === "dinero")).toBe(true);
   });
 
-  test("imports a Dinero export directory: reconciles chart & company", async () => {
+  test("imports a Dinero export directory: reconciles chart & posts the primobalance", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-import-cli-dinero-"));
     const company = join(root, "company");
     const fixture = join(process.cwd(), "examples/import-dinero");
@@ -109,8 +109,11 @@ describe("import run CLI", () => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(true);
     expect(parsed.sourceSystem).toBe("dinero");
-    // A chart-only import posts no primobalance entry.
-    expect(parsed.entryNo).toBeUndefined();
+    // The fixture carries a Posteringer.csv, so the import reconciles the chart
+    // AND posts the cut-over year's primobalance (#194) end-to-end.
+    expect(parsed.entryNo).toBeTruthy();
+    expect(parsed.cutOverDate).toBe("2025-01-01");
+    expect(parsed.openingBalanceLineCount).toBe(8);
     expect(parsed.chart.created.length).toBeGreaterThan(0);
     expect(parsed.company.updatedFields).toContain("cvr");
   });
