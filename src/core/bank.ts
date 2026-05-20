@@ -6,15 +6,16 @@ import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { retainUntilForDate } from "./retention";
-import { compareDkk, multiplyDkk, roundDkk, roundRate6 } from "./money";
-// ===== BANK CLUSTER (#186) =====
+import { addDkk, compareDkk, equalsDkk, multiplyDkk, roundDkk, roundRate6, subtractDkk } from "./money";
+// ===== BANK CLUSTER (#186,#189) =====
 import {
   getBankProfile,
   listBankProfileNames,
   type BankImportProfile,
   type ProfileFieldName,
 } from "./bank-profiles";
-// ===== END BANK CLUSTER (#186) =====
+import { recordException } from "./exceptions";
+// ===== END BANK CLUSTER (#186,#189) =====
 
 export type BankImportRow = {
   transactionDate: string;
@@ -176,6 +177,9 @@ export type BankImportResult = {
 
 const RULE_ID = "DK-BOOKKEEPING-BANK-IMPORT-001";
 const FX_RULE_ID = "DK-BOOKKEEPING-FX-001";
+// ===== BANK CLUSTER (#189) =====
+const BALANCE_CONTINUITY_RULE_ID = "DK-BANK-BALANCE-CONTINUITY-001";
+// ===== END BANK CLUSTER (#189) =====
 
 function sha256Bytes(data: Uint8Array | string) {
   return createHash("sha256").update(data).digest("hex");
@@ -543,6 +547,94 @@ function transactionFingerprint(row: BankImportRow, occurrence: number, bankAcco
   }));
 }
 
+// ===== BANK CLUSTER (#189) =====
+type BalanceContinuityResult = {
+  balanceWarnings?: string[];
+  firstBalance?: number;
+  lastBalance?: number;
+};
+
+/**
+ * Verifies running-balance continuity over a freshly-imported batch (#189).
+ *
+ * Most bank statements carry a running balance (`Saldo`) on every row. In a
+ * complete, correctly ordered statement each row's balance equals the previous
+ * row's balance plus this row's amount. A break means rows are missing,
+ * duplicated or misordered — a silent import error that would undermine a
+ * ledger meant to be trusted.
+ *
+ * Rows are walked in transaction-date then insertion order. A break is surfaced
+ * as a warning AND a `BANK_BALANCE_GAP` exception-queue entry; it never fails
+ * the import, because a legitimately partial export is a valid input. Comparison
+ * is integer-øre (`equalsDkk`) so float artefacts do not raise a false break.
+ *
+ * Rows without a stored balance (generic CSV import, or a profile column the
+ * file omitted) are skipped — there is nothing to check.
+ */
+function verifyBatchBalanceContinuity(db: Database, importedRowIds: number[]): BalanceContinuityResult {
+  if (importedRowIds.length === 0) return {};
+  const placeholders = importedRowIds.map(() => "?").join(", ");
+  const rows = db.query(
+    `SELECT id, transaction_date, text, amount, balance_after
+     FROM bank_transactions
+     WHERE id IN (${placeholders})
+     ORDER BY transaction_date ASC, id ASC`,
+  ).all(...importedRowIds) as Array<{
+    id: number;
+    transaction_date: string;
+    text: string;
+    amount: number;
+    balance_after: number | null;
+  }>;
+
+  const withBalance = rows.filter((row) => row.balance_after !== null && row.balance_after !== undefined);
+  if (withBalance.length < 2) {
+    // 0 rows: nothing to report. 1 row: a single balance, no adjacency to check.
+    return withBalance.length === 1
+      ? { firstBalance: roundDkk(Number(withBalance[0].balance_after)), lastBalance: roundDkk(Number(withBalance[0].balance_after)) }
+      : {};
+  }
+
+  const balanceWarnings: string[] = [];
+  for (let idx = 1; idx < withBalance.length; idx += 1) {
+    const prev = withBalance[idx - 1];
+    const curr = withBalance[idx];
+    const expected = addDkk(Number(prev.balance_after), Number(curr.amount));
+    if (!equalsDkk(expected, Number(curr.balance_after))) {
+      const drift = subtractDkk(Number(curr.balance_after), expected);
+      const warning =
+        `balance break before bank transaction ${curr.id} (${curr.transaction_date} '${curr.text.trim()}'): ` +
+        `expected ${expected} from previous balance ${roundDkk(Number(prev.balance_after))} + amount ${roundDkk(Number(curr.amount))}, ` +
+        `statement shows ${roundDkk(Number(curr.balance_after))} (drift ${drift})`;
+      balanceWarnings.push(warning);
+      recordException(db, {
+        type: "BANK_BALANCE_GAP",
+        severity: "medium",
+        relatedBankTransactionId: curr.id,
+        message: warning,
+        requiredAction: "Check the statement for missing, duplicated or misordered rows around this transaction; re-import the complete export if needed.",
+        sourceEvidence: {
+          ruleId: BALANCE_CONTINUITY_RULE_ID,
+          bankTransactionId: curr.id,
+          transactionDate: curr.transaction_date,
+          previousBalance: roundDkk(Number(prev.balance_after)),
+          amount: roundDkk(Number(curr.amount)),
+          expectedBalance: expected,
+          statementBalance: roundDkk(Number(curr.balance_after)),
+          drift,
+        },
+      });
+    }
+  }
+
+  return {
+    balanceWarnings,
+    firstBalance: roundDkk(Number(withBalance[0].balance_after)),
+    lastBalance: roundDkk(Number(withBalance[withBalance.length - 1].balance_after)),
+  };
+}
+// ===== END BANK CLUSTER (#189) =====
+
 // ===== BANK CLUSTER (#186-189) =====
 export type ImportBankCsvOptions = {
   /** Numeric id or slug of the target bank account (#187). */
@@ -668,7 +760,13 @@ export function importBankCsv(
     });
   })();
 
-  void importedRowIds;
+  // ===== BANK CLUSTER (#189) =====
+  // When a profile supplied a running balance, verify continuity across the
+  // freshly-imported batch. A break is surfaced (warning + exception) but never
+  // fails the import — a partial export is a legitimate input.
+  const balanceCheck = verifyBatchBalanceContinuity(db, importedRowIds);
+  // ===== END BANK CLUSTER (#189) =====
+
   return {
     ok: true,
     importBatchId,
@@ -679,6 +777,7 @@ export function importBankCsv(
     bankAccountId: bankAccountId ?? undefined,
     bankAccountSlug: bankAccount?.slug,
     profile: profile?.name,
+    ...balanceCheck,
     errors: [],
   };
 }
