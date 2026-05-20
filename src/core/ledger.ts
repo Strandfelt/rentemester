@@ -159,7 +159,9 @@ export function validateJournalEntry(db: Database, payload: JournalEntryInput) {
     }
     const account = accounts.get(line.accountNo)!;
     if (!account.active) errors.push(`lines[${idx}].accountNo refers to an inactive account`);
-    if ((debit > 0 && credit > 0) || (debit === 0 && credit === 0)) {
+    if (debit < 0 || credit < 0) {
+      errors.push(`lines[${idx}] debit and credit amounts must not be negative`);
+    } else if ((debit > 0 && credit > 0) || (debit === 0 && credit === 0)) {
       errors.push(`lines[${idx}] must have either debitAmount or creditAmount`);
     }
     debitSum += toOre(debit);

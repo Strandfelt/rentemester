@@ -51,6 +51,38 @@ describe("journal posting", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("rejects journal lines with negative debit or credit amounts", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journal-negative-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const result = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Negative-amount posting",
+      lines: [
+        { accountNo: "2000", debitAmount: -500 },
+        { accountNo: "5000", creditAmount: -500 }
+      ]
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((error) => error.includes("must not be negative"))).toBe(true);
+
+    const positive = postJournalEntry(db, {
+      transactionDate: "2026-05-16",
+      text: "Valid positive posting",
+      lines: [
+        { accountNo: "2000", debitAmount: 500 },
+        { accountNo: "5000", creditAmount: 500 }
+      ]
+    });
+    expect(positive.ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("numbers journal entries from transaction year and resets per year", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-journal-entryno-"));
     const db = openDb(ensureCompanyDirs(root).db);
