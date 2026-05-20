@@ -1,11 +1,11 @@
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import { migrate } from "../core/db";
 import { listExceptions, resolveException } from "../core/exceptions";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("exceptions", "list", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = listExceptions(db, { status: (ctx.arg("--status") as any) ?? undefined });
     if (ctx.outputFormat === "json") {
@@ -38,7 +38,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --id <n>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = resolveException(db, {
       id,

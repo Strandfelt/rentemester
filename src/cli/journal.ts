@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import { migrate } from "../core/db";
 import { postJournalEntry, reverseJournalEntry } from "../core/ledger";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 function resolveJournalEntryId(
@@ -60,7 +60,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = JSON.parse(readFileSync(input, "utf8"));
     const result = postJournalEntry(db, payload);
@@ -71,7 +71,7 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("journal", "reverse", (ctx) => {
     const date = ctx.arg("--date");
     const reason = ctx.arg("--reason");
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const entryId = resolveJournalEntryId(db, ctx);
     if (!entryId || !date || !reason) {
@@ -86,7 +86,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("journal", "list", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const rows = db
       .query(

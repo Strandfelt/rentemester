@@ -25,6 +25,7 @@ import {
 import { postInvoiceReminderToLedger, registerInvoiceReminder } from "../core/invoice-reminders";
 import { writeOffInvoiceBadDebt } from "../core/invoice-bad-debt";
 import { resolveInvoiceMasterData } from "../core/master-data";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch, CommandContext } from "../cli-dispatch";
 
 type Db = ReturnType<typeof openDb>;
@@ -125,7 +126,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("invoice", "render", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId) {
@@ -143,7 +144,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --out <file.xml>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId) {
@@ -166,7 +167,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --out <file.xml>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId) {
@@ -204,7 +205,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("invoice", "post", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId) {
@@ -222,7 +223,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
@@ -241,7 +242,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
@@ -260,7 +261,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
@@ -279,7 +280,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
@@ -298,7 +299,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
@@ -316,7 +317,7 @@ export function register(dispatch: CommandDispatch): void {
     const feeArg = ctx.arg("--fee");
     const feeAmount = feeArg === undefined ? undefined : Number(feeArg);
     const note = ctx.arg("--note");
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId || !reminderDate || (feeArg !== undefined && Number.isNaN(feeAmount))) {
@@ -339,7 +340,7 @@ export function register(dispatch: CommandDispatch): void {
     const reminderIdArg = ctx.arg("--reminder-id");
     const reminderId = reminderIdArg === undefined ? undefined : Number(reminderIdArg);
     const transactionDate = ctx.arg("--date");
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (
@@ -361,7 +362,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("invoice", "status", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId) {
@@ -378,7 +379,7 @@ export function register(dispatch: CommandDispatch): void {
     const maxAmount = ctx.parseOptionalNumber("--max-amount");
     if (!minAmount.ok) ctx.fatal(minAmount.error);
     if (!maxAmount.ok) ctx.fatal(maxAmount.error);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = buildInvoiceList(db, {
       status: (ctx.arg("--status") as any) ?? "all",
@@ -402,7 +403,7 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("invoice", "find", (ctx) => {
     const amount = ctx.parseOptionalNumber("--amount");
     if (!amount.ok) ctx.fatal(amount.error);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = findInvoices(db, {
       query: ctx.parsedArgs.positionals.slice(2).join(" ") || undefined,
@@ -423,7 +424,7 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("invoice", "overdue", (ctx) => {
     const minDays = ctx.parseOptionalNumber("--min-days");
     if (!minDays.ok) ctx.fatal(minDays.error);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = buildOverdueInvoiceList(db, {
       asOfDate: ctx.arg("--as-of") ?? undefined,
@@ -444,7 +445,7 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("invoice", "interest", (ctx) => {
     const asOfDate = ctx.arg("--as-of");
     const referenceRatePercent = Number(ctx.arg("--reference-rate"));
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId || !asOfDate || Number.isNaN(referenceRatePercent)) {
@@ -467,7 +468,7 @@ export function register(dispatch: CommandDispatch): void {
     const rateArg = ctx.arg("--reference-rate");
     const note = ctx.arg("--note");
     const referenceRatePercent = rateArg === undefined ? NaN : Number(rateArg);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId || !asOfDate || Number.isNaN(referenceRatePercent)) {
@@ -490,7 +491,7 @@ export function register(dispatch: CommandDispatch): void {
     const claimIdArg = ctx.arg("--claim-id");
     const claimId = claimIdArg === undefined ? undefined : Number(claimIdArg);
     const transactionDate = ctx.arg("--date");
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (
@@ -515,7 +516,7 @@ export function register(dispatch: CommandDispatch): void {
     const asOfDate = ctx.arg("--as-of");
     const amountArg = ctx.arg("--amount-dkk");
     const compensationAmountDkk = amountArg === undefined ? undefined : Number(amountArg);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (
@@ -542,7 +543,7 @@ export function register(dispatch: CommandDispatch): void {
     const amountArg = ctx.arg("--amount-dkk");
     const note = ctx.arg("--note");
     const compensationAmountDkk = amountArg === undefined ? undefined : Number(amountArg);
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (
@@ -567,7 +568,7 @@ export function register(dispatch: CommandDispatch): void {
 
   dispatch.on("invoice", "post-compensation", (ctx) => {
     const transactionDate = ctx.arg("--date");
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
     if (!documentId) {

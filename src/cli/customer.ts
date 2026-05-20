@@ -1,12 +1,12 @@
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import { migrate } from "../core/db";
 import { createCustomer, listCustomers } from "../core/master-data";
 import { validateVatAgainstVies } from "../core/vies";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("customer", "create", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const paymentTermsRaw = ctx.arg("--payment-terms");
     const paymentTerms = paymentTermsRaw === undefined ? undefined : Number(paymentTermsRaw);
@@ -26,7 +26,7 @@ export function register(dispatch: CommandDispatch): void {
   });
 
   dispatch.on("customer", "list", (ctx) => {
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = listCustomers(db, { archived: ctx.hasFlag("--archived") });
     ctx.emitResult(result as Record<string, unknown>);
@@ -39,7 +39,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --cvr <EU-VAT>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = await validateVatAgainstVies(db, cvr);
     ctx.emitResult(result as Record<string, unknown>);

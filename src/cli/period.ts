@@ -1,6 +1,6 @@
-import { companyPaths } from "../core/paths";
-import { openDb, migrate } from "../core/db";
+import { migrate } from "../core/db";
 import { closeAccountingPeriod } from "../core/periods";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
@@ -11,7 +11,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --from <YYYY-MM-DD> or --to <YYYY-MM-DD>");
       process.exit(2);
     }
-    const db = openDb(companyPaths(ctx.companyRoot()).db);
+    const db = openCommandDb(ctx);
     migrate(db);
     const result = closeAccountingPeriod(db, {
       periodStart: from,
