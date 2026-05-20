@@ -6,7 +6,10 @@ import {
   postRepresentationPurchase,
 } from "../core/vat";
 import { openCommandDb } from "../cli-dispatch";
-import type { CommandDispatch } from "../cli-dispatch";
+import type { CommandContext, CommandDispatch } from "../cli-dispatch";
+// ===== VAT FILING (#178) =====
+import { buildVatFiling } from "../core/vat-filing";
+// ===== END VAT FILING (#178) =====
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("vat", "report", (ctx) => {
@@ -61,4 +64,26 @@ export function register(dispatch: CommandDispatch): void {
     ctx.emitResult(result as Record<string, unknown>);
     db.close();
   });
+
+  // ===== VAT FILING (#178) =====
+  // `vat momsangivelse` (alias `vat filing`): produce a filing-ready
+  // momsangivelse — the standard SKAT rubrikker plus momstilsvar — for a
+  // closed VAT period. Read-only: Rentemester produces the numbers, the user
+  // files them via TastSelv.
+  const emitVatFiling = (ctx: CommandContext) => {
+    const from = ctx.arg("--from");
+    const to = ctx.arg("--to");
+    if (!from || !to) {
+      console.error("Missing required --from <YYYY-MM-DD> or --to <YYYY-MM-DD>");
+      process.exit(2);
+    }
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const result = buildVatFiling(db, from, to);
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
+  };
+  dispatch.on("vat", "momsangivelse", emitVatFiling);
+  dispatch.on("vat", "filing", emitVatFiling);
+  // ===== END VAT FILING (#178) =====
 }

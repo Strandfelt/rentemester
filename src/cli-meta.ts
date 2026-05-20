@@ -239,6 +239,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
   { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
   // ===== END FIXED ASSETS (#124, #125) =====
+  // ===== VAT FILING (#178) =====
+  {
+    key: "vat momsangivelse",
+    usage: "vat momsangivelse --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en indberetningsklar momsangivelse (SKAT-rubrikker + momstilsvar) for en lukket momsperiode. Kræver en lukket/indberettet vat_quarter-periode.",
+    allowedFlags: ["--company", "--from", "--to"],
+  },
+  {
+    key: "vat filing",
+    usage: "vat filing --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Alias for 'vat momsangivelse': indberetningsklar momsangivelse for en lukket momsperiode.",
+    allowedFlags: ["--company", "--from", "--to"],
+  },
+  // ===== END VAT FILING (#178) =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
