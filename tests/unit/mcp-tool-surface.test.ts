@@ -93,6 +93,30 @@ describe("docs/mcp-tool-surface.md", () => {
     expect(content).toMatch(/Resultat-shapes/);
   });
 
+  test("#228 — the journal_post example handshake posts to real seeded accounts", () => {
+    // The canonical example previously used accounts 3617/6902, which are
+    // not in seedAccounts() — an agent copying it gets the posting rejected.
+    const content = readFileSync(DOC_PATH, "utf8");
+    // Locate the journal_post example payload block.
+    const exampleStart = content.indexOf('"name": "journal_post"');
+    expect(exampleStart).toBeGreaterThan(-1);
+    const example = content.slice(exampleStart, exampleStart + 900);
+    // The non-existent accounts must be gone from the example.
+    expect(example).not.toContain('"3617"');
+    expect(example).not.toContain('"6902"');
+    // Every accountNo used in the example must be a seeded account.
+    const seeded = new Set([
+      "1000", "1010", "1100", "1200", "2000", "3000", "3010", "3020",
+      "3050", "3070", "3080", "3120", "4000", "4500", "5000", "5800",
+      "5810", "5820",
+    ]);
+    const used = [...example.matchAll(/"accountNo":\s*"(\d+)"/g)].map((m) => m[1]!);
+    expect(used.length).toBeGreaterThanOrEqual(2);
+    for (const acc of used) {
+      expect(seeded.has(acc), `journal_post example uses unseeded account ${acc}`).toBe(true);
+    }
+  });
+
   test("does not promise an unbacked idempotencyKey on writes", () => {
     // #204 — the doc once promised retry-safe idempotency keys with a 24h
     // cache that was never implemented. The false promise must stay removed.
@@ -130,6 +154,19 @@ describe("docs/mcp-agent-contract.md", () => {
     }
     // It must distinguish itself from the agent run loop contract.
     expect(content).toContain("runtime-agent-contract.md");
+  });
+
+  test("#229 — documents the raw -32602 form for a missing confirm + schema error", () => {
+    // When confirm is omitted AND the payload has a schema error, the SDK
+    // rejects the call with a raw -32602 (no envelope). The contract must
+    // tell an agent how to detect and branch on that shape.
+    const content = readFileSync(CONTRACT_PATH, "utf8");
+    expect(content).toContain("-32602");
+    // It must spell out that this reply has no structuredContent.
+    expect(content).toMatch(/structuredContent/);
+    expect(content).toMatch(/Input validation error/);
+    // And give the agent a concrete branch condition.
+    expect(content).toMatch(/isError/);
   });
 
   test("does not promise retry-safe idempotency keys (#204)", () => {

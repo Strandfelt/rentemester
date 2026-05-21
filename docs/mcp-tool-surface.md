@@ -138,6 +138,14 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 | `invoice_issue` | `{ documentId, invoiceNumber, storedPath, sha256, pdfDocumentId?, pdfStoredPath?, pdfSha256? }` — feltet hedder `documentId` (ikke `invoiceDocumentId`); `invoiceNumber` (ikke `invoiceNo`). |
 | `customer_create` / `vendor_create` | `{ customerId }` / `{ vendorId }` |
 | `journal_reverse` | `{ entryId, entryNo, entryHash }` for modposten |
+| `recurring_invoice_create` | `{ templateId }` |
+| `recurring_invoice_generate` | `{ created, templateId, periodIndex, documentId, invoiceNumber, issueDate, dueDate, deliveryPeriodStart?, deliveryPeriodEnd? }` — `created:false` ⇒ en eksisterende faktura blev returneret (idempotent). |
+| `asset_register` | `{ assetId, totalPeriods, periodAmount }` |
+| `mileage_log` | `{ mileageEntryId, entryNo, amountBasis }` |
+| `period_close` | `{ periodId, periodStart, periodEnd, kind, status, reference? }` |
+| `invoice_send_email` | `{ invoiceNumber, kind, recipient, subject, messageId, duplicate }` — `duplicate:true` ⇒ en identisk afsendelse fandtes allerede (idempotent). |
+| `customer_validate_vat` | `{ validation: { … VIES-record … } }` |
+| `audit_verify` | `{ entries, ok }` — kerne-resultatets `ok` ligger også inde i `data`; konvoluttens `ok` afspejler kaldet. |
 
 > **Discovery-kontrakten:** Konvolut-formen er maskin-kendt via `outputSchema`
 > i `tools/list`. Den præcise `data`-feltliste står her og i kildens
@@ -167,7 +175,7 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 | `bank_list` | `bank list` | `{ company, status?, from?, to?, textMatch?, amount?, account? }` | Lister importerede banktransaktioner med filtre. |
 | `bank_suggest_matches` | `bank suggest-matches` | `{ company, bankTransactionId?, max? }` | Foreslår deterministiske match mellem uafstemte bank-poster og bilag. |
 | `customer_list` | `customer list` | `{ company, archived? }` | Lister kendte kunder. |
-| `customer_validate_vat` | `customer validate-vat` | `{ company, cvr }` | Validerer EU-VAT via VIES og cacher resultatet. |
+| `customer_validate_vat` | `customer validate-vat` | `{ company, cvr }` | Validerer EU-VAT via VIES og opdaterer en lokal validerings-cache. Klassificeret `read` (se note nedenfor): den skriver kun en gennemsigtig opslags-cache, ingen bogførings-/stamdata-state, og kræver ikke `confirm`. |
 | `cvr_lookup` | `customer cvr-lookup` | `{ company, cvr }` | Slår en dansk virksomhed op i CVR-registret. Kræver `CVR_USERNAME`/`CVR_PASSWORD`. |
 | `documents_list` | `documents list` | `{ company }` | Lister gemte bilag. |
 | `exceptions_list` | `exceptions list` | `{ company, status?, includeArchived? }` | Lister exceptions-køen (open/resolved/all). |
@@ -198,6 +206,17 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 ¹ `import_archive_year` har ingen selvstændig CLI-kommando; den hentes fra
 samme arkiv-artefakt som `import archive` skriver.
 ² `period_list` — se "CLI/MCP-mapping" nedenfor.
+
+> **`customer_validate_vat` — read/write-klassifikation.** Tool'et slår et
+> EU-VAT-nummer op mod VIES og *skriver* resultatet til en lokal cache-tabel
+> (`vies_validations`). Det er bevidst klassificeret `read`
+> (`readOnlyHint: true`) og kræver derfor *ikke* `confirm: true`: den eneste
+> side-effekt er en gennemsigtig opslags-cache med TTL — der skrives hverken
+> i finanskæden eller i stamdata, og et gentaget opslag inden for TTL
+> genbruger blot cachen (`idempotentHint: true`). Den tilsvarende
+> CLI-kommando `customer validate-vat` gør nøjagtigt det samme; CLI og MCP
+> er altså konsistente — begge er et cache-opdaterende opslag, ikke en
+> bogførings-/stamdata-mutation.
 
 ## Write-tools
 
@@ -234,7 +253,7 @@ modpostering.
 | `asset_depreciate` | `asset depreciate` | `{ company, assetId, period, date, confirm }` | Bogfører en periodes afskrivning. |
 | `asset_register` | `asset register` | `{ company, name, category, acquisitionDate, cost, usefulLifeMonths, documentId, assetAccount, depreciationAccount, accumulatedAccount, note?, confirm }` | Registrerer et aktiv med lineær afskrivningsplan. |
 | `asset_write_off` | `asset write-off` | `{ company, name, category, acquisitionDate, cost, documentId, expenseAccount, date, thresholdRuleSource, confirmImmediateWriteOff, paymentAccount?, note?, confirm }` | Bogfører straksafskrivning af et mindre aktiv. |
-| `company_add` | `company add` | `{ workspace, name, slug?, cvr?, fiscalYearStartMonth?, fiscalYearLabelStrategy? }` | Opretter en ny virksomhed i workspace'et og initialiserer ledgeren. |
+| `company_add` | `company add` | `{ workspace?, name, slug?, cvr?, fiscalYearStartMonth?, fiscalYearLabelStrategy? }` | Opretter en ny virksomhed under `<workspace>/<slug>/` og initialiserer ledgeren. Udelades `workspace`, bruges miljøvariablen `RENTEMESTER_WORKSPACE` på MCP-serverens host; er den heller ikke sat, afvises kaldet med `no workspace given: pass 'workspace' or set RENTEMESTER_WORKSPACE`. |
 | `expense_book` | `expense book` | `{ company, documentId, bankTransactionId, expenseAccount, vatTreatment?, paymentAccount?, date?, text?, confirm }` | Bogfører leverandørudgift fra bilag + bankpost. |
 | `invoice_apply_payment` | `invoice apply-payment` | `{ company, payload: InvoicePaymentPayload, confirm }` | Registrerer fakturabetaling fra payload. |
 | `invoice_claim_compensation` | `invoice claim-compensation` | `{ company, documentId? \| invoiceNumber?, asOf, amountDkk?, note?, confirm }` | Registrerer kompensationskrav. |
@@ -248,7 +267,7 @@ modpostering.
 | `invoice_refund_bank` | `invoice refund-bank` | `{ company, payload: RefundPayload, confirm }` | Bogfører refundering til kunde fra banken. |
 | `invoice_remind` | `invoice remind` | `{ company, documentId? \| invoiceNumber?, date, fee?, note?, confirm }` | Registrerer rykker på forfalden faktura. |
 | `invoice_render` | `invoice render` | `{ company, documentId? \| invoiceNumber?, confirm }` | Renderer (eller genskaber) deterministisk PDF. Idempotent. |
-| `invoice_send_email` | `invoice send` | `{ company, documentId? \| invoiceNumber?, kind?, to?, confirm }` | Sender faktura/rykker via SMTP med PDF vedhæftet. Idempotent. SMTP-config fra `config/smtp.json`. |
+| `invoice_send_email` | `invoice send` | `{ company, documentId? \| invoiceNumber?, kind?, to?, confirm }` | Sender faktura/rykker via SMTP med PDF vedhæftet. Idempotent. SMTP-config læses fra `config/smtp.json` i virksomhedsmappen — påkrævede felter: `host`, `port`, `fromAddress`; valgfri: `fromName`, `username`, `password`, `dryRun`. Mangler filen ⇒ `{ ok:false, errors:["missing SMTP config: ..."] }`. Den indbyggede transport kører **kun** i dry-run: `dryRun:true` registrerer afsendelsen uden netværkskald (`ok:true`); uden `dryRun:true` fejler et rigtigt send med en `ok:false`-envelope. |
 | `invoice_settle_bank` | `invoice settle-bank` | `{ company, payload: SettlementPayload, confirm }` | Matcher bankbetaling mod faktura. |
 | `invoice_settle_claim_bank` | `invoice settle-claim-bank` | `{ company, payload: ClaimSettlementPayload, confirm }` | Matcher bankbetaling mod fakturakrav. |
 | `invoice_write_off_bad_debt` | `invoice write-off-bad-debt` | `{ company, payload: BadDebtPayload, confirm }` | Bogfører tab på debitor. |
@@ -256,7 +275,7 @@ modpostering.
 | `journal_reverse` | `journal reverse` | `{ company, entryId? \| entryNo? \| matchText?, matchDate?, matchDocumentId?, date, reason, confirm }` | Tilbagefører bogført finanspostering ved at oprette modpost. |
 | `peppol_submit_public_invoice` | `invoice submit-public-peppol` | `{ company, documentId? \| invoiceNumber?, accessPoint, acknowledgement?, confirm }` | Bygger en idempotent PEPPOL-submission-envelope og registrerer forsøget. |
 | `period_close` | `period close` | `{ company, from, to, kind?, status?, reference?, confirm }` | Lukker eller markerer regnskabsperiode. |
-| `recurring_invoice_create` | `recurring-invoice create` | `{ company, name, interval, firstIssueDate, invoice, paymentTermsDays?, deliveryPeriodMode?, notes?, confirm }` | Opretter en gentagende fakturaskabelon. |
+| `recurring_invoice_create` | `recurring-invoice create` | `{ company, name, interval, firstIssueDate, invoice: InvoicePayload, paymentTermsDays?, deliveryPeriodMode?, notes?, confirm }` | Opretter en gentagende fakturaskabelon. `invoice` er en typet `InvoicePayload` (samme form som `invoice_issue`) — men dato-/nummerfelter (`invoiceNumber`, `issueDate`, `dueDate`, leveringsdatoer) sættes IKKE her; `recurring_invoice_generate` udleder dem pr. periode. |
 | `recurring_invoice_generate` | `recurring-invoice generate` | `{ company, templateId, asOfDate, confirm }` | Materialiserer den forfaldne faktura for skabelonen. Idempotent pr. template/periode. |
 | `system_backup` | `system backup` | `{ company, at?, archive?, confirm }` | Opretter revisionsklar backup. `archive:true` pakker straks til ét `.tar`. |
 | `system_backup_archive` | `system backup-archive` | `{ company, backupId?, out?, confirm }` | Pakker en eksisterende backup til ét deterministisk `.tar` (+ `.sha256`). |
@@ -383,9 +402,9 @@ Input:
       "text": "Manuel postering — kontorartikler",
       "documentId": 12,
       "lines": [
-        { "accountNo": "3617", "debitAmount": 320.00, "vatCode": "I25" },
-        { "accountNo": "6902", "debitAmount": 80.00 },
-        { "accountNo": "5820", "creditAmount": 400.00 }
+        { "accountNo": "3120", "debitAmount": 320.00, "vatCode": "DK_PURCHASE_25" },
+        { "accountNo": "3050", "debitAmount": 80.00 },
+        { "accountNo": "2000", "creditAmount": 400.00 }
       ]
     },
     "confirm": true

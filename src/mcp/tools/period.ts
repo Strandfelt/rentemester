@@ -23,7 +23,9 @@ export function registerPeriodTools(server: McpServer): void {
     {
       title: "List accounting periods",
       description: "Lister regnskabsperioder (open/closed/reported). Read-only.",
-      inputSchema: { company: z.string().min(1) },
+      inputSchema: {
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -64,12 +66,33 @@ export function registerPeriodTools(server: McpServer): void {
       title: "Close accounting period",
       description: "Lukker eller markerer regnskabsperiode (closed/reported). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
-        from: z.string().min(1),
-        to: z.string().min(1),
-        kind: z.enum(["vat_quarter", "fiscal_year", "custom"]).optional(),
-        status: z.enum(["closed", "reported"]).optional(),
-        reference: z.string().optional(),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+        from: z.string().min(1).describe("Start of the period to close (inclusive), in YYYY-MM-DD format."),
+        to: z
+          .string()
+          .min(1)
+          .describe("End of the period to close (inclusive), in YYYY-MM-DD format. Must not be before `from`."),
+        kind: z
+          .enum(["vat_quarter", "fiscal_year", "custom"])
+          .optional()
+          .describe(
+            "Type of accounting period (default 'vat_quarter'): 'vat_quarter' = a VAT-reporting quarter; " +
+              "'fiscal_year' = a full fiscal year; 'custom' = an arbitrary date range. " +
+              "A new period must not overlap an existing period of the same kind.",
+          ),
+        status: z
+          .enum(["closed", "reported"])
+          .optional()
+          .describe(
+            "The status to mark the period with (default 'closed'). " +
+              "'closed' = the period is locked: no further bookkeeping writes are accepted into it. " +
+              "'reported' = the period is closed AND has been reported to the authority (e.g. the VAT " +
+              "return filed); a reported timestamp is recorded in addition to the lock.",
+          ),
+        reference: z
+          .string()
+          .optional()
+          .describe("Optional external reference for the closure, e.g. a VAT-return receipt number."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

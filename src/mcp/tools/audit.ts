@@ -10,11 +10,9 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync } from "node:fs";
-import { companyPaths } from "../../core/paths";
-import { openDb, migrate } from "../../core/db";
 import { verifyAuditChain } from "../../core/ledger";
-import { envelopeShape, envelopeToCallResult, errorEnvelope, wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
+import { withCompanyDb } from "../tool-runtime";
 
 const inputSchema = {
   company: z.string().min(1, "company path is required"),
@@ -37,20 +35,11 @@ export function registerAuditTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ company }) => {
-      if (!existsSync(company)) {
-        return envelopeToCallResult(
-          errorEnvelope(`company path does not exist: ${company}`),
-        );
-      }
-      const db = openDb(companyPaths(company).db);
-      try {
-        migrate(db);
-        const result = verifyAuditChain(db);
-        return envelopeToCallResult(wrapCoreResult(result));
-      } finally {
-        db.close();
-      }
-    },
+    withCompanyDb<{ company: string }>(server, ({ db }) => {
+      // `withCompanyDb` already resolves + existsSync-guards `company` and
+      // returns a *path-redacted* error envelope on a bad/missing directory,
+      // so the absolute host path is never disclosed to the caller (#228).
+      return wrapCoreResult(verifyAuditChain(db));
+    }),
   );
 }

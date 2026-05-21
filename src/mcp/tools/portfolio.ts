@@ -171,12 +171,43 @@ export function registerPortfolioTools(server: McpServer): void {
         "Workspace-niveau write-tool — kalder kerne-funktionen createCompany. " +
         "Mutationer er altid enkelt-virksomhed; dette tool tilføjer netop én.",
       inputSchema: {
-        workspace: z.string().optional(),
-        name: z.string().min(1),
-        slug: z.string().optional(),
-        cvr: z.string().optional(),
-        fiscalYearStartMonth: z.number().int().min(1).max(12).optional(),
-        fiscalYearLabelStrategy: z.enum(["end-year", "start-year", "span"]).optional(),
+        workspace: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute path to the workspace root. The new company is created at " +
+              "<workspace>/<slug>/. When omitted, the workspace falls back to the " +
+              "RENTEMESTER_WORKSPACE environment variable on the MCP server's host; " +
+              "if that is also unset the call is rejected with " +
+              "\"no workspace given: pass 'workspace' or set RENTEMESTER_WORKSPACE\".",
+          ),
+        name: z
+          .string()
+          .min(1)
+          .describe("Registered name of the company, e.g. 'Acme ApS'."),
+        slug: z
+          .string()
+          .optional()
+          .describe(
+            "Optional URL-safe slug used as the company's directory name under the workspace. " +
+              "When omitted, a slug is derived from `name`.",
+          ),
+        cvr: z.string().optional().describe("Optional Danish CVR number for the company, e.g. '12345678'."),
+        fiscalYearStartMonth: z
+          .number()
+          .int()
+          .min(1)
+          .max(12)
+          .optional()
+          .describe("Month the fiscal year starts, 1 = January … 12 = December (default 1)."),
+        fiscalYearLabelStrategy: z
+          .enum(["end-year", "start-year", "span"])
+          .optional()
+          .describe(
+            "How a fiscal year spanning two calendar years is labelled: " +
+              "'end-year' = the year it ends in; 'start-year' = the year it starts in; " +
+              "'span' = both years (e.g. '2025/2026').",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },

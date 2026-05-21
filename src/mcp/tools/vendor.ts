@@ -23,8 +23,11 @@ export function registerVendorTools(server: McpServer): void {
       title: "List vendors",
       description: "Lister kendte leverandører. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
-        archived: z.boolean().optional(),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+        archived: z
+          .boolean()
+          .optional()
+          .describe("When true, list archived vendors instead of active ones (default false)."),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -42,21 +45,45 @@ export function registerVendorTools(server: McpServer): void {
       description:
         "Opretter en leverandørpost. write-reversible — kræver confirm:true. Kan arkiveres eller rettes senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         // `name` is optional only because `fromCvr` can supply it; a create
         // with neither a name nor fromCvr is rejected by createVendor.
-        input: z.object({
-          name: z.string().min(1).optional(),
-          address: z.string().optional(),
-          vatOrCvr: z.string().optional(),
-          email: z.string().optional(),
-          phone: z.string().optional(),
-          website: z.string().optional(),
-          defaultExpenseAccount: z.string().optional(),
-          defaultVatTreatment: z.string().optional(),
-          notes: z.string().optional(),
-        }),
-        fromCvr: z.string().optional(),
+        input: z
+          .object({
+            name: z
+              .string()
+              .min(1)
+              .optional()
+              .describe("Vendor name. Required unless fromCvr is given (then the CVR register supplies it)."),
+            address: z.string().optional().describe("Postal address (free text)."),
+            vatOrCvr: z
+              .string()
+              .optional()
+              .describe("VAT or CVR number, e.g. 'DK12345678' (Danish) or 'DE123456789' (EU)."),
+            email: z.string().optional().describe("Contact email address."),
+            phone: z.string().optional().describe("Contact phone number."),
+            website: z.string().optional().describe("Website URL."),
+            defaultExpenseAccount: z
+              .string()
+              .optional()
+              .describe("Default expense account number from the chart of accounts (e.g. '3000') for this vendor's bills."),
+            defaultVatTreatment: z
+              .string()
+              .optional()
+              .describe(
+                "Default VAT treatment for this vendor's purchases — one of 'standard', " +
+                  "'domestic_reverse_charge' or 'foreign_reverse_charge'.",
+              ),
+            notes: z.string().optional().describe("Free-text internal notes."),
+          })
+          .describe("Vendor master-data fields. Fields left unset are filled from the CVR register when fromCvr is supplied."),
+        fromCvr: z
+          .string()
+          .optional()
+          .describe(
+            "Optional Danish CVR number. When set, every field not present in `input` is filled from the " +
+              "official CVR register before the vendor is created.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

@@ -13,16 +13,13 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { existsSync } from "node:fs";
-import { companyPaths } from "../../core/paths";
-import { openDb, migrate } from "../../core/db";
 import {
   postJournalEntry,
   reverseJournalEntry,
   type JournalEntryInput,
 } from "../../core/ledger";
-import { deriveMcpActor, withActor } from "../actor";
-import { envelopeShape, envelopeToCallResult, errorEnvelope, successEnvelope, wrapCoreResult } from "../envelope";
+import { withActor } from "../actor";
+import { envelopeShape, errorEnvelope, successEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, resolveJournalEntryId, confirmField } from "../tool-runtime";
 
 const lineSchema = z.object({
@@ -123,28 +120,18 @@ export function registerJournalTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ company, payload, confirm }) => {
-      if (confirm !== true) {
-        return envelopeToCallResult(
-          errorEnvelope("confirm: true required for write tool journal_post"),
-        );
-      }
-      if (!existsSync(company)) {
-        return envelopeToCallResult(
-          errorEnvelope(`company path does not exist: ${company}`),
-        );
-      }
-      const actor = deriveMcpActor(server.server.getClientVersion());
-      const db = openDb(companyPaths(company).db);
-      try {
-        migrate(db);
-        const entry: JournalEntryInput = withActor(payload as JournalEntryInput, actor);
-        const result = postJournalEntry(db, entry);
-        return envelopeToCallResult(wrapCoreResult(result));
-      } finally {
-        db.close();
-      }
-    },
+    // `withCompanyDbConfirmed` enforces `confirm: true`, resolves + existsSync-
+    // guards `company`, and returns a *path-redacted* error envelope on a
+    // bad/missing directory — the absolute host path never reaches the caller
+    // (#228). It also opens/migrates/closes the db and derives the actor.
+    withCompanyDbConfirmed<{
+      company: string;
+      payload: z.infer<typeof payloadSchema>;
+      confirm?: boolean;
+    }>(server, "journal_post", ({ db, actor, args }) => {
+      const entry: JournalEntryInput = withActor(args.payload as JournalEntryInput, actor);
+      return wrapCoreResult(postJournalEntry(db, entry));
+    }),
   );
 
   server.registerTool(
