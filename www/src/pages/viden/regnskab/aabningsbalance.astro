@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Åbningsbalance og primobalance"
+  description="Åbningsbalance forklaret: cut-over, balanceret primopostering, idempotens og hvordan Rentemester bruger den ved import."
+  pathname="/viden/regnskab/aabningsbalance"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Regnskab"
+    title="Åbningsbalancen er startpunktet for en ren ledger"
+    lead="Når en virksomhed flyttes ind i Rentemester, skal den ikke starte fra nul. Åbningsbalancen etablerer de eksisterende aktiver, passiver og egenkapital som én balanceret postering."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      En åbningsbalance, eller primobalance, er den regnskabsmæssige bro fra et tidligere system eller tidligere manuel bogføring. Den skal balancere fra starten; ellers bliver alle efterfølgende rapporter bygget på et skævt grundlag.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, opening-balance kode og tests."
+      sources={[
+        { href: `${SITE.github}/blob/main/src/core/opening-balance.ts`, label: "opening-balance.ts", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/opening-balance.test.ts`, label: "Opening balance tests", external: true },
+        { href: `${SITE.github}/blob/main/src/core/import/reconcile.ts`, label: "Import reconcile", external: true },
+      ]}
+      related={[
+        { href: "/viden/import/dinero", label: "Import fra Dinero" },
+        { href: "/viden/begreber/debet-kredit", label: "Debet og kredit" },
+        { href: "/viden/begreber/kontoplan", label: "Kontoplan" },
+      ]}
+    />
+
+    <h2>Én cut-over dato</h2>
+    <p>
+      Åbningsbalancen etableres pr. en cut-over dato. Det gør det tydeligt hvilke tal der kommer fra før Rentemester, og hvilke posteringer der er skabt efter overgangen.
+    </p>
+
+    <h2>Balancen skal gå op</h2>
+    <p>
+      Rentemesters kode afviser en primobalance, hvis debet og kredit ikke balancerer. Den kræver mindst to linjer og posterer resultatet som én journalentry med auditspor.
+    </p>
+
+    <h2>Idempotens</h2>
+    <p>
+      En virksomhed bør kun have én åbningsbalance. Derfor er flowet idempotent: forsøger man at poste den igen, peger systemet på den eksisterende primopostering i stedet for at skabe en ny.
+    </p>
+  </article>
+</BaseLayout>

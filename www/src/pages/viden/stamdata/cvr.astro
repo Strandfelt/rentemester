@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="CVR-opslag og stamdata"
+  description="CVR-opslag i Rentemester: lokale snapshots, kunde- og leverandørstamdata, credentials og hvorfor eksplicit input vinder over registerdata."
+  pathname="/viden/stamdata/cvr"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Stamdata"
+    title="CVR-data skal være snapshot, ikke skjult sandhed"
+    lead="CVR-opslag kan udfylde navn, adresse og virksomhedsstatus, men bogføringen skal vide hvornår data blev hentet, og brugeren skal kunne overstyre felter der er relevante for faktura eller bilag."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      CVR-registeret er nyttigt til stamdata, men det er ikke en erstatning for den konkrete aftale, faktura eller leverandørrelation. Derfor bør CVR-data behandles som et lokalt snapshot, der kan hjælpe med udfyldning og kontrol.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, CVR-kode, company sync og master-data tests."
+      sources={[
+        { href: `${SITE.github}/blob/main/src/core/cvr.ts`, label: "cvr.ts", external: true },
+        { href: `${SITE.github}/blob/main/src/core/company.ts`, label: "company.ts", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/master-data-cvr.test.ts`, label: "Master-data CVR tests", external: true },
+      ]}
+      related={[
+        { href: "/vaerktoej/fakturaskabelon", label: "Fakturaskabelon" },
+        { href: "/viden/saadan-bogfoerer-du/faktura", label: "Bogfør faktura" },
+        { href: "/viden/saadan-bogfoerer-du/leverandoerfaktura", label: "Leverandørfaktura" },
+      ]}
+    />
+
+    <h2>Hvad CVR-opslag kan bruges til</h2>
+    <p>
+      Rentemester kan normalisere CVR-numre, slå virksomheder op og gemme et lokalt snapshot. Det bruges til egen virksomheds stamdata og til kunde-/leverandørposter, hvor et CVR-nummer kan udfylde tomme felter.
+    </p>
+
+    <h2>Eksplicit input vinder</h2>
+    <p>
+      Hvis brugeren angiver navn, adresse, email eller andre felter, bør de ikke overskrives blindt af registerdata. Det er vigtigt, fordi faktura- og leverandøroplysninger ofte afspejler en konkret kontrakt, afdeling eller betalingsproces.
+    </p>
+
+    <h2>Credentials bliver udenfor</h2>
+    <p>
+      CVR-adgang kræver brugerens egne credentials. Rentemester beskriver og tester opslag/caching, men credentials skal komme fra miljø eller konfiguration og må ikke blive en del af ledgeren.
+    </p>
+  </article>
+</BaseLayout>

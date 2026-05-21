@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="SAF-T eksport i Rentemester"
+  description="SAF-T i Rentemester: deterministisk, periodestyret eksportpakke med scope-grænse for ledger, salg og køb uden at love fuld officiel compliance."
+  pathname="/viden/myndigheder/saft"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Myndigheder"
+    title="SAF-T skal beskrives med præcis scope"
+    lead="Rentemester har en deterministisk SAF-T-eksportpakke, men den skal beskrives som en afgrænset profil. Det er ikke det samme som at love fuld officiel SAF-T-compliance for alle cases."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      SAF-T er et maskinlæsbart eksportspor til kontrol og dataudveksling. For et open source-bogføringssystem er det vigtigt, at eksporten er periodestyret, reproducerbar og tydeligt markeret med profil og begrænsninger.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, SAF-T-kode, bogføringsregel og tests."
+      sources={[
+        { href: `${SITE.github}/blob/main/src/core/saft-export.ts`, label: "saft-export.ts", external: true },
+        { href: `${SITE.github}/blob/main/rules/dk/bookkeeping.yaml`, label: "SAF-T bogføringsregel", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/saft-export.test.ts`, label: "SAF-T tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/myndigheder/eksport-af-regnskab", label: "Eksport af regnskab" },
+        { href: "/viden/myndigheder/regnskabsmateriale", label: "Regnskabsmateriale" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+      ]}
+    />
+
+    <h2>Hvad eksporten indeholder</h2>
+    <p>
+      Grafen viser en SAF-T-eksportprofil med kontoplan, ledger, salgsfakturaer og purchase-dokumenter. Pakken skriver XML og manifest, og den er bundet til en konkret periode.
+    </p>
+
+    <h2>Profilen er bevidst smal</h2>
+    <p>
+      Koden markerer eksporten med en Rentemester-profil, så den ikke ligner en generisk “færdig SAF-T”. Det er god content-disciplin: siden skal forklare hvad der er dækket, ikke overtage compliance-ansvar fra regler, tests og myndighedspraksis.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      `system export-saft` bygger en deterministisk pakke med `saft.xml`, manifest og audit-event. Virksomheden skal have nødvendige stamdata, og købsdokumenter i profilen skal have de felter, eksporten kræver.
+    </p>
+  </article>
+</BaseLayout>

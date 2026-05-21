@@ -9,6 +9,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
+    "content:coverage": "bun run scripts/check-graph-content-coverage.ts",
     "og": "bun run scripts/generate-og.ts"
   },
   "dependencies": {

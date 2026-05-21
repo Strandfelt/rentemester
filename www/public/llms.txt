@@ -71,9 +71,12 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 - VAT report: https://rentemester.dk/viden/moms/momsrapport
 - VAT filing: https://rentemester.dk/viden/moms/momsindberetning
 - How to book invoices: https://rentemester.dk/viden/saadan-bogfoerer-du/faktura
+- Public e-invoicing, OIOUBL and PEPPOL boundary: https://rentemester.dk/viden/fakturering/e-faktura-offentlig
+- Recurring invoices: https://rentemester.dk/viden/fakturering/gentagne-fakturaer
 - How to book credit notes: https://rentemester.dk/viden/saadan-bogfoerer-du/kreditnota
 - Bank reconciliation: https://rentemester.dk/viden/saadan-bogfoerer-du/bankafstemning
 - How to book supporting documents: https://rentemester.dk/viden/saadan-bogfoerer-du/bilag
+- Bilagsmail / mail intake: https://rentemester.dk/viden/bilag/bilagsmail
 - How to book foreign invoices: https://rentemester.dk/viden/saadan-bogfoerer-du/udenlandsk-faktura
 - How to book currency/FX: https://rentemester.dk/viden/saadan-bogfoerer-du/valuta
 - How to book expenses paid as outlays: https://rentemester.dk/viden/saadan-bogfoerer-du/udlaeg
@@ -100,8 +103,16 @@ Rentemester is open source bookkeeping for small Danish businesses: an AI agent 
 - Reconciliation: https://rentemester.dk/viden/begreber/afstemning
 - Document numbers: https://rentemester.dk/viden/begreber/bilagsnummer
 - Signed accounting backup: https://rentemester.dk/viden/sikkerhed/signeret-backup
+- GDPR and accounting retention: https://rentemester.dk/viden/sikkerhed/gdpr
 - Accounting material: https://rentemester.dk/viden/myndigheder/regnskabsmateriale
+- SAF-T export: https://rentemester.dk/viden/myndigheder/saft
 - MCP bookkeeping: https://rentemester.dk/viden/ai/mcp-bogfoering
+- CVR lookup and master data: https://rentemester.dk/viden/stamdata/cvr
+- Dinero import: https://rentemester.dk/viden/import/dinero
+- Opening balance: https://rentemester.dk/viden/regnskab/aabningsbalance
+- Fixed assets and depreciation: https://rentemester.dk/viden/anlaegsaktiver/afskrivning
+- Annual report and iXBRL: https://rentemester.dk/viden/regnskab/aarsrapport
+- Multiple companies and cockpit: https://rentemester.dk/viden/regnskab/flere-virksomheder
 - VAT calculator: https://rentemester.dk/vaerktoej/momsberegner
 - Invoice template checklist: https://rentemester.dk/vaerktoej/fakturaskabelon
 - Installation: https://rentemester.dk/docs/installation

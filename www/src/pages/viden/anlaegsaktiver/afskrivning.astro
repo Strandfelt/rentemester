@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Anlægsaktiver og afskrivning"
+  description="Anlægsaktiver i Rentemester: aktivregister, lineær afskrivning, periodisk bogføring, straksafskrivning og brugerens ansvar for skat."
+  pathname="/viden/anlaegsaktiver/afskrivning"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Anlægsaktiver"
+    title="Afskrivning skal være sporet tilbage til købet"
+    lead="Når et køb bliver et anlægsaktiv, skal anskaffelse, afskrivningsplan og hver periodisk postering hænge sammen. Rentemester kan hjælpe med den mekanik, men den skattemæssige vurdering er stadig brugerens eller rådgiverens ansvar."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Anlægsaktiver adskiller sig fra almindelige udgifter, fordi værdien forbruges over tid. Det kræver et aktivregister, en plan for afskrivning og bogførte perioder, der kan knyttes tilbage til det oprindelige bilag.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, asset-kode, bogføringsregler og tests."
+      sources={[
+        { href: `${SITE.github}/blob/main/src/core/assets.ts`, label: "assets.ts", external: true },
+        { href: `${SITE.github}/blob/main/rules/dk/bookkeeping.yaml`, label: "Regler for anlægsaktiver", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/asset-depreciation.test.ts`, label: "Asset depreciation tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+        { href: "/viden/begreber/kontoplan", label: "Kontoplan" },
+        { href: "/viden/begreber/audit-trail", label: "Audit trail" },
+      ]}
+    />
+
+    <h2>Aktivregister</h2>
+    <p>
+      Rentemester kan registrere et aktiv med navn, kategori, anskaffelsesdato, kostpris, forventet levetid og dokumentlink. Aktivregisteret viser akkumulerede afskrivninger og bogført værdi.
+    </p>
+
+    <h2>Periodiske afskrivninger</h2>
+    <p>
+      Afskrivningsflowet posterer balancerede perioder: debet på afskrivningskonto og kredit på akkumulerede afskrivninger. Hver periode er deterministisk og knyttet til aktivet.
+    </p>
+
+    <h2>Straksafskrivning kræver eksplicit valg</h2>
+    <p>
+      Koden understøtter straksafskrivning af mindre aktiver, men kræver eksplicit bekræftelse og kildehenvisning til reglen. Rentemester må ikke selv beslutte den skattemæssige behandling.
+    </p>
+  </article>
+</BaseLayout>

@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Bilagsmail, maildrop og IMAP"
+  description="Bilagsmail i Rentemester forklaret: EML, lokal maildrop, IMAP-polling, dedup og exception-kø uden at gætte bilagsdata."
+  pathname="/viden/bilag/bilagsmail"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Bilag"
+    title="Bilagsmail skal være deterministisk før den er smart"
+    lead="Bilagsmail lyder simpelt: send en mail, få et bilag ind. I praksis skal systemet håndtere EML, vedhæftninger, dubletter, metadata og usikre mails uden at opfinde bogføringsgrundlag."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      En god bilagsmail-pipeline starter med det kedelige: parse mailen stabilt, find brugbare vedhæftninger, hash indholdet, undgå dubletter og send uklare cases til review. Hvis systemet gætter leverandør, dato eller beløb uden grundlag, bliver automatiseringen en risiko.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, mail-intake regler og tests."
+      sources={[
+        { href: `${SITE.github}/blob/main/src/core/mail-intake.ts`, label: "mail-intake.ts", external: true },
+        { href: `${SITE.github}/blob/main/rules/dk/mail-intake.yaml`, label: "Mail-intake regler", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/mail-intake.test.ts`, label: "Mail-intake tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bogfør bilag" },
+        { href: "/viden/saadan-bogfoerer-du/kvittering", label: "Bogfør kvittering" },
+        { href: "/viden/begreber/bilagsnummer", label: "Bilagsnummer" },
+      ]}
+    />
+
+    <h2>Lokal EML og maildrop</h2>
+    <p>
+      Den første sikre model er lokal: en enkelt EML-fil eller en maildrop-mappe. Rentemester kan indlæse mails i stabil rækkefølge, udtrække vedhæftninger og registrere message-id plus attachment hash, så samme mail ikke skaber nye bilag ved rerun.
+    </p>
+
+    <h2>IMAP er transport, ikke bogføring</h2>
+    <p>
+      Grafen indeholder også IMAP-intake. Det er polling oven på den eksisterende pipeline, ikke en ny bogføringsmodel. IMAP-konfiguration og adgang hører til transportlaget; dedup og bilagshåndtering skal stadig lande i samme append-only intake-spor.
+    </p>
+
+    <h2>Exception-køen er en funktion</h2>
+    <p>
+      Mails uden brugbar vedhæftning, uden stabil identitet eller med uklare metadata bør ikke bogføres automatisk. Rentemester-reglerne siger eksplicit, at de skal fremhæves som exceptions til menneskelig review.
+    </p>
+  </article>
+</BaseLayout>
