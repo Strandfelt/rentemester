@@ -1,5 +1,6 @@
 ---
 import { SITE } from "../consts";
+import { FOOTER_KNOWLEDGE_LINKS, FOOTER_LEGAL_LINKS, FOOTER_PROJECT_LINKS } from "../site-map";
 const year = new Date().getFullYear();
 ---
 
@@ -26,49 +27,18 @@ const year = new Date().getFullYear();
     <div>
       <div class="font-mono text-[11px] uppercase tracking-[0.2em] text-outline mb-4">Projekt</div>
       <ul class="space-y-2 text-[15px]">
-        <li><a href="/regnskabsprogram" class="text-on-surface-variant hover:text-primary">Regnskabsprogram</a></li>
-        <li><a href="/open-source-regnskabsprogram" class="text-on-surface-variant hover:text-primary">Open source-regnskab</a></li>
-        <li><a href="/bogfoeringsprogram" class="text-on-surface-variant hover:text-primary">Bogføringsprogram</a></li>
-        <li><a href="/ai-bogholder" class="text-on-surface-variant hover:text-primary">AI-bogholder</a></li>
-        <li><a href="/hvorfor" class="text-on-surface-variant hover:text-primary">Hvorfor</a></li>
-        <li><a href="/saadan-virker-det" class="text-on-surface-variant hover:text-primary">Sådan virker det</a></li>
-        <li><a href="/funktioner" class="text-on-surface-variant hover:text-primary">Funktioner</a></li>
-        <li><a href="/om" class="text-on-surface-variant hover:text-primary">Om</a></li>
-        <li><a href="/about" class="text-on-surface-variant hover:text-primary">About</a></li>
-        <li><a href="/kontakt" class="text-on-surface-variant hover:text-primary">Kontakt</a></li>
+        {FOOTER_PROJECT_LINKS.map((link) => (
+          <li><a href={link.href} class="text-on-surface-variant hover:text-primary">{link.label}</a></li>
+        ))}
       </ul>
     </div>
 
     <div>
       <div class="font-mono text-[11px] uppercase tracking-[0.2em] text-outline mb-4">Viden</div>
       <ul class="space-y-2 text-[15px]">
-        <li><a href="/viden" class="text-on-surface-variant hover:text-primary">Videnshub</a></li>
-        <li><a href="/viden/digital-bogfoering" class="text-on-surface-variant hover:text-primary">Digital bogføring</a></li>
-        <li><a href="/viden/bogfoeringsloven" class="text-on-surface-variant hover:text-primary">Bogføringsloven</a></li>
-        <li><a href="/viden/begreber/audit-trail" class="text-on-surface-variant hover:text-primary">Audit trail</a></li>
-        <li><a href="/viden/sikkerhed/backup-af-regnskab" class="text-on-surface-variant hover:text-primary">Backup</a></li>
-        <li><a href="/viden/sikkerhed/lokal-regnskabsdata" class="text-on-surface-variant hover:text-primary">Lokal regnskabsdata</a></li>
-        <li><a href="/viden/ai/ai-bogfoering-med-kontrol" class="text-on-surface-variant hover:text-primary">AI med kontrol</a></li>
-        <li><a href="/viden/myndigheder/eksport-af-regnskab" class="text-on-surface-variant hover:text-primary">Regnskabseksport</a></li>
-        <li><a href="/bogfoering-for-freelancere" class="text-on-surface-variant hover:text-primary">Freelancere</a></li>
-        <li><a href="/bogfoering-for-enkeltmandsvirksomhed" class="text-on-surface-variant hover:text-primary">Enkeltmandsvirksomhed</a></li>
-        <li><a href="/bogfoering-for-aps" class="text-on-surface-variant hover:text-primary">ApS</a></li>
-        <li><a href="/viden/frister/moms" class="text-on-surface-variant hover:text-primary">Momsfrister</a></li>
-        <li><a href="/viden/moms/satser" class="text-on-surface-variant hover:text-primary">Momssatser</a></li>
-        <li><a href="/viden/moms/eu-reverse-charge" class="text-on-surface-variant hover:text-primary">EU reverse charge</a></li>
-        <li><a href="/viden/moms/momsrapport" class="text-on-surface-variant hover:text-primary">Momsrapport</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/faktura" class="text-on-surface-variant hover:text-primary">Bogfør faktura</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/bankafstemning" class="text-on-surface-variant hover:text-primary">Bankafstemning</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/udenlandsk-faktura" class="text-on-surface-variant hover:text-primary">Udenlandsk faktura</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/udlaeg" class="text-on-surface-variant hover:text-primary">Bogfør udlæg</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/mobilepay" class="text-on-surface-variant hover:text-primary">Bogfør MobilePay</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/repraesentation" class="text-on-surface-variant hover:text-primary">Repræsentation</a></li>
-        <li><a href="/viden/saadan-bogfoerer-du/koerselsgodtgorelse" class="text-on-surface-variant hover:text-primary">Kørselsgodtgørelse</a></li>
-        <li><a href="/viden/begreber/debet-kredit" class="text-on-surface-variant hover:text-primary">Debet/kredit</a></li>
-        <li><a href="/vaerktoej/fakturaskabelon" class="text-on-surface-variant hover:text-primary">Fakturaskabelon</a></li>
-        <li><a href="/vaerktoej/momsberegner" class="text-on-surface-variant hover:text-primary">Momsberegner</a></li>
-        <li><a href="/docs/installation" class="text-on-surface-variant hover:text-primary">Installation</a></li>
-        <li><a href="/sikkerhed" class="text-on-surface-variant hover:text-primary">Sikkerhed</a></li>
+        {FOOTER_KNOWLEDGE_LINKS.map((link) => (
+          <li><a href={link.href} class="text-on-surface-variant hover:text-primary">{link.label}</a></li>
+        ))}
         <li><a href={`${SITE.github}/blob/main/CONTRIBUTING.md`} rel="noopener" target="_blank" class="text-on-surface-variant hover:text-primary">Bidragsguide ↗</a></li>
       </ul>
     </div>
@@ -78,11 +48,9 @@ const year = new Date().getFullYear();
     <div class="max-w-container mx-auto px-margin-mobile md:px-margin-desktop py-6 flex flex-col md:flex-row justify-between gap-4 text-[12px] font-mono uppercase tracking-[0.1em] text-outline">
       <div>© {year} {SITE.author} · MIT-licens · ingen tracking, ingen cookies</div>
       <div class="flex flex-wrap gap-6">
-        <a href="/privacy-policy" class="hover:text-primary">Privacy Policy</a>
-        <a href="/privatlivspolitik" class="hover:text-primary">Privatliv</a>
-        <a href="/sikkerhed" class="hover:text-primary">Sikkerhed</a>
-        <a href="/kontakt" class="hover:text-primary">Kontakt</a>
-        <a href="/sitemap-index.xml" class="hover:text-primary">Sitemap</a>
+        {FOOTER_LEGAL_LINKS.map((link) => (
+          <a href={link.href} class="hover:text-primary">{link.label}</a>
+        ))}
       </div>
     </div>
   </div>

@@ -13,10 +13,4 @@ export const SITE = {
   license: "MIT",
 } as const;
 
-export const NAV = [
-  { href: "/funktioner", label: "Funktioner" },
-  { href: "/regnskabsprogram", label: "Regnskabsprogram" },
-  { href: "/viden", label: "Viden" },
-  { href: "/vaerktoej/momsberegner", label: "Momsberegner" },
-  { href: "/saadan-virker-det", label: "Sådan virker det" },
-] as const;
+export { MAIN_NAV as NAV } from "./site-map";

@@ -26,6 +26,7 @@ const groups = [
       { t: "Periodestyring", d: "Luk perioder og blokér posteringer i lukkede eller fremtidige perioder." },
       { t: "Valutakøb", d: "Bogfør køb i fx USD/EUR korrekt, også når banken trækker et DKK-beløb på kontoen." },
       { t: "Valuta", d: "EUR-bilag bogføres med dagskurs og valutakursdifferencer." },
+      { t: "Anlægsaktiver", d: "Aktivregister, afskrivning og straksafskrivning kan spores fra bilag til periodisk postering, men den skattemæssige vurdering er stadig eksplicit brugeransvar." },
     ],
   },
   {
@@ -73,6 +74,7 @@ const groups = [
     intro: "Det du faktisk får ud.",
     items: [
       { t: "Dashboard", d: "Deterministisk HTML-rapport — samme data giver bit-for-bit samme output." },
+      { t: "Portfolio/cockpit", d: "Flere virksomheder kan samles i et lokalt kontrolpanel med portfolio-overblik, uden at det bliver hosted multi-tenant SaaS." },
       { t: "Healthcheck", d: "CLI-status der viser om alt er konsistent." },
       { t: "Statusrapporter", d: "Faktura-status, åbne exceptions, backupstatus og auditstatus." },
       { t: "Myndigheds-/audit-eksport", d: "Eksportpakke til myndigheder med komplet historik, bilag og verifikationsdata." },
@@ -98,7 +100,7 @@ const groups = [
   description="Funktioner og roadmap i Rentemester: bankimport, faktura, momsrapportering, verifiérbar ledger, MCP, audit-eksport og kommende bilagsmail."
   pageType="WebPage"
   datePublished="2026-05-18"
-  dateModified="2026-05-19"
+  dateModified="2026-05-21"
   ogImage="/og-funktioner.png"
 >
   <PageHero
