@@ -2,9 +2,12 @@
 
 import { vi } from "vitest";
 import type {
+  CompanyBalance,
   CompanyDashboard,
+  CompanyIncomeStatement,
   CompanyOverview,
   CompanySummary,
+  CompanyTrialBalance,
 } from "../lib/types";
 
 export function summary(over: Partial<CompanySummary> = {}): CompanySummary {
@@ -104,6 +107,109 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
     },
     exceptions: { count: 0, rows: [] },
     recentEntries: [],
+    ...over,
+  };
+}
+
+const STATEMENT_COMPANY = {
+  name: "Acme ApS",
+  cvr: "DK12345678",
+  country: "DK",
+  currency: "DKK",
+  fiscalYearStartMonth: 1,
+  fiscalYearLabelStrategy: "end-year",
+};
+
+const STATEMENT_FISCAL_YEARS = [
+  { label: "2026", start: "2026-01-01", end: "2026-12-31", source: "live" as const },
+  { label: "2025", start: null, end: null, source: "archive" as const },
+];
+
+export function incomeStatement(
+  over: Partial<CompanyIncomeStatement> = {},
+): CompanyIncomeStatement {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    income: [
+      { accountNo: "1000", name: "Omsætning", amount: 17829.02, priorAmount: 0 },
+    ],
+    expense: [
+      { accountNo: "3000", name: "Vareforbrug", amount: 4594.2, priorAmount: 0 },
+    ],
+    totalIncome: 17829.02,
+    totalExpense: 4594.2,
+    priorTotalIncome: 0,
+    priorTotalExpense: 0,
+    result: 13234.82,
+    priorResult: 0,
+    ...over,
+  };
+}
+
+export function balance(over: Partial<CompanyBalance> = {}): CompanyBalance {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    asOfDate: "2026-12-31",
+    assets: {
+      lines: [{ accountNo: "55000", name: "Bank", amount: 41388.03 }],
+      total: 41388.03,
+    },
+    liabilities: {
+      lines: [{ accountNo: "64000", name: "Salgsmoms", amount: 3371 }],
+      total: 3371,
+    },
+    equity: {
+      lines: [{ accountNo: "51000", name: "Selskabskapital", amount: 24782.21 }],
+      total: 24782.21,
+    },
+    periodResult: 13234.82,
+    totalAssets: 41388.03,
+    totalLiabilitiesAndEquity: 41388.03,
+    balanced: true,
+    ...over,
+  };
+}
+
+export function trialBalance(
+  over: Partial<CompanyTrialBalance> = {},
+): CompanyTrialBalance {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    rows: [
+      {
+        accountNo: "1000",
+        name: "Omsætning",
+        type: "income",
+        debit: 0,
+        credit: 17829.02,
+        balance: -17829.02,
+      },
+      {
+        accountNo: "55000",
+        name: "Bank",
+        type: "asset",
+        debit: 41388.03,
+        credit: 0,
+        balance: 41388.03,
+      },
+    ],
+    totalDebit: 59217.05,
+    totalCredit: 59217.05,
+    balanced: true,
     ...over,
   };
 }

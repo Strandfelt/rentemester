@@ -14,7 +14,11 @@ import { buildInvoiceList, buildOverdueInvoiceList } from "../core/invoice-list"
 import { listBankTransactions } from "../core/reconciliation";
 import { listExceptions } from "../core/exceptions";
 import { buildVatReport } from "../core/vat";
-import { buildProfitAndLoss } from "../core/financial-statements";
+import {
+  buildBalanceSheet,
+  buildProfitAndLoss,
+  buildTrialBalance,
+} from "../core/financial-statements";
 import { listBankAccounts } from "../core/bank";
 import { getBackupComplianceStatus } from "../core/system-backups";
 import { listRecentAuditLog } from "../core/audit-log";
@@ -766,3 +770,309 @@ type RecentEntry = {
   text: string;
   amount: number;
 };
+
+// --------------------------------------------------------------------------
+// Per-company financial statements (year-aware) — cockpit-redesign it. 2
+// --------------------------------------------------------------------------
+
+/**
+ * Resolves the company, opens its ledger and picks the selected fiscal year —
+ * the shared preamble for the statement builders below. The selected year
+ * follows `buildCompanyOverview`: an explicit `?year=` wins, else the most
+ * recent live year, else the newest available year.
+ *
+ * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
+ */
+function resolveStatementContext(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+): {
+  entry: WorkspaceCompanyEntry;
+  db: Database;
+  company: ReturnType<typeof getCompanySettings>;
+  years: FiscalYearEntry[];
+  selectedLabel: string;
+  isArchivedOnly: boolean;
+} {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const years = buildCompanyFiscalYears(workspaceRoot, slug).years;
+  const liveYears = years.filter((y) => y.source === "live");
+  const defaultYear =
+    liveYears[0]?.label ?? years[0]?.label ?? String(new Date().getUTCFullYear());
+  const selectedLabel = year !== null ? String(year) : defaultYear;
+  const selected = years.find((y) => y.label === selectedLabel);
+  const isArchivedOnly = selected ? selected.source === "archive" : false;
+
+  const db = openDb(dbPath);
+  migrate(db);
+  return {
+    entry,
+    db,
+    company: getCompanySettings(db),
+    years,
+    selectedLabel,
+    isArchivedOnly,
+  };
+}
+
+export type StatementCompanyBlock = {
+  name: string;
+  cvr: string | null;
+  country: string;
+  currency: string;
+  fiscalYearStartMonth: number | string;
+  fiscalYearLabelStrategy: string;
+};
+
+function statementCompanyBlock(
+  company: ReturnType<typeof getCompanySettings>,
+): StatementCompanyBlock {
+  return {
+    name: company.name,
+    cvr: company.cvr,
+    country: company.country,
+    currency: company.currency,
+    fiscalYearStartMonth: company.fiscalYearStartMonth,
+    fiscalYearLabelStrategy: company.fiscalYearLabelStrategy,
+  };
+}
+
+export type IncomeStatementLine = {
+  accountNo: string;
+  name: string;
+  amount: number;
+  /** The same account's amount in the prior calendar year, kroner. */
+  priorAmount: number;
+};
+
+export type CompanyIncomeStatement = ReturnType<typeof buildCompanyIncomeStatement>;
+
+/**
+ * Resultatopgørelse — the income statement for the selected calendar fiscal
+ * year: income accounts and expense accounts, each with its own amount and the
+ * prior year's amount for comparison, plus the totals and the result. Every
+ * figure is computed by `core/financial-statements`. Money is kroner.
+ */
+export function buildCompanyIncomeStatement(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        income: [] as IncomeStatementLine[],
+        expense: [] as IncomeStatementLine[],
+        totalIncome: 0,
+        totalExpense: 0,
+        priorTotalIncome: 0,
+        priorTotalExpense: 0,
+        result: 0,
+        priorResult: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const current = buildProfitAndLoss(ctx.db, `${yearNum}-01-01`, `${yearNum}-12-31`);
+    const prior = buildProfitAndLoss(
+      ctx.db,
+      `${yearNum - 1}-01-01`,
+      `${yearNum - 1}-12-31`,
+    );
+    const priorIncome = new Map(prior.income.map((l) => [l.accountNo, l.amount]));
+    const priorExpense = new Map(prior.expense.map((l) => [l.accountNo, l.amount]));
+
+    const income: IncomeStatementLine[] = current.income.map((l) => ({
+      accountNo: l.accountNo,
+      name: l.name,
+      amount: l.amount,
+      priorAmount: priorIncome.get(l.accountNo) ?? 0,
+    }));
+    const expense: IncomeStatementLine[] = current.expense.map((l) => ({
+      accountNo: l.accountNo,
+      name: l.name,
+      amount: l.amount,
+      priorAmount: priorExpense.get(l.accountNo) ?? 0,
+    }));
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      income,
+      expense,
+      totalIncome: current.totalIncome,
+      totalExpense: current.totalExpense,
+      priorTotalIncome: prior.totalIncome,
+      priorTotalExpense: prior.totalExpense,
+      result: current.result,
+      priorResult: prior.result,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+export type BalanceLine = {
+  accountNo: string;
+  name: string;
+  amount: number;
+};
+
+export type BalanceSection = {
+  lines: BalanceLine[];
+  total: number;
+};
+
+export type CompanyBalance = ReturnType<typeof buildCompanyBalance>;
+
+/**
+ * Balance — the balance sheet as of the selected fiscal year's end date:
+ * assets, liabilities and equity sections with section totals. The un-closed
+ * period result is surfaced under equity so the sheet balances (assets =
+ * liabilities + equity). Computed by `core/financial-statements`. Money kroner.
+ */
+export function buildCompanyBalance(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      const empty: BalanceSection = { lines: [], total: 0 };
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        asOfDate: `${ctx.selectedLabel}-12-31`,
+        assets: empty,
+        liabilities: empty,
+        equity: empty,
+        periodResult: 0,
+        totalAssets: 0,
+        totalLiabilitiesAndEquity: 0,
+        balanced: true,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const asOfDate = `${yearNum}-12-31`;
+    const bs = buildBalanceSheet(ctx.db, asOfDate);
+    const toLines = (lines: { accountNo: string; name: string; amount: number }[]) =>
+      lines.map((l) => ({ accountNo: l.accountNo, name: l.name, amount: l.amount }));
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      asOfDate: bs.asOfDate,
+      assets: { lines: toLines(bs.assets.lines), total: bs.assets.total },
+      liabilities: {
+        lines: toLines(bs.liabilities.lines),
+        total: bs.liabilities.total,
+      },
+      equity: { lines: toLines(bs.equity.lines), total: bs.equity.total },
+      periodResult: bs.periodResult,
+      totalAssets: bs.totalAssets,
+      totalLiabilitiesAndEquity: bs.totalLiabilitiesAndEquity,
+      balanced: bs.balanced,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+export type TrialBalanceRow = {
+  accountNo: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+export type CompanyTrialBalance = ReturnType<typeof buildCompanyTrialBalance>;
+
+/**
+ * Saldobalance — the trial balance for the selected calendar fiscal year:
+ * every account that moved, with its summed debit total, credit total and the
+ * signed net balance. The report is balanced when total debit equals total
+ * credit. Computed by `core/financial-statements`. Money is kroner.
+ */
+export function buildCompanyTrialBalance(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        rows: [] as TrialBalanceRow[],
+        totalDebit: 0,
+        totalCredit: 0,
+        balanced: true,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const tb = buildTrialBalance(ctx.db, `${yearNum}-01-01`, `${yearNum}-12-31`);
+    const rows: TrialBalanceRow[] = tb.accounts.map((a) => ({
+      accountNo: a.accountNo,
+      name: a.name,
+      type: a.type,
+      debit: a.debit,
+      credit: a.credit,
+      balance: a.balance,
+    }));
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: tb.periodStart,
+      periodEnd: tb.periodEnd,
+      rows,
+      totalDebit: tb.totalDebit,
+      totalCredit: tb.totalCredit,
+      balanced: tb.balanced,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}

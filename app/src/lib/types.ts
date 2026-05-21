@@ -210,6 +210,116 @@ export type OverviewResponse = {
   overview: CompanyOverview;
 };
 
+// --- financial statements (cockpit-redesign iteration 2) ------------------
+//
+// All money fields below are kroner (DKK with decimals) — use `formatKroner`.
+
+/** The company identity block shared by every statement payload. */
+export type StatementCompany = {
+  name: string;
+  cvr: string | null;
+  country: string;
+  currency: string;
+  fiscalYearStartMonth: number | string;
+  fiscalYearLabelStrategy: string;
+};
+
+// --- income statement (GET .../income-statement?year=) --------------------
+
+export type IncomeStatementLine = {
+  accountNo: string;
+  name: string;
+  amount: number;
+  /** The same account's amount in the prior calendar year, kroner. */
+  priorAmount: number;
+};
+
+export type CompanyIncomeStatement = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  income: IncomeStatementLine[];
+  expense: IncomeStatementLine[];
+  totalIncome: number;
+  totalExpense: number;
+  priorTotalIncome: number;
+  priorTotalExpense: number;
+  result: number;
+  priorResult: number;
+};
+
+export type IncomeStatementResponse = {
+  ok: true;
+  incomeStatement: CompanyIncomeStatement;
+};
+
+// --- balance sheet (GET .../balance?year=) --------------------------------
+
+export type BalanceLine = {
+  accountNo: string;
+  name: string;
+  amount: number;
+};
+
+export type BalanceSection = {
+  lines: BalanceLine[];
+  total: number;
+};
+
+export type CompanyBalance = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  asOfDate: string;
+  assets: BalanceSection;
+  liabilities: BalanceSection;
+  equity: BalanceSection;
+  /** The un-closed period result, carried into the equity side. */
+  periodResult: number;
+  totalAssets: number;
+  totalLiabilitiesAndEquity: number;
+  balanced: boolean;
+};
+
+export type BalanceResponse = {
+  ok: true;
+  balance: CompanyBalance;
+};
+
+// --- trial balance (GET .../trial-balance?year=) --------------------------
+
+export type TrialBalanceRow = {
+  accountNo: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+export type CompanyTrialBalance = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  rows: TrialBalanceRow[];
+  totalDebit: number;
+  totalCredit: number;
+  balanced: boolean;
+};
+
+export type TrialBalanceResponse = {
+  ok: true;
+  trialBalance: CompanyTrialBalance;
+};
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;

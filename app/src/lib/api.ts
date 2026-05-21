@@ -5,13 +5,16 @@
 // only ever deal with data or a single error type.
 
 import type {
+  BalanceResponse,
   CompanyListResponse,
   CreateCompanyInput,
   DashboardResponse,
   FiscalYearsResponse,
   HealthResponse,
+  IncomeStatementResponse,
   OverviewResponse,
   PortfolioResponse,
+  TrialBalanceResponse,
   UpdateCompanyInput,
 } from "./types";
 
@@ -92,6 +95,27 @@ export const api = {
         year ? `?year=${encodeURIComponent(year)}` : ""
       }`,
     ).then((r) => r.overview),
+
+  incomeStatement: (slug: string, year?: string) =>
+    request<IncomeStatementResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/income-statement${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.incomeStatement),
+
+  balance: (slug: string, year?: string) =>
+    request<BalanceResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/balance${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.balance),
+
+  trialBalance: (slug: string, year?: string) =>
+    request<TrialBalanceResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/trial-balance${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.trialBalance),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

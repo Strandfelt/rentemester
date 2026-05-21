@@ -2,23 +2,24 @@
 //
 // Renders `/api/companies/:slug/overview?year=`: three headline KPI cards
 // (Omsætning / Udgifter / Resultat), a month-by-month P&L chart, and a row of
-// status cards (Bank, Moms, Opgaver, Seneste posteringer). A global
-// fiscal-year selector — fed by `/fiscal-years` — reloads the view for the
-// chosen year. All `/overview` money fields are kroner, so `formatKroner` is
-// used throughout (never `formatCurrency`, which expects minor units).
+// status cards (Bank, Moms, Opgaver, Seneste posteringer). The per-company
+// sub-navigation and fiscal-year selector live in `CompanyNav`; the chosen
+// year is carried in the URL (`?year=`) so it follows the user across views.
+// All `/overview` money fields are kroner, so `formatKroner` is used
+// throughout (never `formatCurrency`, which expects minor units).
 
-import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyOverview, OverviewMonth } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
+import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
 import { PnlChart } from "../components/PnlChart";
 
 export function DashboardView() {
   const { slug = "" } = useParams();
-  const [year, setYear] = useState<string | undefined>(undefined);
+  const { year, setYear } = useCompanyYear();
   const state = useAsync<CompanyOverview>(
     () => api.overview(slug, year),
     [slug, year],
@@ -43,16 +44,18 @@ export function DashboardView() {
           </p>
         </div>
         <div className="row-actions">
-          <YearSelector
-            years={o.fiscalYears}
-            selected={o.selectedYear}
-            onChange={(y) => setYear(y)}
-          />
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
             Administrér
           </Link>
         </div>
       </div>
+
+      <CompanyNav
+        slug={slug}
+        years={o.fiscalYears}
+        selectedYear={o.selectedYear}
+        onYearChange={setYear}
+      />
 
       {o.archived ? (
         <ArchivedNotice year={o.selectedYear} />
@@ -97,38 +100,6 @@ export function DashboardView() {
         </>
       )}
     </section>
-  );
-}
-
-// --------------------------------------------------------------------------
-// Fiscal-year selector
-// --------------------------------------------------------------------------
-
-function YearSelector({
-  years,
-  selected,
-  onChange,
-}: {
-  years: CompanyOverview["fiscalYears"];
-  selected: string;
-  onChange: (year: string) => void;
-}) {
-  return (
-    <label className="year-selector">
-      <span className="ys-label">Regnskabsår</span>
-      <select
-        value={selected}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="Vælg regnskabsår"
-      >
-        {years.map((y) => (
-          <option key={y.label} value={y.label}>
-            {y.label}
-            {y.source === "archive" ? " (arkiv)" : ""}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 

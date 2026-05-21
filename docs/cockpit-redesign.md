@@ -126,13 +126,16 @@ rigtige tal før ledgeren er korrekt — derfor fixes importen først.
 - [x] Frontend: P&L-graf måned for måned (Chart.js)
 - [x] Frontend: statuskort — Bank, Moms, Undtagelser/Opgaver, Seneste posteringer
 - [x] Responsivt layout (desktop + mobil)
-- [ ] **Visuel inspektion** — tal matcher ground truth; flot og overskueligt på begge skærme
+- [x] **Visuel inspektion** — tal matcher ground truth (Resultat 13.234,82);
+      graf + KPI-kort + statuskort verificeret på desktop og mobil
 
 ### Iteration 2 — Regnskabsopgørelser (P1)
-- [ ] Backend: income-statement, balance, trial-balance endpoints (årsbevidste)
-- [ ] Frontend: Resultatopgørelse-view (med foregående år til sammenligning)
-- [ ] Frontend: Balance-view
-- [ ] Frontend: Saldobalance-view
+- [x] Backend: income-statement, balance, trial-balance endpoints (årsbevidste)
+- [x] Frontend: Resultatopgørelse-view (med foregående år til sammenligning)
+- [x] Frontend: Balance-view
+- [x] Frontend: Saldobalance-view
+- [x] Per-virksomhed sub-navigation (Overblik · Resultatopgørelse · Balance ·
+      Saldobalance); valgt regnskabsår bæres i URL'en (`?year=`) på tværs af views
 - [ ] **Visuel inspektion**
 
 ### Iteration 3 — Ledger-detaljer (P1–P2)

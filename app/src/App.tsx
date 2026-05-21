@@ -1,15 +1,24 @@
 // App shell + routing for the cockpit SPA (#171).
 //
 // Routes:
-//   /                      portfolio overview (→ onboarding when empty)
-//   /companies/new         add a company
-//   /companies/:slug       per-company dashboard
-//   /companies/:slug/manage  rename / archive
+//   /                                   portfolio overview (→ onboarding)
+//   /companies/new                      add a company
+//   /companies/:slug                    Overblik (per-company dashboard)
+//   /companies/:slug/resultatopgorelse  Resultatopgørelse (income statement)
+//   /companies/:slug/balance            Balance (balance sheet)
+//   /companies/:slug/saldobalance       Saldobalance (trial balance)
+//   /companies/:slug/manage             rename / archive
+//
+// The per-company views share a sub-navigation and a fiscal-year selector
+// (`CompanyNav`); the chosen year is carried in the URL as `?year=`.
 
 import { NavLink, Route, Routes, Link } from "react-router-dom";
 import { PortfolioView } from "./views/PortfolioView";
 import { AddCompanyView } from "./views/AddCompanyView";
 import { DashboardView } from "./views/DashboardView";
+import { IncomeStatementView } from "./views/IncomeStatementView";
+import { BalanceView } from "./views/BalanceView";
+import { TrialBalanceView } from "./views/TrialBalanceView";
 import { ManageCompanyView } from "./views/ManageCompanyView";
 
 export function App() {
@@ -32,6 +41,15 @@ export function App() {
           <Route path="/" element={<PortfolioView />} />
           <Route path="/companies/new" element={<AddCompanyView />} />
           <Route path="/companies/:slug" element={<DashboardView />} />
+          <Route
+            path="/companies/:slug/resultatopgorelse"
+            element={<IncomeStatementView />}
+          />
+          <Route path="/companies/:slug/balance" element={<BalanceView />} />
+          <Route
+            path="/companies/:slug/saldobalance"
+            element={<TrialBalanceView />}
+          />
           <Route
             path="/companies/:slug/manage"
             element={<ManageCompanyView />}

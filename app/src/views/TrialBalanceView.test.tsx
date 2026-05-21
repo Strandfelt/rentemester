@@ -1,0 +1,58 @@
+import { describe, expect, test } from "vitest";
+import { screen, within } from "@testing-library/react";
+import { TrialBalanceView } from "./TrialBalanceView";
+import { renderAt } from "../test/render";
+import { trialBalance, mockFetch } from "../test/fixtures";
+
+function route(over = {}) {
+  return {
+    "GET /api/companies/acme-aps/trial-balance": {
+      trialBalance: trialBalance(over),
+    },
+  };
+}
+
+function renderView() {
+  return renderAt(<TrialBalanceView />, {
+    route: "/companies/acme-aps/saldobalance",
+    path: "/companies/:slug/saldobalance",
+  });
+}
+
+describe("TrialBalanceView — Saldobalance", () => {
+  test("renders the account table with debit/credit/balance columns", async () => {
+    mockFetch(route());
+    renderView();
+    expect(
+      await screen.findByRole("heading", { name: "Acme ApS" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Debet")).toBeInTheDocument();
+    expect(screen.getByText("Kredit")).toBeInTheDocument();
+    expect(screen.getByText("Saldo")).toBeInTheDocument();
+  });
+
+  test("lists every moved account", async () => {
+    mockFetch(route());
+    renderView();
+    expect(await screen.findByText("Omsætning")).toBeInTheDocument();
+    expect(screen.getByText("Bank")).toBeInTheDocument();
+  });
+
+  test("shows the totals row and the balanced confirmation", async () => {
+    mockFetch(route());
+    renderView();
+    const total = (await screen.findByText("I alt")).closest("tr")!;
+    expect(
+      within(total as HTMLElement).getAllByText(/59\.217,05/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/Saldobalancen stemmer/)).toBeInTheDocument();
+  });
+
+  test("an archived year shows the arkiv notice", async () => {
+    mockFetch(route({ archived: true, selectedYear: "2025" }));
+    renderView();
+    expect(
+      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+    ).toBeInTheDocument();
+  });
+});

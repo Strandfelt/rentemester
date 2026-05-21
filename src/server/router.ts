@@ -25,9 +25,12 @@ import type { ServerConfig } from "./config";
 import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
 import {
+  buildCompanyBalance,
   buildCompanyDashboardData,
   buildCompanyFiscalYears,
+  buildCompanyIncomeStatement,
   buildCompanyOverview,
+  buildCompanyTrialBalance,
   buildPortfolioOverview,
   resolveAsOfDate,
   resolveYearParam,
@@ -139,6 +142,36 @@ function handleCompanyOverview(
   const year = resolveYearParam(url.searchParams.get("year"));
   const data = buildCompanyOverview(config.workspaceRoot, slug, year);
   return okResponse({ overview: data });
+}
+
+function handleCompanyIncomeStatement(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyIncomeStatement(config.workspaceRoot, slug, year);
+  return okResponse({ incomeStatement: data });
+}
+
+function handleCompanyBalance(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyBalance(config.workspaceRoot, slug, year);
+  return okResponse({ balance: data });
+}
+
+function handleCompanyTrialBalance(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyTrialBalance(config.workspaceRoot, slug, year);
+  return okResponse({ trialBalance: data });
 }
 
 async function handleCompanyCreate(
@@ -276,6 +309,29 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(overviewMatch[1]!);
       return handleCompanyOverview(config, slug, url);
+    }
+
+    const incomeStatementMatch =
+      /^\/api\/companies\/([^/]+)\/income-statement$/.exec(path);
+    if (incomeStatementMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(incomeStatementMatch[1]!);
+      return handleCompanyIncomeStatement(config, slug, url);
+    }
+
+    const balanceMatch = /^\/api\/companies\/([^/]+)\/balance$/.exec(path);
+    if (balanceMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(balanceMatch[1]!);
+      return handleCompanyBalance(config, slug, url);
+    }
+
+    const trialBalanceMatch =
+      /^\/api\/companies\/([^/]+)\/trial-balance$/.exec(path);
+    if (trialBalanceMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(trialBalanceMatch[1]!);
+      return handleCompanyTrialBalance(config, slug, url);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

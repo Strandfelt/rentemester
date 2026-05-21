@@ -317,7 +317,9 @@ function postPnlEntry(
     migrate(db);
     const inbox = mkdtempSync(join(tmpdir(), "rentemester-ov-inbox-"));
     const sourceFile = join(inbox, "doc.txt");
-    writeFileSync(sourceFile, "Bilag\n1 DKK\n");
+    // Date-unique content so the helper can be called for several years in
+    // one test without colliding on the document content-hash dedupe.
+    writeFileSync(sourceFile, `Bilag ${transactionDate}\n1 DKK\n`);
     const doc = ingestDocument(db, companyRoot, sourceFile, {
       source: "email",
       issueDate: transactionDate,
@@ -431,6 +433,153 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       const res = await get(
         config({ workspaceRoot: ws }),
         "/api/companies/ghost/overview",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — income statement (GET .../income-statement)", () => {
+  test("returns grouped income/expense lines and the result for the year", async () => {
+    const ws = makeWorkspace("is-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/income-statement?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const is = res.body.incomeStatement;
+      expect(is.slug).toBe("acme-aps");
+      expect(is.selectedYear).toBe("2026");
+      expect(is.archived).toBe(false);
+      expect(is.totalIncome).toBe(1000);
+      expect(is.totalExpense).toBe(400);
+      expect(is.result).toBe(600);
+      expect(is.income[0]).toMatchObject({ amount: 1000, priorAmount: 0 });
+      expect(is.expense[0]).toMatchObject({ amount: 400, priorAmount: 0 });
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a prior-year posting surfaces as the comparison amount", async () => {
+    const ws = makeWorkspace("is-prior", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2025-04-01", 800, 0);
+      postPnlEntry(ws, "acme-aps", "2026-04-01", 1000, 0);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/income-statement?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.incomeStatement.income[0].amount).toBe(1000);
+      expect(res.body.incomeStatement.income[0].priorAmount).toBe(800);
+      expect(res.body.incomeStatement.priorTotalIncome).toBe(800);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("income-statement for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("is-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/income-statement",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — balance sheet (GET .../balance)", () => {
+  test("returns asset/liability/equity sections that balance", async () => {
+    const ws = makeWorkspace("bal-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/balance?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const b = res.body.balance;
+      expect(b.slug).toBe("acme-aps");
+      expect(b.asOfDate).toBe("2026-12-31");
+      expect(b.balanced).toBe(true);
+      expect(b.totalAssets).toBe(b.totalLiabilitiesAndEquity);
+      expect(b.assets).toHaveProperty("lines");
+      expect(b.assets).toHaveProperty("total");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("balance for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("bal-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/balance",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — trial balance (GET .../trial-balance)", () => {
+  test("lists every moved account with debit, credit and balance", async () => {
+    const ws = makeWorkspace("tb-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/trial-balance?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const tb = res.body.trialBalance;
+      expect(tb.slug).toBe("acme-aps");
+      expect(tb.balanced).toBe(true);
+      expect(tb.totalDebit).toBe(tb.totalCredit);
+      expect(tb.rows.length).toBeGreaterThan(0);
+      expect(tb.rows[0]).toHaveProperty("accountNo");
+      expect(tb.rows[0]).toHaveProperty("debit");
+      expect(tb.rows[0]).toHaveProperty("credit");
+      expect(tb.rows[0]).toHaveProperty("balance");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("an invalid year query value is a safe 400", async () => {
+    const ws = makeWorkspace("tb-badyear", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/trial-balance?year=20xx",
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("bad_request");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("trial-balance for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("tb-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/trial-balance",
       );
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("not_found");

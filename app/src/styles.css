@@ -697,6 +697,134 @@ table.data.compact tr:last-child td {
 }
 
 /* ==========================================================================
+   Per-company sub-navigation (Overblik · Resultatopgørelse · Balance · …)
+   ========================================================================== */
+
+.company-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-lg);
+}
+.company-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+.company-tabs a {
+  color: var(--text-dim);
+  font-size: var(--text-size-md);
+  font-weight: var(--text-weight-medium);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.company-tabs a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.company-tabs a.active {
+  color: var(--text);
+  font-weight: var(--text-weight-semibold);
+  border-bottom-color: var(--accent);
+}
+.company-nav .year-selector {
+  padding-bottom: var(--space-xs);
+}
+
+/* ==========================================================================
+   Financial statements — Resultatopgørelse / Balance / Saldobalance
+   ========================================================================== */
+
+.statement-asof {
+  font-size: var(--text-size-sm);
+  margin: 0 0 var(--space-sm);
+  font-family: var(--font-mono);
+}
+.statement-card {
+  padding: 0;
+  overflow: hidden;
+}
+/* Horizontal scroll for the wider Saldobalance table on narrow viewports. */
+.table-scroll {
+  overflow-x: auto;
+}
+table.statement-table {
+  width: 100%;
+}
+table.statement-table th,
+table.statement-table td {
+  padding: var(--space-xs) var(--space-md);
+}
+table.statement-table td.account-no,
+table.statement-table .account-no {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+table.statement-table td.num.muted {
+  color: var(--text-dim);
+}
+
+/* Section heading row inside a statement table. */
+.statement-section-head th {
+  background: var(--surface-2);
+  font-family: var(--font-headline);
+  font-size: var(--text-size-md);
+  font-weight: var(--text-weight-semibold);
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1px solid var(--border-strong);
+  padding-top: var(--space-sm);
+  padding-bottom: var(--space-sm);
+}
+
+/* Section subtotal row. */
+.statement-subtotal td {
+  font-weight: var(--text-weight-semibold);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+/* The headline result / balance-total row. */
+.statement-result td {
+  font-weight: var(--text-weight-bold);
+  font-size: var(--text-size-md);
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none;
+  padding-top: var(--space-sm);
+  padding-bottom: var(--space-sm);
+}
+.statement-result.positive td.num {
+  color: var(--ok);
+}
+.statement-result.negative td.num {
+  color: var(--critical);
+}
+
+.statement-check {
+  font-size: var(--text-size-sm);
+  margin: var(--space-sm) 0 0;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+.statement-check.ok {
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+  color: var(--text);
+}
+.statement-check.alert {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+  color: var(--text);
+}
+
+/* ==========================================================================
    Responsive — narrow viewport
    ========================================================================== */
 
@@ -730,5 +858,16 @@ table.data.compact tr:last-child td {
   .page-head .row-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+  .company-nav {
+    align-items: stretch;
+  }
+  .company-nav .year-selector {
+    padding-bottom: var(--space-xs);
+  }
+  /* Tighten statement-table padding so the columns fit a phone width. */
+  table.statement-table th,
+  table.statement-table td {
+    padding: var(--space-xs) var(--space-sm);
   }
 }
