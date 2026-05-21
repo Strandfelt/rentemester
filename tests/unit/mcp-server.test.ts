@@ -139,6 +139,16 @@ describe("MCP server scaffold", () => {
     expect(instructions).toContain("docs/mcp-agent-contract.md");
   });
 
+  test("#245 — instructions warn that a schema-invalid payload yields a raw -32602", () => {
+    // An agent reading only `instructions` must not assume every error is the
+    // { ok, errors[] } envelope: a schema-invalid payload is rejected by the
+    // SDK before the handler and comes back as a raw JSON-RPC -32602 error.
+    const instructions: string = initResult?.instructions ?? "";
+    expect(instructions).toContain("-32602");
+    // It must say this reply has no structuredContent / envelope.
+    expect(instructions).toContain("structuredContent");
+  });
+
   test("lists audit_verify and journal_post via tools/list", async () => {
     const response = await client.send("tools/list");
     expect(response.error).toBeUndefined();

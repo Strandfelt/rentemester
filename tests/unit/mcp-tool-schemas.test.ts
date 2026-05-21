@@ -415,6 +415,115 @@ describe("#204 — journal_post no longer advertises an unbacked idempotencyKey"
   });
 });
 
+describe("#238 — journal_post requires at least two lines", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  test("journal_post lines schema declares minItems 2, matching the core", () => {
+    // The core (src/core/ledger.ts) rejects any entry with fewer than two
+    // lines. The MCP schema must advertise the same minimum so an agent
+    // building from tools/list does not get its first posting rejected.
+    const tool = tools.find((t) => t.name === "journal_post");
+    expect(tool, "journal_post not found").toBeDefined();
+    const lines = tool.inputSchema?.properties?.payload?.properties?.lines;
+    expect(lines?.type).toBe("array");
+    expect(lines?.minItems).toBe(2);
+  });
+
+  test("journal_post lines description states the debit-must-balance-credit rule", () => {
+    const tool = tools.find((t) => t.name === "journal_post");
+    const desc: string = (
+      tool.inputSchema?.properties?.payload?.properties?.lines?.description ?? ""
+    ).toLowerCase();
+    expect(desc).toContain("debit");
+    expect(desc).toContain("credit");
+    // It must spell out the two-line minimum too.
+    expect(desc).toContain("two");
+  });
+
+  test("a single-line journal_post payload is rejected before the handler", async () => {
+    const response = await client.send("tools/call", {
+      name: "journal_post",
+      arguments: {
+        company: companyRoot,
+        payload: {
+          transactionDate: "2026-05-18",
+          text: "one line only",
+          lines: [{ accountNo: "2000", debitAmount: 100 }],
+        },
+        confirm: true,
+      },
+    });
+    // The min(2) schema makes the SDK reject this before the handler runs.
+    const structured = response.result?.structuredContent;
+    const failed =
+      response.error !== undefined ||
+      response.result?.isError === true ||
+      structured?.ok === false;
+    expect(failed).toBe(true);
+  });
+});
+
+describe("#243 — previously-undescribed MCP tool fields now carry describe() text", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  function schemaOf(name: string) {
+    const tool = tools.find((t) => t.name === name);
+    expect(tool, `tool ${name} not found`).toBeDefined();
+    return tool.inputSchema as any;
+  }
+
+  test("bank_import.profile is an enum exposing the danske-bank value with a description", () => {
+    const profile = schemaOf("bank_import").properties?.profile;
+    // It must no longer be a bare string — the valid value must be discoverable.
+    expect(Array.isArray(profile?.enum)).toBe(true);
+    expect(profile?.enum).toContain("danske-bank");
+    expect((profile?.description ?? "").toLowerCase()).toContain("danske-bank");
+  });
+
+  test("bank_import.account / csvPath / csvContent carry descriptions", () => {
+    const props = schemaOf("bank_import").properties ?? {};
+    expect(typeof props.account?.description).toBe("string");
+    expect(typeof props.csvPath?.description).toBe("string");
+    expect(typeof props.csvContent?.description).toBe("string");
+  });
+
+  test("expense_book.vatTreatment description explains each treatment", () => {
+    const vt = schemaOf("expense_book").properties?.vatTreatment;
+    const desc: string = (vt?.description ?? "").toLowerCase();
+    expect(desc.length).toBeGreaterThan(20);
+    // Each enum value should be explained.
+    expect(desc).toContain("reverse_charge");
+    expect(desc).toContain("representation");
+    expect(desc).toContain("exempt");
+  });
+
+  test("documents_ingest force describes bypassing duplicate detection", () => {
+    const force = schemaOf("documents_ingest").properties?.force;
+    const desc: string = (force?.description ?? "").toLowerCase();
+    expect(desc).toContain("duplicate");
+    expect(typeof schemaOf("documents_ingest").properties?.vendorId?.description).toBe(
+      "string",
+    );
+  });
+
+  test("portfolio_overview.workspace documents the RENTEMESTER_WORKSPACE fallback", () => {
+    const ws = schemaOf("portfolio_overview").properties?.workspace;
+    const desc: string = ws?.description ?? "";
+    expect(desc).toContain("RENTEMESTER_WORKSPACE");
+    expect(desc.toLowerCase()).toContain("omitted");
+  });
+});
+
 describe("#200 — typed schemas reject structurally invalid payloads", () => {
   test("invoice_issue rejects a payload missing the required invoiceType", async () => {
     // With the typed schema the SDK rejects this before the handler. The point

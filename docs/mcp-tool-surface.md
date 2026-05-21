@@ -77,8 +77,14 @@ med det samme i komprimeret form.
    En generel write-idempotency-cache er en mulig fremtidig udvidelse, ikke
    et nuværende løfte.
 7. **Eksplicit `company`-parameter overalt.** Aldrig implicit "current
-   company"; agent skal altid pege på den absolutte sti. Workspace-tools
-   (`company_add`, `portfolio_overview`) tager i stedet en `workspace`-sti.
+   company"; agent skal altid pege på virksomheden. `company` accepterer
+   **enten** en absolut filsystem-sti til virksomhedsmappen (`..`-guardet),
+   **eller** en workspace-slug — et bart, separator-frit slug-token der slås
+   op i manifestet for det workspace `RENTEMESTER_WORKSPACE` peger på.
+   En værdi med `/` eller `\` behandles altid som en sti, så en rigtig sti
+   aldrig fejltolkes som slug (`resolveCompanyArg` i
+   `src/mcp/tool-runtime.ts`). Workspace-tools (`company_add`,
+   `portfolio_overview`) tager i stedet en `workspace`-sti.
 
 ## Klassifikation
 

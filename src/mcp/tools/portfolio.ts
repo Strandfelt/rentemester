@@ -254,8 +254,25 @@ export function registerPortfolioTools(server: McpServer): void {
         "konsolideres eller summeres på tværs af enhederne. Cross-company handlinger udføres ved at " +
         "loope de eksisterende enkelt-virksomheds-tools.",
       inputSchema: {
-        workspace: z.string().optional(),
-        asOf: z.string().regex(ISO_DATE_RE, "asOf must be YYYY-MM-DD").optional(),
+        workspace: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute path to the workspace root whose companies are juxtaposed. " +
+              "When omitted, the workspace falls back to the RENTEMESTER_WORKSPACE " +
+              "environment variable on the MCP server's host; if that is also unset " +
+              "the call is rejected with " +
+              "\"no workspace given: pass 'workspace' or set RENTEMESTER_WORKSPACE\".",
+          ),
+        asOf: z
+          .string()
+          .regex(ISO_DATE_RE, "asOf must be YYYY-MM-DD")
+          .optional()
+          .describe(
+            "Optional as-of date (YYYY-MM-DD) for the status snapshot — VAT " +
+              "deadlines, open receivables and backup compliance are evaluated " +
+              "against it. When omitted, the server's current UTC date is used.",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },

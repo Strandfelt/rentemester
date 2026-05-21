@@ -185,5 +185,7 @@ Respons:
   kræver eksplicit `confirm: true` på input. Det er bevidst — det
   forhindrer agenter i at bogføre ved et uheld.
 - **`company path does not exist`.** MCP-serveren accepterer aldrig
-  implicit "current company"; agenten skal altid passe en absolut sti.
+  implicit "current company"; agenten skal altid passe en `company` —
+  enten en absolut sti til virksomhedsmappen eller en workspace-slug
+  (slås op i `RENTEMESTER_WORKSPACE`'s manifest).
   Kør `rentemester init --company /path/to/company` først.
