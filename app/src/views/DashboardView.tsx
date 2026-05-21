@@ -91,6 +91,10 @@ export function DashboardView() {
           <div className="status-grid">
             <BankCard bank={o.bank} currency={currency} />
             <VatCard vat={o.vat} currency={currency} />
+            <ReceivablesCard
+              receivables={o.receivables}
+              currency={currency}
+            />
             <ExceptionsCard slug={slug} exceptions={o.exceptions} />
             <RecentEntriesCard
               entries={o.recentEntries}
@@ -215,6 +219,18 @@ function VatCard({
   vat: CompanyOverview["vat"];
   currency: string;
 }) {
+  // The half-yearly momsangivelse is easy to forget — surface the statutory
+  // filing/payment deadline and a "X dage tilbage" countdown right on the card.
+  const days = vat.daysRemaining;
+  const countdown =
+    days < 0
+      ? `Fristen overskredet ${Math.abs(days)} ${
+          Math.abs(days) === 1 ? "dag" : "dage"
+        }`
+      : days === 0
+        ? "Frist i dag"
+        : `${days} ${days === 1 ? "dag" : "dage"} tilbage`;
+  const tone = days <= 30 ? (days < 0 ? "critical" : "warning") : "ok";
   return (
     <StatusCard title="Moms">
       <div className="status-figure">
@@ -222,6 +238,40 @@ function VatCard({
       </div>
       <p className="muted status-note">
         {vat.periodLabel} · {vat.payable >= 0 ? "at betale" : "tilgode"}
+      </p>
+      <p className="muted status-note">
+        Frist {vat.deadline} ·{" "}
+        <span className={`bank-diff ${tone === "ok" ? "ok" : "alert"}`}>
+          {countdown}
+        </span>
+      </p>
+    </StatusCard>
+  );
+}
+
+function ReceivablesCard({
+  receivables,
+  currency,
+}: {
+  receivables: CompanyOverview["receivables"];
+  currency: string;
+}) {
+  // "Hvem skylder mig" — the open balance of issued sales invoices. For a
+  // company with no outstanding receivables (Helheim) this is a clean zero.
+  const { openCount, openTotal } = receivables;
+  return (
+    <StatusCard title="Tilgodehavender">
+      <div
+        className={`status-figure${openTotal > 0 ? " status-alert" : ""}`}
+      >
+        {formatKroner(openTotal, currency)}
+      </div>
+      <p className="muted status-note">
+        {openCount === 0
+          ? "Ingen udestående fakturaer — ingen skylder dig penge."
+          : `${openCount} ${
+              openCount === 1 ? "faktura" : "fakturaer"
+            } afventer betaling fra kunder.`}
       </p>
     </StatusCard>
   );

@@ -36,6 +36,7 @@ import {
   buildCompanyInvoices,
   buildCompanyJournal,
   buildCompanyMultiYear,
+  buildCompanyObligations,
   buildCompanyOverview,
   buildCompanyTrialBalance,
   buildCompanyVat,
@@ -246,6 +247,16 @@ function handleCompanyInvoices(
 function handleCompanyContacts(config: ServerConfig, slug: string): Response {
   const data = buildCompanyContacts(config.workspaceRoot, slug);
   return okResponse({ contacts: data });
+}
+
+function handleCompanyObligations(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyObligations(config.workspaceRoot, slug, year);
+  return okResponse({ obligations: data });
 }
 
 async function handleCompanyCreate(
@@ -464,6 +475,14 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(contactsMatch[1]!);
       return handleCompanyContacts(config, slug);
+    }
+
+    const obligationsMatch =
+      /^\/api\/companies\/([^/]+)\/obligations$/.exec(path);
+    if (obligationsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(obligationsMatch[1]!);
+      return handleCompanyObligations(config, slug, url);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

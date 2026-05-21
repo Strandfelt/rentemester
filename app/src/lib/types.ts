@@ -211,6 +211,13 @@ export type CompanyOverview = {
     /** balance − actualBalance; the unreconciled gap, kroner; null when unknown. */
     difference: number | null;
   };
+  /** Money owed TO the company — open issued-invoice balances at year end. */
+  receivables: {
+    /** Number of issued invoices still carrying an open balance. */
+    openCount: number;
+    /** Sum of the open balances, kroner. */
+    openTotal: number;
+  };
   vat: {
     periodStart: string;
     periodEnd: string;
@@ -221,6 +228,10 @@ export type CompanyOverview = {
     inputVat: number;
     /** outputVat − inputVat; positive is payable to SKAT, kroner. */
     payable: number;
+    /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
+    deadline: string;
+    /** Signed countdown from today to the deadline; negative once passed. */
+    daysRemaining: number;
   };
   exceptions: {
     count: number;
@@ -446,6 +457,10 @@ export type CompanyVat = {
   inputVat: number;
   /** outputVat − inputVat; positive is payable to SKAT, kroner. */
   payable: number;
+  /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
+  deadline: string;
+  /** Signed countdown from today to the deadline; negative once passed. */
+  daysRemaining: number;
 };
 
 export type VatResponse = {
@@ -622,6 +637,48 @@ export type CompanyContacts = {
 export type ContactsResponse = {
   ok: true;
   contacts: CompanyContacts;
+};
+
+// --- obligations / Forpligtelser (GET .../obligations?year=) — it. 7 --------
+//
+// All money fields below are kroner (DKK with decimals) — use `formatKroner`.
+
+export type ObligationKind =
+  | "vat"
+  | "corporation-tax"
+  | "creditors"
+  | "auditor"
+  | "other";
+
+export type ObligationRow = {
+  kind: ObligationKind;
+  /** A human Danish label, e.g. "Moms — 1. halvår 2026". */
+  label: string;
+  /** The amount owed, kroner; positive is payable. */
+  amount: number;
+  /** The filing/payment deadline as YYYY-MM-DD, or null when none is known. */
+  dueDate: string | null;
+  /** Signed countdown from today to `dueDate`; null when `dueDate` is null. */
+  daysRemaining: number | null;
+  /** The ledger account the figure was read from, when one applies. */
+  accountNo: string | null;
+};
+
+export type CompanyObligations = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  /** Payables sorted by due date, soonest first; dateless rows last. */
+  obligations: ObligationRow[];
+  /** Sum of every obligation's amount, kroner. */
+  totalOwed: number;
+};
+
+export type ObligationsResponse = {
+  ok: true;
+  obligations: CompanyObligations;
 };
 
 export type CreateCompanyInput = {

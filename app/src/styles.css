@@ -865,6 +865,29 @@ table.statement-table td.num.muted {
   color: var(--text);
 }
 
+/* The VAT filing/payment deadline strip on the Moms view. */
+.vat-deadline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-top: var(--space-sm);
+}
+.vat-deadline-label {
+  display: block;
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.vat-deadline-date {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-lg);
+  font-weight: var(--text-weight-bold);
+  color: var(--text);
+}
+
 /* ==========================================================================
    Posteringer — journal entry list with drill-down to lines
    ========================================================================== */

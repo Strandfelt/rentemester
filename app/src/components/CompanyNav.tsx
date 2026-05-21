@@ -8,9 +8,9 @@
 //     reload, and every in-app link below preserves it automatically.
 //
 //   * `CompanyNav` — the sub-navigation bar plus the fiscal-year selector,
-//     rendered at the top of each company view. The twelve views are arranged
-//     in four labelled groups (Regnskab · Bogføring · Salg · Historik) so the
-//     bar stays scannable and wraps tidily on a phone.
+//     rendered at the top of each company view. The thirteen views are
+//     arranged in four labelled groups (Regnskab · Bogføring · Salg ·
+//     Historik) so the bar stays scannable and wraps tidily on a phone.
 
 import { NavLink, useSearchParams } from "react-router-dom";
 import type { FiscalYearEntry } from "../lib/types";
@@ -37,7 +37,7 @@ export function useCompanyYear(): {
 type NavTab = { to: string; label: string };
 
 /**
- * The twelve company views, arranged into four labelled groups. The grouping
+ * The thirteen company views, arranged into four labelled groups. The grouping
  * keeps the bar scannable — and gives narrow viewports a deliberate wrap
  * boundary rather than an arbitrary one.
  */
@@ -49,6 +49,7 @@ const TAB_GROUPS: { name: string; tabs: NavTab[] }[] = [
       { to: "resultatopgorelse", label: "Resultatopgørelse" },
       { to: "balance", label: "Balance" },
       { to: "saldobalance", label: "Saldobalance" },
+      { to: "forpligtelser", label: "Forpligtelser" },
     ],
   },
   {

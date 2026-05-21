@@ -433,6 +433,22 @@ function halfYearPeriod(year: number, half: 1 | 2): { start: string; end: string
     : { start: `${year}-07-01`, end: `${year}-12-31` };
 }
 
+/**
+ * The statutory VAT filing/payment deadline for a Danish ApS on the standard
+ * half-yearly settlement schedule (the small-business default for a company
+ * the size of Helheim). The momsangivelse for a half-year must be filed and
+ * paid by the 1st of the third month after the period ends:
+ *
+ *  - 1. halvår (Jan–Jun) → 1 September the same year
+ *  - 2. halvår (Jul–Dec) → 1 March the following year
+ *
+ * `half` is 1 or 2; `year` is the calendar year the half belongs to. The
+ * deadline is returned as a YYYY-MM-DD ISO date.
+ */
+export function vatHalfYearDeadline(year: number, half: 1 | 2): string {
+  return half === 1 ? `${year}-09-01` : `${year + 1}-03-01`;
+}
+
 /** Rounds a kroner amount to whole øre, killing float drift. */
 function roundKroner(value: number): number {
   return Math.round(Number(value ?? 0) * 100) / 100;
@@ -695,6 +711,7 @@ export function buildCompanyOverview(
           months: [] as OverviewMonth[],
         },
         bank: { balance: 0, actualBalance: null, difference: null },
+        receivables: { openCount: 0, openTotal: 0 },
         vat: {
           periodStart: `${selectedLabel}-01-01`,
           periodEnd: `${selectedLabel}-06-30`,
@@ -702,6 +719,11 @@ export function buildCompanyOverview(
           outputVat: 0,
           inputVat: 0,
           payable: 0,
+          deadline: vatHalfYearDeadline(parseInt(selectedLabel, 10), 1),
+          daysRemaining: daysBetween(
+            todayIsoDate(),
+            vatHalfYearDeadline(parseInt(selectedLabel, 10), 1),
+          ),
         },
         exceptions: {
           count: 0,
@@ -806,6 +828,21 @@ export function buildCompanyOverview(
     const bankDifference =
       actualBalance === null ? null : roundKroner(bookedBalance - actualBalance);
 
+    // Receivables (debitorer): money owed TO the company — the still-open
+    // balance of issued sales invoices as of the year end. `buildInvoiceList`
+    // derives each invoice's open balance via `core/invoice-payments`; for
+    // Helheim (0 issued invoices) this is a clean 0.
+    const openInvoices = buildInvoiceList(db, {
+      status: "open",
+      asOfDate: yearEnd,
+    });
+    const receivables = {
+      openCount: openInvoices.count,
+      openTotal: roundKroner(
+        openInvoices.rows.reduce((acc, r) => acc + r.openBalance, 0),
+      ),
+    };
+
     return {
       slug: entry.slug,
       selectedYear: selectedLabel,
@@ -823,6 +860,7 @@ export function buildCompanyOverview(
         actualBalance,
         difference: bankDifference,
       },
+      receivables,
       vat: {
         periodStart: vat.periodStart,
         periodEnd: vat.periodEnd,
@@ -830,6 +868,11 @@ export function buildCompanyOverview(
         outputVat: vat.outputVat,
         inputVat: vat.inputVat,
         payable: vat.payable,
+        deadline: vatHalfYearDeadline(yearNum, vatHalf),
+        daysRemaining: daysBetween(
+          todayIsoDate(),
+          vatHalfYearDeadline(yearNum, vatHalf),
+        ),
       },
       exceptions: {
         count: exceptions.count,
@@ -1574,6 +1617,7 @@ export function buildCompanyVat(
   try {
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
+      const archYear = parseInt(ctx.selectedLabel, 10);
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
@@ -1586,6 +1630,8 @@ export function buildCompanyVat(
         outputVat: 0,
         inputVat: 0,
         payable: 0,
+        deadline: vatHalfYearDeadline(archYear, 1),
+        daysRemaining: daysBetween(todayIsoDate(), vatHalfYearDeadline(archYear, 1)),
       };
     }
 
@@ -1597,6 +1643,10 @@ export function buildCompanyVat(
     const useSecondHalf = h1.payable === 0 && h2.payable !== 0;
     const vat = useSecondHalf ? h2 : h1;
     const half: 1 | 2 = useSecondHalf ? 2 : 1;
+
+    // The statutory filing/payment deadline for the surfaced half-year, plus a
+    // signed countdown from today — negative once the deadline has passed.
+    const deadline = vatHalfYearDeadline(yearNum, half);
 
     return {
       slug: ctx.entry.slug,
@@ -1610,6 +1660,8 @@ export function buildCompanyVat(
       outputVat: vat.outputVat,
       inputVat: vat.inputVat,
       payable: vat.payable,
+      deadline,
+      daysRemaining: daysBetween(todayIsoDate(), deadline),
     };
   } finally {
     ctx.db.close();
@@ -2165,5 +2217,196 @@ export function buildCompanyContacts(workspaceRoot: string, slug: string) {
     };
   } finally {
     db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company obligations (Forpligtelser — what the company owes, year-aware)
+// — cockpit-redesign Runde 2, iteration 7
+// --------------------------------------------------------------------------
+
+/** One thing the company owes — a payable surfaced from the ledger. */
+export type ObligationRow = {
+  /** A short, stable key for the obligation kind. */
+  kind: "vat" | "corporation-tax" | "creditors" | "auditor" | "other";
+  /** A human Danish label, e.g. "Moms — 1. halvår 2026". */
+  label: string;
+  /** The amount owed, kroner; positive is payable. */
+  amount: number;
+  /** The filing/payment deadline as YYYY-MM-DD, or null when none is known. */
+  dueDate: string | null;
+  /** Signed countdown from today to `dueDate`; null when `dueDate` is null. */
+  daysRemaining: number | null;
+  /** The ledger account the figure was read from, when one applies. */
+  accountNo: string | null;
+};
+
+export type CompanyObligations = ReturnType<typeof buildCompanyObligations>;
+
+/**
+ * Standard Danish liability account numbers (the Dinero chart) whose meaning
+ * is well-known enough to label precisely and — for VAT and corporation tax —
+ * carry a derived deadline. Trade creditors and accrued auditor have no
+ * statutory date the ledger can derive, so their `dueDate` is left null.
+ */
+const KNOWN_LIABILITY_ACCOUNTS: Record<
+  string,
+  { kind: ObligationRow["kind"]; label: string }
+> = {
+  "63000": { kind: "creditors", label: "Kreditorer (leverandørgæld)" },
+  "63040": { kind: "auditor", label: "Afsat revisor" },
+  "63060": { kind: "corporation-tax", label: "Skyldig selskabsskat" },
+};
+
+/**
+ * The credit-signed balance (credit − debit, kroner) of every `liability`-type
+ * account at `asOfDate`. A VAT account is never a liability row here — VAT is
+ * surfaced as its own obligation from the booked VAT position. Settlement
+ * accounts (`Momsafregning` / the `64100` block) only shuttle money between
+ * the VAT accounts and the bank, so they are excluded too.
+ */
+function liabilityBalancesAsOf(
+  db: Database,
+  asOfDate: string,
+): Array<{ accountNo: string; name: string; balance: number }> {
+  const rows = db
+    .query(
+      `SELECT a.account_no AS accountNo,
+              a.name       AS name,
+              COALESCE(SUM(jl.credit_amount - jl.debit_amount), 0) AS balance
+         FROM accounts a
+         JOIN journal_lines jl     ON jl.account_id = a.id
+         JOIN journal_entries je   ON je.id = jl.journal_entry_id
+        WHERE a.type = 'liability'
+          AND je.status = 'posted'
+          AND je.transaction_date <= ?
+          AND lower(a.name) NOT LIKE '%momsafregning%'
+          AND a.account_no NOT GLOB '641[0-9][0-9]'
+        GROUP BY a.id
+        ORDER BY a.account_no ASC`,
+    )
+    .all(asOfDate) as Array<{
+    accountNo: string;
+    name: string;
+    balance: number;
+  }>;
+  return rows.map((r) => ({
+    accountNo: r.accountNo,
+    name: r.name,
+    balance: roundKroner(r.balance),
+  }));
+}
+
+/**
+ * Forpligtelser — "what does the company owe, and when". A year-aware list of
+ * the company's outstanding payables, each with the amount owed and a due date
+ * where one is derivable. Every figure is read straight from the posted
+ * ledger:
+ *
+ *  - VAT — the booked half-yearly VAT position (`vatPositionForPeriod`); its
+ *    deadline is the statutory filing date (`vatHalfYearDeadline`).
+ *  - Corporation tax, trade creditors, accrued auditor and any other payable
+ *    — the credit balance of the `liability`-type accounts at the year end.
+ *    Known account numbers get a precise Danish label; corporation tax also
+ *    gets a derived SKAT deadline. The rest carry no date — that is fine and
+ *    shown as "—" in the UI.
+ *
+ * Rows are returned sorted by due date (soonest first); rows with no date sink
+ * to the bottom. Money is kroner. Throws `ApiError.notFound` when the slug is
+ * not registered or has no ledger.
+ */
+export function buildCompanyObligations(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        obligations: [] as ObligationRow[],
+        totalOwed: 0,
+      };
+    }
+
+    const today = todayIsoDate();
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearEnd = `${yearNum}-12-31`;
+    const obligations: ObligationRow[] = [];
+
+    // VAT: each half-year settles separately. Surface every half that carries
+    // a payable so the owner sees each filing deadline; if neither half has a
+    // payable, no VAT obligation is shown.
+    for (const half of [1, 2] as const) {
+      const period = halfYearPeriod(yearNum, half);
+      const position = vatPositionForPeriod(ctx.db, period.start, period.end);
+      if (position.payable > 0) {
+        const dueDate = vatHalfYearDeadline(yearNum, half);
+        obligations.push({
+          kind: "vat",
+          label: `Moms — ${half}. halvår ${yearNum}`,
+          amount: position.payable,
+          dueDate,
+          daysRemaining: daysBetween(today, dueDate),
+          accountNo: null,
+        });
+      }
+    }
+
+    // Liability accounts with a credit balance — corporation tax, trade
+    // creditors, accrued auditor and anything else. A debit (negative) balance
+    // is not a payable, so it is skipped. Corporation tax for an income year
+    // is due to SKAT on 1 November of the following year (the standard ApS
+    // restskat deadline) — the only liability date the ledger can derive.
+    for (const acc of liabilityBalancesAsOf(ctx.db, yearEnd)) {
+      if (acc.balance <= 0) continue;
+      const known = KNOWN_LIABILITY_ACCOUNTS[acc.accountNo];
+      const kind: ObligationRow["kind"] = known?.kind ?? "other";
+      const label = known?.label ?? acc.name;
+      const dueDate =
+        kind === "corporation-tax" ? `${yearNum + 1}-11-01` : null;
+      obligations.push({
+        kind,
+        label,
+        amount: acc.balance,
+        dueDate,
+        daysRemaining: dueDate === null ? null : daysBetween(today, dueDate),
+        accountNo: acc.accountNo,
+      });
+    }
+
+    // Sorted by due date, soonest first; dateless rows sink to the bottom.
+    // Ties break by descending amount, then by label — fully deterministic.
+    obligations.sort((a, b) => {
+      if (a.dueDate !== b.dueDate) {
+        if (a.dueDate === null) return 1;
+        if (b.dueDate === null) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      }
+      if (a.amount !== b.amount) return b.amount - a.amount;
+      return a.label.localeCompare(b.label, "da");
+    });
+
+    const totalOwed = roundKroner(
+      obligations.reduce((acc, o) => acc + o.amount, 0),
+    );
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      obligations,
+      totalOwed,
+    };
+  } finally {
+    ctx.db.close();
   }
 }

@@ -206,20 +206,25 @@ mangler de drifts-svar en ejer har brug for. Disse iterationer lukker gabet.
 Samme loop-protokol: underagent bygger → visuel inspektion → næste.
 
 ### Iteration 6 — Bank-sandhed & meningsfulde opgaver
-- [ ] Backend: bank/overview returnerer FAKTISK banksaldo (seneste
+- [x] Backend: bank/overview returnerer FAKTISK banksaldo (seneste
       `balance_after` fra kontoudtoget) + difference mod bogført saldo
-- [ ] Overblik: Bank-kortet viser faktisk saldo, bogført saldo OG difference
-- [ ] Bank-view: differencen vist prominent øverst
-- [ ] Opgaver: de mange "bank unmatched"-undtagelser grupperes til ÉN dansk,
+- [x] Overblik: Bank-kortet viser faktisk saldo, bogført saldo OG difference
+- [x] Bank-view: differencen vist prominent øverst
+- [x] Opgaver: de mange "bank unmatched"-undtagelser grupperes til ÉN dansk,
       klikbar linje ("362 banktransaktioner mangler afstemning" → Bank-view)
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — Bank-kort 23.654,75 (kontoudtog) vs 41.388,03
+      (bogført), difference 17.733,28; grupperet opgave; desktop + mobil
 
 ### Iteration 7 — Forpligtelser & deadlines
-- [ ] Backend: forpligtelses-endpoint (moms, selskabsskat, kreditorer, afsat
-      revisor m.fl.) med forfaldsdato/-frist hvor den kendes
-- [ ] Frontend: Forpligtelser-view — "hvad skylder jeg og hvornår"
-- [ ] Moms-view + Overblik: indberetnings-/betalingsfrist + dage tilbage
-- [ ] Overblik: debitor-kort ("hvem skylder mig", åbne tilgodehavender)
+- [x] Backend: forpligtelses-endpoint (moms, selskabsskat, kreditorer, afsat
+      revisor m.fl.) med forfaldsdato/-frist hvor den kendes —
+      `GET .../obligations?year=`; moms-frist udledt fra halvårsperioden,
+      selskabsskat 1. november året efter, kreditorer/revisor uden kendt dato
+- [x] Frontend: Forpligtelser-view — "hvad skylder jeg og hvornår", sorteret
+      efter frist, beløb højrestillet, pæn tom-tilstand; i CompanyNav (13 pkt.)
+- [x] Moms-view + Overblik: indberetnings-/betalingsfrist + dage tilbage
+- [x] Overblik: debitor-kort ("hvem skylder mig", åbne tilgodehavender) —
+      for Helheim 0, vist som ren nul-tilstand
 - [ ] **Visuel inspektion**
 
 ### Iteration 8 — Likviditet / pengestrøm
@@ -232,5 +237,7 @@ Samme loop-protokol: underagent bygger → visuel inspektion → næste.
 - [ ] "Senest bogført pr. <dato>" tydeligt på Overblik
 - [ ] Flerårsoversigt: indeværende år mærket "(år til dato)"
 - [ ] Bilag-view: vis koblet posterings tekst + beløb
+- [ ] Seneste posteringer (Overblik): vis læsbar posteringstekst — afkortes
+      i dag til "I..."
 - [ ] Nøgletal (bruttomargin, egenkapitalandel) på Overblik
 - [ ] **Visuel inspektion**

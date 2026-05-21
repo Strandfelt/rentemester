@@ -19,6 +19,7 @@ import type {
   InvoicesResponse,
   JournalResponse,
   MultiYearResponse,
+  ObligationsResponse,
   OverviewResponse,
   PortfolioResponse,
   TrialBalanceResponse,
@@ -174,6 +175,13 @@ export const api = {
     request<ContactsResponse>(
       `/api/companies/${encodeURIComponent(slug)}/contacts`,
     ).then((r) => r.contacts),
+
+  obligations: (slug: string, year?: string) =>
+    request<ObligationsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/obligations${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.obligations),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

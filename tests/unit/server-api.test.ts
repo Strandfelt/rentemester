@@ -1211,6 +1211,145 @@ describe("cockpit API — contacts (GET .../contacts)", () => {
   });
 });
 
+/**
+ * Posts a balanced liability accrual into a company's ledger: a credit to a
+ * liability account (created on the fly if absent) against a debit to bank
+ * account `2000`. Neither side is an income/expense account, so no document
+ * is required. This is the shape that surfaces in the obligations endpoint.
+ */
+function postLiability(
+  ws: string,
+  slug: string,
+  transactionDate: string,
+  accountNo: string,
+  accountName: string,
+  amount: number,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    db.query(
+      `INSERT OR IGNORE INTO accounts (account_no, name, type, normal_balance)
+       VALUES (?, ?, 'liability', 'credit')`,
+    ).run(accountNo, accountName);
+    const entry = postJournalEntry(db, {
+      transactionDate,
+      text: `Hensættelse ${accountName}`,
+      lines: [
+        { accountNo: "2000", debitAmount: amount },
+        { accountNo, creditAmount: amount },
+      ],
+    });
+    if (!entry.ok) throw new Error("liability post failed: " + entry.errors.join("; "));
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — obligations (GET .../obligations)", () => {
+  test("surfaces VAT with its statutory deadline and liability payables", async () => {
+    const ws = makeWorkspace("obl-live", ["Acme ApS"]);
+    try {
+      // postPnlEntry → 250 output VAT − 100 input VAT = 150 payable for H1.
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      postLiability(ws, "acme-aps", "2026-06-30", "63060", "Skyldig selskabsskat", 2000);
+      postLiability(ws, "acme-aps", "2026-06-30", "63000", "Kreditorer", 500);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/obligations?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const o = res.body.obligations;
+      expect(o.slug).toBe("acme-aps");
+      expect(o.archived).toBe(false);
+      const vat = o.obligations.find((r: any) => r.kind === "vat");
+      expect(vat.amount).toBe(150);
+      // 1. halvår 2026 is filed/paid by 1 September 2026.
+      expect(vat.dueDate).toBe("2026-09-01");
+      const tax = o.obligations.find((r: any) => r.kind === "corporation-tax");
+      expect(tax.amount).toBe(2000);
+      expect(tax.dueDate).toBe("2027-11-01");
+      const creditors = o.obligations.find((r: any) => r.kind === "creditors");
+      expect(creditors.amount).toBe(500);
+      expect(creditors.dueDate).toBeNull();
+      expect(o.totalOwed).toBe(2650);
+      // Sorted soonest-first: dated rows before the dateless creditor row.
+      expect(o.obligations[o.obligations.length - 1].kind).toBe("creditors");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a company that owes nothing returns an empty list", async () => {
+    const ws = makeWorkspace("obl-empty", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/obligations?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.obligations.obligations).toEqual([]);
+      expect(res.body.obligations.totalOwed).toBe(0);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("obligations for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("obl-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/obligations",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — VAT deadline (GET .../vat & .../overview)", () => {
+  test("vat carries the statutory filing deadline and a countdown", async () => {
+    const ws = makeWorkspace("vat-deadline", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(res.status).toBe(200);
+      // 1. halvår 2026 → filed/paid by 1 September 2026.
+      expect(res.body.vat.deadline).toBe("2026-09-01");
+      expect(typeof res.body.vat.daysRemaining).toBe("number");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("overview's VAT card and receivables block carry the new fields", async () => {
+    const ws = makeWorkspace("ov-deadline", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.overview.vat.deadline).toBe("2026-09-01");
+      // No issued invoices → a clean zero receivables block.
+      expect(res.body.overview.receivables).toEqual({
+        openCount: 0,
+        openTotal: 0,
+      });
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("cockpit API — company onboarding (POST /api/companies)", () => {
   test("creates a new company in the workspace", async () => {
     const ws = makeWorkspace("add-create");

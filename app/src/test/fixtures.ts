@@ -12,6 +12,7 @@ import type {
   CompanyInvoices,
   CompanyJournal,
   CompanyMultiYear,
+  CompanyObligations,
   CompanyOverview,
   CompanySummary,
   CompanyTrialBalance,
@@ -106,6 +107,7 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
       })),
     },
     bank: { balance: 41388.03, actualBalance: 23654.75, difference: 17733.28 },
+    receivables: { openCount: 0, openTotal: 0 },
     vat: {
       periodStart: "2026-01-01",
       periodEnd: "2026-06-30",
@@ -113,6 +115,8 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
       outputVat: 4457,
       inputVat: 1086,
       payable: 3371,
+      deadline: "2026-09-01",
+      daysRemaining: 103,
     },
     exceptions: { count: 0, rows: [], groups: [] },
     recentEntries: [],
@@ -328,6 +332,48 @@ export function vat(over: Partial<CompanyVat> = {}): CompanyVat {
     outputVat: 4457,
     inputVat: 1086,
     payable: 3371,
+    deadline: "2026-09-01",
+    daysRemaining: 103,
+    ...over,
+  };
+}
+
+export function obligations(
+  over: Partial<CompanyObligations> = {},
+): CompanyObligations {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    obligations: [
+      {
+        kind: "vat",
+        label: "Moms — 1. halvår 2026",
+        amount: 3371,
+        dueDate: "2026-09-01",
+        daysRemaining: 103,
+        accountNo: null,
+      },
+      {
+        kind: "corporation-tax",
+        label: "Skyldig selskabsskat",
+        amount: 2906.66,
+        dueDate: "2027-11-01",
+        daysRemaining: 529,
+        accountNo: "63060",
+      },
+      {
+        kind: "creditors",
+        label: "Kreditorer (leverandørgæld)",
+        amount: 1250,
+        dueDate: null,
+        daysRemaining: null,
+        accountNo: "63000",
+      },
+    ],
+    totalOwed: 7527.66,
     ...over,
   };
 }
