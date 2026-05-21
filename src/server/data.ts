@@ -433,6 +433,22 @@ function halfYearPeriod(year: number, half: 1 | 2): { start: string; end: string
     : { start: `${year}-07-01`, end: `${year}-12-31` };
 }
 
+/**
+ * The statutory VAT filing/payment deadline for a Danish ApS on the standard
+ * half-yearly settlement schedule (the small-business default for a company
+ * the size of Helheim). The momsangivelse for a half-year must be filed and
+ * paid by the 1st of the third month after the period ends:
+ *
+ *  - 1. halvår (Jan–Jun) → 1 September the same year
+ *  - 2. halvår (Jul–Dec) → 1 March the following year
+ *
+ * `half` is 1 or 2; `year` is the calendar year the half belongs to. The
+ * deadline is returned as a YYYY-MM-DD ISO date.
+ */
+export function vatHalfYearDeadline(year: number, half: 1 | 2): string {
+  return half === 1 ? `${year}-09-01` : `${year + 1}-03-01`;
+}
+
 /** Rounds a kroner amount to whole øre, killing float drift. */
 function roundKroner(value: number): number {
   return Math.round(Number(value ?? 0) * 100) / 100;
@@ -567,6 +583,51 @@ function bankBalanceAsOf(db: Database, asOfDate: string): number {
   return roundKroner(row.bal);
 }
 
+/**
+ * Actual bank balance from the imported statement, kroner — the `balance_after`
+ * of the most recent `bank_transactions` row (latest `transaction_date`, then
+ * latest id) per bank account, summed across accounts.
+ *
+ * This is what the owner's bank app shows; it can differ from the booked
+ * ledger balance when transactions are imported but not yet reconciled. Rows
+ * with no `balance_after` (a generic CSV import that omitted the running
+ * balance) are skipped. Returns `null` when no statement balance is known.
+ */
+function actualBankBalanceAsOf(db: Database, asOfDate: string): number | null {
+  // The latest dated row per bank account (id breaks same-date ties). Rows
+  // imported before #187 have a null bank_account_id — group them together as
+  // one logical account so a single statement still surfaces.
+  const rows = db
+    .query(
+      `SELECT bt.balance_after AS balanceAfter
+         FROM bank_transactions bt
+         JOIN (
+           SELECT bank_account_id AS acc,
+                  MAX(transaction_date) AS maxDate
+             FROM bank_transactions
+            WHERE transaction_date <= ?
+              AND balance_after IS NOT NULL
+            GROUP BY bank_account_id
+         ) latest
+           ON (bt.bank_account_id IS latest.acc
+               OR (bt.bank_account_id IS NULL AND latest.acc IS NULL))
+          AND bt.transaction_date = latest.maxDate
+        WHERE bt.transaction_date <= ?
+          AND bt.balance_after IS NOT NULL
+          AND bt.id = (
+            SELECT MAX(b2.id) FROM bank_transactions b2
+             WHERE (b2.bank_account_id IS bt.bank_account_id)
+               AND b2.transaction_date = bt.transaction_date
+               AND b2.balance_after IS NOT NULL
+               AND b2.transaction_date <= ?
+          )`,
+    )
+    .all(asOfDate, asOfDate, asOfDate) as Array<{ balanceAfter: number }>;
+  if (rows.length === 0) return null;
+  const total = rows.reduce((sum, r) => sum + Number(r.balanceAfter ?? 0), 0);
+  return roundKroner(total);
+}
+
 const MONTH_NAMES_DK = [
   "jan", "feb", "mar", "apr", "maj", "jun",
   "jul", "aug", "sep", "okt", "nov", "dec",
@@ -649,7 +710,8 @@ export function buildCompanyOverview(
           resultat: 0,
           months: [] as OverviewMonth[],
         },
-        bank: { balance: 0 },
+        bank: { balance: 0, actualBalance: null, difference: null },
+        receivables: { openCount: 0, openTotal: 0 },
         vat: {
           periodStart: `${selectedLabel}-01-01`,
           periodEnd: `${selectedLabel}-06-30`,
@@ -657,9 +719,20 @@ export function buildCompanyOverview(
           outputVat: 0,
           inputVat: 0,
           payable: 0,
+          deadline: vatHalfYearDeadline(parseInt(selectedLabel, 10), 1),
+          daysRemaining: daysBetween(
+            todayIsoDate(),
+            vatHalfYearDeadline(parseInt(selectedLabel, 10), 1),
+          ),
         },
-        exceptions: { count: 0, rows: [] as ExceptionPreview[] },
+        exceptions: {
+          count: 0,
+          rows: [] as ExceptionPreview[],
+          groups: [] as ExceptionGroup[],
+        },
         recentEntries: [] as RecentEntry[],
+        lastPostedDate: null,
+        keyFigures: { bruttomargin: null, egenkapitalandel: null },
       };
     }
 
@@ -699,7 +772,9 @@ export function buildCompanyOverview(
     const vat = useSecondHalf ? h2 : h1;
     const vatHalf: 1 | 2 = useSecondHalf ? 2 : 1;
 
-    // The exception queue.
+    // The exception queue — grouped by type into one Danish summary line each,
+    // so the "Opgaver" card reads "362 banktransaktioner mangler afstemning"
+    // rather than 362 individual English exception messages.
     const exceptions = listExceptions(db, { status: "open" });
     const exceptionRows: ExceptionPreview[] = exceptions.rows
       .slice(0, 6)
@@ -709,6 +784,12 @@ export function buildCompanyOverview(
         severity: row.severity,
         message: row.message,
       }));
+    const exceptionGroups = groupExceptions(
+      exceptions.rows.map((row: any) => ({
+        type: row.type,
+        severity: row.severity,
+      })),
+    );
 
     // The most recent posted journal entries within the selected year.
     const entryRows = db
@@ -740,6 +821,46 @@ export function buildCompanyOverview(
       amount: Math.round(Number(r.amount ?? 0) * 100) / 100,
     }));
 
+    // Bank: the booked ledger balance plus the actual statement balance (the
+    // latest imported `balance_after`) and the gap between them. The owner
+    // needs the actual figure — the booked one alone is misleading when the
+    // import is not yet reconciled.
+    const bookedBalance = bankBalanceAsOf(db, yearEnd);
+    const actualBalance = actualBankBalanceAsOf(db, yearEnd);
+    const bankDifference =
+      actualBalance === null ? null : roundKroner(bookedBalance - actualBalance);
+
+    // Receivables (debitorer): money owed TO the company — the still-open
+    // balance of issued sales invoices as of the year end. `buildInvoiceList`
+    // derives each invoice's open balance via `core/invoice-payments`; for
+    // Helheim (0 issued invoices) this is a clean 0.
+    const openInvoices = buildInvoiceList(db, {
+      status: "open",
+      asOfDate: yearEnd,
+    });
+    const receivables = {
+      openCount: openInvoices.count,
+      openTotal: roundKroner(
+        openInvoices.rows.reduce((acc, r) => acc + r.openBalance, 0),
+      ),
+    };
+
+    // The transaction date of the most recent posted journal entry in the
+    // year — surfaced as "Senest bogført pr. <dato>" so the owner sees at a
+    // glance how current the figures are. Null when nothing is posted yet.
+    const lastPostedDate = recentEntries.length > 0 ? recentEntries[0]!.date : null;
+
+    // Nøgletal: the two ratios an owner reads off a glance — bruttomargin
+    // (resultat ÷ omsætning) and egenkapitalandel (egenkapital ÷ balancesum).
+    // Both are fractions (0–1); the SPA renders them as percentages. Each is
+    // null when its denominator is zero — no figure is invented.
+    const bs = buildBalanceSheet(db, yearEnd);
+    const equityTotal = roundKroner(bs.equity.total + bs.periodResult);
+    const bruttomargin =
+      pl.totalIncome !== 0 ? pl.result / pl.totalIncome : null;
+    const egenkapitalandel =
+      bs.totalAssets !== 0 ? equityTotal / bs.totalAssets : null;
+
     return {
       slug: entry.slug,
       selectedYear: selectedLabel,
@@ -752,7 +873,12 @@ export function buildCompanyOverview(
         resultat: pl.result,
         months,
       },
-      bank: { balance: bankBalanceAsOf(db, yearEnd) },
+      bank: {
+        balance: bookedBalance,
+        actualBalance,
+        difference: bankDifference,
+      },
+      receivables,
       vat: {
         periodStart: vat.periodStart,
         periodEnd: vat.periodEnd,
@@ -760,9 +886,20 @@ export function buildCompanyOverview(
         outputVat: vat.outputVat,
         inputVat: vat.inputVat,
         payable: vat.payable,
+        deadline: vatHalfYearDeadline(yearNum, vatHalf),
+        daysRemaining: daysBetween(
+          todayIsoDate(),
+          vatHalfYearDeadline(yearNum, vatHalf),
+        ),
       },
-      exceptions: { count: exceptions.count, rows: exceptionRows },
+      exceptions: {
+        count: exceptions.count,
+        rows: exceptionRows,
+        groups: exceptionGroups,
+      },
       recentEntries,
+      lastPostedDate,
+      keyFigures: { bruttomargin, egenkapitalandel },
     };
   } finally {
     db.close();
@@ -775,6 +912,120 @@ type ExceptionPreview = {
   severity: string;
   message: string;
 };
+
+/**
+ * One grouped exception line for the Overblik "Opgaver" card — every open
+ * exception of one `type` collapsed into a single Danish, actionable summary
+ * with a count and a deep-link target.
+ */
+export type ExceptionGroup = {
+  /** The shared `exceptions.type`. */
+  type: string;
+  /** Open exceptions of this type. */
+  count: number;
+  /** The highest severity among the grouped exceptions. */
+  severity: "low" | "medium" | "high";
+  /** A Danish one-liner, e.g. "362 banktransaktioner mangler afstemning". */
+  label: string;
+  /** The cockpit sub-view this group links to, e.g. "bank"; null when none. */
+  link: string | null;
+};
+
+const SEVERITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
+
+/**
+ * Builds the Danish summary line for a group of `count` same-type exceptions.
+ * Known types get a tailored, pluralised sentence and a deep-link target;
+ * unknown types fall back to a generic count so nothing is ever dropped.
+ */
+function describeExceptionGroup(
+  type: string,
+  count: number,
+): { label: string; link: string | null } {
+  const n = count;
+  switch (type) {
+    case "UNMATCHED_BANK_TRANSACTION":
+      return {
+        label: `${n} ${
+          n === 1 ? "banktransaktion mangler" : "banktransaktioner mangler"
+        } afstemning`,
+        link: "bank",
+      };
+    case "BANK_BALANCE_GAP":
+      return {
+        label: `${n} ${n === 1 ? "afvigelse" : "afvigelser"} mellem bogført og faktisk banksaldo`,
+        link: "bank",
+      };
+    case "MAIL_INTAKE_NO_ATTACHMENT":
+      return {
+        label: `${n} ${n === 1 ? "indkommen mail" : "indkomne mails"} uden vedhæftet bilag`,
+        link: null,
+      };
+    case "MAIL_INTAKE_AMBIGUOUS_METADATA":
+      return {
+        label: `${n} ${n === 1 ? "bilag" : "bilag"} med uklare oplysninger fra mail`,
+        link: null,
+      };
+    case "MAIL_INTAKE_INGEST_BLOCKED":
+      return {
+        label: `${n} ${n === 1 ? "mail kunne" : "mails kunne"} ikke indlæses`,
+        link: null,
+      };
+    case "ASSET_WRITEOFF_MISSING_DOCUMENTATION":
+      return {
+        label: `${n} ${n === 1 ? "aktiv-afskrivning mangler" : "aktiv-afskrivninger mangler"} dokumentation`,
+        link: null,
+      };
+    case "ASSET_WRITEOFF_ELIGIBILITY_UNCERTAIN":
+      return {
+        label: `${n} ${n === 1 ? "aktiv-afskrivning" : "aktiv-afskrivninger"} med usikker fradragsret`,
+        link: null,
+      };
+    default:
+      return {
+        label: `${n} ${n === 1 ? "undtagelse" : "undtagelser"} kræver gennemgang`,
+        link: null,
+      };
+  }
+}
+
+/**
+ * Collapses a list of open exceptions into one summary line per `type`. Each
+ * group carries a Danish, actionable label and the highest severity seen, so
+ * the cockpit renders "362 banktransaktioner mangler afstemning" instead of
+ * 362 individual English lines. Deterministic: groups are ordered by severity
+ * (high first), then by descending count, then by type.
+ */
+function groupExceptions(
+  rows: Array<{ type: string; severity: string }>,
+): ExceptionGroup[] {
+  const byType = new Map<string, { count: number; severity: string }>();
+  for (const row of rows) {
+    const existing = byType.get(row.type);
+    if (existing) {
+      existing.count += 1;
+      if ((SEVERITY_RANK[row.severity] ?? 0) > (SEVERITY_RANK[existing.severity] ?? 0)) {
+        existing.severity = row.severity;
+      }
+    } else {
+      byType.set(row.type, { count: 1, severity: row.severity });
+    }
+  }
+  const groups: ExceptionGroup[] = [];
+  for (const [type, agg] of byType) {
+    const { label, link } = describeExceptionGroup(type, agg.count);
+    const severity =
+      agg.severity === "high" || agg.severity === "medium" ? agg.severity : "low";
+    groups.push({ type, count: agg.count, severity, label, link });
+  }
+  groups.sort(
+    (a, b) =>
+      (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0) ||
+      b.count - a.count ||
+      a.type.localeCompare(b.type),
+  );
+  return groups;
+}
 
 type RecentEntry = {
   id: number;
@@ -1118,11 +1369,16 @@ export type CompanyJournal = ReturnType<typeof buildCompanyJournal>;
  * Posteringer — every posted journal entry for the selected calendar fiscal
  * year, newest first, each carrying its debit/credit lines so the UI can drill
  * into an entry. The entry `total` is the summed debit side. Money is kroner.
+ *
+ * When `account` is given, only entries with at least one line on that account
+ * are returned, and `accountFilter` names the account — this powers the
+ * "klik konto → kontoens posteringer" drill-down from the statement views.
  */
 export function buildCompanyJournal(
   workspaceRoot: string,
   slug: string,
   year: number | null,
+  account: string | null = null,
 ) {
   const ctx = resolveStatementContext(workspaceRoot, slug, year);
   try {
@@ -1137,12 +1393,39 @@ export function buildCompanyJournal(
         periodStart: `${ctx.selectedLabel}-01-01`,
         periodEnd: `${ctx.selectedLabel}-12-31`,
         entries: [] as JournalEntry[],
+        accountFilter: null as { accountNo: string; name: string } | null,
       };
     }
 
     const yearNum = parseInt(ctx.selectedLabel, 10);
     const yearStart = `${yearNum}-01-01`;
     const yearEnd = `${yearNum}-12-31`;
+
+    // Optional account drill-down: resolve the account's name (so the view can
+    // title the filter) and the set of entry ids that touch it.
+    let accountFilter: { accountNo: string; name: string } | null = null;
+    let accountEntryIds: Set<number> | null = null;
+    if (account !== null && account.trim().length > 0) {
+      const accountNo = account.trim();
+      const acc = ctx.db
+        .query("SELECT account_no AS accountNo, name AS name FROM accounts WHERE account_no = ?")
+        .get(accountNo) as { accountNo: string; name: string } | undefined;
+      accountFilter = acc
+        ? { accountNo: acc.accountNo, name: acc.name }
+        : { accountNo, name: accountNo };
+      const idRows = ctx.db
+        .query(
+          `SELECT DISTINCT jl.journal_entry_id AS id
+             FROM journal_lines jl
+             JOIN journal_entries je ON je.id = jl.journal_entry_id
+             JOIN accounts a         ON a.id = jl.account_id
+            WHERE je.status = 'posted'
+              AND je.transaction_date >= ? AND je.transaction_date <= ?
+              AND a.account_no = ?`,
+        )
+        .all(yearStart, yearEnd, accountNo) as Array<{ id: number }>;
+      accountEntryIds = new Set(idRows.map((r) => r.id));
+    }
 
     const entryRows = ctx.db
       .query(
@@ -1199,7 +1482,12 @@ export function buildCompanyJournal(
       linesByEntry.set(row.entryId, list);
     }
 
-    const entries: JournalEntry[] = entryRows.map((e) => {
+    const filteredRows =
+      accountEntryIds === null
+        ? entryRows
+        : entryRows.filter((e) => accountEntryIds!.has(e.id));
+
+    const entries: JournalEntry[] = filteredRows.map((e) => {
       const lines = linesByEntry.get(e.id) ?? [];
       const total = roundKroner(
         lines.reduce((acc, l) => acc + l.debit, 0),
@@ -1223,6 +1511,7 @@ export function buildCompanyJournal(
       periodStart: yearStart,
       periodEnd: yearEnd,
       entries,
+      accountFilter,
     };
   } finally {
     ctx.db.close();
@@ -1280,6 +1569,8 @@ export function buildCompanyBank(
         periodEnd: `${ctx.selectedLabel}-12-31`,
         accounts,
         bookedBalance: 0,
+        actualBalance: null,
+        difference: null,
         transactions: [] as BankTransactionRow[],
         matchedCount: 0,
         unmatchedCount: 0,
@@ -1333,6 +1624,14 @@ export function buildCompanyBank(
       (t) => t.reconciliationStatus === "matched",
     ).length;
 
+    // The booked ledger balance vs the actual statement balance (the latest
+    // imported `balance_after`). Their gap is the headline of a bank page —
+    // money the owner has on paper but not in the account, or vice versa.
+    const bookedBalance = bankBalanceAsOf(ctx.db, yearEnd);
+    const actualBalance = actualBankBalanceAsOf(ctx.db, yearEnd);
+    const difference =
+      actualBalance === null ? null : roundKroner(bookedBalance - actualBalance);
+
     return {
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
@@ -1342,7 +1641,9 @@ export function buildCompanyBank(
       periodStart: yearStart,
       periodEnd: yearEnd,
       accounts,
-      bookedBalance: bankBalanceAsOf(ctx.db, yearEnd),
+      bookedBalance,
+      actualBalance,
+      difference,
       transactions,
       matchedCount,
       unmatchedCount: transactions.length - matchedCount,
@@ -1374,6 +1675,7 @@ export function buildCompanyVat(
   try {
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
+      const archYear = parseInt(ctx.selectedLabel, 10);
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
@@ -1386,6 +1688,8 @@ export function buildCompanyVat(
         outputVat: 0,
         inputVat: 0,
         payable: 0,
+        deadline: vatHalfYearDeadline(archYear, 1),
+        daysRemaining: daysBetween(todayIsoDate(), vatHalfYearDeadline(archYear, 1)),
       };
     }
 
@@ -1397,6 +1701,10 @@ export function buildCompanyVat(
     const useSecondHalf = h1.payable === 0 && h2.payable !== 0;
     const vat = useSecondHalf ? h2 : h1;
     const half: 1 | 2 = useSecondHalf ? 2 : 1;
+
+    // The statutory filing/payment deadline for the surfaced half-year, plus a
+    // signed countdown from today — negative once the deadline has passed.
+    const deadline = vatHalfYearDeadline(yearNum, half);
 
     return {
       slug: ctx.entry.slug,
@@ -1410,6 +1718,8 @@ export function buildCompanyVat(
       outputVat: vat.outputVat,
       inputVat: vat.inputVat,
       payable: vat.payable,
+      deadline,
+      daysRemaining: daysBetween(todayIsoDate(), deadline),
     };
   } finally {
     ctx.db.close();
@@ -1438,6 +1748,10 @@ export type DocumentRow = {
   journalEntryNo: string | null;
   /** The linked journal entry's id, for drill-through. */
   journalEntryId: number | null;
+  /** The linked journal entry's posting text — what the voucher is for. */
+  journalEntryText: string | null;
+  /** The linked journal entry's total (summed debit side), kroner. */
+  journalEntryTotal: number | null;
 };
 
 export type CompanyDocuments = ReturnType<typeof buildCompanyDocuments>;
@@ -1477,7 +1791,11 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
                 d.status          AS status,
                 idl.voucher_ref   AS voucherRef,
                 je.id             AS journalEntryId,
-                je.entry_no       AS journalEntryNo
+                je.entry_no       AS journalEntryNo,
+                je.text           AS journalEntryText,
+                (SELECT COALESCE(SUM(debit_amount), 0)
+                   FROM journal_lines
+                  WHERE journal_entry_id = je.id) AS journalEntryTotal
            FROM documents d
            LEFT JOIN import_document_links idl ON idl.document_id = d.id
            LEFT JOIN journal_entries je        ON je.id = idl.journal_entry_id
@@ -1498,6 +1816,8 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       voucherRef: string | null;
       journalEntryId: number | null;
       journalEntryNo: string | null;
+      journalEntryText: string | null;
+      journalEntryTotal: number | null;
     }>;
 
     const documents: DocumentRow[] = rows.map((r) => ({
@@ -1518,6 +1838,11 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       voucherRef: r.voucherRef,
       journalEntryNo: r.journalEntryNo,
       journalEntryId: r.journalEntryId,
+      journalEntryText: r.journalEntryText,
+      journalEntryTotal:
+        r.journalEntryId === null || r.journalEntryTotal === null
+          ? null
+          : roundKroner(r.journalEntryTotal),
     }));
     const linkedCount = documents.filter(
       (d) => d.journalEntryNo !== null,
@@ -1965,5 +2290,364 @@ export function buildCompanyContacts(workspaceRoot: string, slug: string) {
     };
   } finally {
     db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company obligations (Forpligtelser — what the company owes, year-aware)
+// — cockpit-redesign Runde 2, iteration 7
+// --------------------------------------------------------------------------
+
+/** One thing the company owes — a payable surfaced from the ledger. */
+export type ObligationRow = {
+  /** A short, stable key for the obligation kind. */
+  kind: "vat" | "corporation-tax" | "creditors" | "auditor" | "other";
+  /** A human Danish label, e.g. "Moms — 1. halvår 2026". */
+  label: string;
+  /** The amount owed, kroner; positive is payable. */
+  amount: number;
+  /** The filing/payment deadline as YYYY-MM-DD, or null when none is known. */
+  dueDate: string | null;
+  /** Signed countdown from today to `dueDate`; null when `dueDate` is null. */
+  daysRemaining: number | null;
+  /** The ledger account the figure was read from, when one applies. */
+  accountNo: string | null;
+};
+
+export type CompanyObligations = ReturnType<typeof buildCompanyObligations>;
+
+/**
+ * Standard Danish liability account numbers (the Dinero chart) whose meaning
+ * is well-known enough to label precisely and — for VAT and corporation tax —
+ * carry a derived deadline. Trade creditors and accrued auditor have no
+ * statutory date the ledger can derive, so their `dueDate` is left null.
+ */
+const KNOWN_LIABILITY_ACCOUNTS: Record<
+  string,
+  { kind: ObligationRow["kind"]; label: string }
+> = {
+  "63000": { kind: "creditors", label: "Kreditorer (leverandørgæld)" },
+  "63040": { kind: "auditor", label: "Afsat revisor" },
+  "63060": { kind: "corporation-tax", label: "Skyldig selskabsskat" },
+};
+
+/**
+ * The credit-signed balance (credit − debit, kroner) of every `liability`-type
+ * account at `asOfDate`, excluding the entire standard Danish VAT block.
+ *
+ * No VAT account may appear as a liability row here — VAT is surfaced as its
+ * own single obligation from the booked VAT position (`vatPositionForPeriod`),
+ * and that net figure already represents the *whole* VAT obligation. The gross
+ * VAT accounts (output VAT `64000`, foreign-services reverse-charge `64040`,
+ * input VAT `64060`, …) are merely *components* of that computation, so
+ * counting them here as well would double-count VAT. The exclusion uses the
+ * same VAT-account identification as `vatPositionForPeriod`: `type = 'vat'`
+ * (native-Rentemester chart) or the standard Danish block `64000`–`64099`.
+ * The `64100`-block settlement accounts (`Momsafregning`) only shuttle money
+ * between the VAT accounts and the bank, so they are excluded too.
+ */
+function liabilityBalancesAsOf(
+  db: Database,
+  asOfDate: string,
+): Array<{ accountNo: string; name: string; balance: number }> {
+  const rows = db
+    .query(
+      `SELECT a.account_no AS accountNo,
+              a.name       AS name,
+              COALESCE(SUM(jl.credit_amount - jl.debit_amount), 0) AS balance
+         FROM accounts a
+         JOIN journal_lines jl     ON jl.account_id = a.id
+         JOIN journal_entries je   ON je.id = jl.journal_entry_id
+        WHERE a.type = 'liability'
+          AND je.status = 'posted'
+          AND je.transaction_date <= ?
+          AND a.type != 'vat'
+          AND NOT (a.account_no >= '64000' AND a.account_no < '64100')
+          AND lower(a.name) NOT LIKE '%momsafregning%'
+          AND a.account_no NOT GLOB '641[0-9][0-9]'
+        GROUP BY a.id
+        ORDER BY a.account_no ASC`,
+    )
+    .all(asOfDate) as Array<{
+    accountNo: string;
+    name: string;
+    balance: number;
+  }>;
+  return rows.map((r) => ({
+    accountNo: r.accountNo,
+    name: r.name,
+    balance: roundKroner(r.balance),
+  }));
+}
+
+/**
+ * Forpligtelser — "what does the company owe, and when". A year-aware list of
+ * the company's outstanding payables, each with the amount owed and a due date
+ * where one is derivable. Every figure is read straight from the posted
+ * ledger:
+ *
+ *  - VAT — the booked half-yearly VAT position (`vatPositionForPeriod`); its
+ *    deadline is the statutory filing date (`vatHalfYearDeadline`).
+ *  - Corporation tax, trade creditors, accrued auditor and any other payable
+ *    — the credit balance of the `liability`-type accounts at the year end.
+ *    Known account numbers get a precise Danish label; corporation tax also
+ *    gets a derived SKAT deadline. The rest carry no date — that is fine and
+ *    shown as "—" in the UI.
+ *
+ * Rows are returned sorted by due date (soonest first); rows with no date sink
+ * to the bottom. Money is kroner. Throws `ApiError.notFound` when the slug is
+ * not registered or has no ledger.
+ */
+export function buildCompanyObligations(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        obligations: [] as ObligationRow[],
+        totalOwed: 0,
+      };
+    }
+
+    const today = todayIsoDate();
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearEnd = `${yearNum}-12-31`;
+    const obligations: ObligationRow[] = [];
+
+    // VAT: each half-year settles separately. Surface every half that carries
+    // a payable so the owner sees each filing deadline; if neither half has a
+    // payable, no VAT obligation is shown.
+    for (const half of [1, 2] as const) {
+      const period = halfYearPeriod(yearNum, half);
+      const position = vatPositionForPeriod(ctx.db, period.start, period.end);
+      if (position.payable > 0) {
+        const dueDate = vatHalfYearDeadline(yearNum, half);
+        obligations.push({
+          kind: "vat",
+          label: `Moms — ${half}. halvår ${yearNum}`,
+          amount: position.payable,
+          dueDate,
+          daysRemaining: daysBetween(today, dueDate),
+          accountNo: null,
+        });
+      }
+    }
+
+    // Liability accounts with a credit balance — corporation tax, trade
+    // creditors, accrued auditor and anything else. A debit (negative) balance
+    // is not a payable, so it is skipped. Corporation tax for an income year
+    // is due to SKAT on 1 November of the following year (the standard ApS
+    // restskat deadline) — the only liability date the ledger can derive.
+    for (const acc of liabilityBalancesAsOf(ctx.db, yearEnd)) {
+      if (acc.balance <= 0) continue;
+      const known = KNOWN_LIABILITY_ACCOUNTS[acc.accountNo];
+      const kind: ObligationRow["kind"] = known?.kind ?? "other";
+      const label = known?.label ?? acc.name;
+      const dueDate =
+        kind === "corporation-tax" ? `${yearNum + 1}-11-01` : null;
+      obligations.push({
+        kind,
+        label,
+        amount: acc.balance,
+        dueDate,
+        daysRemaining: dueDate === null ? null : daysBetween(today, dueDate),
+        accountNo: acc.accountNo,
+      });
+    }
+
+    // Sorted by due date, soonest first; dateless rows sink to the bottom.
+    // Ties break by descending amount, then by label — fully deterministic.
+    obligations.sort((a, b) => {
+      if (a.dueDate !== b.dueDate) {
+        if (a.dueDate === null) return 1;
+        if (b.dueDate === null) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      }
+      if (a.amount !== b.amount) return b.amount - a.amount;
+      return a.label.localeCompare(b.label, "da");
+    });
+
+    const totalOwed = roundKroner(
+      obligations.reduce((acc, o) => acc + o.amount, 0),
+    );
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      obligations,
+      totalOwed,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company cash flow (Likviditet — actual money in/out, year-aware)
+// — cockpit-redesign Runde 2, iteration 8
+// --------------------------------------------------------------------------
+
+/** One calendar month of actual money movement on the bank statement. */
+export type CashflowMonth = {
+  /** 1–12. */
+  month: number;
+  label: string;
+  /** Sum of positive `bank_transactions.amount` in the month, kroner. */
+  indbetalinger: number;
+  /** Sum of negative amounts as a positive figure (money out), kroner. */
+  udbetalinger: number;
+  /** indbetalinger − udbetalinger; the net movement, kroner. */
+  netto: number;
+};
+
+/** One dated point on the real bank-balance trajectory. */
+export type CashflowBalancePoint = {
+  date: string;
+  /** The imported `balance_after` at this point, kroner. */
+  balance: number;
+};
+
+export type CompanyCashflow = ReturnType<typeof buildCompanyCashflow>;
+
+/**
+ * Likviditet / pengestrøm — actual money in and out of the bank for the
+ * selected calendar fiscal year, computed straight from the imported
+ * `bank_transactions` (NOT the accrual ledger). This is what the owner's bank
+ * app shows: real cash, not booked revenue.
+ *
+ *  - `months` — per-month indbetalinger (positive amounts) and udbetalinger
+ *    (negative amounts, shown as a positive figure), all twelve months.
+ *  - `balanceSeries` — the `balance_after` trajectory: every transaction in the
+ *    year that carries a running balance, oldest-first; the real bank-balance
+ *    line.
+ *  - summary — opening balance (the actual balance the day before the year
+ *    starts), total in, total out and closing balance for the year.
+ *
+ * `hasTransactions` is false when the company has no bank rows at all in the
+ * year — the UI renders a clean empty state. Money is kroner. Throws
+ * `ApiError.notFound` when the slug is not registered or has no ledger.
+ */
+export function buildCompanyCashflow(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+    const priorYearEnd = `${yearNum - 1}-12-31`;
+
+    const emptyMonths = (): CashflowMonth[] =>
+      MONTH_NAMES_DK.map((label, i) => ({
+        month: i + 1,
+        label,
+        indbetalinger: 0,
+        udbetalinger: 0,
+        netto: 0,
+      }));
+
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: yearStart,
+        periodEnd: yearEnd,
+        hasTransactions: false,
+        months: emptyMonths(),
+        balanceSeries: [] as CashflowBalancePoint[],
+        openingBalance: null as number | null,
+        closingBalance: null as number | null,
+        totalIn: 0,
+        totalOut: 0,
+      };
+    }
+
+    // Every bank transaction in the year, oldest-first — drives both the
+    // monthly in/out totals and the balance trajectory.
+    const rows = ctx.db
+      .query(
+        `SELECT bt.transaction_date AS date,
+                bt.amount           AS amount,
+                bt.balance_after    AS balanceAfter
+           FROM bank_transactions bt
+          WHERE bt.transaction_date >= ? AND bt.transaction_date <= ?
+          ORDER BY bt.transaction_date ASC, bt.id ASC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      date: string;
+      amount: number;
+      balanceAfter: number | null;
+    }>;
+
+    const months = emptyMonths();
+    let totalIn = 0;
+    let totalOut = 0;
+    const balanceSeries: CashflowBalancePoint[] = [];
+    for (const r of rows) {
+      const month = parseInt(r.date.slice(5, 7), 10);
+      const slot = months[month - 1];
+      const amount = Number(r.amount ?? 0);
+      if (slot) {
+        if (amount >= 0) slot.indbetalinger += amount;
+        else slot.udbetalinger += -amount;
+      }
+      if (amount >= 0) totalIn += amount;
+      else totalOut += -amount;
+      if (r.balanceAfter !== null && r.balanceAfter !== undefined) {
+        balanceSeries.push({
+          date: r.date,
+          balance: roundKroner(Number(r.balanceAfter)),
+        });
+      }
+    }
+    for (const m of months) {
+      m.indbetalinger = roundKroner(m.indbetalinger);
+      m.udbetalinger = roundKroner(m.udbetalinger);
+      m.netto = roundKroner(m.indbetalinger - m.udbetalinger);
+    }
+
+    // Opening balance — the actual statement balance the day before the year
+    // begins; closing balance — the actual balance at the year end. Both come
+    // from the same `balance_after`-based helper the bank view uses, so they
+    // are null when no statement carries a running balance.
+    const openingBalance = actualBankBalanceAsOf(ctx.db, priorYearEnd);
+    const closingBalance = actualBankBalanceAsOf(ctx.db, yearEnd);
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      hasTransactions: rows.length > 0,
+      months,
+      balanceSeries,
+      openingBalance,
+      closingBalance,
+      totalIn: roundKroner(totalIn),
+      totalOut: roundKroner(totalOut),
+    };
+  } finally {
+    ctx.db.close();
   }
 }

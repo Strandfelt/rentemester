@@ -38,6 +38,34 @@ describe("BankView — Bank", () => {
     expect(screen.getByText("Uafstemt")).toBeInTheDocument();
   });
 
+  test("shows the booked-vs-actual difference prominently at the top", async () => {
+    mockFetch(route());
+    renderView();
+    expect(
+      await screen.findByRole("heading", { name: "Acme ApS" }),
+    ).toBeInTheDocument();
+    // The gap banner names the difference and the actual statement balance.
+    expect(screen.getByText("Difference")).toBeInTheDocument();
+    expect(screen.getByText(/17\.733,28/)).toBeInTheDocument();
+    expect(screen.getByText("Faktisk saldo")).toBeInTheDocument();
+  });
+
+  test("a reconciled account shows the afstemt banner", async () => {
+    mockFetch(route({ actualBalance: 41388.03, difference: 0 }));
+    renderView();
+    expect(
+      await screen.findByText(/Kontoudtog og bogført saldo stemmer/),
+    ).toBeInTheDocument();
+  });
+
+  test("without an imported statement the banner says so", async () => {
+    mockFetch(route({ actualBalance: null, difference: null }));
+    renderView();
+    expect(
+      await screen.findByText(/Intet kontoudtog importeret for/),
+    ).toBeInTheDocument();
+  });
+
   test("an archived year shows the arkiv notice", async () => {
     mockFetch(
       route({ archived: true, selectedYear: "2025", transactions: [] }),

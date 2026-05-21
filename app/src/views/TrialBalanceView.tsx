@@ -11,7 +11,11 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyTrialBalance } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
-import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import {
+  CompanyNav,
+  accountPostingsTo,
+  useCompanyYear,
+} from "../components/CompanyNav";
 
 export function TrialBalanceView() {
   const { slug = "" } = useParams();
@@ -80,8 +84,19 @@ export function TrialBalanceView() {
                   </tr>
                 ) : (
                   t.rows.map((row) => (
-                    <tr key={row.accountNo}>
-                      <td className="account-no">{row.accountNo}</td>
+                    <tr key={row.accountNo} className="account-row">
+                      <td className="account-no">
+                        <Link
+                          className="account-link"
+                          to={accountPostingsTo(
+                            slug,
+                            t.selectedYear,
+                            row.accountNo,
+                          )}
+                        >
+                          {row.accountNo}
+                        </Link>
+                      </td>
                       <td>{row.name}</td>
                       <td className="num">
                         {formatKroner(row.debit, currency)}

@@ -31,9 +31,21 @@ const AXIS_NUMBER = new Intl.NumberFormat("da-DK", {
   maximumFractionDigits: 0,
 });
 
-export function MultiYearChart({ years }: { years: MultiYearRow[] }) {
+export function MultiYearChart({
+  years,
+  currentYear,
+}: {
+  years: MultiYearRow[];
+  /** The live/current fiscal year — labelled "(år til dato)" as it is partial. */
+  currentYear?: string | null;
+}) {
   const data: ChartData<"bar"> = {
-    labels: years.map((y) => y.year),
+    // The live year is a partial year next to the full archived ones — its
+    // x-axis label says so (a two-line label), so the trend is not read as
+    // like-for-like.
+    labels: years.map((y) =>
+      y.year === currentYear ? [y.year, "(år til dato)"] : y.year,
+    ),
     datasets: [
       {
         label: "Omsætning",

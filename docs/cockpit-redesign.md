@@ -196,3 +196,68 @@ regnskabsårs-vælger virker. Responsivt på desktop + mobil.
   beløb at betale 3.371,20 mod Dineros 3.371,00 — præcis rubrik-opdeling mangler.
 - Resultatopgørelsens "foregående år"-kolonne viser 0 for arkiverede år; kunne
   trække arkiv-data ind.
+
+---
+
+## Runde 2 — fra regnskabs-cockpit til drifts-cockpit
+
+En virksomhedsejer-gennemgang viste: cockpittet viser regnskabet godt, men
+mangler de drifts-svar en ejer har brug for. Disse iterationer lukker gabet.
+Samme loop-protokol: underagent bygger → visuel inspektion → næste.
+
+### Iteration 6 — Bank-sandhed & meningsfulde opgaver
+- [x] Backend: bank/overview returnerer FAKTISK banksaldo (seneste
+      `balance_after` fra kontoudtoget) + difference mod bogført saldo
+- [x] Overblik: Bank-kortet viser faktisk saldo, bogført saldo OG difference
+- [x] Bank-view: differencen vist prominent øverst
+- [x] Opgaver: de mange "bank unmatched"-undtagelser grupperes til ÉN dansk,
+      klikbar linje ("362 banktransaktioner mangler afstemning" → Bank-view)
+- [x] **Visuel inspektion** — Bank-kort 23.654,75 (kontoudtog) vs 41.388,03
+      (bogført), difference 17.733,28; grupperet opgave; desktop + mobil
+
+### Iteration 7 — Forpligtelser & deadlines
+- [x] Backend: forpligtelses-endpoint (moms, selskabsskat, kreditorer, afsat
+      revisor m.fl.) med forfaldsdato/-frist hvor den kendes —
+      `GET .../obligations?year=`; moms-frist udledt fra halvårsperioden,
+      selskabsskat 1. november året efter, kreditorer/revisor uden kendt dato
+- [x] Frontend: Forpligtelser-view — "hvad skylder jeg og hvornår", sorteret
+      efter frist, beløb højrestillet, pæn tom-tilstand; i CompanyNav (13 pkt.)
+- [x] Moms-view + Overblik: indberetnings-/betalingsfrist + dage tilbage
+- [x] Overblik: debitor-kort ("hvem skylder mig", åbne tilgodehavender) —
+      for Helheim 0, vist som ren nul-tilstand
+- [x] **Visuel inspektion** — Forpligtelser 21.672,94 i alt (moms tælles én
+      gang efter fix), moms-frist 103 dage, debitor-kort 0 kr.
+
+### Iteration 8 — Likviditet / pengestrøm
+- [x] Backend: pengestrøms-endpoint — penge ind/ud + faktisk bank-udvikling
+      (`GET .../cashflow?year=`)
+- [x] Frontend: Likviditet-view — primo/ind/ud/ultimo-kort, kombineret graf
+      (søjler + banksaldo-linje), 12-måneders tabel
+- [x] **Visuel inspektion** — primo 30.116,01 + ind 22.286,27 − ud 28.747,53
+      = ultimo 23.654,75; verificeret (krævede fix: registrér LineController)
+
+### Iteration 9 — Drill-down, nøgletal & klarhed
+- [x] Drill-down: Overblik-KPI/statuskort linker til opgørelserne; konto-rækker
+      i Saldobalance/Resultatopgørelse/Balance linker til Posteringer med
+      `?account=<kontonr>`-filter (navngiver kontoen, kan ryddes igen)
+- [x] "Senest bogført pr. <dato>" tydeligt på Overblik — transaktionsdato for
+      seneste bogførte postering (tilføjet til `/overview`-payload)
+- [x] Flerårsoversigt: indeværende (live) år mærket "(år til dato)" i både
+      tabel og graf
+- [x] Bilag-view: viser koblet posterings tekst + beløb (falder tilbage til
+      posteringens total når dokumentbeløbet mangler)
+- [x] Seneste posteringer (Overblik): læsbar posteringstekst — relayout fra
+      afkortet tabel til ombrydende liste (desktop + mobil)
+- [x] Nøgletal (bruttomargin, egenkapitalandel) på Overblik
+- [x] **Visuel inspektion** — nøgletal (74,2 % / 47,6 %), "Senest bogført pr.
+      2026-02-27", konto-drill-down (2000 → 2 posteringer), Flerår
+      "(år til dato)", Bilag-posteringstekst, læsbare seneste posteringer
+
+---
+
+## Status — runde 2 afsluttet
+
+Alle fire drifts-iterationer (6–9) bygget og visuelt inspiceret. Cockpittet er
+nu et drifts-cockpit: faktisk banksaldo + afstemningsdifference, meningsfulde
+opgaver, forpligtelser med forfaldsdato, moms-deadline, likviditet/pengestrøm,
+drill-down, nøgletal. Endelig verifikation: **702 tests grønne · smoke grøn**.

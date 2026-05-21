@@ -11,7 +11,11 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyIncomeStatement, IncomeStatementLine } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
-import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import {
+  CompanyNav,
+  accountPostingsTo,
+  useCompanyYear,
+} from "../components/CompanyNav";
 
 export function IncomeStatementView() {
   const { slug = "" } = useParams();
@@ -75,6 +79,8 @@ export function IncomeStatementView() {
               priorTotal={s.priorTotalIncome}
               totalLabel="Indtægter i alt"
               currency={currency}
+              slug={slug}
+              year={s.selectedYear}
             />
             <StatementSection
               heading="Udgifter"
@@ -83,6 +89,8 @@ export function IncomeStatementView() {
               priorTotal={s.priorTotalExpense}
               totalLabel="Udgifter i alt"
               currency={currency}
+              slug={slug}
+              year={s.selectedYear}
             />
             <tbody>
               <tr className={`statement-result ${positive ? "positive" : "negative"}`}>
@@ -107,6 +115,8 @@ function StatementSection({
   priorTotal,
   totalLabel,
   currency,
+  slug,
+  year,
 }: {
   heading: string;
   lines: IncomeStatementLine[];
@@ -114,6 +124,8 @@ function StatementSection({
   priorTotal: number;
   totalLabel: string;
   currency: string;
+  slug: string;
+  year: string;
 }) {
   return (
     <tbody>
@@ -128,8 +140,15 @@ function StatementSection({
         </tr>
       ) : (
         lines.map((line) => (
-          <tr key={line.accountNo}>
-            <td className="account-no">{line.accountNo}</td>
+          <tr key={line.accountNo} className="account-row">
+            <td className="account-no">
+              <Link
+                className="account-link"
+                to={accountPostingsTo(slug, year, line.accountNo)}
+              >
+                {line.accountNo}
+              </Link>
+            </td>
             <td>{line.name}</td>
             <td className="num">{formatKroner(line.amount, currency)}</td>
             <td className="num muted">

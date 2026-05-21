@@ -8,6 +8,7 @@ import type {
   ArchiveResponse,
   BalanceResponse,
   BankResponse,
+  CashflowResponse,
   CompanyListResponse,
   ContactsResponse,
   CreateCompanyInput,
@@ -19,6 +20,7 @@ import type {
   InvoicesResponse,
   JournalResponse,
   MultiYearResponse,
+  ObligationsResponse,
   OverviewResponse,
   PortfolioResponse,
   TrialBalanceResponse,
@@ -125,12 +127,17 @@ export const api = {
       }`,
     ).then((r) => r.trialBalance),
 
-  journal: (slug: string, year?: string) =>
-    request<JournalResponse>(
+  journal: (slug: string, year?: string, account?: string) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", year);
+    if (account) params.set("account", account);
+    const query = params.toString();
+    return request<JournalResponse>(
       `/api/companies/${encodeURIComponent(slug)}/journal${
-        year ? `?year=${encodeURIComponent(year)}` : ""
+        query ? `?${query}` : ""
       }`,
-    ).then((r) => r.journal),
+    ).then((r) => r.journal);
+  },
 
   bank: (slug: string, year?: string) =>
     request<BankResponse>(
@@ -174,6 +181,20 @@ export const api = {
     request<ContactsResponse>(
       `/api/companies/${encodeURIComponent(slug)}/contacts`,
     ).then((r) => r.contacts),
+
+  obligations: (slug: string, year?: string) =>
+    request<ObligationsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/obligations${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.obligations),
+
+  cashflow: (slug: string, year?: string) =>
+    request<CashflowResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/cashflow${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.cashflow),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

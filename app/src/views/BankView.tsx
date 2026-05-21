@@ -54,7 +54,22 @@ export function BankView() {
         <ArchivedNotice slug={slug} year={b.selectedYear} />
       ) : (
         <>
+          <BankDifferenceBanner bank={b} currency={currency} />
+
           <div className="status-grid bank-summary">
+            <div className="card status-card">
+              <h3>Faktisk saldo</h3>
+              <div className="status-figure">
+                {b.actualBalance === null
+                  ? "—"
+                  : formatKroner(b.actualBalance, currency)}
+              </div>
+              <p className="muted status-note">
+                {b.actualBalance === null
+                  ? "Intet kontoudtog importeret"
+                  : "Seneste saldo fra kontoudtoget"}
+              </p>
+            </div>
             <div className="card status-card">
               <h3>Bogført saldo</h3>
               <div className="status-figure">
@@ -134,6 +149,60 @@ export function BankView() {
         </>
       )}
     </section>
+  );
+}
+
+// The booked-vs-actual gap is the headline of a bank page — shown prominently
+// at the top. When the gap is zero (or no statement is imported) the banner
+// reassures rather than alarms.
+function BankDifferenceBanner({
+  bank,
+  currency,
+}: {
+  bank: CompanyBank;
+  currency: string;
+}) {
+  if (bank.actualBalance === null || bank.difference === null) {
+    return (
+      <div className="card bank-diff-banner neutral">
+        <span className="flag">Bank</span>
+        <p>
+          Intet kontoudtog importeret for {bank.selectedYear} — kun den bogførte
+          saldo {formatKroner(bank.bookedBalance, currency)} kan vises.
+        </p>
+      </div>
+    );
+  }
+
+  const reconciled = Math.abs(bank.difference) < 0.005;
+  if (reconciled) {
+    return (
+      <div className="card bank-diff-banner ok">
+        <span className="flag ok">Afstemt</span>
+        <p>
+          Kontoudtog og bogført saldo stemmer:{" "}
+          {formatKroner(bank.actualBalance, currency)}.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card bank-diff-banner alert">
+      <span className="flag warning">Difference</span>
+      <div>
+        <div className="bank-diff-figure">
+          {formatKroner(bank.difference, currency)}
+        </div>
+        <p>
+          Bogført saldo {formatKroner(bank.bookedBalance, currency)} mod faktisk
+          saldo på kontoudtoget {formatKroner(bank.actualBalance, currency)} —
+          {bank.unmatchedCount > 0
+            ? ` ${bank.unmatchedCount} uafstemte transaktioner.`
+            : " endnu ikke afstemt."}
+        </p>
+      </div>
+    </div>
   );
 }
 

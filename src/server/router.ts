@@ -28,6 +28,7 @@ import {
   buildCompanyArchiveYear,
   buildCompanyBalance,
   buildCompanyBank,
+  buildCompanyCashflow,
   buildCompanyContacts,
   buildCompanyDashboardData,
   buildCompanyDocuments,
@@ -36,6 +37,7 @@ import {
   buildCompanyInvoices,
   buildCompanyJournal,
   buildCompanyMultiYear,
+  buildCompanyObligations,
   buildCompanyOverview,
   buildCompanyTrialBalance,
   buildCompanyVat,
@@ -189,7 +191,8 @@ function handleCompanyJournal(
   url: URL,
 ): Response {
   const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyJournal(config.workspaceRoot, slug, year);
+  const account = url.searchParams.get("account");
+  const data = buildCompanyJournal(config.workspaceRoot, slug, year, account);
   return okResponse({ journal: data });
 }
 
@@ -246,6 +249,26 @@ function handleCompanyInvoices(
 function handleCompanyContacts(config: ServerConfig, slug: string): Response {
   const data = buildCompanyContacts(config.workspaceRoot, slug);
   return okResponse({ contacts: data });
+}
+
+function handleCompanyObligations(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyObligations(config.workspaceRoot, slug, year);
+  return okResponse({ obligations: data });
+}
+
+function handleCompanyCashflow(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyCashflow(config.workspaceRoot, slug, year);
+  return okResponse({ cashflow: data });
 }
 
 async function handleCompanyCreate(
@@ -464,6 +487,21 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(contactsMatch[1]!);
       return handleCompanyContacts(config, slug);
+    }
+
+    const obligationsMatch =
+      /^\/api\/companies\/([^/]+)\/obligations$/.exec(path);
+    if (obligationsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(obligationsMatch[1]!);
+      return handleCompanyObligations(config, slug, url);
+    }
+
+    const cashflowMatch = /^\/api\/companies\/([^/]+)\/cashflow$/.exec(path);
+    if (cashflowMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(cashflowMatch[1]!);
+      return handleCompanyCashflow(config, slug, url);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);
