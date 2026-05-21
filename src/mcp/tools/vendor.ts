@@ -14,7 +14,7 @@ import {
   type CreateVendorInput,
 } from "../../core/master-data";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerVendorTools(server: McpServer): void {
   server.registerTool(
@@ -56,7 +56,7 @@ export function registerVendorTools(server: McpServer): void {
           notes: z.string().optional(),
         }),
         fromCvr: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -64,7 +64,7 @@ export function registerVendorTools(server: McpServer): void {
       company: string;
       input: CreateVendorInput;
       fromCvr?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "vendor_create", async ({ db, args }) => {
       let input = args.input;
       if (args.fromCvr) {

@@ -28,26 +28,80 @@ import {
   successEnvelope,
   wrapCoreResult,
 } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed, resolveJournalEntryId } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, resolveJournalEntryId, confirmField } from "../tool-runtime";
 
 const lineSchema = z.object({
-  accountNo: z.string().min(1),
-  debitAmount: z.number().nonnegative().optional(),
-  creditAmount: z.number().nonnegative().optional(),
-  vatCode: z.string().optional(),
-  text: z.string().optional(),
+  accountNo: z
+    .string()
+    .min(1)
+    .describe("Account number from the chart of accounts, e.g. '3000'. See accounts_list."),
+  debitAmount: z
+    .number()
+    .nonnegative()
+    .optional()
+    .describe(
+      "Debit amount for this line, in kroner (decimal DKK, 2 decimals — NOT øre). " +
+        "Set exactly one of debitAmount or creditAmount per line.",
+    ),
+  creditAmount: z
+    .number()
+    .nonnegative()
+    .optional()
+    .describe(
+      "Credit amount for this line, in kroner (decimal DKK, 2 decimals — NOT øre). " +
+        "Set exactly one of debitAmount or creditAmount per line.",
+    ),
+  vatCode: z
+    .string()
+    .optional()
+    .describe("Optional VAT code for the line, e.g. 'DK_PURCHASE_25', 'DK_SALE_25'."),
+  text: z.string().optional().describe("Optional free-text description of the line."),
 });
 
 const payloadSchema = z.object({
-  transactionDate: z.string().min(1),
-  text: z.string().min(1),
-  documentId: z.number().int().positive().optional(),
-  sourceBankTransactionId: z.number().int().positive().optional(),
-  currency: z.string().optional(),
-  amountForeign: z.number().optional(),
-  amountDkk: z.number().optional(),
-  fxRateToDkk: z.number().optional(),
-  lines: z.array(lineSchema).min(1, "at least one journal line is required"),
+  transactionDate: z
+    .string()
+    .min(1)
+    .describe("Posting date in YYYY-MM-DD format."),
+  text: z.string().min(1).describe("Human-readable description of the journal entry."),
+  documentId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "ID of the underlying document (bilag). REQUIRED whenever any line posts to an " +
+        "expense or income account — the core rejects such an entry with 'documentId is " +
+        "required when posting expense or income lines'. Optional only for entries that " +
+        "touch balance-sheet accounts exclusively (e.g. owner contributions, bank transfers). " +
+        "Use documents_list to find an existing document ID.",
+    ),
+  sourceBankTransactionId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Optional ID of the bank transaction this entry settles. See bank_list."),
+  currency: z
+    .string()
+    .optional()
+    .describe("3-letter ISO currency code (default 'DKK'). Non-DKK entries also require amountForeign, amountDkk and fxRateToDkk."),
+  amountForeign: z
+    .number()
+    .optional()
+    .describe("For non-DKK entries: the entry amount in the foreign currency, in major units (e.g. euros — NOT cents)."),
+  amountDkk: z
+    .number()
+    .optional()
+    .describe("For non-DKK entries: the entry amount converted to kroner (decimal DKK, 2 decimals). Must equal amountForeign * fxRateToDkk."),
+  fxRateToDkk: z
+    .number()
+    .optional()
+    .describe("For non-DKK entries: the FX rate from the foreign currency to DKK (e.g. 7.46)."),
+  lines: z
+    .array(lineSchema)
+    .min(1, "at least one journal line is required")
+    .describe("Journal lines. Total debit must equal total credit (in kroner)."),
 });
 
 export function registerJournalTools(server: McpServer): void {
@@ -57,13 +111,14 @@ export function registerJournalTools(server: McpServer): void {
       title: "Post journal entry",
       description:
         "Bogfører en manuel finanspostering i den append-only kæde. " +
-        "Write-irreversible — kræver confirm:true. Modposteres via journal_reverse.",
+        "Write-irreversible — kræver confirm:true. Modposteres via journal_reverse. " +
+        "Alle beløb er i kroner (decimal DKK, 2 decimaler — ikke øre). " +
+        "payload.documentId er påkrævet hvis nogen linje bogfører på en udgifts- eller " +
+        "indtægtskonto; valgfri kun for posteringer der udelukkende rører balancekonti.",
       inputSchema: {
         company: z.string().min(1, "company path is required"),
         payload: payloadSchema,
-        confirm: z
-          .boolean()
-          .describe("Must be true to acknowledge write-irreversible tool side effects."),
+        confirm: confirmField,
         idempotencyKey: z.string().optional(),
       },
       annotations: {
@@ -113,7 +168,7 @@ export function registerJournalTools(server: McpServer): void {
         matchDocumentId: z.number().int().positive().optional(),
         date: z.string().min(1, "date (transaction date for the reversal) is required"),
         reason: z.string().min(1, "reason is required"),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: {
         readOnlyHint: false,
@@ -131,7 +186,7 @@ export function registerJournalTools(server: McpServer): void {
       matchDocumentId?: number;
       date: string;
       reason: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "journal_reverse", ({ db, args, actor }) => {
       const id = resolveJournalEntryId(db, args);
       if (!id) {

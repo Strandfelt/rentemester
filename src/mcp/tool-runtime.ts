@@ -13,6 +13,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
+import { z } from "zod";
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 import { openDb, migrate } from "../core/db";
@@ -106,6 +107,29 @@ export function resolveCompanyArg(raw: string): CompanyArgResolution {
   }
   return { ok: true, companyRoot: resolved };
 }
+
+/**
+ * Delt `confirm`-felt for write- og destructive-tools.
+ *
+ * **Bevidst `.optional()`** (#201): hvis `confirm` var et påkrævet
+ * `z.boolean()` ville SDK'ens zod-validering afvise et kald hvor `confirm`
+ * mangler *før* handleren kører — og returnere en rå `-32602`-fejl helt uden
+ * `structuredContent`-envelope. En agent der brancher på `structuredContent.ok`
+ * (som docs beskriver) ville så crashe på `undefined`.
+ *
+ * Ved at gøre feltet valgfrit kommer et udeladt `confirm` helt frem til
+ * `withCompanyDbConfirmed` / `withDestructiveConfirm`, som behandler det
+ * præcis som `confirm: false` og returnerer den samme
+ * `{ ok:false, errors:[...] }`-envelope.
+ */
+export const confirmField = z
+  .boolean()
+  .optional()
+  .describe(
+    "Must be set to true to acknowledge the write side effects of this tool. " +
+      "Omitting it (or sending false) returns an { ok:false, errors:[...] } envelope " +
+      "rather than performing the write.",
+  );
 
 /**
  * Wraps en handler så MCP-callbacken får:

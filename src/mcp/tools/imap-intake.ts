@@ -22,7 +22,7 @@ import {
 } from "../../core/imap-intake";
 import type { MailIntakeMetadataInput } from "../../core/mail-intake";
 import { successEnvelope, errorEnvelope } from "../envelope";
-import { withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const metadataSchema = z
   .object({})
@@ -53,7 +53,7 @@ export function registerImapIntakeTools(server: McpServer): void {
           .optional()
           .describe("Metadata pr. message-id; overstyrer 'metadata' for den pågældende besked"),
         force: z.boolean().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -67,7 +67,7 @@ export function registerImapIntakeTools(server: McpServer): void {
       metadata?: MailIntakeMetadataInput;
       metadataPerMessage?: Record<string, MailIntakeMetadataInput>;
       force?: boolean;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "imap_intake_poll", async ({ db, args }) => {
       const partial: Partial<ImapConfig> = {};
       if (args.imapHost) partial.host = args.imapHost;

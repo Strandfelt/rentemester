@@ -17,7 +17,7 @@ import {
   type MailIntakeMetadataInput,
 } from "../../core/mail-intake";
 import { successEnvelope, errorEnvelope } from "../envelope";
-import { withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const metadataSchema = z
   .object({})
@@ -43,7 +43,7 @@ export function registerMailIntakeTools(server: McpServer): void {
           .optional()
           .describe("Metadata pr. message-id; overstyrer 'metadata' for den pågældende besked"),
         force: z.boolean().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -53,7 +53,7 @@ export function registerMailIntakeTools(server: McpServer): void {
       metadata?: MailIntakeMetadataInput;
       metadataPerMessage?: Record<string, MailIntakeMetadataInput>;
       force?: boolean;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "mail_intake_ingest", ({ db, args }) => {
       const options: IngestMailDropOptions = {
         metadata: args.metadata,

@@ -20,7 +20,7 @@ import {
   type CreateMileageEntryInput,
 } from "../../core/mileage";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerMileageTools(server: McpServer): void {
   server.registerTool(
@@ -77,11 +77,11 @@ export function registerMileageTools(server: McpServer): void {
           rateSource: z.string().optional(),
           notes: z.string().optional(),
         }),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; input: CreateMileageEntryInput; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; input: CreateMileageEntryInput; confirm?: boolean }>(
       server,
       "mileage_log",
       ({ db, args }) => {
@@ -102,11 +102,11 @@ export function registerMileageTools(server: McpServer): void {
         from: z.string().min(1),
         to: z.string().min(1),
         outputDir: z.string().min(1),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; from: string; to: string; outputDir: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; from: string; to: string; outputDir: string; confirm?: boolean }>(
       server,
       "mileage_export",
       ({ db, args }) => {

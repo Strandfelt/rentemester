@@ -11,12 +11,57 @@ import { ingestDocument, type DocumentMetadata } from "../../core/documents";
 import { resolveDocumentMasterData } from "../../core/master-data";
 import { recordException } from "../../core/exceptions";
 import { wrapCoreResult, successEnvelope, errorEnvelope } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
+
+const documentPartySchema = z.object({
+  name: z.string().optional().describe("Party name."),
+  address: z.string().optional().describe("Party postal address."),
+  vatOrCvr: z.string().optional().describe("Party VAT or CVR number, e.g. 'DK12345678'."),
+});
 
 const documentMetadataSchema = z
-  .object({})
-  .catchall(z.unknown())
-  .describe("DocumentMetadata payload — se examples/vendor-invoice.metadata.json");
+  .object({
+    source: z
+      .string()
+      .describe("How the document arrived, e.g. 'email', 'photo-upload', 'mobile-scan'. Required."),
+    documentType: z
+      .enum(["purchase_sale", "cash_register_receipt"])
+      .optional()
+      .describe("Document type (default 'purchase_sale')."),
+    issueDate: z.string().optional().describe("Document/invoice date in YYYY-MM-DD format."),
+    invoiceNo: z.string().optional().describe("Invoice or receipt number printed on the document."),
+    deliveryDescription: z
+      .string()
+      .optional()
+      .describe("Free-text description of the goods or services."),
+    amountIncVat: z
+      .number()
+      .optional()
+      .describe("Total amount including VAT, in kroner (decimal DKK, 2 decimals — NOT øre)."),
+    currency: z
+      .string()
+      .optional()
+      .describe("3-letter ISO currency code (default 'DKK')."),
+    sender: documentPartySchema.optional().describe("Sender/supplier details."),
+    recipient: documentPartySchema.optional().describe("Recipient/buyer details."),
+    vatAmount: z
+      .number()
+      .optional()
+      .describe("VAT amount, in kroner (decimal DKK, 2 decimals — NOT øre)."),
+    paymentDetails: z
+      .string()
+      .optional()
+      .describe("Free-text payment details, e.g. 'Bankoverførsel 2026-05-17'."),
+    exemptionCode: z
+      .literal("FOREIGN_PHYSICAL_ONLY")
+      .nullable()
+      .optional()
+      .describe("Set to 'FOREIGN_PHYSICAL_ONLY' for a foreign physical-only receipt; otherwise omit."),
+  })
+  .describe(
+    "Document (bilag) metadata. amountIncVat and vatAmount are in kroner " +
+      "(decimal DKK, 2 decimals — NOT øre).",
+  );
 
 export function registerDocumentTools(server: McpServer): void {
   server.registerTool(
@@ -69,14 +114,33 @@ export function registerDocumentTools(server: McpServer): void {
       title: "Ingest document",
       description:
         "Indlæser og hash-lagrer et bilag med metadata. write-reversible — kræver confirm:true. " +
-        "Skriver en exception hvis ingest blokeres (fx duplicate).",
+        "Skriver en exception hvis ingest blokeres (fx duplicate). " +
+        "VIGTIGT: filePath er en sti på MCP-serverens eget filsystem — bilaget skal allerede " +
+        "ligge på serveren. Klienten/agenten kan IKKE uploade en fil her, og der findes (i " +
+        "modsætning til bank_import's csvContent) ingen inline-content-variant: filen kan kun " +
+        "angives via sti. Alle beløb i metadata er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        filePath: z.string().min(1),
+        filePath: z
+          .string()
+          .min(1)
+          .describe(
+            "Absolute path to the document file ON THE MCP SERVER'S FILESYSTEM. The file " +
+              "must already exist on the server — this tool does not accept uploaded or " +
+              "inline file content (no csvContent-style alternative exists, unlike bank_import).",
+          ),
         metadata: documentMetadataSchema,
-        vendorId: z.number().int().positive().optional(),
-        force: z.boolean().optional(),
-        confirm: z.boolean(),
+        vendorId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Optional ID of an existing vendor to associate with the document. See vendor_list."),
+        force: z
+          .boolean()
+          .optional()
+          .describe("Set true to force ingest even if a document with the same logical identity already exists."),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -86,7 +150,7 @@ export function registerDocumentTools(server: McpServer): void {
       metadata: DocumentMetadata;
       vendorId?: number;
       force?: boolean;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "documents_ingest", ({ db, args }) => {
       const resolved = resolveDocumentMasterData(db, args.metadata, { vendorId: args.vendorId });
       if (!resolved.ok) return errorEnvelope(resolved.errors ?? ["resolveDocumentMasterData failed"]);

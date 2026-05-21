@@ -10,7 +10,7 @@ import { z } from "zod";
 import { lookupCvrCompany } from "../../core/cvr";
 import { syncCompanyFromCvr } from "../../core/company";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerCvrTools(server: McpServer): void {
   server.registerTool(
@@ -39,11 +39,11 @@ export function registerCvrTools(server: McpServer): void {
         "Henter virksomhedens egne stamdata fra CVR-registret og opdaterer companies-rækken (navn, adresse, branche, virksomhedsform, status). write-reversible — kræver confirm:true. Regnskabsåret røres aldrig; et afvigende regnskabsår rapporteres kun.",
       inputSchema: {
         company: z.string().min(1),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withCompanyDbConfirmed<{ company: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; confirm?: boolean }>(
       server,
       "company_sync_cvr",
       async ({ db }) => {

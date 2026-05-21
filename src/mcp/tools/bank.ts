@@ -24,7 +24,7 @@ import {
 import { suggestBankMatches } from "../../core/bank-suggest-matches";
 import { syncUnmatchedBankTransactionExceptions } from "../../core/exceptions";
 import { wrapCoreResult, successEnvelope } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const statusSchema = z.enum(["all", "matched", "unmatched"]).optional();
 
@@ -168,11 +168,11 @@ export function registerBankTools(server: McpServer): void {
         account: z.string().optional(),
         profile: z.string().optional(),
         // ===== END BANK CLUSTER (#187,#186) =====
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; profile?: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; profile?: string; confirm?: boolean }>(
       server,
       "bank_import",
       ({ db, args }) => {

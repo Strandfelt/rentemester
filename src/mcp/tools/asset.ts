@@ -16,7 +16,7 @@ import {
   buildAssetRegisterReport,
 } from "../../core/assets";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerAssetTools(server: McpServer): void {
   server.registerTool(
@@ -37,7 +37,7 @@ export function registerAssetTools(server: McpServer): void {
         depreciationAccount: z.string().optional(),
         accumulatedAccount: z.string().optional(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -53,7 +53,7 @@ export function registerAssetTools(server: McpServer): void {
       depreciationAccount?: string;
       accumulatedAccount?: string;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "asset_register", ({ db, args }) => {
       const result = registerAsset(db, {
         name: args.name,
@@ -82,7 +82,7 @@ export function registerAssetTools(server: McpServer): void {
         assetId: z.number().int().positive(),
         period: z.number().int().positive(),
         date: z.string().min(1),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -91,7 +91,7 @@ export function registerAssetTools(server: McpServer): void {
       assetId: number;
       period: number;
       date: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "asset_depreciate", ({ db, args }) => {
       const result = postDepreciationPeriod(db, {
         assetId: args.assetId,
@@ -121,7 +121,7 @@ export function registerAssetTools(server: McpServer): void {
         confirmImmediateWriteOff: z.boolean(),
         paymentAccount: z.string().optional(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -138,7 +138,7 @@ export function registerAssetTools(server: McpServer): void {
       confirmImmediateWriteOff: boolean;
       paymentAccount?: string;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "asset_write_off", ({ db, args }) => {
       const result = postImmediateWriteOff(db, {
         name: args.name,

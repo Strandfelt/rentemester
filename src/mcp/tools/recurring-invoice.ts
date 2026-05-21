@@ -16,7 +16,7 @@ import {
   type RecurringInvoiceTemplateInput,
 } from "../../core/recurring-invoices";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerRecurringInvoiceTools(server: McpServer): void {
   server.registerTool(
@@ -34,7 +34,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
         paymentTermsDays: z.number().int().min(0).max(365).optional(),
         deliveryPeriodMode: z.enum(["issue_month", "interval_window", "none"]).optional(),
         notes: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -47,7 +47,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
       paymentTermsDays?: number;
       deliveryPeriodMode?: "issue_month" | "interval_window" | "none";
       notes?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "recurring_invoice_create", ({ db, args }) => {
       const result = createRecurringInvoiceTemplate(db, {
         name: args.name,
@@ -72,7 +72,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
         company: z.string().min(1),
         templateId: z.number().int().positive(),
         asOfDate: z.string().min(1),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -80,7 +80,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
       company: string;
       templateId: number;
       asOfDate: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "recurring_invoice_generate", ({ db, args }) => {
       const result = generateRecurringInvoice(db, args.company, {
         templateId: args.templateId,

@@ -13,7 +13,7 @@ import {
   type ExceptionStatus,
 } from "../../core/exceptions";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerExceptionTools(server: McpServer): void {
   server.registerTool(
@@ -52,11 +52,11 @@ export function registerExceptionTools(server: McpServer): void {
         company: z.string().min(1),
         id: z.number().int().positive(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; id: number; note?: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; id: number; note?: string; confirm?: boolean }>(
       server,
       "exception_resolve",
       ({ db, args, actor }) => {

@@ -60,12 +60,322 @@ import {
   withCompanyDb,
   withCompanyDbConfirmed,
   resolveIssuedInvoiceDocumentId,
+  confirmField,
 } from "../tool-runtime";
 
+// --------------------------------------------------------------- payload schemas
+// All monetary fields are in kroner — decimal DKK with 2 decimals (NOT øre).
+// VAT rates are fractions (0.25 = 25%). FX rates are major-unit → DKK (e.g. 7.46).
+
+const invoiceLineSchema = z.object({
+  description: z
+    .string()
+    .describe("Description of the good or service. Required on every line."),
+  quantity: z.number().optional().describe("Quantity of the line item."),
+  unitPriceExVat: z
+    .number()
+    .optional()
+    .describe("Unit price excluding VAT, in kroner (decimal DKK)."),
+  lineTotalExVat: z
+    .number()
+    .optional()
+    .describe(
+      "Line total excluding VAT, in kroner (decimal DKK). Must equal quantity * unitPriceExVat.",
+    ),
+});
+
+const invoiceTotalsSchema = z.object({
+  netAmount: z
+    .number()
+    .optional()
+    .describe(
+      "Total excluding VAT, in kroner (decimal DKK). Required for full invoices; " +
+        "must equal the sum of all lines' lineTotalExVat.",
+    ),
+  vatRate: z
+    .number()
+    .optional()
+    .describe("VAT rate as a fraction (0.25 = 25%). Required for standard-VAT invoices; must be omitted for reverse-charge invoices."),
+  vatAmount: z
+    .number()
+    .optional()
+    .describe(
+      "Total VAT, in kroner (decimal DKK). Required for standard-VAT invoices; " +
+        "must be omitted for reverse-charge invoices.",
+    ),
+  grossAmount: z
+    .number()
+    .optional()
+    .describe(
+      "Total including VAT, in kroner (decimal DKK). Required. For standard VAT it must " +
+        "equal netAmount + vatAmount; for reverse charge it must equal netAmount.",
+    ),
+  fxRateToDkk: z
+    .number()
+    .optional()
+    .describe("For non-DKK invoices: FX rate from invoice currency to DKK (e.g. 7.46)."),
+  netAmountDkk: z
+    .number()
+    .optional()
+    .describe("For non-DKK invoices: netAmount converted to kroner (decimal DKK). Must equal netAmount * fxRateToDkk."),
+  vatAmountDkk: z
+    .number()
+    .optional()
+    .describe("For non-DKK standard-VAT invoices: vatAmount converted to kroner (decimal DKK). Must equal vatAmount * fxRateToDkk."),
+  grossAmountDkk: z
+    .number()
+    .optional()
+    .describe("For non-DKK invoices: grossAmount converted to kroner (decimal DKK). Must equal grossAmount * fxRateToDkk."),
+  vatComputationBasis: z
+    .string()
+    .optional()
+    .describe("Optional VAT computation basis, e.g. 'VAT_20_OF_GROSS' for simplified invoices."),
+});
+
+const invoicePartySchema = z.object({
+  name: z.string().optional().describe("Party name."),
+  address: z.string().optional().describe("Party postal address."),
+  vatOrCvr: z.string().optional().describe("Party VAT or CVR number, e.g. 'DK12345678'."),
+});
+
+const invoiceBuyerSchema = z.object({
+  name: z.string().optional().describe("Buyer name. Required for full invoices."),
+  address: z.string().optional().describe("Buyer postal address. Required for full invoices."),
+  vatOrCvr: z
+    .string()
+    .optional()
+    .describe("Buyer VAT or CVR number. Required for foreign reverse-charge invoices."),
+  eanNumber: z
+    .string()
+    .optional()
+    .describe("13-digit EAN/GLN number — required when invoicing a Danish public-sector recipient."),
+  publicRecipient: z
+    .boolean()
+    .optional()
+    .describe("Set true when the buyer is a Danish public-sector body (forces full invoice + EAN)."),
+});
+
 const invoicePayloadSchema = z
-  .object({})
-  .catchall(z.unknown())
-  .describe("InvoicePayload — se examples/full-invoice.dk.json for schema");
+  .object({
+    invoiceType: z
+      .enum(["full", "simplified"])
+      .describe("'full' for a full invoice; 'simplified' only for gross totals up to DKK 3,000."),
+    vatTreatment: z
+      .enum(["standard", "domestic_reverse_charge", "foreign_reverse_charge"])
+      .optional()
+      .describe("VAT treatment (default 'standard'). Reverse-charge variants also require reverseChargeBasis."),
+    issueDate: z.string().optional().describe("Invoice issue date in YYYY-MM-DD format. Required."),
+    invoiceNumber: z
+      .string()
+      .optional()
+      .describe("Optional explicit invoice number. If omitted, a sequential number is assigned."),
+    seller: invoicePartySchema
+      .optional()
+      .describe("Seller details. seller.name, seller.address and seller.vatOrCvr are all required."),
+    buyer: invoiceBuyerSchema.optional().describe("Buyer details."),
+    lines: z
+      .array(invoiceLineSchema)
+      .optional()
+      .describe("Invoice lines — at least one line with a description is required."),
+    totals: invoiceTotalsSchema
+      .optional()
+      .describe("Invoice totals. All amounts are in kroner (decimal DKK)."),
+    reverseChargeBasis: z
+      .enum([
+        "DK_MOMSLOVEN_§46_STK_1_NR_3",
+        "DK_MOMSLOVEN_§46_STK_1_NR_6",
+        "DK_MOMSLOVEN_§46_STK_1_NR_7",
+        "EU_MOMSDIREKTIV_ART_196",
+        "EU_MOMSDIREKTIV_ART_199",
+      ])
+      .optional()
+      .describe("Legal basis for reverse charge — required for reverse-charge invoices."),
+    reverseChargeNote: z
+      .string()
+      .optional()
+      .describe("Optional free-text note explaining the reverse-charge treatment."),
+    currency: z
+      .string()
+      .optional()
+      .describe("3-letter ISO currency code (default 'DKK'). Non-DKK invoices require the *Dkk total fields and fxRateToDkk."),
+    dueDate: z.string().optional().describe("Payment due date in YYYY-MM-DD format; cannot be earlier than issueDate."),
+    deliveryDate: z.string().optional().describe("Delivery date in YYYY-MM-DD format. Use this OR the deliveryPeriod fields, not both."),
+    deliveryPeriodStart: z
+      .string()
+      .optional()
+      .describe("Start of the delivery period in YYYY-MM-DD format. Must be provided together with deliveryPeriodEnd."),
+    deliveryPeriodEnd: z
+      .string()
+      .optional()
+      .describe("End of the delivery period in YYYY-MM-DD format. Must be provided together with deliveryPeriodStart."),
+  })
+  .describe(
+    "Danish customer-invoice payload. All monetary amounts are in kroner " +
+      "(decimal DKK, 2 decimals — NOT øre); vatRate is a fraction (0.25 = 25%).",
+  );
+
+// --- credit note -------------------------------------------------------------
+const creditNotePayloadSchema = z
+  .object({
+    originalInvoiceDocumentId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Document ID of the invoice being credited. Provide this OR originalInvoiceNumber."),
+    originalInvoiceNumber: z
+      .string()
+      .optional()
+      .describe("Invoice number of the invoice being credited. Provide this OR originalInvoiceDocumentId."),
+    issueDate: z.string().describe("Credit-note issue date in YYYY-MM-DD format."),
+    reason: z.string().describe("Reason for the credit note."),
+    grossAmount: z
+      .number()
+      .optional()
+      .describe(
+        "Amount to credit including VAT, in kroner (decimal DKK). Defaults to the full " +
+          "remaining creditable amount; may not exceed it.",
+      ),
+    creditNoteNumber: z
+      .string()
+      .optional()
+      .describe("Optional explicit credit-note number. If omitted, a sequential number is assigned."),
+  })
+  .describe("Credit-note payload. grossAmount is in kroner (decimal DKK, 2 decimals — NOT øre).");
+
+// --- bank-settlement family --------------------------------------------------
+// invoice_settle_bank, invoice_settle_claim_bank and invoice_refund_bank share
+// the same shape: they match an existing bank transaction against an invoice.
+const bankSettlementPayloadSchema = z
+  .object({
+    invoiceDocumentId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Document ID of the invoice. Provide this OR invoiceNumber."),
+    invoiceNumber: z
+      .string()
+      .optional()
+      .describe("Invoice number. Provide this OR invoiceDocumentId."),
+    bankTransactionId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("ID of the bank transaction to match. Provide this OR bankTransactionReference. See bank_list."),
+    bankTransactionReference: z
+      .string()
+      .optional()
+      .describe("Reference of the bank transaction to match. Provide this OR bankTransactionId."),
+    paymentDate: z
+      .string()
+      .optional()
+      .describe("Payment/settlement date in YYYY-MM-DD format. Defaults to the bank transaction's date."),
+    amount: z
+      .number()
+      .optional()
+      .describe(
+        "Amount to settle, in kroner (decimal DKK, 2 decimals — NOT øre). Defaults to the " +
+          "full bank-transaction amount.",
+      ),
+    bankAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional bank account number from the chart of accounts to post against."),
+    receivableAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional accounts-receivable account number from the chart of accounts."),
+  })
+  .describe("Bank-settlement payload. amount is in kroner (decimal DKK, 2 decimals — NOT øre).");
+
+const refundBankPayloadSchema = bankSettlementPayloadSchema
+  .extend({
+    refundDate: z
+      .string()
+      .optional()
+      .describe("Refund date in YYYY-MM-DD format. Defaults to the bank transaction's date."),
+  })
+  .describe("Refund-to-bank payload. amount is in kroner (decimal DKK, 2 decimals — NOT øre).");
+
+// --- bad-debt write-off ------------------------------------------------------
+const badDebtPayloadSchema = z
+  .object({
+    invoiceDocumentId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Document ID of the invoice. Provide this OR invoiceNumber."),
+    invoiceNumber: z
+      .string()
+      .optional()
+      .describe("Invoice number. Provide this OR invoiceDocumentId."),
+    writeOffDate: z.string().describe("Write-off date in YYYY-MM-DD format."),
+    grossAmount: z
+      .number()
+      .optional()
+      .describe(
+        "Amount to write off including VAT, in kroner (decimal DKK, 2 decimals — NOT øre). " +
+          "Defaults to the full open principal balance; may not exceed it.",
+      ),
+    expenseAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional bad-debt expense account number from the chart of accounts."),
+    receivableAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional accounts-receivable account number from the chart of accounts."),
+    vatAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional VAT account number from the chart of accounts for the VAT relief."),
+    note: z.string().optional().describe("Optional free-text note."),
+  })
+  .describe("Bad-debt write-off payload. grossAmount is in kroner (decimal DKK, 2 decimals — NOT øre).");
+
+// --- apply payment -----------------------------------------------------------
+const applyPaymentPayloadSchema = z
+  .object({
+    invoiceDocumentId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Document ID of the invoice. Provide this OR invoiceNumber."),
+    invoiceNumber: z
+      .string()
+      .optional()
+      .describe("Invoice number. Provide this OR invoiceDocumentId."),
+    paymentDate: z.string().describe("Payment date in YYYY-MM-DD format."),
+    amount: z
+      .number()
+      .describe("Payment amount, in kroner (decimal DKK, 2 decimals — NOT øre)."),
+    bankTransactionId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Optional ID of the linked bank transaction. See bank_list."),
+    journalEntryId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Optional ID of an existing journal entry to link the payment to."),
+    bankAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional bank account number from the chart of accounts to post against."),
+    receivableAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional accounts-receivable account number from the chart of accounts."),
+    note: z.string().optional().describe("Optional free-text note."),
+  })
+  .describe("Apply-payment payload. amount is in kroner (decimal DKK, 2 decimals — NOT øre).");
 
 const statusEnum = z
   .enum(["open", "paid", "credited", "refunded", "overpaid", "written_off", "overdue", "all"])
@@ -90,7 +400,9 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_validate",
     {
       title: "Validate invoice payload",
-      description: "Validerer faktura-payload uden at gemme. Read-only.",
+      description:
+        "Validerer faktura-payload uden at gemme. Read-only. " +
+        "Alle beløb er i kroner (decimal DKK, 2 decimaler — ikke øre); vatRate er en brøk (0.25 = 25%).",
       inputSchema: { payload: invoicePayloadSchema },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -288,12 +600,14 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_issue",
     {
       title: "Issue invoice",
-      description: "Udsteder kundefaktura + immutable snapshot. write-irreversible.",
+      description:
+        "Udsteder kundefaktura + immutable snapshot. write-irreversible. " +
+        "Alle beløb i payload er i kroner (decimal DKK, 2 decimaler — ikke øre); vatRate er en brøk (0.25 = 25%).",
       inputSchema: {
         company: z.string().min(1),
         payload: invoicePayloadSchema,
         customerId: z.number().int().positive().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -301,7 +615,7 @@ export function registerInvoiceTools(server: McpServer): void {
       company: string;
       payload: InvoicePayload;
       customerId?: number;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_issue", ({ db, args }) => {
       const resolved = resolveInvoiceMasterData(db, args.payload, { customerId: args.customerId });
       if (!resolved.ok) return wrapCoreResult(resolved);
@@ -316,14 +630,14 @@ export function registerInvoiceTools(server: McpServer): void {
       title: "Render invoice PDF",
       description:
         "Renderer (eller genskaber) deterministisk PDF for udstedt faktura. write-irreversible.",
-      inputSchema: { ...docIdOrNumberSchema, confirm: z.boolean() },
+      inputSchema: { ...docIdOrNumberSchema, confirm: confirmField },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       documentId?: number;
       invoiceNumber?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_render", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -336,15 +650,17 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_credit_note",
     {
       title: "Issue credit note",
-      description: "Udsteder kreditnota mod en eksisterende faktura. write-irreversible.",
+      description:
+        "Udsteder kreditnota mod en eksisterende faktura. write-irreversible. " +
+        "payload.grossAmount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: z.object({}).catchall(z.unknown()),
-        confirm: z.boolean(),
+        payload: creditNotePayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; payload: IssueCreditNoteInput; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; payload: IssueCreditNoteInput; confirm?: boolean }>(
       server,
       "invoice_credit_note",
       ({ db, args }) => {
@@ -360,14 +676,14 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Post invoice to ledger",
       description: "Bogfører en udstedt faktura i finansen. write-irreversible.",
-      inputSchema: { ...docIdOrNumberSchema, confirm: z.boolean() },
+      inputSchema: { ...docIdOrNumberSchema, confirm: confirmField },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       documentId?: number;
       invoiceNumber?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_post", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -380,18 +696,20 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_settle_bank",
     {
       title: "Settle invoice from bank",
-      description: "Matcher en bankbetaling mod en faktura. write-irreversible.",
+      description:
+        "Matcher en bankbetaling mod en faktura. write-irreversible. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: z.object({}).catchall(z.unknown()),
-        confirm: z.boolean(),
+        payload: bankSettlementPayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: SettleInvoiceFromBankInput & { invoiceNumber?: string };
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_settle_bank", ({ db, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const result = settleInvoiceFromBank(db, resolved as SettleInvoiceFromBankInput);
@@ -403,18 +721,20 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_settle_claim_bank",
     {
       title: "Settle invoice claims from bank",
-      description: "Matcher en bankbetaling mod fakturakrav. write-irreversible.",
+      description:
+        "Matcher en bankbetaling mod fakturakrav. write-irreversible. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: z.object({}).catchall(z.unknown()),
-        confirm: z.boolean(),
+        payload: bankSettlementPayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: SettleInvoiceClaimsFromBankInput & { invoiceNumber?: string };
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_settle_claim_bank", ({ db, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const result = settleInvoiceClaimsFromBank(db, resolved as SettleInvoiceClaimsFromBankInput);
@@ -426,18 +746,20 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_write_off_bad_debt",
     {
       title: "Write off bad debt",
-      description: "Bogfører tab på debitor. write-irreversible.",
+      description:
+        "Bogfører tab på debitor. write-irreversible. " +
+        "payload.grossAmount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: z.object({}).catchall(z.unknown()),
-        confirm: z.boolean(),
+        payload: badDebtPayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: WriteOffInvoiceBadDebtInput & { invoiceNumber?: string };
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_write_off_bad_debt", ({ db, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const result = writeOffInvoiceBadDebt(db, resolved as WriteOffInvoiceBadDebtInput);
@@ -449,18 +771,20 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_apply_payment",
     {
       title: "Apply invoice payment",
-      description: "Registrerer fakturabetaling fra payload. write-irreversible.",
+      description:
+        "Registrerer fakturabetaling fra payload. write-irreversible. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: z.object({}).catchall(z.unknown()),
-        confirm: z.boolean(),
+        payload: applyPaymentPayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: ApplyInvoicePaymentInput & { invoiceNumber?: string };
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_apply_payment", ({ db, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const result = applyInvoicePayment(db, resolved as ApplyInvoicePaymentInput);
@@ -472,18 +796,20 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_refund_bank",
     {
       title: "Refund invoice to bank",
-      description: "Bogfører refundering til kunde fra banken. write-irreversible.",
+      description:
+        "Bogfører refundering til kunde fra banken. write-irreversible. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: z.object({}).catchall(z.unknown()),
-        confirm: z.boolean(),
+        payload: refundBankPayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: RefundInvoiceToBankInput & { invoiceNumber?: string };
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_refund_bank", ({ db, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const result = refundInvoiceToBank(db, resolved as RefundInvoiceToBankInput);
@@ -501,7 +827,7 @@ export function registerInvoiceTools(server: McpServer): void {
         date: z.string().min(1),
         fee: z.number().optional(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -512,7 +838,7 @@ export function registerInvoiceTools(server: McpServer): void {
       date: string;
       fee?: number;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_remind", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -535,7 +861,7 @@ export function registerInvoiceTools(server: McpServer): void {
         ...docIdOrNumberSchema,
         reminderId: z.number().int().positive().optional(),
         date: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -545,7 +871,7 @@ export function registerInvoiceTools(server: McpServer): void {
       invoiceNumber?: string;
       reminderId?: number;
       date?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_post_reminder", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -568,7 +894,7 @@ export function registerInvoiceTools(server: McpServer): void {
         asOf: z.string().min(1),
         referenceRate: z.number(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -579,7 +905,7 @@ export function registerInvoiceTools(server: McpServer): void {
       asOf: string;
       referenceRate: number;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_claim_interest", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -602,7 +928,7 @@ export function registerInvoiceTools(server: McpServer): void {
         ...docIdOrNumberSchema,
         claimId: z.number().int().positive().optional(),
         date: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -612,7 +938,7 @@ export function registerInvoiceTools(server: McpServer): void {
       invoiceNumber?: string;
       claimId?: number;
       date?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_post_interest", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -635,7 +961,7 @@ export function registerInvoiceTools(server: McpServer): void {
         asOf: z.string().min(1),
         amountDkk: z.number().optional(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -646,7 +972,7 @@ export function registerInvoiceTools(server: McpServer): void {
       asOf: string;
       amountDkk?: number;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_claim_compensation", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
@@ -668,7 +994,7 @@ export function registerInvoiceTools(server: McpServer): void {
       inputSchema: {
         ...docIdOrNumberSchema,
         date: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -677,7 +1003,7 @@ export function registerInvoiceTools(server: McpServer): void {
       documentId?: number;
       invoiceNumber?: string;
       date?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_post_compensation", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);

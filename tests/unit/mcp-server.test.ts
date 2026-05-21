@@ -405,11 +405,13 @@ describe("MCP tools full surface (#78)", () => {
   });
 
   test("invoice_issue without confirm:true returns envelope error", async () => {
+    // payload only needs to satisfy the typed input schema structurally; the
+    // confirm:false gate fires in the handler regardless of payload validity.
     const response = await client.send("tools/call", {
       name: "invoice_issue",
       arguments: {
         company: companyRoot,
-        payload: { invoiceNumber: "X" },
+        payload: { invoiceType: "full", invoiceNumber: "X" },
         confirm: false,
       },
     });

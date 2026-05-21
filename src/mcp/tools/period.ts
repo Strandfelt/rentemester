@@ -15,7 +15,7 @@ import {
   type AccountingPeriodKind,
 } from "../../core/periods";
 import { wrapCoreResult, successEnvelope } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerPeriodTools(server: McpServer): void {
   server.registerTool(
@@ -69,7 +69,7 @@ export function registerPeriodTools(server: McpServer): void {
         kind: z.enum(["vat_quarter", "fiscal_year", "custom"]).optional(),
         status: z.enum(["closed", "reported"]).optional(),
         reference: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -80,7 +80,7 @@ export function registerPeriodTools(server: McpServer): void {
       kind?: AccountingPeriodKind;
       status?: "closed" | "reported";
       reference?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "period_close", ({ db, args }) => {
       const result = closeAccountingPeriod(db, {
         periodStart: args.from,

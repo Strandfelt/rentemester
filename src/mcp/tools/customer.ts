@@ -16,7 +16,7 @@ import {
 } from "../../core/master-data";
 import { validateVatAgainstVies } from "../../core/vies";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerCustomerTools(server: McpServer): void {
   server.registerTool(
@@ -76,7 +76,7 @@ export function registerCustomerTools(server: McpServer): void {
           notes: z.string().optional(),
         }),
         fromCvr: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -84,7 +84,7 @@ export function registerCustomerTools(server: McpServer): void {
       company: string;
       input: CreateCustomerInput;
       fromCvr?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "customer_create", async ({ db, args }) => {
       let input = args.input;
       if (args.fromCvr) {

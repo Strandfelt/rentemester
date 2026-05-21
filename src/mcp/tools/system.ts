@@ -33,6 +33,7 @@ import {
   withCompanyDb,
   withCompanyDbConfirmed,
   withDestructiveConfirm,
+  confirmField,
 } from "../tool-runtime";
 
 export function registerSystemTools(server: McpServer): void {
@@ -102,11 +103,11 @@ export function registerSystemTools(server: McpServer): void {
         company: z.string().min(1),
         at: z.string().optional(),
         archive: z.boolean().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; at?: string; archive?: boolean; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; at?: string; archive?: boolean; confirm?: boolean }>(
       server,
       "system_backup",
       ({ db, args }) => {
@@ -136,11 +137,11 @@ export function registerSystemTools(server: McpServer): void {
         company: z.string().min(1),
         backupId: z.string().optional(),
         out: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; backupId?: string; out?: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; backupId?: string; out?: string; confirm?: boolean }>(
       server,
       "system_backup_archive",
       ({ db, args }) =>
@@ -197,7 +198,7 @@ export function registerSystemTools(server: McpServer): void {
         itSecurityMeetsStandards: z.boolean().optional(),
         itSecurityNote: z.string().optional(),
         at: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -214,7 +215,7 @@ export function registerSystemTools(server: McpServer): void {
       itSecurityMeetsStandards?: boolean;
       itSecurityNote?: string;
       at?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "system_backup_destination_add", ({ db, actor, args }) =>
       wrapCoreResult(
         addBackupDestination(db, args.company, {
@@ -240,10 +241,10 @@ export function registerSystemTools(server: McpServer): void {
     {
       title: "Remove a backup destination",
       description: "Fjerner en konfigureret backup-destination. write.",
-      inputSchema: { company: z.string().min(1), id: z.string().min(1), confirm: z.boolean() },
+      inputSchema: { company: z.string().min(1), id: z.string().min(1), confirm: confirmField },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; id: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{ company: string; id: string; confirm?: boolean }>(
       server,
       "system_backup_destination_remove",
       ({ db, args }) => wrapCoreResult(removeBackupDestination(db, args.company, args.id)),
@@ -264,7 +265,7 @@ export function registerSystemTools(server: McpServer): void {
         actorKind: z.enum(["human", "agent"]).optional(),
         at: z.string().optional(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -275,7 +276,7 @@ export function registerSystemTools(server: McpServer): void {
       actorKind?: "human" | "agent";
       at?: string;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "system_backup_place", ({ db, actor, args }) =>
       wrapCoreResult(
         placeBackupArchive(db, args.company, {
@@ -307,7 +308,7 @@ export function registerSystemTools(server: McpServer): void {
         actorKind: z.enum(["human", "agent"]).optional(),
         at: z.string().optional(),
         note: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -320,7 +321,7 @@ export function registerSystemTools(server: McpServer): void {
       actorKind?: "human" | "agent";
       at?: string;
       note?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "system_backup_confirm_placement", ({ db, actor, args }) =>
       wrapCoreResult(
         confirmBackupPlacement(db, args.company, {
@@ -349,7 +350,7 @@ export function registerSystemTools(server: McpServer): void {
         enforced: z.boolean().optional(),
         graceDays: z.number().optional(),
         at: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -358,7 +359,7 @@ export function registerSystemTools(server: McpServer): void {
       enforced?: boolean;
       graceDays?: number;
       at?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "system_backup_lock", ({ db, args }) =>
       wrapCoreResult(
         configureBackupLock(db, args.company, {
@@ -382,7 +383,7 @@ export function registerSystemTools(server: McpServer): void {
         out: z.string().min(1),
         requestedAt: z.string().optional(),
         requester: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -393,7 +394,7 @@ export function registerSystemTools(server: McpServer): void {
       out: string;
       requestedAt?: string;
       requester?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "system_export_authority", ({ db, args }) => {
       const result = exportAuthorityPackage(db, args.company, {
         periodStart: args.from,
@@ -418,7 +419,7 @@ export function registerSystemTools(server: McpServer): void {
         backupDir: z.string().min(1),
         targetCompany: z.string().min(1),
         verifyKey: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
         confirmText: z.string().min(1),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -427,7 +428,7 @@ export function registerSystemTools(server: McpServer): void {
       backupDir: string;
       targetCompany: string;
       verifyKey?: string;
-      confirm: boolean;
+      confirm?: boolean;
       confirmText: string;
     }>(
       "system_restore_backup",

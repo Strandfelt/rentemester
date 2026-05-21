@@ -20,7 +20,7 @@ import { z } from "zod";
 import { companyPaths } from "../../core/paths";
 import { createSmtpTransport, sendInvoiceEmail, type SmtpConfig } from "../../core/email";
 import { wrapCoreResult, errorEnvelope } from "../envelope";
-import { withCompanyDbConfirmed, resolveIssuedInvoiceDocumentId } from "../tool-runtime";
+import { withCompanyDbConfirmed, resolveIssuedInvoiceDocumentId, confirmField } from "../tool-runtime";
 
 function loadSmtpConfig(
   companyRoot: string,
@@ -67,7 +67,7 @@ export function registerEmailTools(server: McpServer): void {
         invoiceNumber: z.string().optional(),
         kind: z.enum(["invoice", "reminder"]).optional(),
         to: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: {
         readOnlyHint: false,
@@ -82,7 +82,7 @@ export function registerEmailTools(server: McpServer): void {
       invoiceNumber?: string;
       kind?: "invoice" | "reminder";
       to?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "invoice_send_email", ({ db, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) {

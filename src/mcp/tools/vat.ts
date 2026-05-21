@@ -16,9 +16,112 @@ import {
   type RepresentationPurchaseInput,
 } from "../../core/vat";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDb, withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
-const payloadSchema = z.object({}).catchall(z.unknown());
+// All monetary fields below are in kroner — decimal DKK with 2 decimals (NOT øre).
+
+const euServicePurchasePayloadSchema = z
+  .object({
+    transactionDate: z.string().describe("Posting date in YYYY-MM-DD format."),
+    text: z.string().describe("Human-readable description of the purchase."),
+    documentId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        "Document ID (bilag) of the underlying EU-service invoice. Required, but may be " +
+          "supplied indirectly via invoiceNo, which is resolved to a documentId automatically.",
+      ),
+    invoiceNo: z
+      .string()
+      .optional()
+      .describe("Invoice number of the underlying document. If set, documentId is looked up automatically."),
+    netAmount: z
+      .number()
+      .describe("Purchase amount excluding VAT, in kroner (decimal DKK, 2 decimals — NOT øre)."),
+    expenseAccountNo: z
+      .string()
+      .describe("Expense account number from the chart of accounts to debit, e.g. '3010'."),
+    paymentAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional bank/payment account number from the chart of accounts to credit."),
+    sourceBankTransactionId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Optional ID of the bank transaction this purchase settles. See bank_list."),
+    currency: z
+      .string()
+      .optional()
+      .describe("3-letter ISO currency code (default 'DKK'). Non-DKK purchases also require amountForeign, amountDkk and fxRateToDkk."),
+    amountForeign: z
+      .number()
+      .optional()
+      .describe("For non-DKK purchases: net amount in the foreign currency, in major units (e.g. euros — NOT cents)."),
+    amountDkk: z
+      .number()
+      .optional()
+      .describe("For non-DKK purchases: net amount converted to kroner (decimal DKK, 2 decimals)."),
+    fxRateToDkk: z
+      .number()
+      .optional()
+      .describe("For non-DKK purchases: FX rate from the foreign currency to DKK (e.g. 7.46)."),
+  })
+  .describe(
+    "EU service reverse-charge purchase. netAmount/amountDkk are in kroner " +
+      "(decimal DKK, 2 decimals — NOT øre).",
+  );
+
+const representationPurchasePayloadSchema = z
+  .object({
+    transactionDate: z.string().describe("Posting date in YYYY-MM-DD format."),
+    text: z.string().describe("Human-readable description of the representation expense."),
+    documentId: z
+      .number()
+      .int()
+      .positive()
+      .describe("Document ID (bilag) of the underlying representation receipt. Required. See documents_list."),
+    netAmount: z
+      .number()
+      .describe("Expense amount excluding VAT, in kroner (decimal DKK, 2 decimals — NOT øre)."),
+    expenseAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional representation expense account number from the chart of accounts to debit."),
+    paymentAccountNo: z
+      .string()
+      .optional()
+      .describe("Optional bank/payment account number from the chart of accounts to credit."),
+    sourceBankTransactionId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Optional ID of the bank transaction this purchase settles. See bank_list."),
+    currency: z
+      .string()
+      .optional()
+      .describe("3-letter ISO currency code (default 'DKK'). Non-DKK purchases also require amountForeign, amountDkk and fxRateToDkk."),
+    amountForeign: z
+      .number()
+      .optional()
+      .describe("For non-DKK purchases: net amount in the foreign currency, in major units (e.g. euros — NOT cents)."),
+    amountDkk: z
+      .number()
+      .optional()
+      .describe("For non-DKK purchases: net amount converted to kroner (decimal DKK, 2 decimals)."),
+    fxRateToDkk: z
+      .number()
+      .optional()
+      .describe("For non-DKK purchases: FX rate from the foreign currency to DKK (e.g. 7.46)."),
+  })
+  .describe(
+    "Representation purchase with partial VAT deduction. netAmount/amountDkk are in kroner " +
+      "(decimal DKK, 2 decimals — NOT øre).",
+  );
 
 export function registerVatTools(server: McpServer): void {
   server.registerTool(
@@ -45,18 +148,19 @@ export function registerVatTools(server: McpServer): void {
       title: "Post EU service reverse-charge purchase",
       description:
         "Bogfører EU-servicekøb med reverse charge. write-irreversible. " +
-        "Hvis payload.invoiceNo er sat, slås documentId op automatisk.",
+        "Hvis payload.invoiceNo er sat, slås documentId op automatisk. " +
+        "payload.netAmount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: payloadSchema,
-        confirm: z.boolean(),
+        payload: euServicePurchasePayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: ReverseChargePurchaseInput & { invoiceNo?: string };
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "vat_post_eu_service_purchase", ({ db, args }) => {
       const payload = { ...(args.payload as Record<string, unknown>) };
       const invoiceNo =
@@ -83,18 +187,20 @@ export function registerVatTools(server: McpServer): void {
     "vat_post_representation_purchase",
     {
       title: "Post representation purchase (partial VAT deduction)",
-      description: "Bogfører repræsentationsudgift med delvis momsfradrag. write-irreversible.",
+      description:
+        "Bogfører repræsentationsudgift med delvis momsfradrag. write-irreversible. " +
+        "payload.netAmount er i kroner (decimal DKK, ikke øre).",
       inputSchema: {
         company: z.string().min(1),
-        payload: payloadSchema,
-        confirm: z.boolean(),
+        payload: representationPurchasePayloadSchema,
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
       company: string;
       payload: RepresentationPurchaseInput;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "vat_post_representation_purchase", ({ db, args }) => {
       const result = postRepresentationPurchase(db, args.payload);
       return wrapCoreResult(result);

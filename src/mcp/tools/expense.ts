@@ -9,7 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { bookExpenseFromBank } from "../../core/expense-booking";
 import { wrapCoreResult } from "../envelope";
-import { withCompanyDbConfirmed } from "../tool-runtime";
+import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const vatTreatmentEnum = z
   .enum(["standard", "reverse_charge", "representation", "exempt"])
@@ -31,7 +31,7 @@ export function registerExpenseTools(server: McpServer): void {
         paymentAccount: z.string().optional(),
         date: z.string().optional(),
         text: z.string().optional(),
-        confirm: z.boolean(),
+        confirm: confirmField,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -44,7 +44,7 @@ export function registerExpenseTools(server: McpServer): void {
       paymentAccount?: string;
       date?: string;
       text?: string;
-      confirm: boolean;
+      confirm?: boolean;
     }>(server, "expense_book", ({ db, args }) => {
       const result = bookExpenseFromBank(db, {
         documentId: args.documentId,
