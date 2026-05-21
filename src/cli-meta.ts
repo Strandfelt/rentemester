@@ -41,12 +41,14 @@ function flagsForSpec(spec: CommandSpec): string[] {
  * mutations — so they fall outside `MUTATING_COMMANDS`, yet are emphatically
  * not read-only. `init`/`company add` create company directories, ledger
  * databases and the workspace manifest; `import contacts` writes customer and
- * vendor records. The global help must not invite an agent to call these
- * speculatively under a "read-only" heading. (#239)
+ * vendor records; `company set-profile` rewrites the company's own master
+ * data and appends an audit-log entry (#267). The global help must not invite
+ * an agent to call these speculatively under a "read-only" heading. (#239)
  */
 const SIDE_EFFECTING_COMMANDS = new Set([
   "init",
   "company add",
+  "company set-profile",
   "import contacts",
 ]);
 
@@ -88,6 +90,31 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "Virksomheden skal have et CVR-nummer registreret",
       "CVR-data er et snapshot — det caches lokalt og læses aldrig live under bogføring",
     ],
+  },
+  {
+    // #267: `init` (and `init --help`) point owners here to set the bank/
+    // payment details they skipped at onboarding. The command must therefore
+    // be discoverable and self-documenting — its --help, flags and --example
+    // are part of that promise.
+    key: "company set-profile",
+    usage: "company set-profile --company <slug|path> [--name <text>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>]",
+    description: "Retter virksomhedens egen profil efter init: navn, CVR, adresse, betalingsfrist og betalingsoplysninger (bankkonto/IBAN). Hver efterfølgende udstedt faktura og dens PDF arver de nye værdier automatisk — du indtaster aldrig din egen stamdata på en faktura.",
+    allowedFlags: ["--company", "--name", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--bank-name", "--bank-reg", "--bank-account", "--iban"],
+    examplePath: "examples/company-set-profile.txt",
+    exampleHint: "rentemester company set-profile --example",
+    exampleNote: "Eksemplet er en kommandolinje-skabelon — udskift <sti-eller-slug> og bankoplysningerne med dine egne.",
+    inputNotes: [
+      "Kun de flag du faktisk angiver, ændres — de øvrige profilfelter beholder deres nuværende værdi.",
+      "Angav du ingen bankkonto ved 'init', så sæt --bank-name/--bank-reg/--bank-account (og evt. --iban) her: uden dem får en udstedt fakturas PDF INGEN BETALING-blok, og kunden kan ikke se hvor pengene skal hen.",
+      "Bankkontoen er append-only: den oprettes ved første kald med bankoplysninger. Et senere kald opretter ikke en ny konto — opdatér i stedet kontoen direkte hvis oplysningerne ændrer sig.",
+      "--payment-terms er standard betalingsfrist i dage (udstedelsesdato → forfaldsdato), heltal 0-365.",
+    ],
+  },
+  {
+    key: "company profile",
+    usage: "company profile --company <slug|path>",
+    description: "Viser virksomhedens nuværende profil: navn, CVR, adresse og standard betalingsfrist. Ren læsning — ændrer intet.",
+    allowedFlags: ["--company"],
   },
   {
     key: "serve",

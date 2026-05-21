@@ -125,4 +125,71 @@ describe("company CLI", () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+
+  // #267: `init` (and `init --help`) point owners at `company set-profile` to
+  // set the bank/payment details they skipped. The command's handler exists,
+  // but with no COMMAND_SPEC `--help` fell back to the global command index,
+  // flag typos were silently accepted, and `--example` failed. The spec is the
+  // command's documented contract — these tests pin it down.
+  test("company set-profile --help shows per-command help, not the global index", async () => {
+    const res = await run(["company", "set-profile", "--help"]);
+    expect(res.exitCode).toBe(0);
+    // The per-command help block — never the global index header.
+    expect(res.stdout).not.toContain("Læsekommandoer (read-only");
+    expect(res.stdout).toContain("Brug:");
+    expect(res.stdout).toContain("company set-profile");
+    expect(res.stdout).toContain("Inputnoter:");
+    // Every profile flag the handler reads must be documented.
+    for (const flag of [
+      "--bank-name",
+      "--bank-reg",
+      "--bank-account",
+      "--iban",
+      "--name",
+      "--cvr",
+      "--address",
+      "--postal-code",
+      "--city",
+      "--payment-terms",
+    ]) {
+      expect(res.stdout).toContain(flag);
+    }
+  });
+
+  test("company set-profile rejects an unknown flag with a clear error", async () => {
+    const root = tmpRoot("company-cli-setprofile-badflag");
+    try {
+      const company = join(root, "company");
+      await run(["init", "--company", company]);
+      const res = await run([
+        "company",
+        "set-profile",
+        "--company",
+        company,
+        "--bank-naem",
+        "Danske Bank",
+      ]);
+      expect(res.exitCode).toBe(2);
+      expect(`${res.stdout}${res.stderr}`).toContain("Unknown flag --bank-naem");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("company set-profile --example prints a runnable example invocation", async () => {
+    const res = await run(["company", "set-profile", "--example"]);
+    expect(res.exitCode).toBe(0);
+    // The example must be usable as-is: it names the command and the bank flags
+    // an owner who skipped the bank account at `init` actually needs.
+    expect(res.stdout).toContain("company set-profile");
+    expect(res.stdout).toContain("--bank-name");
+    expect(res.stdout).toContain("--bank-reg");
+    expect(res.stdout).toContain("--bank-account");
+  });
+
+  test("company set-profile is discoverable in the global command index", async () => {
+    const res = await run(["--help"]);
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain("company set-profile");
+  });
 });
