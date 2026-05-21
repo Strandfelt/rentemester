@@ -128,6 +128,14 @@ describe("docs/mcp-tool-surface.md", () => {
     // The doc must explicitly state there is no general idempotency mechanism.
     expect(content).toMatch(/[Ii]ngen generel idempotency-key/);
   });
+
+  test("#245 — documents that the company argument also accepts a workspace slug", () => {
+    // resolveCompanyArg accepts a path OR a slug; the doc must not claim
+    // company is absolute-path-only.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).toContain("slug");
+    expect(content).toContain("RENTEMESTER_WORKSPACE");
+  });
 });
 
 describe("docs/mcp-agent-contract.md", () => {
@@ -178,6 +186,18 @@ describe("docs/mcp-agent-contract.md", () => {
     expect(content).toMatch(/double-post/);
     // It must not still claim a key-keyed retry returns the original result.
     expect(content).not.toMatch(/same key does not double-post/);
+  });
+
+  test("#245 — Identification section states company accepts a path OR a workspace slug", () => {
+    // resolveCompanyArg accepts both forms; the contract must not claim the
+    // company argument is absolute-path-only.
+    const content = readFileSync(CONTRACT_PATH, "utf8");
+    const idxStart = content.indexOf("## Identification");
+    expect(idxStart).toBeGreaterThan(-1);
+    const section = content.slice(idxStart, idxStart + 1400);
+    expect(section).toContain("slug");
+    expect(section).toContain("RENTEMESTER_WORKSPACE");
+    expect(section).toContain("resolveCompanyArg");
   });
 });
 

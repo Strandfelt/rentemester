@@ -92,8 +92,13 @@ const payloadSchema = z.object({
     .describe("For non-DKK entries: the FX rate from the foreign currency to DKK (e.g. 7.46)."),
   lines: z
     .array(lineSchema)
-    .min(1, "at least one journal line is required")
-    .describe("Journal lines. Total debit must equal total credit (in kroner)."),
+    .min(2, "at least two journal lines are required")
+    .describe(
+      "Journal lines — at least two. Double-entry: total debit must exactly " +
+        "equal total credit (in kroner). Each line sets exactly one of " +
+        "debitAmount or creditAmount; the core rejects an entry whose debit " +
+        "and credit do not balance, and any entry with fewer than two lines.",
+    ),
 });
 
 export function registerJournalTools(server: McpServer): void {

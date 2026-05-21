@@ -13,7 +13,17 @@ import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const vatTreatmentEnum = z
   .enum(["standard", "reverse_charge", "representation", "exempt"])
-  .optional();
+  .optional()
+  .describe(
+    "How VAT on the expense is treated. " +
+      "'standard' = ordinary Danish purchase VAT, deducted as input VAT (default). " +
+      "'reverse_charge' = EU/foreign purchase where the buyer self-accounts for VAT " +
+      "(omvendt betalingspligt). " +
+      "'representation' = entertainment/representation costs with the statutory " +
+      "limited VAT deduction. " +
+      "'exempt' = the expense carries no deductible VAT. " +
+      "When omitted, 'standard' is used.",
+  );
 
 export function registerExpenseTools(server: McpServer): void {
   server.registerTool(

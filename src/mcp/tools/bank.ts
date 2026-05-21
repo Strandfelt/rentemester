@@ -165,11 +165,38 @@ export function registerBankTools(server: McpServer): void {
         "Send enten csvPath (absolut sti) eller csvContent (rå CSV-tekst).",
       inputSchema: {
         company: z.string().min(1),
-        csvPath: z.string().optional(),
-        csvContent: z.string().optional(),
+        csvPath: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute path to the CSV file ON THE MCP SERVER'S FILESYSTEM. " +
+              "Provide either csvPath or csvContent; csvPath wins if both are set.",
+          ),
+        csvContent: z
+          .string()
+          .optional()
+          .describe(
+            "Raw CSV text, used as an inline alternative to csvPath when the " +
+              "file does not exist on the server. Provide either csvPath or csvContent.",
+          ),
         // ===== BANK CLUSTER (#187,#186) =====
-        account: z.string().optional(),
-        profile: z.string().optional(),
+        account: z
+          .string()
+          .optional()
+          .describe(
+            "Optional bank account identifier (name or number) to import the " +
+              "transactions into. When omitted, the company's default bank account is used.",
+          ),
+        profile: z
+          .enum(["danske-bank"])
+          .optional()
+          .describe(
+            "Optional named CSV import profile that pins the file's delimiter, " +
+              "encoding, date order and column→field mapping. Known value: " +
+              "'danske-bank' (Danske Bank account-statement export). When omitted, " +
+              "the generic CSV parser is used (auto-detected headers). An unknown " +
+              "profile aborts the import before parsing.",
+          ),
         // ===== END BANK CLUSTER (#187,#186) =====
         confirm: confirmField,
       },

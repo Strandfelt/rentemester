@@ -140,7 +140,11 @@ export function registerDocumentTools(server: McpServer): void {
         force: z
           .boolean()
           .optional()
-          .describe("Set true to force ingest even if a document with the same logical identity already exists."),
+          .describe(
+            "Set true to bypass duplicate detection and force ingest even when a " +
+              "document with the same logical identity already exists. When omitted " +
+              "(or false), a duplicate is blocked and an exception is recorded.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

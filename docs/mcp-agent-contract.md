@@ -30,13 +30,23 @@ holding the thread of work together.
 
 ## Identification — `company` is mandatory and explicit
 
-- Every company-scoped tool takes an **absolute `company` path**. There is
+- Every company-scoped tool takes an explicit `company` argument. There is
   never an implicit "current company". This is deliberate: it makes
   cross-company mistakes structurally impossible.
+- The `company` argument accepts **either** of two forms (`resolveCompanyArg`
+  in `src/mcp/tool-runtime.ts`):
+  - an **absolute filesystem path** to the company directory — resolved and
+    `..`-guarded, mirroring the CLI's `--company` guard; **or**
+  - a **workspace slug** — a bare, separator-free, slug-shaped token, looked
+    up in the manifest of the workspace named by the `RENTEMESTER_WORKSPACE`
+    environment variable on the server's host. An unknown slug, or a slug
+    given with no workspace configured, is an error.
+  A value containing a `/` or `\` is always treated as a path, so a real
+  path can never be misread as a slug.
 - Workspace-level tools (`company_add`, `portfolio_overview`) take a
   `workspace` path instead.
-- A wrong or missing path comes back as `{ ok: false, errors: [...] }`. The
-  error text never leaks the absolute host path back to the caller.
+- A wrong or missing path/slug comes back as `{ ok: false, errors: [...] }`.
+  The error text never leaks the absolute host path back to the caller.
 
 ## Safety classes — read each tool's `annotations`
 
