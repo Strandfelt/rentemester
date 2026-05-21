@@ -133,7 +133,7 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 | `invoice_list` | `{ invoices: [...], count }` |
 | `exceptions_list` | `{ exceptions: [...], count }` |
 | `period_list` | `{ periods: [{ id, periodStart, periodEnd, kind, status, reference, createdAt }], count }` — `kind` er `"vat_quarter" \| "fiscal_year" \| "custom"`; `status` er `"open" \| "closed" \| "reported"`; `reference` kan være `null`. |
-| `audit_verify` | `{ entries: <number>, ok }` (kerne-resultatets `errors` ligger på konvoluttens niveau) |
+| `audit_verify` | `{ entries: <number> }` — kun antallet af verificerede posteringer. Integritets-verdikten læses fra **konvolutten**: `ok=true` (+ tom `errors[]`) ⇒ kæden er intakt; `ok=false` ⇒ `errors[]` lister bruddene. Der er hverken `ok` eller `errors` *inde i* `data`. |
 | `invoice_status` | `{ invoiceDocumentId, invoiceNumber, grossAmount, creditedAmount, paidAmount, openBalance, claimOpenBalance, asOfDate, dueDate, effectiveDueDate, isOverdue, overdueDays, status, payments[], creditNotes[], refunds[], claimPayments[], badDebtWriteOffs[], reminders[], compensationClaims[], interestClaims[], totalReminderFees, totalCompensationClaims, totalInterestClaims, totalClaimPayments, totalBadDebtWrittenOff }` — feltet hedder `invoiceDocumentId` (ikke `documentId`), `invoiceNumber` (ikke `invoiceNo`) og `overdueDays` (ikke `daysOverdue`). `status` er `"open" \| "paid" \| "credited" \| "refunded" \| "overpaid" \| "written_off"`. Den fulde typedefinition er `InvoiceStatusResult` i `src/core/invoice-payments.ts`. |
 
 `write`-tools returnerer id'er + hashes på den nyligt oprettede entitet:
@@ -151,7 +151,7 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 | `period_close` | `{ periodId, periodStart, periodEnd, kind, status, reference? }` |
 | `invoice_send_email` | `{ invoiceNumber, kind, recipient, subject, messageId, duplicate }` — `duplicate:true` ⇒ en identisk afsendelse fandtes allerede (idempotent). |
 | `customer_validate_vat` | `{ validation: { … VIES-record … } }` |
-| `audit_verify` | `{ entries, ok }` — kerne-resultatets `ok` ligger også inde i `data`; konvoluttens `ok` afspejler kaldet. |
+| `audit_verify` | `{ entries }` — kun antallet af verificerede posteringer. Integritets-verdikten er **konvoluttens** `ok`/`errors[]`, ikke et felt i `data`: `ok=true` ⇒ kæden er intakt, `ok=false` ⇒ `errors[]` lister bruddene. |
 
 > **Discovery-kontrakten:** Konvolut-formen er maskin-kendt via `outputSchema`
 > i `tools/list`. Den præcise `data`-feltliste står her og i kildens
@@ -350,12 +350,25 @@ afvigelser pr. denne revision:
   (write-irreversible), men ikke en genåbning. En agent der over MCP rammer
   en lukket-periode-afvisning kan altså ikke selv genåbne perioden; den må
   henvise mennesket til `rentemester period reopen`.
+- **`invoice create` er CLI-only — den ergonomiske CLI-vej til at fakturere.**
+  `invoice create` udsteder en kundefaktura uden at man selv skriver JSON eller
+  regner moms (linjer som `"beskrivelse|antal|stykpris"`, satsen i procent).
+  Den har *ingen* MCP-tool: MCP-pendanten er det typede `invoice_issue`, der
+  tager en fuld `InvoicePayload` med færdigberegnede totaler. En agent over MCP
+  bruger altså `invoice_issue` (typet payload) — `invoice create` er
+  CLI-ergonomien for et menneske.
+- **`invoice export-public` og `invoice export-public-oioubl` er CLI-only.**
+  De skriver deterministiske handoff-artefakter til offentlig e-faktura
+  (henholdsvis et EAN/GLN-preview og et OIOUBL-handoff) uden PEPPOL-transport.
+  Der findes ingen `*_export_public*` MCP-tools — MCP-surface'en eksponerer kun
+  `peppol_submit_public_invoice` til den egentlige PEPPOL-submission.
 - **CLI-only-kommandoer uden MCP-tool.** Flere CLI-kommandoer eksponeres
   ikke som tools, fx `init`, `serve`, `report *`, `vat momsangivelse`/
   `vat filing`, `period reopen`, `gdpr export`/`gdpr erase`,
   `opening-balance post`, `bank-account add`/`list`,
   `import run`/`systems`/`contacts`, `agent run`,
-  `reg coverage`/`reg citations` og diverse
+  `reg coverage`/`reg citations`, `invoice create`,
+  `invoice export-public`/`invoice export-public-oioubl` og diverse
   `system export-*`/`verify-*`-kommandoer. Disse driver lokale workflows
   eller hører til den indbyggede `agent run`-loop og er bevidst holdt uden
   for den løse agent-surface.
@@ -379,11 +392,25 @@ Output:
 {
   "ok": true,
   "data": {
-    "entries": 142,
-    "ok": true,
-    "errors": []
+    "entries": 142
   },
-  "appliedRules": ["DK-BOOKKEEPING-AUDIT-CHAIN-001"]
+  "errors": []
+}
+```
+
+`data` carries **only** `{ entries }` — the count of journal entries that were
+verified. The integrity verdict is the **envelope** `ok`/`errors`, not a field
+inside `data`: `ok:true` with an empty `errors[]` means the hash-chain and
+bookkeeping integrity checks passed. A broken chain returns `ok:false` with the
+specific failures in `errors[]`:
+
+```json
+{
+  "ok": false,
+  "errors": [
+    "2026-00087: entry_hash mismatch",
+    "2026-00088: previous_hash mismatch"
+  ]
 }
 ```
 
