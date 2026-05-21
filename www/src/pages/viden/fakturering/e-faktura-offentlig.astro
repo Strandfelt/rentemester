@@ -1,0 +1,93 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+
+const faq = [
+  {
+    q: "Sender Rentemester PEPPOL-fakturaer direkte?",
+    a: "Koden kan bygge en deterministisk PEPPOL-submission-envelope oven på OIOUBL-handoff, men credentials og access-point transport ligger uden for bogføringstilstanden.",
+  },
+  {
+    q: "Er OIOUBL det samme som PEPPOL?",
+    a: "Nej. OIOUBL er fakturaformatet/handoff-artefaktet i denne sammenhæng. PEPPOL handler om transporten gennem et access point.",
+  },
+];
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faq.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+};
+---
+
+<BaseLayout
+  title="Offentlig e-faktura med EAN, OIOUBL og PEPPOL"
+  description="Sådan hænger EAN/GLN, OIOUBL-handoff og PEPPOL-transport sammen i Rentemesters offentlige fakturaflow."
+  pathname="/viden/fakturering/e-faktura-offentlig"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+  jsonLd={jsonLd}
+>
+  <PageHero
+    eyebrow="Fakturering"
+    title="Offentlig e-faktura kræver en klar transportgrænse"
+    lead="Når en kunde er en offentlig modtager, skal fakturaen kunne bære EAN/GLN-metadata og eksporteres til et format, der kan afleveres videre. Rentemester skelner mellem fakturadata, OIOUBL-handoff og selve PEPPOL-transporten."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Offentlig e-fakturering bør ikke beskrives som én magisk knap. Der er mindst tre lag: den udstedte faktura, et stabilt e-faktura-artefakt og en transportkanal. Hvis de blandes sammen, bliver det uklart om bogføringssystemet har udstedt dokumentet, forberedt en fil eller faktisk sendt den gennem et access point.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, fakturaregler, PEPPOL-regel og public-einvoice tests."
+      sources={[
+        { href: `${SITE.github}/blob/main/src/core/public-einvoice.ts`, label: "public-einvoice.ts", external: true },
+        { href: `${SITE.github}/blob/main/rules/dk/invoices.yaml`, label: "Fakturaregler for offentlig e-faktura", external: true },
+        { href: `${SITE.github}/blob/main/rules/dk/peppol.yaml`, label: "PEPPOL-regel", external: true },
+      ]}
+      related={[
+        { href: "/viden/saadan-bogfoerer-du/faktura", label: "Bogfør faktura" },
+        { href: "/viden/debitorer/faktura-status", label: "Fakturastatus" },
+        { href: "/viden/myndigheder/eksport-af-regnskab", label: "Eksport af regnskab" },
+      ]}
+    />
+
+    <h2>EAN/GLN først</h2>
+    <p>
+      En offentlig modtager skal kunne identificeres deterministisk. I Rentemesters regler betyder det, at den immutable buyer snapshot på fakturaen skal indeholde de nødvendige EAN/GLN-oplysninger, før der kan eksporteres en offentlig e-faktura-preview eller OIOUBL-handoff.
+    </p>
+
+    <h2>OIOUBL som handoff</h2>
+    <p>
+      Rentemester kan materialisere et deterministisk OIOUBL-handoff-artefakt fra en udstedt faktura. Det er bevidst scoped som handoff: filen er sporbar, reproducerbar og audit-linket, men den må ikke forveksles med bevis for at fakturaen er afleveret gennem PEPPOL.
+    </p>
+
+    <h2>PEPPOL uden credential-læk</h2>
+    <p>
+      Grafen viser også et PEPPOL-submission-spor. Det bygger en idempotent submission-envelope oven på OIOUBL-handoff, mens access-point-konfiguration og credentials læses udefra. De gemmes ikke i bogføringstilstanden og bliver ikke en del af ledgeren.
+    </p>
+
+    <h2>Sådan håndterer Rentemester det</h2>
+    <p>
+      CLI-flows for public preview, OIOUBL-handoff og PEPPOL submission-envelope er kodebackede. Den vigtige grænse er, at Rentemester forbereder og registrerer materialet deterministisk; transportansvar, access-point-aftale og credentials ligger uden for kernen.
+    </p>
+
+    <h2>Ofte stillede spørgsmål</h2>
+    {faq.map((item) => (
+      <>
+        <h3>{item.q}</h3>
+        <p>{item.a}</p>
+      </>
+    ))}
+  </article>
+</BaseLayout>

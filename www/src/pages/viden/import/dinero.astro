@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import PageHero from "../../../components/PageHero.astro";
+import SeoEvidence from "../../../components/SeoEvidence.astro";
+import { SITE } from "../../../consts";
+---
+
+<BaseLayout
+  title="Import fra Dinero til Rentemester"
+  description="Dinero-import i Rentemester: kontoplan, posteringer, bilag, kontakter, åbningsbalance og read-only arkiv for gamle år."
+  pathname="/viden/import/dinero"
+  pageType="Article"
+  datePublished="2026-05-21"
+  dateModified="2026-05-21"
+  reviewedBy={SITE.author}
+>
+  <PageHero
+    eyebrow="Import"
+    title="Dinero-import skal bevare historikken uden at rode i hovedbogen"
+    lead="En import fra Dinero skal ikke bare læse CSV-filer. Den skal etablere en korrekt åbningsbalance, replaye relevante posteringer og gemme tidligere år som arkiv, så overgangen kan forklares."
+  />
+
+  <article class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-12 md:py-16 prose-da">
+    <p>
+      Migration fra et andet bogføringssystem er et af de steder, hvor små fejl bliver dyre. Kontonumre kan betyde noget andet, bilag kan ligge i særskilte mapper, og gamle regnskabsår bør ofte bevares som dokumentation uden at blive genposteret i den nye hovedbog.
+    </p>
+
+    <SeoEvidence
+      updated="2026-05-21"
+      status="QA-gennemgået mod Graphify-graf, import-framework, Dinero-parser og importtests."
+      sources={[
+        { href: `${SITE.github}/tree/main/src/core/import`, label: "Import-framework og Dinero-parser", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/import-dinero.test.ts`, label: "Dinero import tests", external: true },
+        { href: `${SITE.github}/blob/main/tests/unit/import-dinero-archive.test.ts`, label: "Dinero archive tests", external: true },
+      ]}
+      related={[
+        { href: "/viden/regnskab/aabningsbalance", label: "Åbningsbalance" },
+        { href: "/viden/begreber/kontoplan", label: "Kontoplan" },
+        { href: "/viden/saadan-bogfoerer-du/bilag", label: "Bilag" },
+      ]}
+    />
+
+    <h2>Hvad importen læser</h2>
+    <p>
+      Dinero-sporet i grafen omfatter kontoplan, posteringer, saldobalance, firmaoplysninger, kontakter og bilag. Importen kan håndtere både mapper og zip-kilder via et fælles import-framework.
+    </p>
+
+    <h2>Åbningsbalance før replay</h2>
+    <p>
+      Rentemester bruger åbningsbalancen som skæringspunkt. Først etableres virksomhedens primo ved cut-over, derefter kan relevante posteringer fra cut-over-året replayes som balancerede journalposter.
+    </p>
+
+    <h2>Gamle år som arkiv</h2>
+    <p>
+      Tidligere Dinero-år bliver ikke nødvendigvis genposteret i den aktive ledger. Koden har et read-only arkivspor, så gamle års Posteringer og SaldoBalance kan vises som referencedata uden at ændre den nye hovedbog.
+    </p>
+  </article>
+</BaseLayout>
