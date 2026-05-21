@@ -258,6 +258,101 @@ describe("#200/#206/#208/#210 — write tools expose fully-typed input schemas",
   });
 });
 
+describe("#232 — the remaining write tools carry field-level schemas", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  function schemaOf(name: string) {
+    const tool = tools.find((t) => t.name === name);
+    expect(tool, `tool ${name} not found`).toBeDefined();
+    return tool.inputSchema as any;
+  }
+
+  test("recurring_invoice_create.invoice is a typed object, not a schemaless catchall", () => {
+    const schema = schemaOf("recurring_invoice_create");
+    const invoice = schema.properties?.invoice;
+    expect(invoice?.type).toBe("object");
+    // A real contract: discriminating fields and a description are present.
+    expect(invoice?.properties?.invoiceType).toBeDefined();
+    expect(invoice?.properties?.totals).toBeDefined();
+    expect(invoice?.properties?.lines).toBeDefined();
+    expect(typeof invoice?.description).toBe("string");
+    // It must not be the old fully-open record (no named properties).
+    expect(Object.keys(invoice?.properties ?? {}).length).toBeGreaterThan(3);
+  });
+
+  test("customer_create / vendor_create input fields carry descriptions", () => {
+    for (const name of ["customer_create", "vendor_create"]) {
+      const input = schemaOf(name).properties?.input;
+      expect(input?.type, `${name}.input`).toBe("object");
+      expect(typeof input?.properties?.name?.description, `${name}.input.name`).toBe("string");
+      expect(typeof input?.properties?.vatOrCvr?.description, `${name}.input.vatOrCvr`).toBe("string");
+    }
+  });
+
+  test("mileage_log input fields document units and source-backed rate", () => {
+    const input = schemaOf("mileage_log").properties?.input;
+    const km: string = input?.properties?.kilometers?.description ?? "";
+    expect(km.toLowerCase()).toContain("kilomet");
+    const rate: string = input?.properties?.ratePerKm?.description ?? "";
+    expect(rate.toLowerCase()).toContain("kroner");
+    expect(typeof input?.properties?.rateBasis?.description).toBe("string");
+  });
+
+  test("asset_register / asset_write_off flat fields carry descriptions", () => {
+    const reg = schemaOf("asset_register").properties ?? {};
+    expect((reg.cost?.description ?? "").toLowerCase()).toContain("kroner");
+    expect((reg.usefulLifeMonths?.description ?? "").toLowerCase()).toContain("month");
+    const wo = schemaOf("asset_write_off").properties ?? {};
+    expect(typeof wo.thresholdRuleSource?.description).toBe("string");
+    expect(typeof wo.confirmImmediateWriteOff?.description).toBe("string");
+  });
+
+  test("period_close documents the closed/reported status semantics", () => {
+    const status = schemaOf("period_close").properties?.status;
+    const desc: string = status?.description ?? "";
+    expect(desc).toContain("closed");
+    expect(desc).toContain("reported");
+    // The default must be stated.
+    expect(desc.toLowerCase()).toContain("default");
+  });
+
+  test("company_add documents the workspace fallback when workspace is omitted", () => {
+    const ws = schemaOf("company_add").properties?.workspace;
+    const desc: string = ws?.description ?? "";
+    expect(desc).toContain("RENTEMESTER_WORKSPACE");
+    expect(desc.toLowerCase()).toContain("omitted");
+  });
+
+  test("invoice_send_email documents config/smtp.json required fields and dry-run", () => {
+    const tool = tools.find((t) => t.name === "invoice_send_email");
+    expect(tool, "invoice_send_email not found").toBeDefined();
+    const desc: string = (tool.description ?? "").toLowerCase();
+    expect(desc).toContain("smtp.json");
+    // Required fields named.
+    expect(desc).toContain("host");
+    expect(desc).toContain("port");
+    expect(desc).toContain("fromaddress");
+    // Dry-run behaviour stated.
+    expect(desc).toContain("dryrun");
+  });
+
+  test("customer_validate_vat read/write classification is documented as consistent", () => {
+    const tool = tools.find((t) => t.name === "customer_validate_vat");
+    expect(tool, "customer_validate_vat not found").toBeDefined();
+    // It stays readOnlyHint:true — but the description must explain that
+    // it writes a transparent cache, so CLI and MCP agree on the meaning.
+    expect(tool.annotations?.readOnlyHint).toBe(true);
+    const desc: string = (tool.description ?? "").toLowerCase();
+    expect(desc).toContain("cache");
+    expect(desc).toContain("validate-vat");
+  });
+});
+
 describe("#202 — every tool declares the shared envelope outputSchema", () => {
   let tools: any[];
 

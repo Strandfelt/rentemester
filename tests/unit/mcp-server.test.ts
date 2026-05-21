@@ -480,6 +480,79 @@ describe("MCP tools full surface (#78)", () => {
     expect(joined).not.toContain(tmpdir());
   });
 
+  test("#228 — audit_verify on a missing company does not leak the absolute host path", async () => {
+    // audit_verify previously hand-rolled its own existsSync check and
+    // returned `company path does not exist: <absolute path>` — disclosing
+    // the host layout. It now routes through withCompanyDb, which redacts.
+    const secretPath = join(tmpdir(), "rentemester-secret-audit-dir-228");
+    const response = await client.send("tools/call", {
+      name: "audit_verify",
+      arguments: { company: secretPath },
+    });
+    const structured = response.result?.structuredContent;
+    expect(structured?.ok).toBe(false);
+    expect(structured?.errors?.length).toBeGreaterThan(0);
+    const joined = (structured?.errors ?? []).join(" | ");
+    expect(joined).not.toContain(secretPath);
+    expect(joined).not.toContain(tmpdir());
+  });
+
+  test("#228 — journal_post on a missing company does not leak the absolute host path", async () => {
+    // journal_post likewise hand-rolled its existsSync check and leaked the
+    // path. It now routes through withCompanyDbConfirmed, which redacts.
+    const secretPath = join(tmpdir(), "rentemester-secret-journal-dir-228");
+    const response = await client.send("tools/call", {
+      name: "journal_post",
+      arguments: {
+        company: secretPath,
+        payload: {
+          transactionDate: "2026-05-18",
+          text: "Should be redacted",
+          lines: [
+            { accountNo: "2000", debitAmount: 100 },
+            { accountNo: "1000", creditAmount: 100 },
+          ],
+        },
+        confirm: true,
+      },
+    });
+    const structured = response.result?.structuredContent;
+    expect(structured?.ok).toBe(false);
+    expect(structured?.errors?.length).toBeGreaterThan(0);
+    const joined = (structured?.errors ?? []).join(" | ");
+    expect(joined).not.toContain(secretPath);
+    expect(joined).not.toContain(tmpdir());
+  });
+
+  test("#229 — missing confirm + a schema error returns the documented raw -32602 form", async () => {
+    // The agent contract documents this case: when `confirm` is omitted AND
+    // the payload also has a schema error (here an empty lines[]), the SDK's
+    // input validation rejects the call before the handler runs — so the
+    // reply is a raw -32602 with isError:true and NO structuredContent.
+    // An agent must branch on this shape; this test pins the contract.
+    const response = await client.send("tools/call", {
+      name: "journal_post",
+      arguments: {
+        company: companyRoot,
+        payload: {
+          transactionDate: "2026-05-18",
+          text: "schema-invalid + confirm omitted",
+          lines: [], // schema error: at least one line is required
+        },
+        // confirm intentionally omitted
+      },
+    });
+    // No structured envelope: isError true, structuredContent absent.
+    expect(response.result?.isError).toBe(true);
+    expect(response.result?.structuredContent).toBeUndefined();
+    // The cause is human-readable in the text content and names the -32602
+    // form an agent is told (in docs/mcp-agent-contract.md) to detect.
+    const text: string = response.result?.content?.[0]?.text ?? "";
+    expect(text).toContain("-32602");
+    expect(text).toContain("Input validation error");
+    expect(text).toContain("journal_post");
+  });
+
   test("customer_create with confirm:true persists the customer", async () => {
     const response = await client.send("tools/call", {
       name: "customer_create",

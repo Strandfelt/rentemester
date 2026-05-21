@@ -25,8 +25,11 @@ export function registerCustomerTools(server: McpServer): void {
       title: "List customers",
       description: "Lister kendte kunder. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
-        archived: z.boolean().optional(),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+        archived: z
+          .boolean()
+          .optional()
+          .describe("When true, list archived customers instead of active ones (default false)."),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -41,10 +44,24 @@ export function registerCustomerTools(server: McpServer): void {
     "customer_validate_vat",
     {
       title: "Validate VAT number via VIES",
-      description: "Validerer et EU-VAT-nummer mod VIES og cacher resultatet.",
+      description:
+        "Validerer et EU-VAT-nummer mod EU-Kommissionens VIES-tjeneste og opdaterer en lokal " +
+        "validerings-cache (vies_validations) med resultatet. Klassificeret read (readOnlyHint:true): " +
+        "den skriver ikke bogførings- eller stamdata-state — kun en gennemsigtig opslags-cache med TTL — " +
+        "og kræver derfor ikke confirm:true. Idempotent: et gentaget opslag inden for TTL genbruger cachen. " +
+        "Den tilsvarende CLI-kommando `customer validate-vat` gør præcis det samme.",
       inputSchema: {
-        company: z.string().min(1),
-        cvr: z.string().min(1),
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+        cvr: z
+          .string()
+          .min(1)
+          .describe(
+            "EU VAT number to validate, including the 2-letter country prefix, e.g. 'DK12345678' " +
+              "or 'DE123456789'. Spaces and dots are tolerated.",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -62,22 +79,48 @@ export function registerCustomerTools(server: McpServer): void {
       description:
         "Opretter en kundepost. write-reversible — kræver confirm:true. Kan arkiveres eller rettes senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         // `name` is optional only because `fromCvr` can supply it; a create
         // with neither a name nor fromCvr is rejected by createCustomer.
-        input: z.object({
-          name: z.string().min(1).optional(),
-          address: z.string().optional(),
-          vatOrCvr: z.string().optional(),
-          email: z.string().optional(),
-          phone: z.string().optional(),
-          website: z.string().optional(),
-          eanNumber: z.string().optional(),
-          paymentTermsDays: z.number().int().positive().optional(),
-          defaultCurrency: z.string().optional(),
-          notes: z.string().optional(),
-        }),
-        fromCvr: z.string().optional(),
+        input: z
+          .object({
+            name: z
+              .string()
+              .min(1)
+              .optional()
+              .describe("Customer name. Required unless fromCvr is given (then the CVR register supplies it)."),
+            address: z.string().optional().describe("Postal address (free text)."),
+            vatOrCvr: z
+              .string()
+              .optional()
+              .describe("VAT or CVR number, e.g. 'DK12345678' (Danish) or 'DE123456789' (EU)."),
+            email: z.string().optional().describe("Contact email address."),
+            phone: z.string().optional().describe("Contact phone number."),
+            website: z.string().optional().describe("Website URL."),
+            eanNumber: z
+              .string()
+              .optional()
+              .describe("13-digit EAN/GLN number — required to invoice this customer as a Danish public-sector recipient."),
+            paymentTermsDays: z
+              .number()
+              .int()
+              .positive()
+              .optional()
+              .describe("Default payment terms in days (a positive integer). Used as the invoice due-date offset."),
+            defaultCurrency: z
+              .string()
+              .optional()
+              .describe("Default 3-letter ISO currency code for this customer's invoices, e.g. 'DKK' or 'EUR'."),
+            notes: z.string().optional().describe("Free-text internal notes."),
+          })
+          .describe("Customer master-data fields. Fields left unset are filled from the CVR register when fromCvr is supplied."),
+        fromCvr: z
+          .string()
+          .optional()
+          .describe(
+            "Optional Danish CVR number. When set, every field not present in `input` is filled from the " +
+              "official CVR register before the customer is created.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

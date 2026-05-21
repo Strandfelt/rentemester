@@ -63,6 +63,50 @@ deciding to write is always an explicit, logged act.
 has gathered the preconditions (read first — see below) and is committing to
 the mutation.
 
+#### When the missing-`confirm` reply is *not* an envelope (`-32602`)
+
+The `{ ok:false, errors:[...] }` envelope above only appears when the rest of
+the payload is **schema-valid**. The server's `confirm` field is deliberately
+optional, so a payload that is otherwise well-formed but simply omits
+`confirm` reaches the handler and gets the envelope.
+
+There is **one exception an agent must branch on.** If `confirm` is omitted
+*and* the payload also has a **schema error** (a required field missing, an
+empty `lines[]`, a wrong type, …), the MCP SDK's input validation runs and
+rejects the call **before the handler — and therefore before the `confirm`
+check — is ever reached.** In that case the reply is not the envelope but a
+raw JSON-RPC error:
+
+```json
+{
+  "result": {
+    "content": [
+      { "type": "text", "text": "MCP error -32602: Input validation error: Invalid arguments for tool journal_post: [ ... ]" }
+    ],
+    "isError": true
+  }
+}
+```
+
+This reply has **`isError: true`, no `structuredContent`, and no `errors[]`
+array.** An agent that always reads `errors[]` from the envelope must guard
+against it:
+
+- **Detect it:** the JSON-RPC `result` has `isError: true` but no
+  `structuredContent` (equivalently, the `error` field carries code `-32602`,
+  or the text content begins with `MCP error -32602: Input validation
+  error`).
+- **Read it:** the human-readable cause is in `content[0].text` — it names
+  the tool and lists the offending fields (zod issues with `path` and
+  `message`).
+- **Fix it:** treat it exactly like an `ok:false` precondition failure —
+  correct the payload (supply the missing/typed field) **and** add
+  `confirm: true`, then re-call. The `-32602` form never indicates a
+  successful or partial write; nothing was posted.
+
+In short: branch on `isError === true && structuredContent === undefined`
+first; only then fall through to reading `structuredContent.errors[]`.
+
 ### The destructive convention
 
 `system_restore_backup` is the only `destructive` tool. On top of
@@ -118,6 +162,12 @@ Common precondition failures and the fix:
 **Never guess past an `ok: false`.** The error is the precondition. If it
 cannot be resolved deterministically, surface it to the human rather than
 forcing the operation a different way.
+
+One reply shape is **not** this envelope: a schema-invalid payload is
+rejected by the MCP SDK before the handler runs, yielding a raw
+`-32602` JSON-RPC error with `isError: true` and no `structuredContent` —
+see "When the missing-`confirm` reply is *not* an envelope (`-32602`)" above.
+Branch on that case before reading `errors[]`.
 
 ## Idempotency — retries are NOT automatically safe
 

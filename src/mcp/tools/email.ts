@@ -58,15 +58,40 @@ export function registerEmailTools(server: McpServer): void {
       title: "Send invoice or reminder by email",
       description:
         "Sender en udstedt faktura eller en betalingspaamindelse til kundens email via SMTP " +
-        "med PDF'en vedhaeftet og registrerer afsendelsen append-only. SMTP-config laeses fra " +
-        "config/smtp.json; credentials gemmes aldrig i bogføringstilstanden. Idempotent: en " +
-        "identisk afsendelse genudsendes ikke. write-irreversible.",
+        "med PDF'en vedhaeftet og registrerer afsendelsen append-only. write-irreversible. " +
+        "Idempotent: en identisk afsendelse genudsendes ikke. " +
+        "SMTP-config laeses fra filen config/smtp.json i virksomhedsmappen; credentials gemmes " +
+        "aldrig i bogføringstilstanden. config/smtp.json er et JSON-objekt med PAAKRAEVEDE felter " +
+        "host (string), port (number) og fromAddress (string), samt VALGFRIE felter fromName, " +
+        "username, password og dryRun (boolean). Mangler filen, afvises kaldet med envelopen " +
+        "{ ok:false, errors:[\"missing SMTP config: create config/smtp.json ...\"] } — der kastes " +
+        "ingen exception. Den indbyggede SMTP-transport koerer KUN i dry-run: med dryRun:true " +
+        "registreres afsendelsen uden et netvaerkskald (ok:true); uden dryRun:true fejler et " +
+        "rigtigt send med envelopen { ok:false, errors:[\"the built-in SMTP transport runs in " +
+        "dryRun only ...\"] }. Aegte levering kraever en injiceret EmailTransport.",
       inputSchema: {
-        company: z.string().min(1),
-        documentId: z.number().int().positive().optional(),
-        invoiceNumber: z.string().optional(),
-        kind: z.enum(["invoice", "reminder"]).optional(),
-        to: z.string().optional(),
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+        documentId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Document ID of the issued invoice to send. Provide this OR invoiceNumber."),
+        invoiceNumber: z
+          .string()
+          .optional()
+          .describe("Invoice number of the issued invoice to send. Provide this OR documentId."),
+        kind: z
+          .enum(["invoice", "reminder"])
+          .optional()
+          .describe("What to send (default 'invoice'): 'invoice' = the invoice itself; 'reminder' = a payment reminder."),
+        to: z
+          .string()
+          .optional()
+          .describe("Optional recipient email address. When omitted, the customer's stored email is used."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

@@ -28,7 +28,9 @@ export function registerMileageTools(server: McpServer): void {
     {
       title: "List mileage entries",
       description: "Lister registrerede kørselsposter (kørselsregnskab). Read-only.",
-      inputSchema: { company: z.string().min(1) },
+      inputSchema: {
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -44,9 +46,9 @@ export function registerMileageTools(server: McpServer): void {
       description:
         "Deterministisk periode-rapport over kilometer og beløbsgrundlag for et datointerval. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
-        from: z.string().min(1),
-        to: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+        from: z.string().min(1).describe("Start of the report period (inclusive), in YYYY-MM-DD format."),
+        to: z.string().min(1).describe("End of the report period (inclusive), in YYYY-MM-DD format."),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -65,20 +67,40 @@ export function registerMileageTools(server: McpServer): void {
         "ratePerKm/rateBasis skal være bruger-oplyst og kilde-bakket; Rentemester fører kun loggen, " +
         "skattemæssig behandling er brugerens/rådgiverens ansvar.",
       inputSchema: {
-        company: z.string().min(1),
-        input: z.object({
-          tripDate: z.string().min(1),
-          purpose: z.string().min(1),
-          fromLocation: z.string().min(1),
-          toLocation: z.string().min(1),
-          kilometers: z.number().positive(),
-          vehicle: z.string().min(1),
-          driver: z.string().min(1),
-          ratePerKm: z.number().positive(),
-          rateBasis: z.string().min(1),
-          rateSource: z.string().optional(),
-          notes: z.string().optional(),
-        }),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+        input: z
+          .object({
+            tripDate: z.string().min(1).describe("Date the trip was driven, in YYYY-MM-DD format."),
+            purpose: z.string().min(1).describe("Business purpose of the trip (free text)."),
+            fromLocation: z.string().min(1).describe("Where the trip started (free text, e.g. an address or place name)."),
+            toLocation: z.string().min(1).describe("Where the trip ended (free text, e.g. an address or place name)."),
+            kilometers: z
+              .number()
+              .positive()
+              .describe("Distance driven, in kilometres (a positive number, not metres or miles)."),
+            vehicle: z.string().min(1).describe("Identifier of the vehicle used, e.g. a registration number."),
+            driver: z.string().min(1).describe("Name of the person who drove the trip."),
+            ratePerKm: z
+              .number()
+              .positive()
+              .describe(
+                "Per-kilometre rate applied, in kroner per km (decimal DKK). User-supplied — Rentemester " +
+                  "does not own the tax rate; it only records what you confirm.",
+              ),
+            rateBasis: z
+              .string()
+              .min(1)
+              .describe(
+                "Source-backed basis for ratePerKm that you confirm, e.g. which official rate table or " +
+                  "Skattestyrelsen circular the rate comes from.",
+              ),
+            rateSource: z
+              .string()
+              .optional()
+              .describe("Optional citation or URL documenting the rate basis."),
+            notes: z.string().optional().describe("Optional free-text notes about the trip."),
+          })
+          .describe("Mileage entry. This is audit/documentation data only — nothing is posted to the ledger."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -101,10 +123,16 @@ export function registerMileageTools(server: McpServer): void {
         "Skriver et deterministisk eksport-artifact (JSON + CSV) over kørselsregnskabet for en periode. " +
         "write-reversible — kræver confirm:true.",
       inputSchema: {
-        company: z.string().min(1),
-        from: z.string().min(1),
-        to: z.string().min(1),
-        outputDir: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
+        from: z.string().min(1).describe("Start of the export period (inclusive), in YYYY-MM-DD format."),
+        to: z.string().min(1).describe("End of the export period (inclusive), in YYYY-MM-DD format."),
+        outputDir: z
+          .string()
+          .min(1)
+          .describe(
+            "Server-side directory path where the JSON + CSV export artifacts are written. " +
+              "This path is on the MCP server's host, not the caller's machine.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
