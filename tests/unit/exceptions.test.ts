@@ -128,6 +128,87 @@ describe("exceptions workflow", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  // #264: re-running the sync after a matching bilag was ingested must not
+  // attempt a forbidden UPDATE of the immutable exception row. The stale
+  // exception is resolved and a fresh, corrected one is opened in its place.
+  test("re-syncing after a bilag is ingested resolves the stale exception and opens a fresh one", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-exc-restale-"));
+    const company = ensureCompanyDirs(root);
+    const db = openDb(company.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const csv = join(root, "bank.csv");
+    writeFileSync(csv, "transaction_date,text,amount\n2026-05-18,Restaurant Kanalen,-1205\n");
+    expect(importBankCsv(db, root, csv).ok).toBe(true);
+
+    // First sync: no bilag yet — generic "no bilag found" exception.
+    const first = syncUnmatchedBankTransactionExceptions(db);
+    expect(first.ok).toBe(true);
+    expect(first.created).toBe(1);
+    const original = listExceptions(db, { status: "open" }).rows[0];
+    expect(original.message).toContain("Der er ikke fundet et bilag");
+
+    // A matching restaurant receipt is ingested afterwards.
+    db.run(
+      `INSERT INTO documents (document_no, source, sha256_hash, supplier_name, amount_inc_vat, document_type, delivery_description)
+       VALUES ('BILAG-501', 'email', 'hash-restaurant-501', 'Restaurant Kanalen', 1205.00, 'cash_register_receipt', 'Frokost')`,
+    );
+
+    // Second sync must NOT throw an immutability error.
+    const second = syncUnmatchedBankTransactionExceptions(db);
+    expect(second.ok).toBe(true);
+
+    // Exactly one open exception, with the corrected message naming the bilag.
+    const open = listExceptions(db, { status: "open" });
+    expect(open.count).toBe(1);
+    expect(open.rows[0].message).not.toContain("Der er ikke fundet et bilag");
+    expect(open.rows[0].message).toContain("bilag BILAG-501");
+    expect(open.rows[0].relatedDocumentId).toBeGreaterThan(0);
+
+    // The stale exception is resolved, not mutated — audit chain intact.
+    const all = listExceptions(db, { status: "all" });
+    const stale = all.rows.find((r) => r.id === original.id)!;
+    expect(stale.status).toBe("resolved");
+    expect(stale.message).toContain("Der er ikke fundet et bilag");
+
+    // A third sync is idempotent — no further churn.
+    const third = syncUnmatchedBankTransactionExceptions(db);
+    expect(third.ok).toBe(true);
+    expect(listExceptions(db, { status: "open" }).count).toBe(1);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // #269: a non-DKK bank line must show its amount in its own currency
+  // ("100,00 EUR"), never as a DKK-formatted figure with "kr." plus the
+  // currency code tacked on ("100,00 kr. EUR"), which is numerically wrong.
+  test("formats a non-DKK bank line amount in its own currency, not as kroner", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-exc-fx-"));
+    const company = ensureCompanyDirs(root);
+    const db = openDb(company.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const csv = join(root, "bank.csv");
+    writeFileSync(
+      csv,
+      "transaction_date,text,amount,currency,amount_dkk,fx_rate_to_dkk\n" +
+        "2026-05-18,Foreign supplier,-100,EUR,-745,7.45\n",
+    );
+    expect(importBankCsv(db, root, csv).ok).toBe(true);
+
+    expect(syncUnmatchedBankTransactionExceptions(db).created).toBe(1);
+
+    const row = listExceptions(db, { status: "open" }).rows[0];
+    expect(row.message).toContain("100,00 EUR");
+    expect(row.message).not.toContain("kr. EUR");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("records generic blocked-work exceptions with evidence", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-exception-record-"));
     const db = openDb(ensureCompanyDirs(root).db);

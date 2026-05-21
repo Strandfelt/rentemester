@@ -305,6 +305,22 @@ function formatKroner(amount: number): string {
 }
 
 /**
+ * Danish-locale rendering of a bank-line amount in its own currency. A DKK
+ * line renders as kroner ("1.205,00 kr."). A foreign-currency line renders in
+ * that currency ("100,00 EUR") — never as a DKK-formatted figure with "kr."
+ * and the code tacked on, which would imply a wrong, far larger kroner value
+ * (#269: 100 EUR is ~745 kr., so "100,00 kr. EUR" is numerically misleading).
+ */
+function formatBankAmount(amount: number, currency: string | null | undefined): string {
+  if (!currency || currency === "DKK") return formatKroner(amount);
+  const formatted = Math.abs(amount).toLocaleString("da-DK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${formatted} ${currency}`;
+}
+
+/**
  * The bookkeeping direction of a bank line, derived from the amount's sign.
  * A positive amount is money IN (a customer payment / payout — income); a
  * negative amount is money OUT (a supplier payment — an expense). A zero
@@ -328,7 +344,7 @@ function describeUnmatchedBankTransaction(
   bank: { id: number; transaction_date: string; text: string | null; amount: number; currency: string },
   bilag: CandidateBilag | null,
 ): { message: string; requiredAction: string } {
-  const beløb = `${formatKroner(bank.amount)}${bank.currency && bank.currency !== "DKK" ? ` ${bank.currency}` : ""}`;
+  const beløb = formatBankAmount(bank.amount, bank.currency);
   const tekst = (bank.text ?? "").trim() || "(ingen tekst)";
   const direction = bankDirection(bank.amount);
   // Sign-aware nouns: an inbound payment is income (an "indbetaling"), an
@@ -403,7 +419,8 @@ export function syncUnmatchedBankTransactionExceptions(db: Database) {
   // Every bank transaction with no posted journal entry — together with its
   // currently-open UNMATCHED_BANK_TRANSACTION exception (if any). A new
   // transaction has no exception yet; one synced before its bilag was ingested
-  // has a stale one. Both are handled below: missing ⇒ create, stale ⇒ refresh.
+  // has a stale one. Both are handled below: missing ⇒ create, stale ⇒ the old
+  // exception is resolved and a fresh, corrected one opened in its place.
   const unmatchedRows = db.query(
     `SELECT bt.id, bt.transaction_date, bt.booking_date, bt.text, bt.amount, bt.currency, bt.reference, bt.import_batch_id,
             ex.id AS exception_id, ex.message AS exception_message, ex.required_action AS exception_required_action
@@ -421,6 +438,7 @@ export function syncUnmatchedBankTransactionExceptions(db: Database) {
 
   let created = 0;
   let refreshed = 0;
+  let resolvedStale = 0;
   for (const row of unmatchedRows) {
     const amount = Number(row.amount);
     const bilag = findCandidateBilag(db, row.id, amount);
@@ -448,27 +466,31 @@ export function syncUnmatchedBankTransactionExceptions(db: Database) {
     });
 
     if (row.exception_id != null) {
-      // An exception already exists. Refresh it in place when its Danish text
-      // has gone stale — typically because the matching bilag has since been
-      // ingested, so the generic "no bilag found" message can now name the
-      // bilag and (for a restaurant voucher) the missing formål + deltagere.
+      // An exception already exists. When its Danish text is still current
+      // there is nothing to do — leaving it untouched keeps the sync
+      // idempotent, so re-importing overlapping bank rows never touches the
+      // immutable row.
       const stale =
         row.exception_message !== message ||
         (row.exception_required_action ?? "") !== requiredAction;
-      if (stale) {
-        db.run(
-          `UPDATE exceptions
-             SET message = ?, required_action = ?, related_document_id = ?, source_evidence = ?
-           WHERE id = ?`,
-          message,
-          requiredAction,
-          bilag?.documentId ?? null,
-          sourceEvidence,
-          row.exception_id,
-        );
-        refreshed += 1;
-      }
-      continue;
+      if (!stale) continue;
+
+      // The text has gone stale — typically because the matching bilag has
+      // since been ingested, so the generic "no bilag found" message can now
+      // name the bilag. Exception rows are append-only (the immutability
+      // trigger rejects ANY mutation, including a corrected message or a
+      // newly-linked related_document_id), so we cannot rewrite the row.
+      // Instead we resolve the stale exception and fall through to open a
+      // fresh, corrected one — the audit chain stays intact and we stay
+      // within the existing open → resolved lifecycle.
+      resolveException(db, {
+        id: row.exception_id,
+        note: "Erstattet automatisk: beskrivelsen blev opdateret, da et passende bilag blev tilføjet bogføringen",
+        resolvedBy: "system:sync-unmatched-bank-transactions",
+      });
+      refreshed += 1;
+      resolvedStale += 1;
+      // fall through — recordException below opens the corrected exception.
     }
 
     const result = recordException(db, {
@@ -487,5 +509,5 @@ export function syncUnmatchedBankTransactionExceptions(db: Database) {
     if (result.ok && !result.duplicate) created += 1;
   }
 
-  return { ok: true, created, refreshed, errors: [] };
+  return { ok: true, created, refreshed, resolvedStale, errors: [] };
 }
