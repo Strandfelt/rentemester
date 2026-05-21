@@ -1,7 +1,19 @@
 // Tests: src/core/regulatory-coverage.ts, src/core/rules-metadata.ts
 import { describe, expect, test } from "bun:test";
-import { computeRegulatoryCoverage } from "../../src/core/regulatory-coverage";
-import { parseRuleBundle, readRuleMetadata } from "../../src/core/rules-metadata";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  computeRegulatoryCoverage,
+  evaluateScope,
+  parseScopeManifest,
+  type ScopeManifest,
+} from "../../src/core/regulatory-coverage";
+import type { Provision } from "../../src/core/legal-provisions";
+import {
+  parseRuleBundle,
+  readRuleMetadata,
+  type RuleMetadata,
+} from "../../src/core/rules-metadata";
 
 describe("regulatory coverage", () => {
   test("no rule citation has a closure error", () => {
@@ -24,6 +36,14 @@ describe("regulatory coverage", () => {
     expect(first).toEqual(second);
   });
 
+  test("no rule citation has a scope error", () => {
+    // A scope error means the scope manifest is incomplete: a missing source,
+    // a bad range endpoint, or a citation outside the declared scope. The gate
+    // hard-fails so an unreviewed scope gap cannot land.
+    const coverage = computeRegulatoryCoverage();
+    expect(coverage.scopeErrors).toEqual([]);
+  });
+
   test("the coverage metric is internally consistent", () => {
     const coverage = computeRegulatoryCoverage();
     expect(coverage.overall.operativeCount).toBeGreaterThanOrEqual(0);
@@ -42,6 +62,39 @@ describe("regulatory coverage", () => {
     }
     expect(summedOperative).toBe(coverage.overall.operativeCount);
     expect(summedCited).toBe(coverage.overall.citedCount);
+  });
+
+  test("the in-scope metric is internally consistent", () => {
+    const coverage = computeRegulatoryCoverage();
+    // The headline metric (in-scope cited / in-scope operative) must be a
+    // well-formed fraction and a subset of the raw corpus-wide figures.
+    expect(coverage.overall.inScopeCitedCount).toBeGreaterThanOrEqual(0);
+    expect(coverage.overall.inScopeCitedCount).toBeLessThanOrEqual(
+      coverage.overall.inScopeOperativeCount,
+    );
+    expect(coverage.overall.inScopeOperativeCount).toBeLessThanOrEqual(
+      coverage.overall.operativeCount,
+    );
+    expect(coverage.overall.inScopeCitedCount).toBeLessThanOrEqual(
+      coverage.overall.citedCount,
+    );
+
+    let summedInScopeOperative = 0;
+    let summedInScopeCited = 0;
+    for (const source of coverage.perSource) {
+      expect(source.inScopeCitedCount).toBeGreaterThanOrEqual(0);
+      expect(source.inScopeCitedCount).toBeLessThanOrEqual(source.inScopeOperativeCount);
+      expect(source.inScopeOperativeCount).toBeLessThanOrEqual(source.operativeCount);
+      expect(source.inScopeCitedCount).toBeLessThanOrEqual(source.citedCount);
+      summedInScopeOperative += source.inScopeOperativeCount;
+      summedInScopeCited += source.inScopeCitedCount;
+    }
+    expect(summedInScopeOperative).toBe(coverage.overall.inScopeOperativeCount);
+    expect(summedInScopeCited).toBe(coverage.overall.inScopeCitedCount);
+
+    // With every cited provision in scope (the gate), in-scope cited equals
+    // the raw cited count — the headline metric only narrows the denominator.
+    expect(coverage.overall.inScopeCitedCount).toBe(coverage.overall.citedCount);
   });
 
   test("uncited rules are exactly the rules with no provisions block", () => {
@@ -140,5 +193,186 @@ describe("rule citation parser rejects malformed input", () => {
     const rules = parseRuleBundle(yaml, "invoices");
     expect(rules).toHaveLength(1);
     expect(rules[0].provisions).toEqual([{ ref: "§ 3, stk. 1", textHash: "sha256:abc" }]);
+  });
+
+  test("a folded block-scalar explanation is joined into one line", () => {
+    const yaml = [
+      ...ruleHead,
+      "    severity: hard_stop",
+      "    explanation: >-",
+      "      First line of the explanation",
+      "      continues onto a second line.",
+    ].join("\n");
+    const rules = parseRuleBundle(yaml, "invoices");
+    expect(rules[0].explanation).toBe(
+      "First line of the explanation continues onto a second line.",
+    );
+  });
+});
+
+describe("scope manifest parser rejects malformed input", () => {
+  const goodManifest = [
+    "version: dk-scope-test-v1",
+    "sources:",
+    "  DK-RENTELOVEN-2014-459:",
+    "    in_scope:",
+    '      - "§ 1-§ 9b"',
+    "  DK-BILAG-OPBEVARING-2023-1383:",
+    "    in_scope: all",
+  ].join("\n");
+
+  test("a well-formed manifest parses into a version and a sources map", () => {
+    const manifest = parseScopeManifest(goodManifest);
+    expect(manifest.version).toBe("dk-scope-test-v1");
+    expect(manifest.sources.get("DK-BILAG-OPBEVARING-2023-1383")).toEqual({ kind: "all" });
+    expect(manifest.sources.get("DK-RENTELOVEN-2014-459")).toEqual({
+      kind: "ranges",
+      ranges: [{ low: "1", high: "9b" }],
+    });
+  });
+
+  test("the real sources/scope.yaml parses without throwing", () => {
+    const text = readFileSync(
+      join(import.meta.dir, "../../sources/scope.yaml"),
+      "utf8",
+    );
+    const manifest = parseScopeManifest(text);
+    expect(manifest.version.length).toBeGreaterThan(0);
+    expect(manifest.sources.size).toBeGreaterThan(0);
+  });
+
+  test("a missing version throws", () => {
+    const yaml = ["sources:", "  DK-X:", "    in_scope: all"].join("\n");
+    expect(() => parseScopeManifest(yaml)).toThrow(/missing version/);
+  });
+
+  test("a source with no in_scope declaration throws", () => {
+    const yaml = ["version: v1", "sources:", "  DK-X:"].join("\n");
+    expect(() => parseScopeManifest(yaml)).toThrow(/no in_scope/);
+  });
+
+  test("an inverted range throws", () => {
+    const yaml = [
+      "version: v1",
+      "sources:",
+      "  DK-X:",
+      "    in_scope:",
+      '      - "§ 9-§ 3"',
+    ].join("\n");
+    expect(() => parseScopeManifest(yaml)).toThrow(/inverted/);
+  });
+
+  test("a range token that is not `§ ...` throws", () => {
+    const yaml = [
+      "version: v1",
+      "sources:",
+      "  DK-X:",
+      "    in_scope:",
+      '      - "1-9"',
+    ].join("\n");
+    expect(() => parseScopeManifest(yaml)).toThrow(/bad range/);
+  });
+
+  test("tab indentation throws", () => {
+    const yaml = ["version: v1", "sources:", "\tDK-X:"].join("\n");
+    expect(() => parseScopeManifest(yaml)).toThrow(/tab indentation/);
+  });
+});
+
+describe("the three scope hard-error checks", () => {
+  const provision = (sourceId: string, paragraf: string): Provision => ({
+    sourceId,
+    ref: `§ ${paragraf}, stk. 1`,
+    path: [paragraf, "1"],
+    kind: "operative",
+    text: "stub text",
+    textHash: "sha256:stub",
+  });
+
+  const provisions = new Map<string, Provision[]>([
+    ["DK-A", [provision("DK-A", "1"), provision("DK-A", "2"), provision("DK-A", "3")]],
+    ["DK-B", [provision("DK-B", "5")]],
+  ]);
+
+  const rule = (sourceId: string, ref: string): RuleMetadata => ({
+    ruleId: "DK-TEST-001",
+    sourceId,
+    bundle: "test",
+    name: "test rule",
+    explanation: "test",
+    provisions: [{ ref, textHash: "sha256:stub" }],
+    severity: "hard_stop",
+    category: "test",
+  });
+
+  const manifest = (text: string): ScopeManifest => parseScopeManifest(text);
+
+  test("(a) a downloaded source missing from the manifest is a scope error", () => {
+    // DK-B is downloaded but absent from the manifest.
+    const scope = manifest(
+      ["version: v1", "sources:", "  DK-A:", "    in_scope: all"].join("\n"),
+    );
+    const errors = evaluateScope(provisions, scope, []);
+    expect(errors).toEqual([{ kind: "missing_source", sourceId: "DK-B" }]);
+  });
+
+  test("(b) a range endpoint that is not a paragraf in the source is a scope error", () => {
+    // DK-A has §§ 1-3; § 9 does not exist.
+    const scope = manifest(
+      [
+        "version: v1",
+        "sources:",
+        "  DK-A:",
+        "    in_scope:",
+        '      - "§ 1-§ 9"',
+        "  DK-B:",
+        "    in_scope: all",
+      ].join("\n"),
+    );
+    const errors = evaluateScope(provisions, scope, []);
+    expect(errors).toEqual([{ kind: "bad_endpoint", sourceId: "DK-A", paragraf: "9" }]);
+  });
+
+  test("(c) a citation outside the declared scope is a scope error", () => {
+    // DK-A's scope is § 1 only; the rule cites § 3.
+    const scope = manifest(
+      [
+        "version: v1",
+        "sources:",
+        "  DK-A:",
+        "    in_scope:",
+        '      - "§ 1"',
+        "  DK-B:",
+        "    in_scope: all",
+      ].join("\n"),
+    );
+    const errors = evaluateScope(provisions, scope, [rule("DK-A", "§ 3, stk. 1")]);
+    expect(errors).toEqual([
+      {
+        kind: "citation_out_of_scope",
+        ruleId: "DK-TEST-001",
+        sourceId: "DK-A",
+        ref: "§ 3, stk. 1",
+      },
+    ]);
+  });
+
+  test("a fully covered manifest produces no scope errors", () => {
+    const scope = manifest(
+      [
+        "version: v1",
+        "sources:",
+        "  DK-A:",
+        "    in_scope:",
+        '      - "§ 1-§ 3"',
+        "  DK-B:",
+        "    in_scope: all",
+      ].join("\n"),
+    );
+    const errors = evaluateScope(provisions, scope, [
+      rule("DK-A", "§ 3, stk. 1"),
+      rule("DK-B", "§ 5, stk. 1"),
+    ]);
+    expect(errors).toEqual([]);
   });
 });

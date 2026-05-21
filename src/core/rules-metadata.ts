@@ -75,6 +75,8 @@ export type RuleMetadata = {
   ruleId: string;
   sourceId: string;
   bundle: string;
+  name: string;
+  explanation: string;
   provisions: RuleProvisionCitation[];
   severity: string;
   category: string;
@@ -109,6 +111,8 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
   let current: {
     ruleId: string;
     sourceId: string;
+    name: string;
+    explanation: string;
     severity: string;
     category: string;
     provisions: RuleProvisionCitation[];
@@ -116,6 +120,23 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
   let inProvisions = false;
   let pendingRef: string | null = null;
   let pendingHash: string | null = null;
+  // A YAML folded/literal block scalar in progress (`name: >-` etc.). Its
+  // continuation lines are indented deeper than the key.
+  let pendingBlock: { field: "name" | "explanation"; keyIndent: number; lines: string[] }
+    | null = null;
+
+  const flushBlock = () => {
+    if (!pendingBlock || !current) {
+      pendingBlock = null;
+      return;
+    }
+    // Folded scalars join on single spaces; this manifest never uses literal
+    // (`|`) explanations, so a uniform fold is faithful enough for review text.
+    const joined = pendingBlock.lines.map((l) => l.trim()).join(" ").trim();
+    if (pendingBlock.field === "name") current.name = joined;
+    else current.explanation = joined;
+    pendingBlock = null;
+  };
 
   const flushCitation = () => {
     if (pendingRef !== null || pendingHash !== null) {
@@ -132,6 +153,7 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
   };
 
   const flushRule = () => {
+    flushBlock();
     flushCitation();
     if (current) {
       current.provisions.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
@@ -139,6 +161,8 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
         ruleId: current.ruleId,
         sourceId: current.sourceId,
         bundle,
+        name: current.name,
+        explanation: current.explanation,
         provisions: current.provisions,
         severity: current.severity,
         category: current.category,
@@ -155,12 +179,25 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
       throw new Error(`${bundle}.yaml: tab indentation is not allowed in rule files`);
     }
     const indent = indentOf(line);
+
+    // While a block scalar is open, lines indented deeper than its key are
+    // continuation text; the first line at or above the key indent ends it.
+    if (pendingBlock) {
+      if (indent > pendingBlock.keyIndent) {
+        pendingBlock.lines.push(line);
+        continue;
+      }
+      flushBlock();
+    }
+
     const ruleStart = line.match(/^\s*-\s*rule_id:\s*(\S+)\s*$/);
     if (ruleStart) {
       flushRule();
       current = {
         ruleId: ruleStart[1],
         sourceId: "",
+        name: "",
+        explanation: "",
         severity: "",
         category: "",
         provisions: [],
@@ -211,6 +248,24 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
     const sourceMatch = line.match(/^\s{4}source_id:\s*(\S+)\s*$/);
     if (sourceMatch) {
       current.sourceId = sourceMatch[1];
+      continue;
+    }
+    const nameMatch = line.match(/^\s{4}name:\s*(.*?)\s*$/);
+    if (nameMatch) {
+      if (/^[>|][+-]?$/.test(nameMatch[1])) {
+        pendingBlock = { field: "name", keyIndent: indent, lines: [] };
+      } else {
+        current.name = stripQuotes(nameMatch[1]);
+      }
+      continue;
+    }
+    const explanationMatch = line.match(/^\s{4}explanation:\s*(.*?)\s*$/);
+    if (explanationMatch) {
+      if (/^[>|][+-]?$/.test(explanationMatch[1])) {
+        pendingBlock = { field: "explanation", keyIndent: indent, lines: [] };
+      } else {
+        current.explanation = stripQuotes(explanationMatch[1]);
+      }
       continue;
     }
     const severityMatch = line.match(/^\s{4}severity:\s*(\S+)\s*$/);
