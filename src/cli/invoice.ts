@@ -33,6 +33,7 @@ import { writeOffInvoiceBadDebt } from "../core/invoice-bad-debt";
 import { resolveInvoiceMasterData } from "../core/master-data";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch, CommandContext } from "../cli-dispatch";
+import { emitHumanReport, formatKroner } from "../cli-format";
 
 type Db = ReturnType<typeof openDb>;
 
@@ -74,24 +75,39 @@ function withResolvedInvoicePayload<T extends Record<string, unknown>>(
   return { ...payload, [idKey]: resolved };
 }
 
+const INVOICE_STATUS_DA: Record<string, string> = {
+  open: "åben",
+  paid: "betalt",
+  credited: "krediteret",
+  refunded: "refunderet",
+  overpaid: "overbetalt",
+  written_off: "afskrevet",
+  overdue: "forfalden",
+};
+
 function renderInvoiceRowsHuman(title: string, rows: any[], emptyMessage: string): void {
   console.log(title);
   if (rows.length === 0) {
     console.log(emptyMessage);
     return;
   }
-  console.table(
-    rows.map((row) => ({
-      invoiceNumber: row.invoiceNumber,
-      customerName: row.customerName,
-      invoiceDate: row.invoiceDate,
-      effectiveDueDate: row.effectiveDueDate,
-      grossAmount: row.grossAmount,
-      openBalance: row.openBalance,
-      status: row.status,
-      overdueDays: row.overdueDays,
-    })),
-  );
+  for (const row of rows) {
+    const statusDa = INVOICE_STATUS_DA[String(row.status)] ?? row.status ?? "—";
+    const customer = row.customerName ?? "(ukendt kunde)";
+    console.log("");
+    console.log(`Faktura ${row.invoiceNumber} — ${customer}`);
+    console.log(
+      `  Fakturadato: ${row.invoiceDate ?? "—"} | Forfald: ${row.effectiveDueDate ?? "—"}`,
+    );
+    console.log(
+      `  Beløb (inkl. moms): ${formatKroner(row.grossAmount)} | Åben saldo: ${formatKroner(row.openBalance)}`,
+    );
+    const overdue =
+      typeof row.overdueDays === "number" && row.overdueDays > 0
+        ? ` | ${row.overdueDays} dage forfalden`
+        : "";
+    console.log(`  Status: ${statusDa}${overdue}`);
+  }
 }
 
 export function register(dispatch: CommandDispatch): void {
@@ -423,7 +439,7 @@ export function register(dispatch: CommandDispatch): void {
       process.exit(2);
     }
     const result = getInvoiceStatus(db, documentId, ctx.arg("--as-of"));
-    ctx.emitResult(result as Record<string, unknown>);
+    emitHumanReport("invoice-status", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 
@@ -448,7 +464,11 @@ export function register(dispatch: CommandDispatch): void {
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
     } else {
-      renderInvoiceRowsHuman(`Invoices (${result.count})`, result.rows, "No invoices for current filter.");
+      renderInvoiceRowsHuman(
+        `Fakturaer (${result.count})`,
+        result.rows,
+        "Ingen fakturaer for det valgte filter.",
+      );
     }
     db.close();
   });
@@ -469,7 +489,11 @@ export function register(dispatch: CommandDispatch): void {
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
     } else {
-      renderInvoiceRowsHuman(`Invoice matches (${result.count})`, result.rows, "No invoices matched the query.");
+      renderInvoiceRowsHuman(
+        `Fakturatræf (${result.count})`,
+        result.rows,
+        "Ingen fakturaer matchede søgningen.",
+      );
     }
     db.close();
   });
@@ -487,9 +511,9 @@ export function register(dispatch: CommandDispatch): void {
       ctx.emitResult(result as Record<string, unknown>);
     } else {
       renderInvoiceRowsHuman(
-        `Overdue invoices as of ${result.asOfDate ?? "today"} (${result.count})`,
+        `Forfaldne fakturaer pr. ${result.asOfDate ?? "i dag"} (${result.count})`,
         result.rows,
-        "No overdue invoices for current filter.",
+        "Ingen forfaldne fakturaer for det valgte filter.",
       );
     }
     db.close();

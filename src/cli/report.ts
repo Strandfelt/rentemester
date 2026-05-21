@@ -13,6 +13,7 @@ import {
 } from "../core/financial-statements";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
+import { emitHumanReport } from "../cli-format";
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("report", "trial-balance", (ctx) => {
@@ -25,7 +26,7 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = buildTrialBalance(db, from, to);
-    ctx.emitResult(result as unknown as Record<string, unknown>);
+    emitHumanReport("report-trial-balance", result as unknown as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 
@@ -39,7 +40,7 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = buildProfitAndLoss(db, from, to);
-    ctx.emitResult(result as unknown as Record<string, unknown>);
+    emitHumanReport("report-profit-loss", result as unknown as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 
@@ -52,7 +53,7 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = buildBalanceSheet(db, asOf);
-    ctx.emitResult(result as unknown as Record<string, unknown>);
+    emitHumanReport("report-balance", result as unknown as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 }

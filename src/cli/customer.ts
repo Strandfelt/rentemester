@@ -8,6 +8,7 @@ import {
 import { validateVatAgainstVies } from "../core/vies";
 import { lookupCvrCompany } from "../core/cvr";
 import { openCommandDb } from "../cli-dispatch";
+import { renderContactList } from "../cli-format";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
@@ -50,7 +51,13 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = listCustomers(db, { archived: ctx.hasFlag("--archived") });
-    ctx.emitResult(result as Record<string, unknown>);
+    if (ctx.outputFormat === "json") {
+      ctx.emitResult(result as Record<string, unknown>);
+    } else {
+      console.log(
+        renderContactList(result as Record<string, unknown>, "Kunder", "Ingen kunder registreret."),
+      );
+    }
     db.close();
   });
 
