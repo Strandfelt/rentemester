@@ -1,0 +1,178 @@
+import { describe, expect, test, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { DocumentIngestModal } from "./DocumentIngestModal";
+import { mockFetch } from "../test/fixtures";
+
+function noop() {}
+
+function receiptFile(name = "kvittering.txt") {
+  return new File(["Kasseboner\n12,00 DKK\n"], name, { type: "text/plain" });
+}
+
+/** Routes the document-ingest POST to a success result. */
+function ingestRoute(over: Record<string, unknown> = {}) {
+  return {
+    "POST /api/companies/acme-aps/documents/ingest": {
+      document: { id: 1, documentNo: "DOC-2026-000001", ...over },
+    },
+  };
+}
+
+/** Switches the modal to the cash-register-receipt type (minimal fields). */
+async function pickReceiptType() {
+  await userEvent.selectOptions(
+    screen.getByLabelText("Bilagstype"),
+    "cash_register_receipt",
+  );
+}
+
+describe("DocumentIngestModal", () => {
+  test("renders the dialog with a file picker and metadata fields", () => {
+    render(
+      <DocumentIngestModal slug="acme-aps" onIngested={noop} onClose={noop} />,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Indlæs bilag" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Bilagsfil")).toBeInTheDocument();
+    expect(screen.getByLabelText("Bilagstype")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kilde")).toBeInTheDocument();
+  });
+
+  test("the Indlæs button is disabled until a file is chosen", async () => {
+    render(
+      <DocumentIngestModal slug="acme-aps" onIngested={noop} onClose={noop} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Indlæs bilag" }),
+    ).toBeDisabled();
+    await userEvent.upload(screen.getByLabelText("Bilagsfil"), receiptFile());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Indlæs bilag" }),
+      ).not.toBeDisabled(),
+    );
+  });
+
+  test("the purchase/sale party fields hide for a cash-register receipt", async () => {
+    render(
+      <DocumentIngestModal slug="acme-aps" onIngested={noop} onClose={noop} />,
+    );
+    // køb/salg (the default) shows the sender/recipient fields.
+    expect(screen.getByLabelText("Afsender")).toBeInTheDocument();
+    await pickReceiptType();
+    expect(screen.queryByLabelText("Afsender")).not.toBeInTheDocument();
+  });
+
+  test("ingesting POSTs the file as base64 with metadata and confirm:true", async () => {
+    mockFetch(ingestRoute());
+    const onIngested = vi.fn();
+    render(
+      <DocumentIngestModal
+        slug="acme-aps"
+        onIngested={onIngested}
+        onClose={noop}
+      />,
+    );
+    await pickReceiptType();
+    await userEvent.upload(screen.getByLabelText("Bilagsfil"), receiptFile());
+    await userEvent.click(
+      screen.getByRole("button", { name: "Indlæs bilag" }),
+    );
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      const ingestCall = calls.find((c) =>
+        String(c[0]).includes("/documents/ingest"),
+      );
+      expect(ingestCall).toBeDefined();
+      const init = ingestCall![1] as RequestInit;
+      expect(init.method).toBe("POST");
+      const sent = JSON.parse(String(init.body));
+      expect(sent.fileName).toBe("kvittering.txt");
+      expect(typeof sent.fileBase64).toBe("string");
+      expect(sent.fileBase64.length).toBeGreaterThan(0);
+      expect(sent.metadata.documentType).toBe("cash_register_receipt");
+      expect(sent.confirm).toBe(true);
+    });
+    expect(onIngested).toHaveBeenCalled();
+  });
+
+  test("shows a receipt with the document number after success", async () => {
+    mockFetch(ingestRoute());
+    render(
+      <DocumentIngestModal slug="acme-aps" onIngested={noop} onClose={noop} />,
+    );
+    await pickReceiptType();
+    await userEvent.upload(screen.getByLabelText("Bilagsfil"), receiptFile());
+    await userEvent.click(
+      screen.getByRole("button", { name: "Indlæs bilag" }),
+    );
+    expect(
+      await screen.findByText(/DOC-2026-000001/),
+    ).toBeInTheDocument();
+  });
+
+  test("a 409 backup-lock conflict is shown as a kind lock banner", async () => {
+    mockFetch({
+      "POST /api/companies/acme-aps/documents/ingest": {
+        __error: {
+          code: "conflict",
+          message: "Bogføring er låst: en ugentlig backup er overskredet.",
+        },
+      },
+    });
+    const onClose = vi.fn();
+    render(
+      <DocumentIngestModal
+        slug="acme-aps"
+        onIngested={noop}
+        onClose={onClose}
+      />,
+    );
+    await pickReceiptType();
+    await userEvent.upload(screen.getByLabelText("Bilagsfil"), receiptFile());
+    await userEvent.click(
+      screen.getByRole("button", { name: "Indlæs bilag" }),
+    );
+    expect(
+      await screen.findByText("Bogføringen er låst"),
+    ).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test("a validation error from the server is shown as an error banner", async () => {
+    mockFetch({
+      "POST /api/companies/acme-aps/documents/ingest": {
+        __error: {
+          code: "bad_request",
+          message: "deliveryDescription is required",
+        },
+      },
+    });
+    render(
+      <DocumentIngestModal slug="acme-aps" onIngested={noop} onClose={noop} />,
+    );
+    await userEvent.upload(screen.getByLabelText("Bilagsfil"), receiptFile());
+    await userEvent.click(
+      screen.getByRole("button", { name: "Indlæs bilag" }),
+    );
+    expect(
+      await screen.findByText("deliveryDescription is required"),
+    ).toBeInTheDocument();
+  });
+
+  test("Annullér closes the modal without ingesting", async () => {
+    const onClose = vi.fn();
+    render(
+      <DocumentIngestModal
+        slug="acme-aps"
+        onIngested={noop}
+        onClose={onClose}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Annullér" }));
+    expect(onClose).toHaveBeenCalled();
+  });
+});

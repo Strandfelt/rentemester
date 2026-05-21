@@ -634,7 +634,9 @@ td.num,
   font-size: var(--text-size-sm);
   color: var(--text-dim);
 }
-.modal-field textarea {
+.modal-field textarea,
+.modal-field input,
+.modal-field select {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -642,11 +644,24 @@ td.num,
   padding: var(--space-xs) var(--space-sm);
   font-size: var(--text-size-md);
   font-family: var(--font-body);
+}
+.modal-field textarea {
   resize: vertical;
 }
-.modal-field textarea:focus {
+.modal-field textarea:focus,
+.modal-field input:focus,
+.modal-field select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+/* A two-column grid for the document-intake metadata fields. */
+.modal-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+.modal-field-grid .modal-field {
+  min-width: 0;
 }
 .modal-actions {
   display: flex;

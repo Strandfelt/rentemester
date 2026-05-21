@@ -6,6 +6,7 @@
 // still carries the selected `?year=` so it follows the user across views —
 // the fiscal years for the selector are fetched separately.
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
@@ -13,6 +14,7 @@ import { useAsync } from "../lib/useAsync";
 import type { CompanyDocuments, FiscalYearEntry } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import { DocumentIngestModal } from "../components/DocumentIngestModal";
 
 type DocumentsPage = {
   documents: CompanyDocuments;
@@ -37,6 +39,8 @@ export function DocumentsView() {
     },
     [slug],
   );
+  // True while the document-intake modal (#213, slice 3) is open.
+  const [ingesting, setIngesting] = useState(false);
 
   if (state.loading && !state.data) return <Loading label="Henter bilag…" />;
   if (state.error)
@@ -49,6 +53,10 @@ export function DocumentsView() {
     fiscalYears.find((y) => y.source === "live")?.label ??
     fiscalYears[0]?.label ??
     String(new Date().getFullYear());
+  // The intake action is hidden when the selected year is an archived
+  // (pre-cut-over, read-only) year — there is no live ledger to ingest into.
+  const selectedYearArchived =
+    fiscalYears.find((y) => y.label === selectedYear)?.source === "archive";
 
   return (
     <section className="statement">
@@ -61,6 +69,15 @@ export function DocumentsView() {
           </p>
         </div>
         <div className="row-actions">
+          {!selectedYearArchived && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setIngesting(true)}
+            >
+              Indlæs bilag
+            </button>
+          )}
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
             Administrér
           </Link>
@@ -73,6 +90,14 @@ export function DocumentsView() {
         selectedYear={selectedYear}
         onYearChange={setYear}
       />
+
+      {ingesting && (
+        <DocumentIngestModal
+          slug={slug}
+          onIngested={state.reload}
+          onClose={() => setIngesting(false)}
+        />
+      )}
 
       <p className="statement-asof muted">
         {d.documents.length} bilag · {d.linkedCount} bogført ·{" "}

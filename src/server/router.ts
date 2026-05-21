@@ -52,7 +52,11 @@ import {
   syncCompanyCvr,
 } from "./data";
 import { serveStatic } from "./static";
-import { handleResolveException } from "./write-handlers";
+import {
+  handleBankImport,
+  handleDocumentIngest,
+  handleResolveException,
+} from "./write-handlers";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -550,6 +554,24 @@ export async function handleRequest(
       const slug = decodeURIComponent(resolveExceptionMatch[1]!);
       const id = decodeURIComponent(resolveExceptionMatch[2]!);
       return await handleResolveException(config, request, slug, id);
+    }
+
+    // Bookkeeping write route (#213, slice 2): import a bank-statement CSV.
+    const bankImportMatch =
+      /^\/api\/companies\/([^/]+)\/bank\/import$/.exec(path);
+    if (bankImportMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(bankImportMatch[1]!);
+      return await handleBankImport(config, request, slug);
+    }
+
+    // Bookkeeping write route (#213, slice 3): ingest a document (bilag).
+    const documentIngestMatch =
+      /^\/api\/companies\/([^/]+)\/documents\/ingest$/.exec(path);
+    if (documentIngestMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(documentIngestMatch[1]!);
+      return await handleDocumentIngest(config, request, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

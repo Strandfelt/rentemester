@@ -6,6 +6,7 @@
 // registered bank account and its booked ledger balance are shown above the
 // table. All money fields are kroner — `formatKroner` is used throughout.
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
@@ -13,11 +14,14 @@ import { useAsync } from "../lib/useAsync";
 import type { CompanyBank } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import { BankImportModal } from "../components/BankImportModal";
 
 export function BankView() {
   const { slug = "" } = useParams();
   const { year, setYear } = useCompanyYear();
   const state = useAsync<CompanyBank>(() => api.bank(slug, year), [slug, year]);
+  // True while the bank-CSV-import modal (#213, slice 2) is open.
+  const [importing, setImporting] = useState(false);
 
   if (state.loading && !state.data) return <Loading label="Henter bank…" />;
   if (state.error)
@@ -37,6 +41,17 @@ export function BankView() {
           </p>
         </div>
         <div className="row-actions">
+          {/* The bank-import write action — hidden for an archived (read-only)
+              year, where no live ledger is available to import into. */}
+          {!b.archived && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setImporting(true)}
+            >
+              Importér kontoudtog
+            </button>
+          )}
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
             Administrér
           </Link>
@@ -49,6 +64,14 @@ export function BankView() {
         selectedYear={b.selectedYear}
         onYearChange={setYear}
       />
+
+      {importing && (
+        <BankImportModal
+          slug={slug}
+          onImported={state.reload}
+          onClose={() => setImporting(false)}
+        />
+      )}
 
       {b.archived ? (
         <ArchivedNotice year={b.selectedYear} />

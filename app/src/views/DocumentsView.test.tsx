@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { DocumentsView } from "./DocumentsView";
 import { renderAt } from "../test/render";
 import { documents, mockFetch } from "../test/fixtures";
@@ -19,9 +20,9 @@ function route(over = {}) {
   };
 }
 
-function renderView() {
+function renderView(route = "/companies/acme-aps/bilag") {
   return renderAt(<DocumentsView />, {
-    route: "/companies/acme-aps/bilag",
+    route,
     path: "/companies/:slug/bilag",
   });
 }
@@ -115,5 +116,37 @@ describe("DocumentsView — Bilag", () => {
     );
     renderView();
     expect(await screen.findByText("Ikke bogført")).toBeInTheDocument();
+  });
+
+  // #213 slice 3 — the document-intake write action.
+
+  test("a live year offers an Indlæs bilag action", async () => {
+    mockFetch(route());
+    renderView();
+    await screen.findByRole("heading", { name: "Acme ApS" });
+    expect(
+      screen.getByRole("button", { name: "Indlæs bilag" }),
+    ).toBeInTheDocument();
+  });
+
+  test("an archived year offers no intake action", async () => {
+    mockFetch(route());
+    // The URL pins the archived year 2025; its fiscal-year source is `archive`.
+    renderView("/companies/acme-aps/bilag?year=2025");
+    await screen.findByRole("heading", { name: "Acme ApS" });
+    expect(
+      screen.queryByRole("button", { name: "Indlæs bilag" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("clicking Indlæs bilag opens the intake modal", async () => {
+    mockFetch(route());
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Indlæs bilag" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Indlæs bilag" }),
+    ).toBeInTheDocument();
   });
 });

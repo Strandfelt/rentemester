@@ -59,6 +59,14 @@ export type WithCompanyMutationOptions = {
    * so it leaves this off; slices 2–4 set it for irreversible postings.
    */
   requireConfirm?: boolean;
+  /**
+   * Optional hard cap on the request body size, in bytes. When set, a body
+   * larger than this is rejected with a 400 *before* it is read into memory —
+   * DoS hardening for the file-upload routes (#213, slices 2-3), where the
+   * frontend POSTs CSV text / base64-encoded documents inline. Routes whose
+   * body is a tiny JSON object (slice 1's resolve-exception) leave this off.
+   */
+  maxBodyBytes?: number;
 };
 
 /**
@@ -102,9 +110,34 @@ function backupLockMessage(reason: string): string {
  * Reads + JSON-parses the request body, mapping any failure to a 400. An empty
  * body is treated as `{}` so a handler whose fields are all optional (the
  * resolve-exception `{ note? }` body) works with no body at all.
+ *
+ * When `maxBodyBytes` is given the body is size-checked: a declared
+ * `Content-Length` over the cap is rejected before reading, and the actual
+ * byte length is re-checked after reading (a `Content-Length` header is
+ * client-supplied and may lie). This is the DoS guard for the file-upload
+ * routes — a Cockpit CSV/document POST carries inline file content.
  */
-async function readMutationBody(request: Request): Promise<Record<string, unknown>> {
+async function readMutationBody(
+  request: Request,
+  maxBodyBytes?: number,
+): Promise<Record<string, unknown>> {
+  if (maxBodyBytes !== undefined) {
+    const declared = Number(request.headers.get("content-length") ?? "");
+    if (Number.isFinite(declared) && declared > maxBodyBytes) {
+      throw ApiError.badRequest(
+        `request body exceeds the ${maxBodyBytes}-byte limit`,
+      );
+    }
+  }
   const raw = await request.text();
+  if (maxBodyBytes !== undefined) {
+    const actual = Buffer.byteLength(raw, "utf8");
+    if (actual > maxBodyBytes) {
+      throw ApiError.badRequest(
+        `request body exceeds the ${maxBodyBytes}-byte limit`,
+      );
+    }
+  }
   if (raw.trim().length === 0) return {};
   let parsed: unknown;
   try {
@@ -163,7 +196,7 @@ export async function withCompanyMutation<T extends CoreResult>(
     throw ApiError.notFound(`company '${slug}' has no ledger`);
   }
 
-  const body = await readMutationBody(request);
+  const body = await readMutationBody(request, options.maxBodyBytes);
 
   // (3) Confirm gate for destructive actions.
   if (options.requireConfirm && body.confirm !== true) {

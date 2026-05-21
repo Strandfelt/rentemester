@@ -236,4 +236,89 @@ export const api = {
         body: JSON.stringify(note ? { note } : {}),
       },
     ).then((r) => r.exception),
+
+  /**
+   * Imports a bank-statement CSV (#213, slice 2). The browser reads the file
+   * and passes its text as `csvContent`; the server writes it to a temp file
+   * and calls the same core import the CLI/MCP use. Destructive, so the body
+   * carries `confirm: true`.
+   */
+  importBank: (slug: string, input: BankImportInput) =>
+    request<{ ok: true; import: BankImportSummary }>(
+      `/api/companies/${encodeURIComponent(slug)}/bank/import`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          csvContent: input.csvContent,
+          ...(input.account ? { account: input.account } : {}),
+          ...(input.profile ? { profile: input.profile } : {}),
+          confirm: true,
+        }),
+      },
+    ).then((r) => r.import),
+
+  /**
+   * Ingests a document/voucher (bilag) (#213, slice 3). The browser reads the
+   * (possibly binary) file and passes it base64-encoded; the server decodes it
+   * to a temp file and calls the same core ingest the CLI/MCP use. Destructive,
+   * so the body carries `confirm: true`.
+   */
+  ingestDocument: (slug: string, input: DocumentIngestInput) =>
+    request<{
+      ok: true;
+      document: { id: number | null; documentNo: string | null };
+    }>(`/api/companies/${encodeURIComponent(slug)}/documents/ingest`, {
+      method: "POST",
+      body: JSON.stringify({
+        fileName: input.fileName,
+        fileBase64: input.fileBase64,
+        metadata: input.metadata,
+        ...(input.vendorId ? { vendorId: input.vendorId } : {}),
+        ...(input.force ? { force: true } : {}),
+        confirm: true,
+      }),
+    }).then((r) => r.document),
+};
+
+/** Input for `api.importBank` — the CSV text plus optional account/profile. */
+export type BankImportInput = {
+  csvContent: string;
+  account?: string;
+  profile?: string;
+};
+
+/** The bank-import result the server echoes back. */
+export type BankImportSummary = {
+  importBatchId?: string;
+  imported: number;
+  skippedDuplicates: number;
+  skippedDuplicateRows: string[];
+  bankAccountSlug?: string;
+  profile?: string;
+  balanceWarnings: string[];
+  exceptionsCreated: number;
+};
+
+/** Document metadata for `api.ingestDocument` — amounts are kroner (decimal DKK). */
+export type DocumentIngestMetadata = {
+  source: string;
+  documentType?: "purchase_sale" | "cash_register_receipt";
+  issueDate?: string;
+  invoiceNo?: string;
+  deliveryDescription?: string;
+  amountIncVat?: number;
+  currency?: string;
+  sender?: { name?: string; address?: string; vatOrCvr?: string };
+  recipient?: { name?: string; address?: string; vatOrCvr?: string };
+  vatAmount?: number;
+  paymentDetails?: string;
+};
+
+/** Input for `api.ingestDocument` — the base64 file plus its metadata. */
+export type DocumentIngestInput = {
+  fileName: string;
+  fileBase64: string;
+  metadata: DocumentIngestMetadata;
+  vendorId?: number;
+  force?: boolean;
 };

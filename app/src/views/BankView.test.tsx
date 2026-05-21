@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { BankView } from "./BankView";
 import { renderAt } from "../test/render";
 import { bank, mockFetch } from "../test/fixtures";
@@ -73,6 +74,39 @@ describe("BankView — Bank", () => {
     renderView();
     expect(
       await screen.findByText(/Bank er ikke tilgængelig for 2025/),
+    ).toBeInTheDocument();
+  });
+
+  // #213 slice 2 — the bank-CSV-import write action.
+
+  test("a live year offers an Importér kontoudtog action", async () => {
+    mockFetch(route());
+    renderView();
+    await screen.findByRole("heading", { name: "Acme ApS" });
+    expect(
+      screen.getByRole("button", { name: "Importér kontoudtog" }),
+    ).toBeInTheDocument();
+  });
+
+  test("an archived year offers no import action", async () => {
+    mockFetch(
+      route({ archived: true, selectedYear: "2025", transactions: [] }),
+    );
+    renderView();
+    await screen.findByText(/Bank er ikke tilgængelig for 2025/);
+    expect(
+      screen.queryByRole("button", { name: "Importér kontoudtog" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("clicking Importér kontoudtog opens the import modal", async () => {
+    mockFetch(route());
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Importér kontoudtog" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Importér kontoudtog" }),
     ).toBeInTheDocument();
   });
 });
