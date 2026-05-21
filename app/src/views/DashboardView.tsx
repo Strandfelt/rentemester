@@ -8,14 +8,20 @@
 // All `/overview` money fields are kroner, so `formatKroner` is used
 // throughout (never `formatCurrency`, which expects minor units).
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner, formatPercent } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
-import type { CompanyOverview, OverviewMonth } from "../lib/types";
+import type {
+  CompanyOverview,
+  OverviewExceptionRow,
+  OverviewMonth,
+} from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
 import { ArchivedBanner } from "../components/ArchivedBanner";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PnlChart } from "../components/PnlChart";
 
 export function DashboardView() {
@@ -122,7 +128,12 @@ export function DashboardView() {
               currency={currency}
               to={statementTo(slug, "fakturaer", o.selectedYear)}
             />
-            <ExceptionsCard slug={slug} exceptions={o.exceptions} />
+            <ExceptionsCard
+              slug={slug}
+              exceptions={o.exceptions}
+              archived={o.archived}
+              onResolved={state.reload}
+            />
           </>
         )}
         <RecentEntriesCard entries={o.recentEntries} currency={currency} />
@@ -383,13 +394,19 @@ function exceptionLinkTo(slug: string, link: string | null): string | null {
 function ExceptionsCard({
   slug,
   exceptions,
+  archived,
+  onResolved,
 }: {
   slug: string;
   exceptions: CompanyOverview["exceptions"];
+  /** A pre-cut-over archived year is read-only — no write action is offered. */
+  archived: boolean;
+  /** Re-runs the overview load after an exception is resolved. */
+  onResolved: () => void;
 }) {
-  // Exceptions are grouped by type into one Danish, actionable line each, so
-  // the card reads "362 banktransaktioner mangler afstemning" rather than
-  // listing every individual exception.
+  // The exception under the open "Løs" modal — null when no modal is open.
+  const [resolving, setResolving] = useState<OverviewExceptionRow | null>(null);
+
   return (
     <StatusCard title="Opgaver">
       <div
@@ -402,34 +419,85 @@ function ExceptionsCard({
       {exceptions.count === 0 ? (
         <p className="muted status-note">Ingen åbne opgaver.</p>
       ) : (
-        <ul className="status-list">
-          {exceptions.groups.map((g) => {
-            const to = exceptionLinkTo(slug, g.link);
-            const body = (
-              <>
-                <span
-                  className={`flag ${
-                    g.severity === "high" ? "critical" : "warning"
-                  }`}
-                >
-                  {g.count}
-                </span>{" "}
-                {g.label}
-              </>
-            );
-            return (
-              <li key={g.type}>
-                {to ? (
-                  <Link className="status-link" to={to}>
-                    {body}
-                  </Link>
-                ) : (
-                  body
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {/* The grouped summary lines — one Danish line per exception type. */}
+          <ul className="status-list">
+            {exceptions.groups.map((g) => {
+              const to = exceptionLinkTo(slug, g.link);
+              const body = (
+                <>
+                  <span
+                    className={`flag ${
+                      g.severity === "high" ? "critical" : "warning"
+                    }`}
+                  >
+                    {g.count}
+                  </span>{" "}
+                  {g.label}
+                </>
+              );
+              return (
+                <li key={g.type}>
+                  {to ? (
+                    <Link className="status-link" to={to}>
+                      {body}
+                    </Link>
+                  ) : (
+                    body
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {/* The first few individual exceptions, each with a "Løs" action.
+              The action is hidden for an archived (read-only) year. */}
+          {!archived && exceptions.rows.length > 0 && (
+            <ul className="status-list">
+              {exceptions.rows.map((row) => (
+                <li key={row.id} className="task-row">
+                  <span>
+                    <span
+                      className={`flag ${
+                        row.severity === "high" ? "critical" : "warning"
+                      }`}
+                    >
+                      !
+                    </span>{" "}
+                    {row.message}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => setResolving(row)}
+                  >
+                    Løs
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      {resolving && (
+        <ConfirmDialog
+          title="Løs opgave"
+          body={
+            <p>
+              Markér opgaven <em>{resolving.message}</em> som løst. Den
+              forbliver i regnskabet, men tæller ikke længere som en åben
+              opgave.
+            </p>
+          }
+          confirmLabel="Løs opgave"
+          noteLabel="Note (valgfri)"
+          notePlaceholder="Hvad blev gjort?"
+          onConfirm={async (note) => {
+            await api.resolveException(slug, resolving.id, note || undefined);
+            onResolved();
+          }}
+          onClose={() => setResolving(null)}
+        />
       )}
     </StatusCard>
   );
