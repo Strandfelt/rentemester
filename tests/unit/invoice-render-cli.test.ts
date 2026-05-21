@@ -45,7 +45,8 @@ describe("invoice PDF rendering", () => {
 
     // Trailing legally-required content must survive into the rendered PDF.
     expect(strings).toContain("Total");
-    expect(strings).toContain("10000.00 DKK");
+    // #225: customer-facing amounts use Danish number format (10.000,00).
+    expect(strings).toContain("10.000,00 DKK");
     expect(strings.join("\n")).toContain("Omvendt betalingspligt");
     // Pagination produces more than one page object.
     const count = Buffer.from(pdf).toString("latin1").match(/\/Count (\d+)/);
@@ -115,6 +116,45 @@ describe("invoice PDF rendering", () => {
       totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
     } as any);
     expect(pdfStrings(pdf).join("\n")).not.toContain("BETALING");
+  });
+
+  test("renders line and total amounts in Danish number format (#225)", () => {
+    const pdf = buildIssuedInvoicePdf({
+      invoiceNumber: "2026-0011",
+      issueDate: "2026-05-16",
+      currency: "DKK",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Konsulentydelse", quantity: 8, unitPriceExVat: 1250.5, lineTotalExVat: 10004 }],
+      totals: { netAmount: 10004, vatRate: 0.25, vatAmount: 2501, grossAmount: 12505 },
+    } as any);
+    const strings = pdfStrings(pdf);
+
+    // Danish format: thousands grouped with '.', decimals after ','.
+    expect(strings).toContain("1.250,50"); // unit price
+    expect(strings).toContain("10.004,00"); // line total
+    expect(strings).toContain("12.505,00 DKK"); // gross total
+    // The English "1000.00" / "10004.00" form must NOT appear.
+    expect(strings.join("\n")).not.toContain("10004.00");
+    expect(strings.join("\n")).not.toContain("1250.50");
+  });
+
+  test("the PDF footer uses an ASCII separator — no mojibake (#225)", () => {
+    const pdf = buildIssuedInvoicePdf({
+      invoiceNumber: "2026-0012",
+      issueDate: "2026-05-16",
+      currency: "DKK",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+    } as any);
+    const strings = pdfStrings(pdf);
+    const footer = strings.find((s) => s.includes("Side"));
+    expect(footer).toBe("Faktura 2026-0012 - Side 1 af 1");
+    // No broken/exotic glyph in the footer.
+    expect(footer).not.toContain("?");
+    expect(footer).not.toContain("·");
   });
 
   test("is deterministic: identical payloads produce byte-identical PDFs", () => {

@@ -54,6 +54,10 @@ export function migrate(db: Database) {
   if (!hasColumn(db, "companies", "cvr_status")) db.exec("ALTER TABLE companies ADD COLUMN cvr_status TEXT;");
   if (!hasColumn(db, "companies", "audit_waived")) db.exec("ALTER TABLE companies ADD COLUMN audit_waived INTEGER;");
   if (!hasColumn(db, "companies", "cvr_synced_at")) db.exec("ALTER TABLE companies ADD COLUMN cvr_synced_at TEXT;");
+  // #221: the owner's own payment terms — default days from invoice issue date
+  // to due date. Captured once on the company profile so every invoice inherits
+  // it instead of the owner re-typing it. Older ledgers predate the column.
+  if (!hasColumn(db, "companies", "payment_terms_days")) db.exec("ALTER TABLE companies ADD COLUMN payment_terms_days INTEGER NOT NULL DEFAULT 14 CHECK(payment_terms_days BETWEEN 0 AND 365);");
   // Contact-detail columns on customers/vendors — older ledgers predate the
   // Dinero contacts import + CVR enrichment.
   if (!hasColumn(db, "customers", "phone")) db.exec("ALTER TABLE customers ADD COLUMN phone TEXT;");

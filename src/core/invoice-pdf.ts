@@ -6,7 +6,7 @@ import type { InvoicePayload } from "./invoice";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { promoteTempFile, removeIfExists, writeTempFileFor } from "./atomic-file";
-import { formatAmount, formatDkk } from "./money";
+import { formatAmount } from "./money";
 
 const RULE_ID = "DK-INVOICE-ISSUE-001";
 const PDF_DOCUMENT_TYPE = "issued_invoice_pdf";
@@ -144,11 +144,47 @@ function compact(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
+// ---------------------------------------------------------------------------
+// Danish number formatting (#225)
+//
+// A Danish invoice must show amounts the Danish way — thousands grouped with a
+// period and the decimal separator a comma: `1.000,00`, not `1000.00`. The
+// shared `money.ts` `formatAmount`/`formatDkk` emit the locale-free
+// "1234.56" form for JSON/ledger stability; here, on the customer-facing PDF,
+// we re-group that canonical string into Danish presentation. The arithmetic
+// still runs through `money.ts`, so this is a pure presentation transform.
+// ---------------------------------------------------------------------------
+
+/** Re-group a canonical `formatAmount` string ("-1234.56") into Danish
+ *  presentation ("-1.234,56"). Returns null for null input. */
+function toDanishNumber(canonical: string | null): string | null {
+  if (canonical == null) return null;
+  const negative = canonical.startsWith("-");
+  const unsigned = negative ? canonical.slice(1) : canonical;
+  const [whole = "0", fraction = "00"] = unsigned.split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${negative ? "-" : ""}${grouped},${fraction}`;
+}
+
+/** Format a monetary amount in Danish number format ("1.000,00"), no currency
+ *  suffix. Returns null for null/undefined/empty/NaN. */
+function formatDanishAmount(value: number | string | null | undefined): string | null {
+  return toDanishNumber(formatAmount(value));
+}
+
+/** Format a monetary amount in Danish number format with a currency suffix
+ *  ("1.000,00 DKK"). Returns null for invalid input. */
+function formatDanishDkk(value: number | string | null | undefined, currency = "DKK"): string | null {
+  const amount = formatDanishAmount(value);
+  if (amount == null) return null;
+  return `${amount} ${currency.trim().toUpperCase()}`;
+}
+
 function amountLabel(value: unknown, currency = "DKK") {
   if (value == null || value === "") return null;
   const amount = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(amount)) return null;
-  return formatDkk(amount, currency);
+  return formatDanishDkk(amount, currency);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,8 +309,8 @@ function buildLineItems(payload: IssuedInvoicePdfPayload, currency: string): Lin
   return (payload.lines ?? []).map((line) => ({
     description: compact(line.description) ?? "",
     quantity: line.quantity == null ? "" : String(line.quantity),
-    unitPrice: line.unitPriceExVat == null ? "" : (formatAmount(line.unitPriceExVat) ?? ""),
-    lineTotal: line.lineTotalExVat == null ? "" : (formatAmount(line.lineTotalExVat) ?? ""),
+    unitPrice: line.unitPriceExVat == null ? "" : (formatDanishAmount(line.unitPriceExVat) ?? ""),
+    lineTotal: line.lineTotalExVat == null ? "" : (formatDanishAmount(line.lineTotalExVat) ?? ""),
   }));
 }
 
@@ -609,7 +645,10 @@ export function buildIssuedInvoicePdf(payload: IssuedInvoicePdfPayload) {
   pages.forEach((page, i) => {
     const pageNo = pageObjectNos[i];
     const contentNo = pageNo + 1;
-    const footer = `${title} · Side ${i + 1} af ${pageCount}`;
+    // ASCII separator (#225): a non-ASCII bullet/middle-dot in the footer
+    // rendered as a broken glyph in some PDF viewers ("Faktura 2026-0001 <?>
+    // Side 1"). A plain hyphen is safe in every viewer and font.
+    const footer = `${title} - Side ${i + 1} af ${pageCount}`;
     const content = pageContentStream(page, footer);
     objects.push(
       `${pageNo} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] ` +

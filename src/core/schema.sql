@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS companies (
   cvr_status TEXT,
   audit_waived INTEGER,
   cvr_synced_at TEXT,
+  -- #221: the owner's own default payment terms (days from issue to due date).
+  -- Captured once on the company profile so every issued invoice inherits it.
+  payment_terms_days INTEGER NOT NULL DEFAULT 14 CHECK(payment_terms_days BETWEEN 0 AND 365),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

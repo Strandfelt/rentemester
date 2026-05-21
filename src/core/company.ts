@@ -38,7 +38,14 @@ export type CompanySettings = {
   auditWaived: boolean | null;
   /** ISO timestamp the CVR stamdata above was last synced; null when never. */
   cvrSyncedAt: string | null;
+  /**
+   * #221: the owner's own default payment terms — days from an invoice's issue
+   * date to its due date. Captured once so every issued invoice inherits it.
+   */
+  paymentTermsDays: number;
 };
+
+const DEFAULT_PAYMENT_TERMS_DAYS = 14;
 
 const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   id: 1,
@@ -57,7 +64,79 @@ const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   cvrStatus: null,
   auditWaived: null,
   cvrSyncedAt: null,
+  paymentTermsDays: DEFAULT_PAYMENT_TERMS_DAYS,
 };
+
+/**
+ * #221: the company's own postal address rendered as a single line, built from
+ * the stored `address` / `postalCode` / `city` columns. This is the seller
+ * address that flows onto every issued invoice. Returns null when nothing is
+ * stored so a partially-configured company still produces a valid invoice.
+ */
+export function companyAddressLine(settings: CompanySettings): string | null {
+  const cityLine = [settings.postalCode, settings.city]
+    .map((part) => part?.trim())
+    .filter((part) => part && part.length > 0)
+    .join(" ");
+  const full = [settings.address?.trim(), cityLine]
+    .filter((part) => part && part.length > 0)
+    .join(", ");
+  return full.length > 0 ? full : null;
+}
+
+/**
+ * #221: the company's payment instructions for the customer-facing invoice,
+ * sourced from the ledger's `bank_accounts` table. Deterministic: prefers the
+ * lowest-id active account whose currency matches the invoice, then any
+ * lowest-id active account. Returns undefined when no usable account is
+ * configured so the invoice/PDF simply omits the payment block.
+ */
+export type CompanyPaymentDetails = {
+  bankName: string | null;
+  registrationNo: string | null;
+  accountNo: string | null;
+  iban: string | null;
+};
+
+export function resolveCompanyPaymentDetails(
+  db: Database,
+  currency = "DKK",
+): CompanyPaymentDetails | undefined {
+  let rows: Array<{
+    bank_name: string | null;
+    registration_no: string | null;
+    account_no: string | null;
+    iban: string | null;
+    currency: string | null;
+  }> = [];
+  try {
+    rows = db
+      .query(
+        `SELECT bank_name, registration_no, account_no, iban, currency
+           FROM bank_accounts
+          WHERE active = 1
+          ORDER BY id ASC`,
+      )
+      .all() as typeof rows;
+  } catch {
+    // The table may not exist in very old ledgers; payment block is optional.
+    return undefined;
+  }
+  if (rows.length === 0) return undefined;
+  const wanted = currency.trim().toUpperCase();
+  const match =
+    rows.find((row) => (row.currency ?? "").trim().toUpperCase() === wanted) ?? rows[0];
+  const details: CompanyPaymentDetails = {
+    bankName: match.bank_name?.trim() || null,
+    registrationNo: match.registration_no?.trim() || null,
+    accountNo: match.account_no?.trim() || null,
+    iban: match.iban?.trim() || null,
+  };
+  if (!details.bankName && !details.registrationNo && !details.accountNo && !details.iban) {
+    return undefined;
+  }
+  return details;
+}
 
 export function normalizeCvr(value?: string | null): string | null {
   const trimmed = value?.trim();
@@ -80,6 +159,18 @@ export function normalizeFiscalYearLabelStrategy(value?: string | null): FiscalY
   return null;
 }
 
+/**
+ * #221: validate the owner's default payment-terms-in-days input. Accepts an
+ * integer 0..365 (the `companies.payment_terms_days` CHECK range). Returns null
+ * on anything else so callers can surface a clear error.
+ */
+export function normalizePaymentTermsDays(value?: number | string | null): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const days = typeof value === "string" ? Number(value) : value;
+  if (!Number.isInteger(days) || (days as number) < 0 || (days as number) > 365) return null;
+  return days as number;
+}
+
 const DEFAULT_POLICY_YAML =
   "company_policy:\n" +
   "  country: DK\n" +
@@ -87,13 +178,68 @@ const DEFAULT_POLICY_YAML =
   "  allow_direct_sql_write: false\n" +
   "  block_if_uncertain: true\n";
 
+/**
+ * #221: the company's own payment details captured at `init` (or later via the
+ * profile). When any field is set, `init`/`company add` creates a primary
+ * `bank_accounts` row so the customer-facing invoice PDF always shows where to
+ * pay. All fields are optional — a company can be initialised without them.
+ */
+export type CompanyPaymentInput = {
+  bankName?: string | null;
+  registrationNo?: string | null;
+  accountNo?: string | null;
+  iban?: string | null;
+};
+
 export type CompanyInitOptions = {
   /** Display name stored in the ledger's `companies` row (id = 1). */
   name?: string;
   cvr?: string | null;
   fiscalYearStartMonth?: number | string | null;
   fiscalYearLabelStrategy?: string | null;
+  /** #221: the company's own postal address — the seller address on invoices. */
+  address?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  /** #221: default payment terms in days (issue date -> due date). */
+  paymentTermsDays?: number | string | null;
+  /** #221: payment details; when any field is set a bank account is created. */
+  payment?: CompanyPaymentInput;
 };
+
+/** True when at least one payment-detail field carries real information. */
+function hasPaymentInfo(payment?: CompanyPaymentInput): payment is CompanyPaymentInput {
+  if (!payment) return false;
+  return Boolean(
+    payment.bankName?.trim() ||
+      payment.registrationNo?.trim() ||
+      payment.accountNo?.trim() ||
+      payment.iban?.trim(),
+  );
+}
+
+/**
+ * #221: create the company's primary bank account from captured payment
+ * details, if one does not already exist. Idempotent — a second call with the
+ * same slug is a silent no-op so re-running `init` or editing the profile never
+ * fails on the append-only `bank_accounts` guard.
+ */
+function upsertPrimaryBankAccount(db: Database, currency: string, payment: CompanyPaymentInput) {
+  const existing = db
+    .query("SELECT id FROM bank_accounts WHERE slug = 'primaer' LIMIT 1")
+    .get() as { id: number } | null;
+  if (existing) return;
+  db.query(
+    `INSERT INTO bank_accounts (slug, name, bank_name, registration_no, account_no, iban, currency)
+     VALUES ('primaer', 'Driftskonto', ?, ?, ?, ?, ?)`,
+  ).run(
+    payment.bankName?.trim() || null,
+    payment.registrationNo?.trim() || null,
+    payment.accountNo?.trim() || null,
+    payment.iban?.trim() || null,
+    currency,
+  );
+}
 
 export type CompanyInitResult = {
   companyRoot: string;
@@ -128,6 +274,11 @@ export function initialiseCompanyVolume(
       );
     }
   }
+  if (options.paymentTermsDays !== undefined && options.paymentTermsDays !== null) {
+    if (normalizePaymentTermsDays(options.paymentTermsDays) === null) {
+      throw new Error("paymentTermsDays must be an integer between 0 and 365");
+    }
+  }
 
   const p = ensureCompanyDirs(companyRoot);
   const db = openDb(p.db);
@@ -140,15 +291,30 @@ export function initialiseCompanyVolume(
     const fiscalYearLabelStrategy =
       normalizeFiscalYearLabelStrategy(options.fiscalYearLabelStrategy) ?? "end-year";
     const name = options.name?.trim() || DEFAULT_COMPANY_SETTINGS.name;
+    const address = options.address?.trim() || null;
+    const postalCode = options.postalCode?.trim() || null;
+    const city = options.city?.trim() || null;
+    const paymentTermsDays =
+      normalizePaymentTermsDays(options.paymentTermsDays) ?? DEFAULT_PAYMENT_TERMS_DAYS;
     db.query(
-      `INSERT INTO companies (id, name, cvr, fiscal_year_start_month, fiscal_year_label_strategy)
-       VALUES (1, ?, ?, ?, ?)
+      `INSERT INTO companies (id, name, cvr, fiscal_year_start_month, fiscal_year_label_strategy,
+                              address, postal_code, city, payment_terms_days)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          cvr = excluded.cvr,
          fiscal_year_start_month = excluded.fiscal_year_start_month,
-         fiscal_year_label_strategy = excluded.fiscal_year_label_strategy`,
-    ).run(name, cvr, fiscalYearStartMonth, fiscalYearLabelStrategy);
+         fiscal_year_label_strategy = excluded.fiscal_year_label_strategy,
+         address = excluded.address,
+         postal_code = excluded.postal_code,
+         city = excluded.city,
+         payment_terms_days = excluded.payment_terms_days`,
+    ).run(name, cvr, fiscalYearStartMonth, fiscalYearLabelStrategy, address, postalCode, city, paymentTermsDays);
+    // #221: capture payment details once — create the primary bank account so
+    // every customer-facing invoice PDF shows where to pay.
+    if (hasPaymentInfo(options.payment)) {
+      upsertPrimaryBankAccount(db, DEFAULT_COMPANY_SETTINGS.currency, options.payment);
+    }
     const policy = join(p.config, "policy.yaml");
     if (!existsSync(policy)) writeFileSync(policy, DEFAULT_POLICY_YAML);
     db.run(
@@ -247,6 +413,11 @@ export function createCompany(
     cvr: options.cvr,
     fiscalYearStartMonth: options.fiscalYearStartMonth,
     fiscalYearLabelStrategy: options.fiscalYearLabelStrategy,
+    address: options.address,
+    postalCode: options.postalCode,
+    city: options.city,
+    paymentTermsDays: options.paymentTermsDays,
+    payment: options.payment,
   });
   // registerWorkspaceCompany throws on a duplicate slug, so the manifest and
   // the on-disk directory cannot drift apart silently.
@@ -263,7 +434,7 @@ export function getCompanySettings(db: Database): CompanySettings {
   const row = db.query(
     `SELECT id, name, country, currency, cvr, fiscal_year_start_month, fiscal_year_label_strategy,
             address, postal_code, city, company_form, industry_code, industry_text,
-            cvr_status, audit_waived, cvr_synced_at
+            cvr_status, audit_waived, cvr_synced_at, payment_terms_days
        FROM companies
       ORDER BY id ASC
       LIMIT 1`
@@ -284,6 +455,7 @@ export function getCompanySettings(db: Database): CompanySettings {
     cvr_status: string | null;
     audit_waived: number | null;
     cvr_synced_at: string | null;
+    payment_terms_days: number | null;
   } | null;
 
   if (!row) return DEFAULT_COMPANY_SETTINGS;
@@ -304,7 +476,119 @@ export function getCompanySettings(db: Database): CompanySettings {
     cvrStatus: row.cvr_status,
     auditWaived: row.audit_waived === null ? null : row.audit_waived === 1,
     cvrSyncedAt: row.cvr_synced_at,
+    paymentTermsDays:
+      normalizePaymentTermsDays(row.payment_terms_days) ?? DEFAULT_PAYMENT_TERMS_DAYS,
   };
+}
+
+/**
+ * #221: the editable company profile. After `init`, the owner adjusts their own
+ * master data (name, address, CVR, default payment terms, payment details)
+ * here, once — every subsequently-issued invoice and its PDF pick the new
+ * values up automatically. Only the fields actually passed are changed; the
+ * rest keep their current value. The primary bank account is created on first
+ * use and is append-only thereafter (the `bank_accounts` guard), so updating
+ * payment details after one already exists is reported, not silently dropped.
+ */
+export type SetCompanyProfileOptions = {
+  name?: string | null;
+  cvr?: string | null;
+  address?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  paymentTermsDays?: number | string | null;
+  payment?: CompanyPaymentInput;
+};
+
+export type SetCompanyProfileResult = {
+  ok: boolean;
+  /** The company settings after the update (unchanged on failure). */
+  settings?: CompanySettings;
+  /** Names of the profile fields that actually changed. */
+  updatedFields?: string[];
+  errors: string[];
+};
+
+export function setCompanyProfile(
+  db: Database,
+  options: SetCompanyProfileOptions,
+): SetCompanyProfileResult {
+  const errors: string[] = [];
+  let cvr: string | null | undefined;
+  if (options.cvr !== undefined) {
+    try {
+      cvr = normalizeCvr(options.cvr);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  let paymentTermsDays: number | undefined;
+  if (options.paymentTermsDays !== undefined && options.paymentTermsDays !== null) {
+    const normalized = normalizePaymentTermsDays(options.paymentTermsDays);
+    if (normalized === null) {
+      errors.push("paymentTermsDays must be an integer between 0 and 365");
+    } else {
+      paymentTermsDays = normalized;
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors };
+
+  const before = getCompanySettings(db);
+  // A first `setCompanyProfile` before `init` ran would have no row; guard it.
+  const exists = db.query("SELECT id FROM companies WHERE id = 1").get() as
+    | { id: number }
+    | null;
+  if (!exists) {
+    return {
+      ok: false,
+      errors: ["company has not been initialised — run 'rentemester init' first"],
+    };
+  }
+
+  const result = db.transaction(() => {
+    const name = options.name !== undefined ? options.name?.trim() || before.name : before.name;
+    const nextCvr = options.cvr !== undefined ? cvr ?? null : before.cvr;
+    const address =
+      options.address !== undefined ? options.address?.trim() || null : before.address;
+    const postalCode =
+      options.postalCode !== undefined ? options.postalCode?.trim() || null : before.postalCode;
+    const city = options.city !== undefined ? options.city?.trim() || null : before.city;
+    const terms = paymentTermsDays ?? before.paymentTermsDays;
+
+    db.query(
+      `UPDATE companies SET
+         name = ?, cvr = ?, address = ?, postal_code = ?, city = ?, payment_terms_days = ?
+       WHERE id = 1`,
+    ).run(name, nextCvr, address, postalCode, city, terms);
+
+    if (hasPaymentInfo(options.payment)) {
+      upsertPrimaryBankAccount(db, before.currency, options.payment);
+    }
+
+    insertAuditLog(db, {
+      eventType: "company_profile_update",
+      entityType: "company",
+      entityId: 1,
+      message: "Updated company profile (identity / payment details)",
+    });
+    return getCompanySettings(db);
+  }, { immediate: true })();
+
+  const updatedFields: string[] = [];
+  const compare: Array<[string, unknown, unknown]> = [
+    ["name", before.name, result.name],
+    ["cvr", before.cvr, result.cvr],
+    ["address", before.address, result.address],
+    ["postalCode", before.postalCode, result.postalCode],
+    ["city", before.city, result.city],
+    ["paymentTermsDays", before.paymentTermsDays, result.paymentTermsDays],
+  ];
+  for (const [field, prev, next] of compare) {
+    if (prev !== next) updatedFields.push(field);
+  }
+  if (hasPaymentInfo(options.payment)) updatedFields.push("payment");
+
+  return { ok: true, settings: result, updatedFields, errors: [] };
 }
 
 export type SyncCompanyFromCvrResult = {

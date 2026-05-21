@@ -74,7 +74,8 @@ describe("invoice issue", () => {
     expect(pdfText.startsWith("%PDF-")).toBe(true);
     expect(pdfText).toContain("2026-0001");
     expect(pdfText).toContain("DK12345678");
-    expect(pdfText).toContain("250.00 DKK");
+    // #225: customer-facing amounts use Danish number format (1.000,00).
+    expect(pdfText).toContain("250,00 DKK");
 
     const rerender = renderIssuedInvoicePdf(db, root, { invoiceDocumentId: result.documentId! });
     expect(rerender.ok).toBe(true);
