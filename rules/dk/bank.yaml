@@ -1,4 +1,4 @@
-version: dk-bank-v0.0.1
+version: dk-bank-v0.0.2
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
 rules:
@@ -6,6 +6,9 @@ rules:
     name: Imported bank statements are checked for running-balance continuity
     category: bank_import_integrity
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 11, stk. 1"
+        text_hash: "sha256:8a1a2a31b9b0c4e29a1b74f5433907f26f276c95348950c907dc5e8f758f1eea"
     severity: warning
     machine_rule:
       require: running_balance_continuity_after_import

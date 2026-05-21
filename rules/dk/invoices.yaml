@@ -1,4 +1,4 @@
-version: dk-invoices-v0.0.5
+version: dk-invoices-v0.0.6
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
   - DK-MOMSLOVEN-2024-209
@@ -9,6 +9,25 @@ rules:
     name: Full invoice must contain core seller/buyer/date/number/content fields
     category: invoice_validation
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1"
+        text_hash: "sha256:04629844bae235a49e49aaa95f21e625e1a8bbca1c51bccc0604cc20a3bdb97a"
+      - ref: "§ 58, stk. 1, nr. 1"
+        text_hash: "sha256:4463074fada169cd88e0291f97ebdf745ea34313ef80367d6cb5290c28bfffcd"
+      - ref: "§ 58, stk. 1, nr. 2"
+        text_hash: "sha256:9908ba73ceb7a4bae7d4b0b205d2bc1d4f96ee8618ecc0487ea8822872e9c0a6"
+      - ref: "§ 58, stk. 1, nr. 3"
+        text_hash: "sha256:d54964a3131ee814ebb54da5b83d20a2e176af65727f6a3fbe962e33f8bf64c6"
+      - ref: "§ 58, stk. 1, nr. 4"
+        text_hash: "sha256:181efbfec0d47a7be280304e056b1c2e641555e6b3e7ccc7c21e059beb3e6f6b"
+      - ref: "§ 58, stk. 1, nr. 5"
+        text_hash: "sha256:16d656787bb9c323ef4d2c9790c5ea0efd0966ff6d14a6e3f7838690121cf158"
+      - ref: "§ 58, stk. 1, nr. 7"
+        text_hash: "sha256:fbf5c12a82de96cc008148a8bf4b77c284e520ab3b983d3e93e8701f16398cf9"
+      - ref: "§ 58, stk. 1, nr. 8"
+        text_hash: "sha256:b3b34287303c4a5f0277a3f0eeb7f5463387c95a96b0d70bed93574c99fe3992"
+      - ref: "§ 58, stk. 1, nr. 9"
+        text_hash: "sha256:090223e9a56ea922e65eb53deb4ebd9a9bc20db57199ce2af4ffa83253da4670"
     severity: hard_stop
     machine_rule:
       require:
@@ -27,6 +46,19 @@ rules:
     name: Simplified invoice is only allowed up to DKK 3,000 gross and needs the reduced field set
     category: invoice_validation
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 66, stk. 1"
+        text_hash: "sha256:40b7167b428477997204c7760bd21f32d7b805f92fbc1ed5af49daed55b4db99"
+      - ref: "§ 66, stk. 1, nr. 1"
+        text_hash: "sha256:65e2c36333d63c78a7a8519acda7e83eff79ce9ae817a1665b3a53ca2c3a363b"
+      - ref: "§ 66, stk. 1, nr. 2"
+        text_hash: "sha256:08d364f094d18954be4f5f7cbde06189c901f424f59f079d47c4eac0b864807c"
+      - ref: "§ 66, stk. 1, nr. 3"
+        text_hash: "sha256:df1452d54aea336fbc99df5917980d748d7a1ee167f1bfb64423fb30e7a21911"
+      - ref: "§ 66, stk. 1, nr. 4"
+        text_hash: "sha256:b4ee711947827b55e13cd2a08a731cdefd384ff2e7710a5a983854d1141726bd"
+      - ref: "§ 66, stk. 1, nr. 5"
+        text_hash: "sha256:583e2cfe5df1765dbc888db1737ef06fb0edca36d34672a38992933d84ef5f21"
     severity: hard_stop
     machine_rule:
       condition: invoice_type == 'simplified'
@@ -44,6 +76,11 @@ rules:
     name: Reverse-charge invoices must omit VAT amount/rate and include a reverse-charge note
     category: invoice_validation
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 59, stk. 1"
+        text_hash: "sha256:2f8fec79698582aa822d0a91c30b12b0932e42bc04e4a120ec55a5511a0aa1b3"
+      - ref: "§ 60, stk. 1"
+        text_hash: "sha256:b00d554746fb7d423668afeada440ae77edc48fe3eb107472d66aff9cc604945"
     severity: hard_stop
     machine_rule:
       condition: vat_treatment in ['domestic_reverse_charge', 'foreign_reverse_charge']
@@ -57,6 +94,11 @@ rules:
     name: Reverse-charge faktura skal angive den specifikke lovbestemmelse som fritagelsesgrundlag
     category: invoice_validation
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 60, stk. 1"
+        text_hash: "sha256:b00d554746fb7d423668afeada440ae77edc48fe3eb107472d66aff9cc604945"
+      - ref: "§ 62, stk. 1"
+        text_hash: "sha256:e7b6d5902dcd7a2a46a0a2771174d3d502d843ef219e55183cdf320e8614592f"
     severity: hard_stop
     machine_rule:
       condition: vat_treatment in ['domestic_reverse_charge', 'foreign_reverse_charge']
@@ -70,6 +112,9 @@ rules:
     name: Faktura skal angive leveringsdato når den afviger fra udstedelsesdato
     category: invoice_validation
     source_id: DK-MOMSLOVEN-2024-209
+    provisions:
+      - ref: "§ 23, stk. 2"
+        text_hash: "sha256:e29ceb8c88182ef2a3b0de41fa6d912d2bab381be061f805b53cacb834401b06"
     severity: hard_stop
     machine_rule:
       require:
@@ -83,6 +128,11 @@ rules:
     name: Invoice line sums and totals must be arithmetically consistent before issue
     category: invoice_validation
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1, nr. 7"
+        text_hash: "sha256:fbf5c12a82de96cc008148a8bf4b77c284e520ab3b983d3e93e8701f16398cf9"
+      - ref: "§ 58, stk. 1, nr. 9"
+        text_hash: "sha256:090223e9a56ea922e65eb53deb4ebd9a9bc20db57199ce2af4ffa83253da4670"
     severity: hard_stop
     machine_rule:
       require:
@@ -97,6 +147,9 @@ rules:
     name: Issued invoices must be stored immutably with sequential invoice numbers
     category: invoice_integrity
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1, nr. 2"
+        text_hash: "sha256:9908ba73ceb7a4bae7d4b0b205d2bc1d4f96ee8618ecc0487ea8822872e9c0a6"
     severity: hard_stop
     machine_rule:
       require:
@@ -110,6 +163,11 @@ rules:
     name: Customer master data reused on invoices must resolve deterministically before issue
     category: invoice_integrity
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1"
+        text_hash: "sha256:04629844bae235a49e49aaa95f21e625e1a8bbca1c51bccc0604cc20a3bdb97a"
+      - ref: "§ 58, stk. 1, nr. 4"
+        text_hash: "sha256:181efbfec0d47a7be280304e056b1c2e641555e6b3e7ccc7c21e059beb3e6f6b"
     severity: hard_stop
     machine_rule:
       require:
@@ -172,6 +230,11 @@ rules:
     name: Customer invoices must expose a deterministic due date and overdue classification
     category: invoice_lifecycle
     source_id: DK-RENTELOVEN-2014-459
+    provisions:
+      - ref: "§ 3, stk. 1"
+        text_hash: "sha256:1bc08bf70f7a73f1d25a70ec3393b6f176492d2d31f39910b84602b655582962"
+      - ref: "§ 3, stk. 2"
+        text_hash: "sha256:86e6c5b8e8aa4d909d067240a608c5b517f30c005e5991472e1051f70f07826f"
     severity: hard_stop
     machine_rule:
       require:
@@ -184,6 +247,9 @@ rules:
     name: Overdue customer invoices must support deterministic statutory late-interest calculation
     category: invoice_lifecycle
     source_id: DK-RENTELOVEN-2014-459
+    provisions:
+      - ref: "§ 5, stk. 1"
+        text_hash: "sha256:1afb43f039820251355a071d780d7c0263ff307daa1381903310bb72cfe71bba"
     severity: hard_stop
     machine_rule:
       require:
@@ -198,6 +264,9 @@ rules:
     name: A late-interest claim may only be registered from a deterministic calculation and must remain traceable in the claim balance
     category: invoice_lifecycle
     source_id: DK-RENTELOVEN-2014-459
+    provisions:
+      - ref: "§ 5, stk. 1"
+        text_hash: "sha256:1afb43f039820251355a071d780d7c0263ff307daa1381903310bb72cfe71bba"
     severity: hard_stop
     machine_rule:
       require:
@@ -212,6 +281,9 @@ rules:
     name: Registered late-interest claims must be bookable once to receivables and non-VAT claim income
     category: invoice_accounting
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -226,6 +298,11 @@ rules:
     name: Reminder fees must respect statutory max amount, max count, and spacing
     category: invoice_lifecycle
     source_id: DK-RENTELOVEN-2014-459
+    provisions:
+      - ref: "§ 9b, stk. 1"
+        text_hash: "sha256:2a6309a80034886551544568990e364cf5e7797f16a28169b13cab12e1caeaa3"
+      - ref: "§ 9b, stk. 2"
+        text_hash: "sha256:e286daf0fe44881b41f3da26eb793c05aa8edd728628bcbb64d4857fa107e7c2"
     severity: hard_stop
     machine_rule:
       require:
@@ -242,6 +319,9 @@ rules:
     name: Registered reminder fees must be bookable once to receivables and non-VAT claim income
     category: invoice_accounting
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -284,6 +364,9 @@ rules:
     name: Registered fixed compensation claims must be bookable once to receivables and non-VAT claim income
     category: invoice_accounting
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -298,6 +381,11 @@ rules:
     name: Issued sales invoices must create one traceable receivable, revenue, and VAT journal entry
     category: invoice_accounting
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1, nr. 7"
+        text_hash: "sha256:fbf5c12a82de96cc008148a8bf4b77c284e520ab3b983d3e93e8701f16398cf9"
+      - ref: "§ 58, stk. 1, nr. 9"
+        text_hash: "sha256:090223e9a56ea922e65eb53deb4ebd9a9bc20db57199ce2af4ffa83253da4670"
     severity: hard_stop
     machine_rule:
       require:
@@ -312,6 +400,11 @@ rules:
     name: Reverse-charge sales invoices and fallback credit notes must post without an output-VAT line
     category: invoice_accounting
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 59, stk. 1"
+        text_hash: "sha256:2f8fec79698582aa822d0a91c30b12b0932e42bc04e4a120ec55a5511a0aa1b3"
+      - ref: "§ 60, stk. 1"
+        text_hash: "sha256:b00d554746fb7d423668afeada440ae77edc48fe3eb107472d66aff9cc604945"
     severity: hard_stop
     machine_rule:
       require:
@@ -402,6 +495,11 @@ rules:
     name: Credit notes must reference the original issued invoice and mirror the corrected VAT effect
     category: invoice_correction
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 2"
+        text_hash: "sha256:7491f9df0204116cdee57939d3765170ba8de20a2188e6cc807fded3d7f64227"
+      - ref: "§ 66, stk. 1, nr. 6"
+        text_hash: "sha256:5708034ac432b9bee2826945ba679fca8327f0e328a999268d84e9f256d96248"
     severity: hard_stop
     machine_rule:
       require:
@@ -434,6 +532,11 @@ rules:
     name: Uncollectible customer invoice receivables must be written off through an append-only, invoice-linked correction entry
     category: invoice_lifecycle
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
+      - ref: "§ 9, stk. 3"
+        text_hash: "sha256:87459b2827cedd7f32dba1aaa78bb13b8afa8f2b6edd152a8ec8ba688461b8f2"
     severity: hard_stop
     machine_rule:
       require:
@@ -449,6 +552,9 @@ rules:
     name: Issued invoices cannot be modified
     category: invoice_integrity
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 2"
+        text_hash: "sha256:7491f9df0204116cdee57939d3765170ba8de20a2188e6cc807fded3d7f64227"
     severity: hard_stop
     machine_rule:
       forbid: [modify_issued_invoice, delete_issued_invoice]
@@ -459,6 +565,9 @@ rules:
     name: Recurring invoice templates store an immutable, pre-validated invoice specification
     category: invoice_lifecycle
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1"
+        text_hash: "sha256:04629844bae235a49e49aaa95f21e625e1a8bbca1c51bccc0604cc20a3bdb97a"
     severity: hard_stop
     machine_rule:
       require:
