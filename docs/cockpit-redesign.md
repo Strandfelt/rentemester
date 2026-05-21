@@ -310,3 +310,25 @@ viser arkiv-tallene (skrivebeskyttet-banner). Views uden arkiv-data viser en
 ærlig "ikke tilgængelig"-tilstand. Flerårsoversigten sammenligner nu resultat,
 balance og nøgletal på tværs af alle år. Endelig verifikation: **710 tests
 grønne · smoke grøn**; alle fire regnskabsår balancerer.
+
+---
+
+## Runde 4 — porteføljeoversigten
+
+Ejer-feedback: porteføljekortet viser forkerte/forældede tal (`/api/portfolio`
+bruger gammel #171-logik — moms beregnes til 0 for Dinero-importerede ledgers,
+samme fejl som per-virksomhed blev rettet i runde 1). Og kortet mangler det en
+ejer dømmer en virksomhed på: resultat, likviditet, omsætning. For en ejer med
+flere virksomheder skal oversigten give pr.-virksomhed-helbred + et tværgående
+overblik + hvor man skal handle.
+
+### Iteration 12 — Portefølje med rigtige tal
+- [ ] Backend: omskriv `buildPortfolioOverview` — hver virksomhed får de rigtige
+      tal (resultat, omsætning, faktisk banksaldo, moms via `vatPositionForPeriod`
+      + frist, grupperede opgaver) ved at genbruge per-virksomheds-logikken;
+      plus en tværgående opsummering (samlet resultat, likviditet, moms-skyld)
+- [ ] Frontend: redesign virksomhedskortet — overskrifts-helbred (resultat,
+      bank, omsætning, moms+frist, opgaver); kort klikbart ind i virksomheden
+- [ ] Frontend: tværgående opsummerings-stribe øverst på porteføljen
+- [ ] Frontend: virksomheder der kræver opmærksomhed markeres/sorteres øverst
+- [ ] **Visuel inspektion**
