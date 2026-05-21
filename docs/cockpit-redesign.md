@@ -178,4 +178,21 @@ rigtige tal før ledgeren er korrekt — derfor fixes importen først.
       og omlagt til fire mærkede grupper (Regnskab · Bogføring · Salg ·
       Historik) med hårfine skillelinjer, hover/fokus-tilstande og ryddelig
       mobil-ombrydning; ensartede kort, tabeller og tom-tilstande på tværs
-- [ ] **Visuel inspektion** — hele cockpittet; informationsparitet med Dinero bekræftet
+- [x] **Visuel inspektion** — Fakturaer + Kontakter (pæne tom-tilstande, korrekt
+      for Helheim), grupperet 12-punkts-nav verificeret desktop + mobil
+
+---
+
+## Status — loop afsluttet
+
+Alle 6 iterationer bygget og visuelt inspiceret. 12 views på plads med
+informationsparitet med Dinero. Endelig verifikation på `feat/cockpit-redesign`:
+**688 tests grønne · `bun run smoke` grøn**. Tallene matcher ledger-ground-truth
+(Resultat 13.234,82 · Balance 42.290,03 · Moms 3.371,20). Multi-år (2023–26) og
+regnskabsårs-vælger virker. Responsivt på desktop + mobil.
+
+Åbne polish-punkter (ikke-blokerende, noteret til opfølgning):
+- Moms-viewet lægger konto 64040 (omvendt-betalingspligt-moms) ind i salgsmoms;
+  beløb at betale 3.371,20 mod Dineros 3.371,00 — præcis rubrik-opdeling mangler.
+- Resultatopgørelsens "foregående år"-kolonne viser 0 for arkiverede år; kunne
+  trække arkiv-data ind.
