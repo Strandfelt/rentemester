@@ -1,12 +1,12 @@
-// Portfolio overview — one card per company, "needs attention" first.
+// Portfolio overview — the workspace-level landing page.
 //
-// Deliberately juxtaposes the separate legal entities: it shows a count of
-// companies and per-company figures, but never sums receivables/VAT across
-// them, because they are distinct legal entities.
+// A cross-company roll-up strip answers "how is the whole portfolio doing",
+// and one card per company shows the headline health an owner judges a
+// company on. Companies that need attention sort to the top and are flagged.
 
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { sortByAttention } from "../lib/format";
+import { formatKroner, sortByAttention } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import { CompanyCard } from "../components/CompanyCard";
 import { ErrorState, Loading } from "../components/Feedback";
@@ -25,9 +25,7 @@ export function PortfolioView() {
   // First run: an empty workspace drops straight into onboarding.
   if (portfolio.companies.length === 0) {
     return (
-      <Onboarding
-        onCreated={(slug) => navigate(`/companies/${slug}`)}
-      />
+      <Onboarding onCreated={(slug) => navigate(`/companies/${slug}`)} />
     );
   }
 
@@ -37,10 +35,14 @@ export function PortfolioView() {
       !c.archived &&
       (c.ledgerMissing ||
         !c.auditChainOk ||
-        c.openExceptionCount > 0 ||
-        c.overdueInvoiceCount > 0 ||
-        c.unlinkedBankCount > 0),
+        c.resultat < 0 ||
+        c.openTaskCount > 0 ||
+        (c.vat !== null &&
+          c.vat.payable > 0 &&
+          c.vat.daysRemaining <= 30)),
   ).length;
+
+  const { rollup } = portfolio;
 
   return (
     <section>
@@ -57,6 +59,39 @@ export function PortfolioView() {
           Tilføj virksomhed
         </Link>
       </div>
+
+      {rollup && (
+        <div className="rollup-strip" aria-label="Tværgående overblik">
+          <div
+            className={`rollup-cell ${rollup.resultat < 0 ? "neg" : "pos"}`}
+          >
+            <span className="rollup-label">Samlet resultat</span>
+            <span className="rollup-value">
+              {formatKroner(rollup.resultat)}
+            </span>
+          </div>
+          <div className="rollup-cell">
+            <span className="rollup-label">Samlet likviditet</span>
+            <span className="rollup-value">
+              {formatKroner(rollup.liquidity)}
+            </span>
+          </div>
+          <div className="rollup-cell">
+            <span className="rollup-label">Moms at betale</span>
+            <span className="rollup-value">
+              {formatKroner(rollup.vatPayable)}
+            </span>
+          </div>
+          <div
+            className={`rollup-cell ${
+              rollup.openTaskCount > 0 ? "warn" : ""
+            }`}
+          >
+            <span className="rollup-label">Åbne opgaver</span>
+            <span className="rollup-value">{rollup.openTaskCount}</span>
+          </div>
+        </div>
+      )}
 
       <div className="company-grid">
         {ordered.map((c) => (

@@ -396,6 +396,123 @@ td.num,
   font-weight: var(--text-weight-semibold);
 }
 
+/* ---- portfolio roll-up strip (cross-company overview) ---- */
+.rollup-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+.rollup-cell {
+  background: var(--color-paper-raised);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+}
+.rollup-cell.pos {
+  border-top-color: var(--ok);
+}
+.rollup-cell.neg {
+  border-top-color: var(--critical);
+}
+.rollup-cell.warn {
+  border-top-color: var(--warning);
+}
+.rollup-cell .rollup-label {
+  display: block;
+  font-size: var(--text-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+.rollup-cell .rollup-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-xl);
+  font-weight: var(--text-weight-bold);
+  margin-top: var(--space-xxs);
+  line-height: 1.2;
+}
+.rollup-cell.neg .rollup-value {
+  color: var(--critical);
+}
+.rollup-cell.warn .rollup-value {
+  color: var(--warning);
+}
+
+/* ---- company-card headline metrics ---- */
+.cc-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm) var(--space-md);
+  padding-top: var(--space-xxs);
+}
+.cc-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cc-metric .m-label {
+  font-size: var(--text-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+.cc-metric .m-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-lg);
+  font-weight: var(--text-weight-semibold);
+}
+.cc-metric.pos .m-value {
+  color: var(--ok);
+}
+.cc-metric.neg .m-value {
+  color: var(--critical);
+}
+.cc-metric .m-sub {
+  font-size: var(--text-size-xs);
+  color: var(--text-dim);
+}
+.cc-metric .m-sub.sub-warning {
+  color: var(--warning);
+  font-weight: var(--text-weight-medium);
+}
+.cc-metric .m-sub.sub-critical {
+  color: var(--critical);
+  font-weight: var(--text-weight-medium);
+}
+
+/* ---- company-card open-tasks block ---- */
+.cc-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-xxs);
+  border-top: 1px solid var(--border);
+}
+.cc-task-none {
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.cc-task-count {
+  font-size: var(--text-size-sm);
+  font-weight: var(--text-weight-semibold);
+  color: var(--text);
+}
+.cc-task-line {
+  font-size: var(--text-size-xs);
+  color: var(--text-dim);
+}
+.cc-task-line.sev-high {
+  color: var(--critical);
+}
+.cc-task-line.sev-medium {
+  color: var(--warning);
+}
+
 /* ==========================================================================
    Flags & badges
    ========================================================================== */
@@ -1288,6 +1405,14 @@ table.statement-table td.num.muted {
   }
   .metric-row {
     grid-template-columns: 1fr;
+  }
+  .rollup-strip {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+  }
+  .cc-metrics {
+    grid-template-columns: 1fr 1fr;
   }
   .kpi-row {
     gap: var(--space-sm);

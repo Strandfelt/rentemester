@@ -20,7 +20,7 @@ describe("formatCurrency", () => {
 });
 
 describe("attentionFlags", () => {
-  test("a clean company has no flags", () => {
+  test("a healthy company has no flags", () => {
     expect(attentionFlags(summary())).toEqual([]);
     expect(attentionLevel(summary())).toBe("ok");
   });
@@ -35,12 +35,30 @@ describe("attentionFlags", () => {
     expect(attentionLevel(summary({ auditChainOk: false }))).toBe("critical");
   });
 
-  test("overdue invoices are a warning, not critical", () => {
-    expect(attentionLevel(summary({ overdueInvoiceCount: 2 }))).toBe("warning");
+  test("a negative result is critical", () => {
+    expect(attentionLevel(summary({ resultat: -500 }))).toBe("critical");
   });
 
-  test("open exceptions outrank overdue invoices to critical", () => {
-    const c = summary({ openExceptionCount: 1, overdueInvoiceCount: 3 });
+  test("open tasks are a warning, not critical", () => {
+    expect(attentionLevel(summary({ openTaskCount: 2 }))).toBe("warning");
+  });
+
+  test("a VAT deadline within 30 days is a warning", () => {
+    const c = summary({
+      vat: { payable: 3371.2, deadline: "2026-06-01", daysRemaining: 12 },
+    });
+    expect(attentionLevel(c)).toBe("warning");
+  });
+
+  test("an overdue VAT deadline is critical", () => {
+    const c = summary({
+      vat: { payable: 3371.2, deadline: "2026-01-01", daysRemaining: -4 },
+    });
+    expect(attentionLevel(c)).toBe("critical");
+  });
+
+  test("a negative result outranks open tasks to critical", () => {
+    const c = summary({ resultat: -100, openTaskCount: 3 });
     expect(attentionLevel(c)).toBe("critical");
   });
 });
@@ -51,7 +69,7 @@ describe("sortByAttention", () => {
     const warn = summary({
       slug: "warn-co",
       name: "Warn Co",
-      overdueInvoiceCount: 1,
+      openTaskCount: 1,
     });
     const crit = summary({
       slug: "crit-co",

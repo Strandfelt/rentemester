@@ -5,12 +5,22 @@ import { renderAt } from "../test/render";
 import { mockFetch, summary } from "../test/fixtures";
 
 function portfolioRoute(companies: ReturnType<typeof summary>[]) {
+  const rollup = companies.reduce(
+    (acc, c) => ({
+      resultat: acc.resultat + c.resultat,
+      liquidity: acc.liquidity + (c.actualBankBalance ?? 0),
+      vatPayable: acc.vatPayable + (c.vat?.payable ?? 0),
+      openTaskCount: acc.openTaskCount + c.openTaskCount,
+    }),
+    { resultat: 0, liquidity: 0, vatPayable: 0, openTaskCount: 0 },
+  );
   return {
     "GET /api/portfolio": {
       portfolio: {
         workspace: "/ws",
         asOf: "2026-05-20",
         companyCount: companies.length,
+        rollup,
         totals: {},
         companies,
       },
@@ -45,12 +55,24 @@ describe("PortfolioView", () => {
   test("shows the attention summary count", async () => {
     mockFetch(
       portfolioRoute([
-        summary({ slug: "a", name: "A", overdueInvoiceCount: 1 }),
+        summary({ slug: "a", name: "A", openTaskCount: 1 }),
         summary({ slug: "b", name: "B" }),
       ]),
     );
     renderAt(<PortfolioView />);
     expect(await screen.findByText(/1 kræver opmærksomhed/i)).toBeInTheDocument();
+  });
+
+  test("renders the cross-company roll-up strip", async () => {
+    mockFetch(
+      portfolioRoute([
+        summary({ slug: "a", name: "A" }),
+        summary({ slug: "b", name: "B" }),
+      ]),
+    );
+    renderAt(<PortfolioView />);
+    expect(await screen.findByText(/Samlet resultat/i)).toBeInTheDocument();
+    expect(screen.getByText(/Samlet likviditet/i)).toBeInTheDocument();
   });
 
   test("surfaces an API error with a retry affordance", async () => {

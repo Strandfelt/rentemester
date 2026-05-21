@@ -310,3 +310,37 @@ viser arkiv-tallene (skrivebeskyttet-banner). Views uden arkiv-data viser en
 ærlig "ikke tilgængelig"-tilstand. Flerårsoversigten sammenligner nu resultat,
 balance og nøgletal på tværs af alle år. Endelig verifikation: **710 tests
 grønne · smoke grøn**; alle fire regnskabsår balancerer.
+
+---
+
+## Runde 4 — porteføljeoversigten
+
+Ejer-feedback: porteføljekortet viser forkerte/forældede tal (`/api/portfolio`
+bruger gammel #171-logik — moms beregnes til 0 for Dinero-importerede ledgers,
+samme fejl som per-virksomhed blev rettet i runde 1). Og kortet mangler det en
+ejer dømmer en virksomhed på: resultat, likviditet, omsætning. For en ejer med
+flere virksomheder skal oversigten give pr.-virksomhed-helbred + et tværgående
+overblik + hvor man skal handle.
+
+### Iteration 12 — Portefølje med rigtige tal
+- [x] Backend: omskriv `buildPortfolioOverview` — hver virksomhed får de rigtige
+      tal (resultat, omsætning, faktisk banksaldo, moms via `vatPositionForPeriod`
+      + frist, grupperede opgaver) ved at genbruge per-virksomheds-logikken;
+      plus en tværgående opsummering (samlet resultat, likviditet, moms-skyld)
+- [x] Frontend: redesign virksomhedskortet — overskrifts-helbred (resultat,
+      bank, omsætning, moms+frist, opgaver); kort klikbart ind i virksomheden
+- [x] Frontend: tværgående opsummerings-stribe øverst på porteføljen
+- [x] Frontend: virksomheder der kræver opmærksomhed markeres/sorteres øverst
+- [x] **Visuel inspektion** — Helheim-kort viser rigtige tal (resultat 13.234,82,
+      bank 23.654,75, omsætning 17.829,02, moms 3.371,20 + frist), opsummerings-
+      stribe verificeret desktop + mobil (rettede 2-kolonne-overløb på mobil)
+
+---
+
+## Status — runde 4 afsluttet
+
+Porteføljeoversigten er nu koblet til rigtige data. Hvert virksomhedskort viser
+resultat, faktisk banksaldo, omsætning, moms + frist og opgaver; en tværgående
+opsummerings-stribe samler tallene på tværs af virksomheder; virksomheder der
+kræver opmærksomhed sorteres øverst. Endelig verifikation: **746 tests grønne ·
+smoke grøn**.
