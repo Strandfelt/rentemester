@@ -249,9 +249,9 @@ describe("invoice issue", () => {
       currency: "DKK"
     });
 
-    expect(first2024.invoiceNumber).toBe("2024-00001");
-    expect(second2024.invoiceNumber).toBe("2024-00002");
-    expect(first2025.invoiceNumber).toBe("2025-00001");
+    expect(first2024.invoiceNumber).toBe("2024-0001");
+    expect(second2024.invoiceNumber).toBe("2024-0002");
+    expect(first2025.invoiceNumber).toBe("2025-0001");
 
     db.close();
     rmSync(root, { recursive: true, force: true });
@@ -297,15 +297,20 @@ describe("invoice issue", () => {
       currency: "DKK"
     });
 
-    expect(first.invoiceNumber).toBe("2027-00001");
-    expect(second.invoiceNumber).toBe("2027-00002");
-    expect(next.invoiceNumber).toBe("2028-00001");
+    expect(first.invoiceNumber).toBe("2027-0001");
+    expect(second.invoiceNumber).toBe("2027-0002");
+    expect(next.invoiceNumber).toBe("2028-0001");
 
     db.close();
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("reserves the canonical manual invoice number when it matches the next sequence", () => {
+  // #251: a manual invoice number that matches the next sequence value is
+  // accepted and stored in the canonical four-digit format — regardless of how
+  // many digits the caller padded it to. A five-digit `2026-00001` and a
+  // four-digit `2026-0001` therefore both persist as `2026-0001`, so the
+  // issued series is one unbroken, consistent fortløbende nummer.
+  test("canonicalises a matching manual invoice number to the four-digit format", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-seq-"));
     const db = openDb(ensureCompanyDirs(root).db);
     migrate(db);
@@ -322,7 +327,14 @@ describe("invoice issue", () => {
       currency: "DKK"
     });
     expect(first.ok).toBe(true);
-    expect(first.invoiceNumber).toBe("2026-00001");
+    // A five-digit manual number is re-padded to the canonical four-digit form.
+    expect(first.invoiceNumber).toBe("2026-0001");
+    // The persisted snapshot and documents row carry the same canonical number.
+    expect(JSON.parse(readFileSync(first.storedPath!, "utf8")).invoiceNumber).toBe("2026-0001");
+    const firstRow = db
+      .query("SELECT invoice_no FROM documents WHERE id = ?")
+      .get(first.documentId!) as { invoice_no: string };
+    expect(firstRow.invoice_no).toBe("2026-0001");
 
     const second = issueInvoice(db, root, {
       invoiceType: "full",
@@ -335,10 +347,53 @@ describe("invoice issue", () => {
       currency: "DKK"
     });
     expect(second.ok).toBe(true);
-    expect(second.invoiceNumber).toBe("2026-00002");
+    expect(second.invoiceNumber).toBe("2026-0002");
 
     db.close();
     rmSync(root, { recursive: true, force: true });
+  });
+
+  // #251: `invoice issue` (manual, from example JSON) and `invoice create`
+  // (auto-numbered) must produce the identical string for the same sequence
+  // value, so the two built-in paths never collide in one ledger.
+  test("manual and auto-numbered first invoices resolve to the same canonical number", () => {
+    const autoRoot = mkdtempSync(join(tmpdir(), "rentemester-issue-auto-fmt-"));
+    const autoDb = openDb(ensureCompanyDirs(autoRoot).db);
+    migrate(autoDb);
+    const auto = issueInvoice(autoDb, autoRoot, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    autoDb.close();
+    rmSync(autoRoot, { recursive: true, force: true });
+
+    const manualRoot = mkdtempSync(join(tmpdir(), "rentemester-issue-manual-fmt-"));
+    const manualDb = openDb(ensureCompanyDirs(manualRoot).db);
+    migrate(manualDb);
+    const manual = issueInvoice(manualDb, manualRoot, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Bogføring", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 0.25, vatAmount: 250, grossAmount: 1250 },
+      currency: "DKK"
+    });
+    manualDb.close();
+    rmSync(manualRoot, { recursive: true, force: true });
+
+    expect(auto.ok).toBe(true);
+    expect(manual.ok).toBe(true);
+    expect(auto.invoiceNumber).toBe("2026-0001");
+    expect(manual.invoiceNumber).toBe(auto.invoiceNumber);
   });
 
   test("rejects canonical manual invoice numbers that skip the next sequence value", () => {
@@ -359,7 +414,7 @@ describe("invoice issue", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors[0]).toContain("næste fortløbende nummer 2026-00001");
+    expect(result.errors[0]).toContain("næste fortløbende nummer 2026-0001");
 
     db.close();
     rmSync(root, { recursive: true, force: true });
@@ -497,7 +552,7 @@ describe("invoice issue", () => {
     });
 
     expect(retried.ok).toBe(true);
-    expect(retried.invoiceNumber).toBe("2026-00001");
+    expect(retried.invoiceNumber).toBe("2026-0001");
 
     realDb.close();
     rmSync(root, { recursive: true, force: true });

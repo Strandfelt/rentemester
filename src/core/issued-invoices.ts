@@ -102,20 +102,37 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
+// #251: the single canonical issued-invoice-number format. The fortløbende
+// nummer is the fiscal-year scope, a hyphen, and the sequence value padded to
+// four digits (`2026-0001`). Every issuing path — `invoice issue`, the guided
+// `invoice create`, the MCP `invoice_issue` tool and recurring invoices — funnels
+// through `issueInvoice`, so this one function fixes the format for all of them.
+// Four digits matches the credit-note series (`CN-<scope>-NNNN`); journal
+// entries keep their own separate `entry_no` series.
+const INVOICE_NUMBER_DIGITS = 4;
+
 function canonicalInvoiceNumber(scope: string, value: number): InvoiceNumber {
-  return asInvoiceNumber(`${scope}-${String(value).padStart(5, "0")}`);
+  return asInvoiceNumber(`${scope}-${String(value).padStart(INVOICE_NUMBER_DIGITS, "0")}`);
 }
 
 function invoiceSequenceState(db: Database, issueDate: string) {
   const scope = fiscalYearLabelFromDate(db, issueDate);
-  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -5) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no GLOB ?`).get(`${scope}-[0-9][0-9][0-9][0-9][0-9]`) as { n: number };
+  // The GLOB matches the canonical four-digit suffix; `substr(invoice_no, -4)`
+  // then yields exactly that suffix as the numeric floor.
+  const row = db.query(`SELECT COALESCE(MAX(CAST(substr(invoice_no, -4) AS INTEGER)), 0) AS n FROM documents WHERE document_type = 'issued_invoice' AND invoice_no GLOB ?`).get(`${scope}-[0-9][0-9][0-9][0-9]`) as { n: number };
   return { scope, currentFloor: Number(row.n ?? 0), sequenceScope: companySequenceScope(db, scope) };
 }
 
 // Manual invoice numbers must be <scope>-<digits>: the scope is everything
 // before the final hyphen, the suffix is one or more decimal digits. The
-// numeric value of the suffix is what is reserved against the sequence — the
-// invoice-number string itself is always stored verbatim (no re-padding).
+// numeric value of the suffix is what is reserved against the sequence.
+//
+// #251: the suffix is always re-padded to the canonical 5-digit form before it
+// is stored, so a manually supplied `2026-0001` and an auto-generated number
+// for the same sequence value both become the identical string `2026-00001`.
+// Without this, `invoice issue` (from example JSON carrying a 4-digit number)
+// and `invoice create` (auto-numbered, 5-digit) produced two different,
+// colliding formats in the same ledger — a fortløbende-nummer compliance fault.
 const MANUAL_INVOICE_NUMBER_RE = /^(.+)-([0-9]+)$/;
 
 function validateManualInvoiceNumberScope(db: Database, issueDate: string, invoiceNumber: string) {
@@ -144,7 +161,10 @@ function reserveManualInvoiceNumber(db: Database, issueDate: string, invoiceNumb
       error: `manual invoiceNumber ${invoiceNumber} exceeds næste fortløbende nummer ${canonicalInvoiceNumber(scope, reserved.expectedValue)}`,
     };
   }
-  return { ok: true as const, invoiceNumber };
+  // #251: store the canonical 5-digit form, never the verbatim manual string,
+  // so the issued series stays one consistent format regardless of how the
+  // number was supplied.
+  return { ok: true as const, invoiceNumber: canonicalInvoiceNumber(scope, requestedValue) };
 }
 
 function nextIssuedInvoiceNumber(db: Database, issueDate: string) {
@@ -188,11 +208,14 @@ export function issueInvoice(db: Database, companyRoot: string, rawPayload: Invo
 
   try {
     const result = db.transaction(() => {
-      let invoiceNumber: InvoiceNumber | undefined =
-        explicitInvoiceNumber === undefined ? undefined : asInvoiceNumber(explicitInvoiceNumber);
-      if (invoiceNumber) {
-        const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, invoiceNumber);
+      let invoiceNumber: InvoiceNumber;
+      if (explicitInvoiceNumber !== undefined) {
+        const reserved = reserveManualInvoiceNumber(db, payload.issueDate!, explicitInvoiceNumber);
         if (!reserved.ok) return { ok: false as const, error: reserved.error };
+        // #251: use the canonicalised 5-digit number, not the verbatim input,
+        // so the persisted snapshot, PDF and documents row all carry the same
+        // consistent format as an auto-numbered invoice.
+        invoiceNumber = asInvoiceNumber(reserved.invoiceNumber);
       } else {
         invoiceNumber = nextIssuedInvoiceNumber(db, payload.issueDate!);
       }

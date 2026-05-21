@@ -75,7 +75,7 @@ describe("recurring-invoice CLI", () => {
     const generatedJson = JSON.parse(generated.stdout);
     expect(generatedJson.ok).toBe(true);
     expect(generatedJson.created).toBe(true);
-    expect(generatedJson.invoiceNumber).toBe("2026-00001");
+    expect(generatedJson.invoiceNumber).toBe("2026-0001");
     expect(generatedJson.appliedRules).toContain("DK-RECURRING-INVOICE-GENERATE-001");
 
     const rerun = await run([
@@ -91,7 +91,7 @@ describe("recurring-invoice CLI", () => {
     const rerunJson = JSON.parse(rerun.stdout);
     expect(rerunJson.ok).toBe(true);
     expect(rerunJson.created).toBe(false);
-    expect(rerunJson.invoiceNumber).toBe("2026-00001");
+    expect(rerunJson.invoiceNumber).toBe("2026-0001");
 
     const listed = await run([
       "recurring-invoice",

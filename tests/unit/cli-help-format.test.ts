@@ -71,6 +71,8 @@ describe("CLI help, examples, and human formatting", () => {
   });
 
   test("renders human success output when requested", async () => {
+    // #250: `invoice validate` has a dedicated Danish human renderer — a valid
+    // payload states the verdict plainly, with no raw JSON.
     const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "validate", "--input", "examples/full-invoice.dk.json", "--format", "human"], {
       cwd: process.cwd(),
       stdout: "pipe",
@@ -82,11 +84,13 @@ describe("CLI help, examples, and human formatting", () => {
     const exitCode = await proc.exited;
 
     expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
-    expect(stdout).toContain("✔");
+    expect(stdout).toContain("Fakturaen er gyldig og kan udstedes.");
     expect(stdout).not.toContain('"ok"');
   });
 
   test("renders human error output when requested", async () => {
+    // #250: an invalid payload renders the dedicated Danish verdict on stderr
+    // with every concrete rejection reason, and exits 1.
     const dir = mkdtempSync(join(tmpdir(), "rentemester-cli-human-"));
     const file = join(dir, "bad-invoice.json");
     writeFileSync(file, JSON.stringify({ invoiceType: "full", currency: "DKK" }, null, 2));
@@ -104,7 +108,7 @@ describe("CLI help, examples, and human formatting", () => {
     rmSync(dir, { recursive: true, force: true });
     expect(exitCode).toBe(1);
     expect(stdout).toBe("");
-    expect(stderr).toContain("✘");
+    expect(stderr).toContain("Fakturaen er IKKE gyldig");
     expect(stderr).toContain("issueDate must be present in YYYY-MM-DD format");
     expect(stderr).not.toContain('"errors"');
   });
