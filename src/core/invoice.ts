@@ -284,3 +284,95 @@ export function validateInvoice(payload: InvoicePayload): InvoiceValidationResul
     errors,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Invoice arithmetic — compute line totals and invoice totals from the bare
+// essentials a human can supply (description, quantity, unit price ex-VAT and
+// a VAT rate). The point of #212: a bookkeeping product must do this maths so
+// the human never hand-writes a number SKAT will hold them accountable for.
+//
+// All amounts are in DKK kroner (decimal). `vatRatePercent` is a percentage
+// (e.g. 25 for standard Danish VAT), normalised to the 0..1 fraction the rest
+// of the invoice pipeline (validation, totals.vatRate) expects.
+// ---------------------------------------------------------------------------
+
+export type InvoiceLineInput = {
+  description: string;
+  quantity: number;
+  unitPriceExVat: number;
+};
+
+export type ComputedInvoiceLine = {
+  description: string;
+  quantity: number;
+  unitPriceExVat: number;
+  lineTotalExVat: number;
+};
+
+export type ComputedInvoiceTotals = {
+  /** VAT rate as a 0..1 fraction, ready for totals.vatRate. */
+  vatRate: number;
+  netAmount: number;
+  vatAmount: number;
+  grossAmount: number;
+};
+
+export type ComputeInvoiceAmountsResult =
+  | { ok: true; lines: ComputedInvoiceLine[]; totals: ComputedInvoiceTotals; errors: [] }
+  | { ok: false; lines: ComputedInvoiceLine[]; totals?: undefined; errors: string[] };
+
+/**
+ * Compute every derived invoice amount from minimal human input.
+ *
+ * The human supplies one or more lines (description, quantity, unit price
+ * ex-VAT) and a single VAT rate in percent. Rentemester computes each line
+ * total, the net amount (sum of line totals), the VAT amount and the gross
+ * amount — using the same `roundDkk` ore-precise rounding the validator uses,
+ * so the result always passes `validateInvoice`'s arithmetic checks.
+ */
+export function computeInvoiceAmounts(
+  lines: InvoiceLineInput[],
+  vatRatePercent: number,
+): ComputeInvoiceAmountsResult {
+  const errors: string[] = [];
+  if (!Array.isArray(lines) || lines.length === 0) {
+    errors.push("at least one invoice line is required");
+  }
+  if (!Number.isFinite(vatRatePercent) || vatRatePercent < 0) {
+    errors.push("vatRatePercent must be a number greater than or equal to 0");
+  }
+
+  const computed: ComputedInvoiceLine[] = [];
+  (lines ?? []).forEach((line, index) => {
+    const description = typeof line.description === "string" ? line.description.trim() : "";
+    if (description.length === 0) {
+      errors.push(`lines[${index}].description must not be blank`);
+    }
+    if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
+      errors.push(`lines[${index}].quantity must be a number greater than 0`);
+    }
+    if (!Number.isFinite(line.unitPriceExVat) || line.unitPriceExVat < 0) {
+      errors.push(`lines[${index}].unitPriceExVat must be a number greater than or equal to 0`);
+    }
+    computed.push({
+      description,
+      quantity: line.quantity,
+      unitPriceExVat: line.unitPriceExVat,
+      lineTotalExVat: roundDkk(Number(line.quantity) * Number(line.unitPriceExVat)),
+    });
+  });
+
+  if (errors.length > 0) return { ok: false, lines: computed, errors };
+
+  const netAmount = roundDkk(computed.reduce((sum, line) => sum + line.lineTotalExVat, 0));
+  const vatRate = roundRate6(vatRatePercent / 100);
+  const vatAmount = roundDkk(netAmount * vatRate);
+  const grossAmount = roundDkk(netAmount + vatAmount);
+
+  return {
+    ok: true,
+    lines: computed,
+    totals: { vatRate, netAmount, vatAmount, grossAmount },
+    errors: [],
+  };
+}
