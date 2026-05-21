@@ -102,6 +102,18 @@ export function register(dispatch: CommandDispatch): void {
         "SELECT id, entry_no, transaction_date, text, currency, amount_foreign, amount_dkk, fx_rate_to_dkk, document_id, source_bank_transaction_id, status, reversal_of_entry_id FROM journal_entries ORDER BY id DESC",
       )
       .all() as Array<Record<string, unknown>>;
+    // The header `amount_dkk` is null for plain DKK entries — the booked
+    // amount lives on the posting lines. Compute each entry's debit total
+    // (which equals the credit total for a balanced entry) so the human
+    // renderer can show what was actually booked instead of "—".
+    const debitTotalByEntry = new Map<number, number>();
+    for (const row of db
+      .query(
+        "SELECT journal_entry_id, SUM(debit_amount) AS debit_total FROM journal_lines GROUP BY journal_entry_id",
+      )
+      .all() as Array<{ journal_entry_id: number; debit_total: number }>) {
+      debitTotalByEntry.set(row.journal_entry_id, Number(row.debit_total));
+    }
     if (ctx.outputFormat === "json") {
       console.log(JSON.stringify(rows, null, 2));
       db.close();
@@ -117,7 +129,9 @@ export function register(dispatch: CommandDispatch): void {
       console.log("");
       console.log(`#${row.entry_no ?? row.id} — ${row.transaction_date ?? "—"}`);
       console.log(`  Tekst: ${row.text ?? "—"}`);
-      let amountLine = `  Beløb: ${formatKroner(row.amount_dkk)}`;
+      const debitTotal = debitTotalByEntry.get(Number(row.id));
+      const amountValue = row.amount_dkk ?? debitTotal ?? null;
+      let amountLine = `  Beløb: ${formatKroner(amountValue)}`;
       if (currency !== "DKK") {
         amountLine += ` (${row.amount_foreign} ${currency}, kurs ${row.fx_rate_to_dkk})`;
       }

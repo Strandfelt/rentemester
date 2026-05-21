@@ -50,26 +50,26 @@ function renderBankTransactionsHuman(rows: any[]): void {
 
 function renderBankSuggestionsHuman(rows: any[]): void {
   if (rows.length === 0) {
-    console.log("No unmatched bank transactions for current filter.");
+    console.log("Ingen uafstemte banktransaktioner for det valgte filter.");
     return;
   }
   for (const row of rows) {
     console.log(
-      `Bank transaction ${row.bankTransactionId} | ${row.date} | ${row.amount} ${row.currency} | ${row.text}`,
+      `Banktransaktion ${row.bankTransactionId} | ${row.date} | ${row.amount} ${row.currency} | ${row.text}`,
     );
     if (row.suggestions.length === 0) {
-      console.log("  No deterministic suggestions.");
+      console.log("  Ingen sikre forslag.");
       continue;
     }
     console.table(
       row.suggestions.map((suggestion: any) => ({
-        kind: suggestion.kind,
-        documentId: suggestion.documentId,
-        invoiceNo: suggestion.invoiceNo,
-        supplierName: suggestion.supplierName ?? null,
-        customerName: suggestion.customerName ?? null,
-        confidence: suggestion.confidence,
-        reasons: suggestion.reasons.join("; "),
+        type: suggestion.kind,
+        bilagsId: suggestion.documentId,
+        fakturanr: suggestion.invoiceNo,
+        leverandør: suggestion.supplierName ?? null,
+        kunde: suggestion.customerName ?? null,
+        sikkerhed: suggestion.confidence,
+        begrundelser: suggestion.reasons.join("; "),
       })),
     );
   }

@@ -97,7 +97,7 @@ export function postIssuedInvoiceToLedger(db: Database, input: PostIssuedInvoice
   const posting = issuedInvoiceJournalLines(doc, payload, grossAmountDkk, netAmountDkk, vatAmountDkk, input);
   const journal = postJournalEntry(db, {
     transactionDate: input.transactionDate ?? doc.invoice_date ?? payload?.issueDate,
-    text: `Issued invoice ${doc.invoice_no}`,
+    text: `Faktura ${doc.invoice_no} udstedt`,
     documentId: input.invoiceDocumentId,
     currency: currency === "DKK" ? undefined : currency,
     amountForeign: currency === "DKK" ? undefined : grossAmount,
