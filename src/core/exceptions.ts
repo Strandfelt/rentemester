@@ -16,6 +16,13 @@ export type RecordExceptionInput = {
 
 export type ListExceptionsInput = {
   status?: ExceptionStatus;
+  /**
+   * When false (the default), exceptions whose subject falls in an archived
+   * period — before the primobalance cut-over date, or inside a closed/reported
+   * accounting period — are excluded. They are real historical artifacts but
+   * not open tasks, so they must not be counted as such.
+   */
+  includeArchived?: boolean;
 };
 
 export type ResolveExceptionInput = {
@@ -96,23 +103,64 @@ export function recordException(db: Database, input: RecordExceptionInput) {
   return { ok: true, exceptionId: row.id, duplicate: false, errors: [] };
 }
 
+/** The archived boundary of the live ledger — see `isArchivedDate`. */
+type ArchivedBoundary = {
+  /** Primobalance cut-over date; everything before it is the old system's. */
+  cutOverDate: string | null;
+  /** Closed/reported accounting periods — exceptions inside them are archived. */
+  closedPeriods: Array<{ start: string; end: string }>;
+};
+
+function loadArchivedBoundary(db: Database): ArchivedBoundary {
+  const opening = db
+    .query(`SELECT cut_over_date FROM opening_balances LIMIT 1`)
+    .get() as { cut_over_date: string } | null;
+  const periods = db
+    .query(
+      `SELECT period_start, period_end FROM accounting_periods
+        WHERE status IN ('closed', 'reported')`,
+    )
+    .all() as Array<{ period_start: string; period_end: string }>;
+  return {
+    cutOverDate: opening?.cut_over_date ?? null,
+    closedPeriods: periods.map((p) => ({ start: p.period_start, end: p.period_end })),
+  };
+}
+
+/**
+ * Whether an exception's subject date falls in an archived period. ISO dates
+ * compare correctly as strings. A null date (an exception with no dated
+ * subject) is never archived — it stays an open task.
+ */
+function isArchivedDate(subjectDate: string | null, boundary: ArchivedBoundary): boolean {
+  if (!subjectDate) return false;
+  if (boundary.cutOverDate && subjectDate < boundary.cutOverDate) return true;
+  return boundary.closedPeriods.some((p) => subjectDate >= p.start && subjectDate <= p.end);
+}
+
 export function listExceptions(db: Database, input: ListExceptionsInput = {}) {
   const status = normalizeStatus(input.status);
   if (!status) return { ok: false, count: 0, rows: [], errors: ["status must be open, resolved, or all when present"] };
 
-  const rows = db.query(
-    `SELECT id, type, severity, status, related_bank_transaction_id, related_document_id,
-            message, required_action, source_evidence, posting_preview,
-            created_at, resolved_at, resolved_by, resolution_note
-     FROM exceptions
-     WHERE (? = 'all' OR status = ?)
-     ORDER BY id DESC`
+  const boundary = loadArchivedBoundary(db);
+  // The subject date is the date of the bank transaction / document the
+  // exception concerns — that is what places it in (or out of) an archived
+  // period. An exception with no dated subject has no archived classification.
+  const rawRows = db.query(
+    `SELECT e.id, e.type, e.severity, e.status, e.related_bank_transaction_id, e.related_document_id,
+            e.message, e.required_action, e.source_evidence, e.posting_preview,
+            e.created_at, e.resolved_at, e.resolved_by, e.resolution_note,
+            COALESCE(bt.transaction_date, d.invoice_date, substr(d.upload_datetime, 1, 10)) AS subject_date
+     FROM exceptions e
+     LEFT JOIN bank_transactions bt ON bt.id = e.related_bank_transaction_id
+     LEFT JOIN documents d ON d.id = e.related_document_id
+     WHERE (? = 'all' OR e.status = ?)
+     ORDER BY e.id DESC`
   ).all(status, status) as Array<any>;
 
-  return {
-    ok: true,
-    count: rows.length,
-    rows: rows.map((row) => ({
+  const includeArchived = input.includeArchived === true;
+  const rows = rawRows
+    .map((row) => ({
       id: row.id,
       type: row.type,
       severity: row.severity,
@@ -127,9 +175,12 @@ export function listExceptions(db: Database, input: ListExceptionsInput = {}) {
       resolvedAt: row.resolved_at,
       resolvedBy: row.resolved_by,
       resolutionNote: row.resolution_note,
-    })),
-    errors: [],
-  };
+      /** True when the exception belongs to an archived/closed period. */
+      archived: isArchivedDate(row.subject_date, boundary),
+    }))
+    .filter((row) => includeArchived || !row.archived);
+
+  return { ok: true, count: rows.length, rows, errors: [] };
 }
 
 export function resolveException(db: Database, input: ResolveExceptionInput) {

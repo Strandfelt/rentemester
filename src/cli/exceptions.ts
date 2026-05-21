@@ -7,7 +7,10 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("exceptions", "list", (ctx) => {
     const db = openCommandDb(ctx);
     migrate(db);
-    const result = listExceptions(db, { status: (ctx.arg("--status") as any) ?? undefined });
+    const result = listExceptions(db, {
+      status: (ctx.arg("--status") as any) ?? undefined,
+      includeArchived: ctx.hasFlag("--include-archived"),
+    });
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
     } else if (result.ok) {
@@ -17,6 +20,7 @@ export function register(dispatch: CommandDispatch): void {
           type: row.type,
           severity: row.severity,
           status: row.status,
+          archived: row.archived,
           relatedBankTransactionId: row.relatedBankTransactionId,
           relatedDocumentId: row.relatedDocumentId,
           message: row.message,

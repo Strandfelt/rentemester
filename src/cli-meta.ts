@@ -84,7 +84,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   },
   { key: "vendor create", usage: "vendor create --company <path> --name <text> [--address <text>] [--cvr <DK...>] [--expense-account <konto>] [--default-vat <text>] [--notes <text>] [--from-cvr <DK...>]", description: "Opretter en append-only leverandørpost til bilagsindlæsning. Med --from-cvr udfyldes navn/adresse/CVR automatisk fra CVR-registret.", allowedFlags: ["--company", "--name", "--address", "--cvr", "--expense-account", "--default-vat", "--notes", "--from-cvr"] },
   { key: "vendor list", usage: "vendor list --company <path> [--archived]", description: "Lister kendte leverandører.", allowedFlags: ["--company", "--archived"] },
-  { key: "exceptions list", usage: "exceptions list --company <path> [--status open|resolved|all]", description: "Lister exceptions-køen.", allowedFlags: ["--company", "--status"] },
+  { key: "exceptions list", usage: "exceptions list --company <path> [--status open|resolved|all] [--include-archived]", description: "Lister exceptions-køen. Exceptions i arkiverede/lukkede perioder udelades som standard — vis dem med --include-archived.", allowedFlags: ["--company", "--status", "--include-archived"] },
   { key: "exceptions resolve", usage: "exceptions resolve --company <path> --id <n> [--note <text>]", description: "Markerer en exception som løst.", allowedFlags: ["--company", "--id", "--note"] },
   {
     key: "invoice validate",

@@ -5,6 +5,7 @@ const BOOLEAN_FLAGS = new Set([
   "--json",
   "--sign-with-ed25519",
   "--enrich-cvr",
+  "--include-archived",
 ]);
 
 export type ParsedCliArgs = {

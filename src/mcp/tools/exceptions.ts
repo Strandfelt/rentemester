@@ -20,17 +20,25 @@ export function registerExceptionTools(server: McpServer): void {
     "exceptions_list",
     {
       title: "List exceptions",
-      description: "Lister exceptions-køen. Filtrér på status: open|resolved|all. Read-only.",
+      description:
+        "Lister exceptions-køen. Filtrér på status: open|resolved|all. Exceptions i arkiverede/lukkede perioder udelades som standard — sæt includeArchived:true for at vise dem. Read-only.",
       inputSchema: {
         company: z.string().min(1),
         status: z.enum(["open", "resolved", "all"]).optional(),
+        includeArchived: z.boolean().optional(),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    withCompanyDb<{ company: string; status?: ExceptionStatus }>(server, ({ db, args }) => {
-      const result = listExceptions(db, { status: args.status });
-      return wrapCoreResult(result);
-    }),
+    withCompanyDb<{ company: string; status?: ExceptionStatus; includeArchived?: boolean }>(
+      server,
+      ({ db, args }) => {
+        const result = listExceptions(db, {
+          status: args.status,
+          includeArchived: args.includeArchived,
+        });
+        return wrapCoreResult(result);
+      },
+    ),
   );
 
   server.registerTool(
