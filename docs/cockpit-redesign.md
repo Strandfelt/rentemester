@@ -161,11 +161,21 @@ rigtige tal før ledgeren er korrekt — derfor fixes importen først.
 - [x] Frontend: Flerårsoversigt — nøgletals-tabel + Chart.js-trendgraf (2023→26)
 - [x] Regnskabsårs-vælger spænder over arkiv + live; CompanyNav udvidet til 10
       punkter; arkiverede år i live-views linker nu til Arkiv-viewet
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — Flerårsoversigt (4 år 2023–26, trend-graf, tabel),
+      Arkiv (2024-saldobalance, skrivebeskyttet); desktop + mobil
 
 ### Iteration 5 — Kontakter, fakturaer & finish (P3)
-- [ ] Backend: invoices, contacts endpoints
-- [ ] Frontend: Fakturaer-view
-- [ ] Frontend: Kontakter-view
-- [ ] Sidste responsiv- og designpolering på tværs af alle views
+- [x] Backend: invoices, contacts endpoints — `GET .../invoices?year=`
+      (udstedte fakturaer med status: bogført/betalt/forfalden m.fl.) og
+      `GET .../contacts` (kunder + leverandører som stamdata). Begge giver
+      yndefuldt et tomt resultat når virksomheden intet har — Helheims
+      forventede tilstand (0 fakturaer, 0 kontakter).
+- [x] Frontend: Fakturaer-view — fakturaliste med status, summerings-kort
+      (faktureret/udestående/forfaldne), årsbevidst, pæn tom-tilstand
+- [x] Frontend: Kontakter-view — kunder + leverandører i hver sin tabel,
+      pæn tom-tilstand
+- [x] Sidste responsiv- og designpolering: CompanyNav udvidet til 12 punkter
+      og omlagt til fire mærkede grupper (Regnskab · Bogføring · Salg ·
+      Historik) med hårfine skillelinjer, hover/fokus-tilstande og ryddelig
+      mobil-ombrydning; ensartede kort, tabeller og tom-tilstande på tværs
 - [ ] **Visuel inspektion** — hele cockpittet; informationsparitet med Dinero bekræftet

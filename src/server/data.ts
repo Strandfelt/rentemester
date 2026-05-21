@@ -11,6 +11,7 @@ import { openDb, migrate } from "../core/db";
 import { getCompanySettings } from "../core/company";
 import { fiscalYearForDate } from "../core/fiscal-year";
 import { buildInvoiceList, buildOverdueInvoiceList } from "../core/invoice-list";
+import { listCustomers, listVendors } from "../core/master-data";
 import { listBankTransactions } from "../core/reconciliation";
 import { listExceptions } from "../core/exceptions";
 import { buildVatReport } from "../core/vat";
@@ -1776,6 +1777,191 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
       slug: entry.slug,
       company: statementCompanyBlock(company),
       years: rows,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company issued invoices (Fakturaer, year-aware) — cockpit-redesign it. 5
+// --------------------------------------------------------------------------
+
+/** One issued invoice — the fields the Fakturaer view renders. */
+export type CompanyInvoiceRow = {
+  documentId: number;
+  invoiceNo: string;
+  invoiceDate: string | null;
+  customerName: string | null;
+  /** Gross amount inc. VAT, kroner. */
+  grossAmount: number;
+  /** Still-outstanding balance on the invoice, kroner. */
+  openBalance: number;
+  currency: string;
+  /** Settlement state, plus "overdue" for an open invoice past its due date. */
+  status: "open" | "paid" | "credited" | "refunded" | "overpaid" | "written_off" | "overdue";
+  effectiveDueDate: string | null;
+  overdueDays: number;
+};
+
+export type CompanyInvoices = ReturnType<typeof buildCompanyInvoices>;
+
+/**
+ * Fakturaer — the company's issued (sales) invoices for the selected calendar
+ * fiscal year. Each row carries its settlement status; an open invoice past
+ * its due date is surfaced as "overdue". Every figure comes from
+ * `core/invoice-list` (which derives status via `core/invoice-payments`) — no
+ * business logic is duplicated. A company with no issued invoices returns an
+ * empty list, which is a correct, expected state.
+ */
+export function buildCompanyInvoices(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        invoices: [] as CompanyInvoiceRow[],
+        totalGross: 0,
+        totalOpen: 0,
+        overdueCount: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    const list = buildInvoiceList(ctx.db, { from: yearStart, to: yearEnd });
+    const invoices: CompanyInvoiceRow[] = list.rows.map((r) => ({
+      documentId: r.documentId,
+      invoiceNo: r.invoiceNumber,
+      invoiceDate: r.invoiceDate,
+      customerName: r.customerName,
+      grossAmount: roundKroner(r.grossAmount),
+      openBalance: roundKroner(r.openBalance),
+      currency: r.currency,
+      status: r.isOverdue ? "overdue" : r.status,
+      effectiveDueDate: r.effectiveDueDate,
+      overdueDays: r.overdueDays,
+    }));
+    // Newest invoice first — the most recent activity is what the user wants.
+    invoices.sort((a, b) => {
+      const dateA = a.invoiceDate ?? "";
+      const dateB = b.invoiceDate ?? "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return b.invoiceNo.localeCompare(a.invoiceNo);
+    });
+
+    const totalGross = roundKroner(
+      invoices.reduce((acc, r) => acc + r.grossAmount, 0),
+    );
+    const totalOpen = roundKroner(
+      invoices.reduce((acc, r) => acc + r.openBalance, 0),
+    );
+    const overdueCount = invoices.filter((r) => r.status === "overdue").length;
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      invoices,
+      totalGross,
+      totalOpen,
+      overdueCount,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company contacts (Kontakter — customers + vendors) — cockpit-redesign it. 5
+// --------------------------------------------------------------------------
+
+/** One customer in the master data. */
+export type ContactCustomerRow = {
+  id: number;
+  name: string;
+  vatOrCvr: string | null;
+  email: string | null;
+  paymentTermsDays: number;
+  defaultCurrency: string;
+};
+
+/** One vendor (supplier) in the master data. */
+export type ContactVendorRow = {
+  id: number;
+  name: string;
+  vatOrCvr: string | null;
+  defaultExpenseAccount: string | null;
+  defaultVatTreatment: string | null;
+};
+
+export type CompanyContacts = ReturnType<typeof buildCompanyContacts>;
+
+/**
+ * Kontakter — the company's customers and vendors (master data). This is
+ * reference data, not year-scoped; the company sub-nav still carries the
+ * selected `?year=` so it follows the user across views, so the fiscal years
+ * for the selector are fetched alongside. Both lists come straight from
+ * `core/master-data`. A company with no contacts returns empty lists — a
+ * correct, expected state.
+ */
+export function buildCompanyContacts(workspaceRoot: string, slug: string) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const years = buildCompanyFiscalYears(workspaceRoot, slug).years;
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    const customers: ContactCustomerRow[] = listCustomers(db).rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      vatOrCvr: c.vatOrCvr,
+      email: c.email,
+      paymentTermsDays: c.paymentTermsDays,
+      defaultCurrency: c.defaultCurrency,
+    }));
+    const vendors: ContactVendorRow[] = listVendors(db).rows.map((v) => ({
+      id: v.id,
+      name: v.name,
+      vatOrCvr: v.vatOrCvr,
+      defaultExpenseAccount: v.defaultExpenseAccount,
+      defaultVatTreatment: v.defaultVatTreatment,
+    }));
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      fiscalYears: years,
+      customers,
+      vendors,
     };
   } finally {
     db.close();

@@ -7,9 +7,10 @@
 //     the choice survives navigation between a company's sub-views and a page
 //     reload, and every in-app link below preserves it automatically.
 //
-//   * `CompanyNav` — the sub-navigation bar (Overblik · Resultatopgørelse ·
-//     Balance · Saldobalance) plus the fiscal-year selector. Rendered at the
-//     top of each company view.
+//   * `CompanyNav` — the sub-navigation bar plus the fiscal-year selector,
+//     rendered at the top of each company view. The twelve views are arranged
+//     in four labelled groups (Regnskab · Bogføring · Salg · Historik) so the
+//     bar stays scannable and wraps tidily on a phone.
 
 import { NavLink, useSearchParams } from "react-router-dom";
 import type { FiscalYearEntry } from "../lib/types";
@@ -33,17 +34,46 @@ export function useCompanyYear(): {
   return { year, setYear };
 }
 
-const TABS: { to: string; label: string }[] = [
-  { to: "", label: "Overblik" },
-  { to: "resultatopgorelse", label: "Resultatopgørelse" },
-  { to: "balance", label: "Balance" },
-  { to: "saldobalance", label: "Saldobalance" },
-  { to: "posteringer", label: "Posteringer" },
-  { to: "bank", label: "Bank" },
-  { to: "moms", label: "Moms" },
-  { to: "bilag", label: "Bilag" },
-  { to: "arkiv", label: "Arkiv" },
-  { to: "fleraar", label: "Flerår" },
+type NavTab = { to: string; label: string };
+
+/**
+ * The twelve company views, arranged into four labelled groups. The grouping
+ * keeps the bar scannable — and gives narrow viewports a deliberate wrap
+ * boundary rather than an arbitrary one.
+ */
+const TAB_GROUPS: { name: string; tabs: NavTab[] }[] = [
+  {
+    name: "Regnskab",
+    tabs: [
+      { to: "", label: "Overblik" },
+      { to: "resultatopgorelse", label: "Resultatopgørelse" },
+      { to: "balance", label: "Balance" },
+      { to: "saldobalance", label: "Saldobalance" },
+    ],
+  },
+  {
+    name: "Bogføring",
+    tabs: [
+      { to: "posteringer", label: "Posteringer" },
+      { to: "bilag", label: "Bilag" },
+      { to: "bank", label: "Bank" },
+      { to: "moms", label: "Moms" },
+    ],
+  },
+  {
+    name: "Salg",
+    tabs: [
+      { to: "fakturaer", label: "Fakturaer" },
+      { to: "kontakter", label: "Kontakter" },
+    ],
+  },
+  {
+    name: "Historik",
+    tabs: [
+      { to: "arkiv", label: "Arkiv" },
+      { to: "fleraar", label: "Flerår" },
+    ],
+  },
 ];
 
 /**
@@ -69,16 +99,25 @@ export function CompanyNav({
   return (
     <nav className="company-nav" aria-label="Virksomhedsvisninger">
       <div className="company-tabs">
-        {TABS.map((tab) => {
-          const path = tab.to
-            ? `/companies/${slug}/${tab.to}`
-            : `/companies/${slug}`;
-          return (
-            <NavLink key={tab.to} to={`${path}${suffix}`} end>
-              {tab.label}
-            </NavLink>
-          );
-        })}
+        {TAB_GROUPS.map((group) => (
+          <div
+            key={group.name}
+            className="company-tab-group"
+            role="group"
+            aria-label={group.name}
+          >
+            {group.tabs.map((tab) => {
+              const path = tab.to
+                ? `/companies/${slug}/${tab.to}`
+                : `/companies/${slug}`;
+              return (
+                <NavLink key={tab.to} to={`${path}${suffix}`} end>
+                  {tab.label}
+                </NavLink>
+              );
+            })}
+          </div>
+        ))}
       </div>
       <YearSelector
         years={years}

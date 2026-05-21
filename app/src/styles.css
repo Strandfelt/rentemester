@@ -397,6 +397,11 @@ td.num,
   background: var(--color-success-soft);
   color: var(--color-success);
 }
+.flag.neutral {
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
 .badge {
   font-size: var(--text-size-xs);
   padding: 2px var(--space-xs);
@@ -700,22 +705,47 @@ table.data.compact tr:last-child td {
 }
 
 /* ==========================================================================
-   Per-company sub-navigation (Overblik · Resultatopgørelse · Balance · …)
+   Per-company sub-navigation — twelve views in four labelled groups
    ========================================================================== */
 
 .company-nav {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-md) var(--space-lg);
   flex-wrap: wrap;
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--space-lg);
 }
 .company-tabs {
   display: flex;
-  gap: var(--space-xs);
   flex-wrap: wrap;
+  /* A faint divider sits between groups (see .company-tab-group::before),
+     so the row-gap carries the visible vertical rhythm when wrapping. */
+  gap: var(--space-xxs) 0;
+}
+/* Each group is its own non-breaking cluster: the four tabs of a group wrap
+   together, never splitting mid-group, which keeps the bar legible. */
+.company-tab-group {
+  display: flex;
+  gap: var(--space-xxs);
+  position: relative;
+  padding-left: var(--space-md);
+  margin-left: var(--space-xs);
+}
+.company-tab-group:first-child {
+  padding-left: 0;
+  margin-left: 0;
+}
+/* Hairline separator between groups. */
+.company-tab-group:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 30%;
+  width: 1px;
+  background: var(--border);
 }
 .company-tabs a {
   color: var(--text-dim);
@@ -724,15 +754,23 @@ table.data.compact tr:last-child td {
   padding: var(--space-xs) var(--space-sm);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.12s ease;
 }
 .company-tabs a:hover {
   color: var(--text);
   text-decoration: none;
+  border-bottom-color: var(--border-strong);
 }
 .company-tabs a.active {
   color: var(--text);
   font-weight: var(--text-weight-semibold);
   border-bottom-color: var(--accent);
+}
+.company-tabs a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
 }
 .company-nav .year-selector {
   padding-bottom: var(--space-xs);
@@ -896,10 +934,11 @@ table.statement-table td.num.muted {
 }
 
 /* ==========================================================================
-   Bank — summary cards above the transaction table
+   Bank / Fakturaer — summary cards above the data table
    ========================================================================== */
 
-.bank-summary {
+.bank-summary,
+.invoices-summary {
   margin-bottom: var(--space-lg);
 }
 
@@ -948,6 +987,15 @@ table.statement-table td.num.muted {
   .kpi-row {
     grid-template-columns: 1fr;
   }
+  /* The grouped sub-nav wraps group-by-group; once it does, drop the
+     hairline dividers and indent — each group reads as its own short row. */
+  .company-tab-group {
+    padding-left: 0;
+    margin-left: 0;
+  }
+  .company-tab-group:not(:first-child)::before {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -979,7 +1027,13 @@ table.statement-table td.num.muted {
     align-items: stretch;
   }
   .company-nav .year-selector {
-    padding-bottom: var(--space-xs);
+    padding-bottom: var(--space-sm);
+  }
+  /* Each tab group becomes a full-width row of tabs on a phone. */
+  .company-tab-group {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: var(--space-xxs) var(--space-xxs);
   }
   /* Tighten statement-table padding so the columns fit a phone width. */
   table.statement-table th,

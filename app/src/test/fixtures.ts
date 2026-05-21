@@ -5,9 +5,11 @@ import type {
   CompanyArchiveYear,
   CompanyBalance,
   CompanyBank,
+  CompanyContacts,
   CompanyDashboard,
   CompanyDocuments,
   CompanyIncomeStatement,
+  CompanyInvoices,
   CompanyJournal,
   CompanyMultiYear,
   CompanyOverview,
@@ -418,6 +420,80 @@ export function multiYear(
         omsaetning: 17829.02,
         udgifter: 4594.2,
         resultat: 13234.82,
+      },
+    ],
+    ...over,
+  };
+}
+
+export function invoices(
+  over: Partial<CompanyInvoices> = {},
+): CompanyInvoices {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    invoices: [
+      {
+        documentId: 1,
+        invoiceNo: "2026-00001",
+        invoiceDate: "2026-03-15",
+        customerName: "Kunde A/S",
+        grossAmount: 12500,
+        openBalance: 0,
+        currency: "DKK",
+        status: "paid",
+        effectiveDueDate: "2026-04-14",
+        overdueDays: 0,
+      },
+      {
+        documentId: 2,
+        invoiceNo: "2026-00002",
+        invoiceDate: "2026-04-01",
+        customerName: "Beta ApS",
+        grossAmount: 6250,
+        openBalance: 6250,
+        currency: "DKK",
+        status: "overdue",
+        effectiveDueDate: "2026-04-30",
+        overdueDays: 21,
+      },
+    ],
+    totalGross: 18750,
+    totalOpen: 6250,
+    overdueCount: 1,
+    ...over,
+  };
+}
+
+export function contacts(
+  over: Partial<CompanyContacts> = {},
+): CompanyContacts {
+  return {
+    slug: "acme-aps",
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    customers: [
+      {
+        id: 1,
+        name: "Kunde A/S",
+        vatOrCvr: "DK87654321",
+        email: "faktura@kunde.dk",
+        paymentTermsDays: 30,
+        defaultCurrency: "DKK",
+      },
+    ],
+    vendors: [
+      {
+        id: 1,
+        name: "Leverandør ApS",
+        vatOrCvr: "DK11223344",
+        defaultExpenseAccount: "3000",
+        defaultVatTreatment: "standard",
       },
     ],
     ...over,

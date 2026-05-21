@@ -516,6 +516,85 @@ export type MultiYearResponse = {
   multiYear: CompanyMultiYear;
 };
 
+// --- invoices / Fakturaer (GET .../invoices?year=) — cockpit-redesign it. 5 --
+//
+// All money fields below are kroner (DKK with decimals) — use `formatKroner`.
+
+export type InvoiceStatus =
+  | "open"
+  | "paid"
+  | "credited"
+  | "refunded"
+  | "overpaid"
+  | "written_off"
+  | "overdue";
+
+export type CompanyInvoiceRow = {
+  documentId: number;
+  invoiceNo: string;
+  invoiceDate: string | null;
+  customerName: string | null;
+  /** Gross amount inc. VAT, kroner. */
+  grossAmount: number;
+  /** Still-outstanding balance on the invoice, kroner. */
+  openBalance: number;
+  currency: string;
+  status: InvoiceStatus;
+  effectiveDueDate: string | null;
+  overdueDays: number;
+};
+
+export type CompanyInvoices = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  invoices: CompanyInvoiceRow[];
+  totalGross: number;
+  totalOpen: number;
+  overdueCount: number;
+};
+
+export type InvoicesResponse = {
+  ok: true;
+  invoices: CompanyInvoices;
+};
+
+// --- contacts / Kontakter (GET .../contacts) — cockpit-redesign it. 5 --------
+
+export type ContactCustomerRow = {
+  id: number;
+  name: string;
+  vatOrCvr: string | null;
+  email: string | null;
+  paymentTermsDays: number;
+  defaultCurrency: string;
+};
+
+export type ContactVendorRow = {
+  id: number;
+  name: string;
+  vatOrCvr: string | null;
+  defaultExpenseAccount: string | null;
+  defaultVatTreatment: string | null;
+};
+
+export type CompanyContacts = {
+  slug: string;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  customers: ContactCustomerRow[];
+  vendors: ContactVendorRow[];
+};
+
+export type ContactsResponse = {
+  ok: true;
+  contacts: CompanyContacts;
+};
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;

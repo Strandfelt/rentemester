@@ -13,6 +13,8 @@
 //   /companies/:slug/bilag              Bilag (ingested documents)
 //   /companies/:slug/arkiv              Arkiv (a single archived year)
 //   /companies/:slug/fleraar            Flerårsoversigt (multi-year comparison)
+//   /companies/:slug/fakturaer          Fakturaer (issued invoices)
+//   /companies/:slug/kontakter          Kontakter (customers + vendors)
 //   /companies/:slug/manage             rename / archive
 //
 // The per-company views share a sub-navigation and a fiscal-year selector
@@ -31,6 +33,8 @@ import { VatView } from "./views/VatView";
 import { DocumentsView } from "./views/DocumentsView";
 import { ArchiveView } from "./views/ArchiveView";
 import { MultiYearView } from "./views/MultiYearView";
+import { InvoicesView } from "./views/InvoicesView";
+import { ContactsView } from "./views/ContactsView";
 import { ManageCompanyView } from "./views/ManageCompanyView";
 
 export function App() {
@@ -73,6 +77,14 @@ export function App() {
           <Route
             path="/companies/:slug/fleraar"
             element={<MultiYearView />}
+          />
+          <Route
+            path="/companies/:slug/fakturaer"
+            element={<InvoicesView />}
+          />
+          <Route
+            path="/companies/:slug/kontakter"
+            element={<ContactsView />}
           />
           <Route
             path="/companies/:slug/manage"

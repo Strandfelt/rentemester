@@ -9,12 +9,14 @@ import type {
   BalanceResponse,
   BankResponse,
   CompanyListResponse,
+  ContactsResponse,
   CreateCompanyInput,
   DashboardResponse,
   DocumentsResponse,
   FiscalYearsResponse,
   HealthResponse,
   IncomeStatementResponse,
+  InvoicesResponse,
   JournalResponse,
   MultiYearResponse,
   OverviewResponse,
@@ -160,6 +162,18 @@ export const api = {
     request<MultiYearResponse>(
       `/api/companies/${encodeURIComponent(slug)}/multi-year`,
     ).then((r) => r.multiYear),
+
+  invoices: (slug: string, year?: string) =>
+    request<InvoicesResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/invoices${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.invoices),
+
+  contacts: (slug: string) =>
+    request<ContactsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/contacts`,
+    ).then((r) => r.contacts),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

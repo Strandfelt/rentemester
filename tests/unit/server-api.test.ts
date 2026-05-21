@@ -12,6 +12,8 @@ import { companyPaths } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { postJournalEntry } from "../../src/core/ledger";
 import { ingestDocument } from "../../src/core/documents";
+import { issueInvoice } from "../../src/core/issued-invoices";
+import { createCustomer, createVendor } from "../../src/core/master-data";
 
 function tmpRoot(label: string) {
   return mkdtempSync(join(tmpdir(), `rentemester-${label}-`));
@@ -942,6 +944,163 @@ describe("cockpit API — multi-year (GET .../multi-year)", () => {
       const res = await get(
         config({ workspaceRoot: ws }),
         "/api/companies/ghost/multi-year",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+/** Issues one sales invoice into a workspace company's ledger. */
+function issueTestInvoice(
+  ws: string,
+  slug: string,
+  issueDate: string,
+  net: number,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    const vat = net * 0.25;
+    const result = issueInvoice(db, companyRoot, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate,
+      seller: {
+        name: "Acme ApS",
+        address: "Testvej 1, 2100 København Ø",
+        vatOrCvr: "DK12345678",
+      },
+      buyer: {
+        name: "Kunde A/S",
+        address: "Købervej 9, 8000 Aarhus C",
+        vatOrCvr: "DK87654321",
+      },
+      lines: [
+        {
+          description: "Ydelse",
+          quantity: 1,
+          unitPriceExVat: net,
+          lineTotalExVat: net,
+        },
+      ],
+      totals: { netAmount: net, vatRate: 0.25, vatAmount: vat, grossAmount: net + vat },
+      currency: "DKK",
+    });
+    if (!result.ok) throw new Error("issue failed: " + result.errors.join("; "));
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — invoices (GET .../invoices)", () => {
+  test("returns issued invoices with their status for the year", async () => {
+    const ws = makeWorkspace("inv-live", ["Acme ApS"]);
+    try {
+      issueTestInvoice(ws, "acme-aps", "2026-03-15", 1000);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/invoices?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const inv = res.body.invoices;
+      expect(inv.slug).toBe("acme-aps");
+      expect(inv.selectedYear).toBe("2026");
+      expect(inv.archived).toBe(false);
+      expect(inv.invoices.length).toBe(1);
+      expect(inv.invoices[0]).toHaveProperty("invoiceNo");
+      expect(inv.invoices[0]).toHaveProperty("status");
+      expect(inv.invoices[0].grossAmount).toBe(1250);
+      expect(inv.totalGross).toBe(1250);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a company with no issued invoices returns an empty list", async () => {
+    const ws = makeWorkspace("inv-empty", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/invoices?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.invoices.invoices).toEqual([]);
+      expect(res.body.invoices.totalGross).toBe(0);
+      expect(res.body.invoices.overdueCount).toBe(0);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("invoices for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("inv-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/invoices",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — contacts (GET .../contacts)", () => {
+  test("returns customers and vendors from the master data", async () => {
+    const ws = makeWorkspace("con-live", ["Acme ApS"]);
+    try {
+      const db = openDb(companyPaths(companyRootForSlug(ws, "acme-aps")).db);
+      try {
+        migrate(db);
+        createCustomer(db, { name: "Kunde A/S", vatOrCvr: "DK87654321" });
+        createVendor(db, { name: "Leverandør ApS", vatOrCvr: "DK11223344" });
+      } finally {
+        db.close();
+      }
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/contacts",
+      );
+      expect(res.status).toBe(200);
+      const c = res.body.contacts;
+      expect(c.slug).toBe("acme-aps");
+      expect(c.customers.length).toBe(1);
+      expect(c.customers[0].name).toBe("Kunde A/S");
+      expect(c.vendors.length).toBe(1);
+      expect(c.vendors[0].name).toBe("Leverandør ApS");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a company with no contacts returns empty lists", async () => {
+    const ws = makeWorkspace("con-empty", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/contacts",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.contacts.customers).toEqual([]);
+      expect(res.body.contacts.vendors).toEqual([]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("contacts for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("con-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/contacts",
       );
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("not_found");
