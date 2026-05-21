@@ -73,6 +73,9 @@ const jsonLd = {
         <p class="text-on-surface-variant text-lg md:text-xl leading-relaxed max-w-2xl mb-4">
           Rentemester er <strong class="text-primary font-semibold">agent-first bogføring</strong> til danske freelancere, mikrovirksomheder og små ApS’er. En AI-agent kan gøre rutinearbejdet; danske regler som kode afgør hvad der må bogføres; en append-only ledger gør historikken efterprøvbar.
         </p>
+        <p class="text-on-surface-variant text-base md:text-lg mb-4 max-w-2xl">
+          Det kan bruges <strong class="text-on-background">på to måder</strong>: <strong class="text-on-background">agent-betjent</strong>, hvor en autonom agent driver bogholderiet for dig, eller <strong class="text-on-background">menneske-betjent</strong>, hvor du selv styrer hver kommando. Samme kerne, samme regler, samme reviderbare spor.
+        </p>
         <p class="text-on-surface-variant text-base md:text-lg mb-10 max-w-2xl">
           Ambitionen er rolig: et system der kan hjælpe med rutinerne, holde sig inden for eksplicitte regler og forklare hver eneste postering. Projektet er åbent, fordi tillid kræver gennemsigtighed.
         </p>
@@ -163,8 +166,8 @@ const jsonLd = {
           { status: "live", day: "Dag 1", title: "Danske regler som kode", body: "Bilag, kontoplan, momslogik og valideringer får faste tests." },
           { status: "live", day: "Dag 2", title: "Faktura + bankafstemning", body: "Fakturaer, betalinger, rykkere, kreditnotaer, bankafstemning og valutakøb er nu dækket af tests og smoke-flow." },
           { status: "live", day: "Dag 2.5", title: "Agent-workflow + dashboard", body: "MCP-server, agent-demo, llms-brief og statisk HTML-dashboard gør projektet læsbart for både mennesker og agenter." },
-          { status: "now", day: "Nu", title: "Bilagsmail og exception-kø", body: "Første deterministiske bilagsmail-slice skal ingest'e EML/vedhæftninger uden mail-provider-lock-in og sende usikre cases til exception-køen." },
-          { status: "next", day: "Næste", title: "PEPPOL, templates og stamdata", body: "EAN/GLN preview og deterministisk OIOUBL-handoff er landet. Næste skridt er direkte PEPPOL-transport, gentagne fakturaskabeloner og stærkere kunde-/leverandørstamdata." },
+          { status: "live", day: "Dag 2.8", title: "Bilagsmail og exception-kø", body: "Bilag kan ingest'es fra EML/maildrop og direkte fra en e-mailkonto via IMAP; usikre cases lander i exception-køen." },
+          { status: "now", day: "Nu", title: "PEPPOL og stamdata", body: "EAN/GLN-preview, OIOUBL-handoff og gentagne fakturaskabeloner er landet. Næste skridt er direkte PEPPOL-transport og stærkere kunde-/leverandørstamdata." },
           { status: "live", day: "Dag 3", title: "Eksportspor til myndighed og revisor", body: "Authority export, første deterministiske SAF-T-slice og lokal accountant-handoff giver et konkret, verificerbart eksportlag uden at påstå fuld compliance eller hosted adgang." },
           { status: "future", day: "v0.5", title: "Interaktiv web-UI", body: "Det statiske dashboard skal vokse til et lille kontrolrum for godkendelser, exceptions og drill-down i ledgeren." },
           { status: "future", day: "v0.5", title: "Åbne bankfeeds og plugins", body: "CSV virker nu. Senere kommer PSD2/open banking og forsigtige integrationer til fx PayPal, Zettle og Shopify." },
@@ -295,10 +298,10 @@ Lav en minimal ændring. Kør tests. Forklar hvad du ændrede, hvorfor det er si
 
       <div class="grid gap-gutter sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { t: "Bilagsmail", d: "Roadmap: første slice bliver deterministisk intake fra maildrop/EML uden provider-lock-in; usikre cases skal lande i exception-køen." },
-          { t: "Bankimport", d: "CSV-import fra danske banker. Automatisk matchning af linjer med bilag." },
-          { t: "Kontakter", d: "Roadmap: kunder og leverandører linkes til fakturaer, køb, bilag og historik." },
-          { t: "Fakturering", d: "Udsted, send påmindelser, kompensation og renter — fuldt sporbart i ledgeren. EAN/GLN preview og OIOUBL-handoff er live; direkte PEPPOL-transport og gentagne fakturaskabeloner er roadmap." },
+          { t: "Bilagsmail", d: "Indlæs bilag fra .eml-filer/maildrop eller direkte fra en e-mailkonto via IMAP. Usikre cases lander i exception-køen." },
+          { t: "Bankimport", d: "CSV-import fra danske banker. Deterministiske forslag til matchning af linjer med bilag." },
+          { t: "Kontakter", d: "Kunde- og leverandørkartotek med opslag i CVR-registret. Roadmap: tættere kobling til køb og bilagshistorik." },
+          { t: "Fakturering", d: "Udsted fakturaer, registrér rykkere, kompensation og renter, og send faktura/påmindelse på e-mail — fuldt sporbart i ledgeren. Gentagne fakturaskabeloner er live; direkte PEPPOL-transport er roadmap." },
           { t: "Valutakøb", d: "Bogfør køb i fx USD/EUR korrekt, også når banken trækker et DKK-beløb på kontoen." },
           { t: "Momsrapport", d: "Generér afstemningsgrundlag for momsperioden. Repræsentation og EU-servicekøb er testede flows." },
           { t: "SAF-T", d: "Første deterministiske SAF-T-slice er live for ledger + salgsfakturaer. Roadmap: bredere dækning og strammere profil/compliance-lag." },

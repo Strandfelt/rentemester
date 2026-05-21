@@ -4,7 +4,7 @@
 
 **Bogholderen i maskinen — bygget til små danske virksomheder.**
 
-Rentemester er et kommende bogholderisystem for danske mikrovirksomheder, freelancere, konsulenter og små ApS’er, hvor en AI-agent kan hjælpe med det daglige bogholderarbejde — mens selve regnskabet styres af faste regler, bilag, momslogik og en kontrollerbar historik.
+Rentemester er et kommende bogholderisystem for danske mikrovirksomheder, freelancere, konsulenter og små ApS’er. Det kan bruges på to måder — en AI-agent kan drive det daglige bogholderarbejde for dig, eller du kan styre det selv direkte — mens selve regnskabet i begge tilfælde holdes på plads af faste regler, bilag, momslogik og en kontrollerbar historik.
 
 Målet er enkelt:
 
@@ -82,6 +82,36 @@ Med andre ord:
 
 ---
 
+## To måder at bruge Rentemester på
+
+Rentemester er bygget til at blive brugt på **to måder** — og begge er gyldige. Det er ikke to forskellige programmer; det er samme kerne, samme regler og samme ledger, betjent af enten en agent eller et menneske.
+
+### 1. Agent-betjent
+
+En selvstændig AI-agent driver bogholderiet for dig. Agenten læser bilag, foreslår posteringer og bogfører det entydige — alt sammen gennem Rentemesters værktøjer, ikke ved at gætte.
+
+Det ser sådan ud i praksis:
+
+- Du peger agenten på din virksomhed og en mappe med nye bilag.
+- Agenten kører en fast bogføringsrunde: indlæser bilag, bogfører det sikre, lægger det usikre i en opgaveliste, afstemmer banken og tjekker moms- og regnskabsårsfrister.
+- Til sidst får du en kort rapport over hvad der blev gjort, og hvad der venter på dig.
+
+Teknisk sker det enten via kommandoen `agent run` (én komplet, gentagelig runde) eller via Rentemesters MCP-server, så en agent i fx en chatklient kan kalde de samme værktøjer skridt for skridt. Agenten gætter aldrig: alt den ikke kan afgøre med sikkerhed, bliver til en opgave på listen — aldrig en postering.
+
+### 2. Menneske-betjent
+
+Du driver det selv, direkte. Hver handling i Rentemester er en kommando på kommandolinjen — udsted en faktura, importér en bank-CSV, bogfør en udgift, kør momsrapporten, luk en periode.
+
+Det ser sådan ud i praksis:
+
+- Du kører kommandoer selv, ét skridt ad gangen, og ser resultatet med det samme.
+- De samme regler og kontroller gælder: en postering der ikke balancerer, eller en faktura med fejl, bliver afvist — uanset hvem der kalder.
+- Du kan til enhver tid bede en agent overtage en del af arbejdet, eller selv overtage fra agenten. Historikken er den samme uanset hvem der handlede.
+
+Begge måder skriver i samme ledger, følger samme regler og efterlader samme reviderbare spor. Forskellen er kun, hvem der trykker på knapperne.
+
+---
+
 ## Hvorfor ikke bare “AI i et regnskabsprogram”?
 
 Fordi bogføring kræver tillid.
@@ -140,43 +170,66 @@ Se [`examples/agent-demo/README.md`](examples/agent-demo/README.md) for forvente
 
 ## Hvad er bygget nu?
 
-Rentemester er i en tidlig teknisk prototype. Den nuværende version har allerede en fungerende kerne for:
+Rentemester er stadig under udvikling og bør endnu ikke være din eneste kilde til sandhed (se forbeholdet længere nede). Men kernen virker allerede — alt nedenfor kan køres i dag, både af en agent og af et menneske. Listen er grupperet, så du som virksomhedsejer kan se hvad det betyder for dig.
 
-- virksomhedsmappe med lokale data
-- SQLite-ledger
-- append-only bogføringshistorik
-- audit/hash-kæde til integritetskontrol
-- dansk kontoplan-lite
-- import af bank-CSV, inkl. udenlandske banktransaktioner med gemt omregningsfaktor og DKK-beløb
-- simpel bankafstemning
-- deterministisk bogføring af leverandørudgifter i fremmed valuta, også når banken afregner i DKK, med gemt FX-grundlag i ledgeren
-- indlæsning og hashing af bilag, inkl. fysisk modtagne udenlandske bilag og kassestrimler med bevaret original valuta under lovlige metadata-undtagelser
-- validering af danske fakturaoplysninger
-- deterministisk udstedelse og låsning af udgående fakturaer
-- deterministisk PDF-generering af udstedte fakturaer
-- deterministisk registrering af betalinger på udstedte fakturaer
-- deterministisk bogføring af udstedte fakturaer til debitorer, omsætning og salgsmoms
-- deterministisk afregning af kundeindbetalinger mod debitorer og bank, inkl. separat bankafregning af bogførte rykker-, kompensations- og morarentekrav
-- deterministisk udstedelse af kreditnotaer, som korrigerer fejl via separat append-only dokument og modpostering
-- deterministisk bankafregning af kunderefunderinger efter kreditnotaer
-- deterministisk aritmetisk validering af linjer, netto, moms og brutto før fakturaudstedelse
-- deterministisk forfalds- og overfaldstracking for kundefakturaer med eksplicit dato eller lovbestemt 30-dages fallback
-- deterministisk beregning, registrering og bogføring af lovbestemt morarente på åbne overfaldne kundefakturaer ud fra referencesats + 8 pct.-point
-- deterministisk registrering og bogføring af rykkergebyrer med lovbestemt maksimum 100 kr., maks. 3 rykkere og mindst 10 dages mellemrum
-- deterministisk vurdering, registrering og bogføring af fast kompensationskrav ved forsinket betaling på overfaldne erhvervsfakturaer, inkl. lovbestemt standardbeløb 310 kr. fra 2013-03-01
-- deterministisk tabsafskrivning på uerholdelige standardmoms-fakturaer med momsregulering på den fradragsberettigede tabsbase
-- bogføring af journalposter med krav om balance, inkl. udenlandsk valuta med gemt omregningsfaktor og DKK-grundlag
-- tilbageførsel af posteringer via reversal — ikke sletning
-- momsrapport for periode
-- EU-køb af ydelser med reverse charge
-- repræsentationsudgifter med deterministisk 25 pct. fradragsberettiget købsmoms og 75 pct. ikke-fradragsberettiget moms i omkostningen
-- downloadede og hash-verificerede danske retskilder
-- automatiske tests
-- container-runtime til drift med monterede virksomhedsmappen
-- deterministiske fulde systemsnapshots af ledger, bilag og udstedte fakturaer med backup-manifest og backup-status mod ugentlig lovpligt
-- deterministisk myndigheds- og kuratorpakke pr. periode med maskinlæsbart eksportformat, læsbare bilag og 4-ugers deadline-spor
-- deterministisk lokal eksportpakke til bogholder eller revisor med eksplicit trust boundary: fil-handoff, ikke live adgang
-- opslag i CVR-registret med lokal snapshot-cache: synkronisering af egen virksomheds stamdata (`company sync-cvr`) og auto-udfyldte kunde-/leverandørposter ud fra CVR-nummer (`--from-cvr`) — credentials medfølger ikke, brugeren skaffer sine egne (se `.env.example`)
+**Sådan kommer data ind**
+
+- importér banktransaktioner fra en CSV-fil, også fra udenlandske konti — kursen og DKK-beløbet gemmes
+- indlæs bilag (PDF, billeder, kassestrimler) med dokumentation; også fysiske udenlandske bilag i original valuta
+- hent bilag fra en mappe med e-mails (`.eml`-filer / maildrop) — første trin mod en rigtig bilagsmail
+- hent bilag direkte fra en e-mailkonto via IMAP, så indbakken tømmes automatisk
+- slå dine egne og dine kunders/leverandørers stamdata op i CVR-registret og udfyld kunde- og leverandørkartoteket automatisk
+- importér en kundeliste fra et andet system og migrér en hel virksomhed ind via en åbningsbalance
+
+**Bogføring og daglig drift**
+
+- en fungerende kassebog (ledger) i en lokal SQLite-fil med dansk kontoplan
+- bogfør udgifter direkte fra bilag + bankpost, også i fremmed valuta når banken trækker DKK
+- bogfør manuelle posteringer med krav om at debet er lig kredit
+- afstem banken og få deterministiske forslag til hvilke bankposter der hører til hvilke bilag og fakturaer
+- en opgaveliste (exceptions) hvor alt usikkert havner — så det kan løses bevidst i stedet for at blive gættet
+- ret fejl ved at tilbageføre med en ny postering — aldrig ved at slette
+- luk regnskabsperioder, så lukkede og fremtidige perioder ikke kan bogføres ved en fejl
+- kørselsregnskab og register over anlægsaktiver med afskrivning over tid
+
+**Fakturering**
+
+- validér og udsted danske fakturaer med moms og forfald; et immutabelt snapshot gemmes
+- generér en PDF af en udstedt faktura
+- send en faktura eller en betalingspåmindelse til kunden på e-mail med PDF'en vedhæftet — afsendelsen logges og kan ikke ske dobbelt ved et uheld. *Bemærk:* selve den indbyggede e-mailafsendelse kører foreløbig i test-tilstand; rigtig levering kræver at man tilkobler sin egen e-mailkanal
+- gentagne fakturaer via skabeloner (månedlige, kvartalsvise, årlige) — første trin mod abonnementsfakturering
+- registrér betalinger og afstem dem mod banken
+- udsted kreditnotaer og bogfør refundering tilbage til kunden
+- automatisk bogføring af fakturaer til debitorer, omsætning og salgsmoms
+- følg forfald, og beregn og bogfør lovbestemt morarente, rykkergebyrer og kompensationsbeløb ved for sen betaling
+- afskriv tab på en kunde der ikke betaler, med korrekt momsregulering
+- forbered e-faktura til offentlige kunder: EAN/GLN-eksport, et OIOUBL-handoff-dokument og en PEPPOL-forsendelseskuvert
+
+**Moms og rapporter**
+
+- momsrapport for en periode og en indberetningsklar momsangivelse med SKAT-rubrikker
+- EU-servicekøb med reverse charge og repræsentationsudgifter med korrekt delvis momsfradrag
+- validér EU-momsnumre mod VIES før EU-bogføring
+- regnskabsrapporter: saldobalance, resultatopgørelse og balance
+- en årsrapport for regnskabsklasse B, der kan skrive en iXBRL-fil — Rentemester forbereder, du og din revisor gennemgår og indberetter
+- et statisk HTML-dashboard over virksomhedens aktuelle status
+
+**Sikkerhed, backup og udlevering**
+
+- append-only historik med en hash-kæde, så manipulation kan opdages
+- valgfri kryptografisk signering (ed25519), så en tredjepart kan verificere uafhængigt
+- en `audit verify`-kommando der tjekker hele kæden
+- revisionsklare backups, der kan pakkes til ét arkiv og lægges et sikkert sted, med en backup-styring der holder øje med den ugentlige backup-pligt, attesterede destinationer i EU/EØS og en frivillig bogførings-lås
+- eksportpakker til myndighedsudlevering, til en kurator og en lokal håndoff-pakke til din bogholder eller revisor — fil-overdragelse, ikke live adgang
+- en første SAF-T-eksport efter den nye bogføringslov
+- GDPR-værktøjer: saml alle persondata om en kunde i én indsigtsrapport, og slet det der ikke længere skal opbevares — bogføringspligten går altid forud for sletteret
+
+**Brug og drift**
+
+- alt kan køres fra kommandolinjen (menneske-betjent) og via MCP-værktøjer (agent-betjent)
+- en runtime-agent (`agent run`), der kører én komplet, gentagelig bogføringsrunde
+- danske retskilder downloades og hash-verificeres, så regler kan spores til en kilde
+- automatiske tests, og en container til drift med din virksomhedsmappe monteret
 
 Det er ikke færdigt, men fundamentet er lagt rigtigt: regler først, dokumentation først, audit først.
 
@@ -184,20 +237,17 @@ Det er ikke færdigt, men fundamentet er lagt rigtigt: regler først, dokumentat
 
 ## Hvad mangler stadig?
 
-Før Rentemester kan bruges som rigtigt bogholderisystem, mangler bl.a.:
+Meget virker allerede, men før Rentemester kan bruges som dit rigtige bogholderisystem mangler der bl.a.:
 
-- bedre automatisk match mellem bank og bilag
-- egentlig opgaveliste for undtagelser
-- bilagsmail med deterministisk intake uden provider-lock-in
-- egentlig PEPPOL-transport til offentlige kunder oven på den nuværende EAN/GLN-preview-eksport og det nye deterministiske OIOUBL-handoff-artifact
-- gentagne fakturaer via templates før egentlig abonnementsautomatik
-- udsendelse af fakturaer via mail
-- bredere SAF-T-dækning oven på den første afgrænsede eksport efter den nye bogføringslov
-- hosted bogholder-/revisoradgang med rollegrænser oven på den eksisterende lokale eksportpakke
-- interaktiv brugerflade oven på det statiske dashboard
-- direkte bankfeeds og åbne API-integrationer
-- mere komplet dansk regelbibliotek
-- grundig review med bogholder/revisor
+- bedre automatisk match mellem bank og bilag (forslagene findes, men kan blive skarpere)
+- rigtig levering af fakturaer på e-mail ud af boksen — i dag bygges e-mailen, men selve afsendelsen kører i test-tilstand, indtil en e-mailkanal er tilkoblet
+- direkte PEPPOL-transport til offentlige kunder, ikke kun forberedte forsendelsesdokumenter
+- bredere SAF-T-dækning oven på den første afgrænsede eksport
+- adgang for din bogholder eller revisor direkte i et hosted system med rollegrænser — i dag er det en lokal fil-håndoff
+- en interaktiv brugerflade oven på det statiske dashboard
+- direkte bankfeeds (PSD2/open banking) og integrationer til fx PayPal, Zettle og Shopify
+- et mere komplet dansk regelbibliotek
+- grundig gennemgang sammen med en bogholder eller revisor
 
 Rentemester skal ikke kaldes færdigt, før det kan tåle at være source of truth.
 

@@ -9,7 +9,7 @@ const groups = [
     title: "Input",
     intro: "Sådan kommer data ind i systemet.",
     items: [
-      { t: "Bilagsmail", d: "Roadmap: første slice bliver deterministisk intake fra maildrop/EML uden provider-lock-in; usikre cases skal lande i exception-køen." },
+      { t: "Bilagsmail", d: "Indlæs bilag fra .eml-filer/maildrop, eller hent dem direkte fra en e-mailkonto via IMAP. Usikre cases lander i exception-køen." },
       { t: "Dokument-ingest", d: "Importér bilag fra CLI med metadata. Understøtter PDF, billeder, tekst." },
       { t: "Kontakter og virksomheder", d: "Kunde- og leverandørstamdata findes i kernen. Roadmap: bredere kobling til køb, bilag og historik." },
       { t: "Bankimport", d: "CSV-import med automatisk format-detektion for danske banker. DKK og EUR med dagskurs." },
@@ -34,8 +34,9 @@ const groups = [
     intro: "Hele fakturalivscyklussen — sporbart i ledgeren.",
     items: [
       { t: "Udstedelse", d: "Validér og udsted fakturaer i dansk format med moms og forfald." },
-      { t: "Offentlig e-fakturering", d: "EAN/GLN preview-eksport og deterministisk OIOUBL-handoff er live. Roadmap: direkte PEPPOL-transport til offentlige kunder med de nødvendige kontroller." },
-      { t: "Abonnementer", d: "Roadmap: gentagne fakturaer for faste aftaler, perioder, fornyelser og korrekt bogføring." },
+      { t: "Offentlig e-fakturering", d: "EAN/GLN preview-eksport, deterministisk OIOUBL-handoff og PEPPOL-forsendelseskuvert er live. Roadmap: direkte PEPPOL-transport til offentlige kunder." },
+      { t: "Gentagne fakturaer", d: "Fakturaskabeloner med fast interval (måned/kvartal/år) materialiserer deterministisk den forfaldne faktura — første trin mod abonnementsfakturering." },
+      { t: "E-mailudsendelse", d: "Send en faktura eller betalingspåmindelse til kunden med PDF vedhæftet; afsendelsen logges og kan ikke ske dobbelt. Den indbyggede transport kører foreløbig i test-tilstand." },
       { t: "Bogføring", d: "Postér fakturaer automatisk når de udstedes." },
       { t: "Påmindelser", d: "Registrér rykkere og bogfør dem som debitorhåndtering." },
       { t: "Kompensationsbeløb", d: "Beregn og bogfør lovbestemt kompensation ved dokumenteret forsinkelse." },
@@ -83,10 +84,11 @@ const groups = [
   },
   {
     title: "Integration",
-    intro: "Sådan taler andre systemer med Rentemester.",
+    intro: "Sådan betjenes Rentemester — agent-betjent eller menneske-betjent.",
     items: [
-      { t: "CLI", d: "Alt er tilgængeligt via kommandolinje. Scriptbart, automatiserbart." },
-      { t: "MCP-server", d: "MCP-kompatible klienter kobler op via en struktureret tool-protokol." },
+      { t: "CLI (menneske-betjent)", d: "Alt er tilgængeligt via kommandolinje, ét skridt ad gangen. Scriptbart og automatiserbart." },
+      { t: "MCP-server (agent-betjent)", d: "MCP-kompatible agenter kobler op via en struktureret tool-protokol og driver de samme handlinger." },
+      { t: "Runtime-agent", d: "Kommandoen agent run kører én komplet, gentagelig bogføringsrunde: ingest, bogfør det sikre, rut det usikre til exception-køen, afstem bank, tjek frister." },
       { t: "Plugin-system", d: "Roadmap: stabilt plugin-lag til PayPal, Zettle, Shopify og andre API’er uden at gøre kernen skrøbelig." },
       { t: "JSON-input", d: "Strukturerede operations-payloads — ingen fri tekst hvor det betyder noget." },
       { t: "Standard CSV", d: "Bank, MobilePay, kontoplan — alt der ikke er proprietært." },
