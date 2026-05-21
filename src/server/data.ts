@@ -86,6 +86,16 @@ function daysBetween(a: string, b: string): number {
 // Per-company summary (one row in the portfolio overview)
 // --------------------------------------------------------------------------
 
+/** The VAT block on a portfolio card — null when no VAT period is known. */
+export type CompanyVatSummary = {
+  /** Net VAT payable for the company's current half-year, kroner. */
+  payable: number;
+  /** The statutory filing/payment deadline (YYYY-MM-DD). */
+  deadline: string;
+  /** Whole days from today to the deadline; negative when overdue. */
+  daysRemaining: number;
+};
+
 export type CompanySummary = {
   slug: string;
   name: string;
@@ -93,20 +103,65 @@ export type CompanySummary = {
   archived: boolean;
   /** True when the slug is registered but has no ledger on disk. */
   ledgerMissing: boolean;
+  /** The fiscal year these figures cover, e.g. "2026"; null when unknown. */
+  fiscalYear: string | null;
+  /** Year-to-date result (resultat) for the current fiscal year, kroner. */
+  resultat: number;
+  /** Year-to-date revenue (omsætning) for the current fiscal year, kroner. */
+  omsaetning: number;
+  /**
+   * Actual bank balance from the imported statement, kroner — what the bank
+   * app shows. Null when no statement balance is known for the company.
+   */
+  actualBankBalance: number | null;
+  /** Current half-year VAT position + deadline; null when unknown. */
+  vat: CompanyVatSummary | null;
+  /** Open tasks — open exceptions, grouped into Danish summary lines. */
+  openTaskCount: number;
+  taskGroups: ExceptionGroup[];
+  auditChainOk: boolean;
+  // --- legacy fields retained for the MCP/older consumers -----------------
   openInvoiceCount: number;
   openInvoiceTotal: number;
   overdueInvoiceCount: number;
   unlinkedBankCount: number;
+  /** Alias of `openTaskCount`. */
   openExceptionCount: number;
-  /** Estimated net VAT payable for the quarter containing `asOf`. */
+  /** Alias of `vat.payable` (0 when no VAT). */
   netVatPayable: number;
-  auditChainOk: boolean;
 };
+
+/**
+ * The current (most recent live) fiscal year for a company — the same default
+ * the per-company Overblik view uses. Falls back to today's calendar year when
+ * the ledger has no posted entries yet. Returns the calendar year as a number.
+ */
+function currentFiscalYear(db: Database, settings: CompanySettings): {
+  label: string;
+  year: number;
+} {
+  const dateRows = db
+    .query(
+      "SELECT MAX(transaction_date) AS d FROM journal_entries WHERE status = 'posted'",
+    )
+    .get() as { d: string | null };
+  const latest = dateRows?.d;
+  if (latest && ISO_DATE_RE.test(latest)) {
+    const fy = fiscalYearForDate(
+      latest,
+      settings.fiscalYearStartMonth,
+      settings.fiscalYearLabelStrategy,
+    );
+    const y = parseInt(latest.slice(0, 4), 10);
+    return { label: fy.identifierLabel, year: y };
+  }
+  const y = new Date().getUTCFullYear();
+  return { label: String(y), year: y };
+}
 
 function summariseCompany(
   workspaceRoot: string,
   entry: WorkspaceCompanyEntry,
-  asOfDate: string,
 ): CompanySummary {
   const companyRoot = companyRootForSlug(workspaceRoot, entry.slug);
   const dbPath = companyPaths(companyRoot).db;
@@ -117,40 +172,117 @@ function summariseCompany(
       cvr: null,
       archived: entry.archived,
       ledgerMissing: true,
+      fiscalYear: null,
+      resultat: 0,
+      omsaetning: 0,
+      actualBankBalance: null,
+      vat: null,
+      openTaskCount: 0,
+      taskGroups: [],
+      auditChainOk: false,
       openInvoiceCount: 0,
       openInvoiceTotal: 0,
       overdueInvoiceCount: 0,
       unlinkedBankCount: 0,
       openExceptionCount: 0,
       netVatPayable: 0,
-      auditChainOk: false,
     };
   }
 
-  const db = openDb(dbPath);
+  let db: Database;
+  try {
+    db = openDb(dbPath);
+  } catch {
+    // An unreadable ledger degrades gracefully — treated as "missing".
+    return {
+      slug: entry.slug,
+      name: entry.name,
+      cvr: null,
+      archived: entry.archived,
+      ledgerMissing: true,
+      fiscalYear: null,
+      resultat: 0,
+      omsaetning: 0,
+      actualBankBalance: null,
+      vat: null,
+      openTaskCount: 0,
+      taskGroups: [],
+      auditChainOk: false,
+      openInvoiceCount: 0,
+      openInvoiceTotal: 0,
+      overdueInvoiceCount: 0,
+      unlinkedBankCount: 0,
+      openExceptionCount: 0,
+      netVatPayable: 0,
+    };
+  }
   try {
     migrate(db);
     const company = getCompanySettings(db);
-    const invoices = buildInvoiceList(db, { status: "open", asOfDate });
-    const overdue = buildOverdueInvoiceList(db, { asOfDate });
-    const unlinked = listBankTransactions(db, { status: "unmatched" });
+    const { label: fyLabel, year: yearNum } = currentFiscalYear(db, company);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    // Resultat + omsætning — the same P&L the per-company Overblik renders.
+    const pl = buildProfitAndLoss(db, yearStart, yearEnd);
+
+    // Actual bank balance from the imported statement (what the bank shows).
+    const actualBankBalance = actualBankBalanceAsOf(db, yearEnd);
+
+    // VAT: the booked half-year position — the first half, switching to the
+    // second only when the first is empty and the second carries activity.
+    // Same selection as the Overblik view; NOT the old `buildVatReport`.
+    const p1 = halfYearPeriod(yearNum, 1);
+    const p2 = halfYearPeriod(yearNum, 2);
+    const h1 = vatPositionForPeriod(db, p1.start, p1.end);
+    const h2 = vatPositionForPeriod(db, p2.start, p2.end);
+    const useSecondHalf = h1.payable === 0 && h2.payable !== 0;
+    const vatPos = useSecondHalf ? h2 : h1;
+    const vatHalf: 1 | 2 = useSecondHalf ? 2 : 1;
+    const deadline = vatHalfYearDeadline(yearNum, vatHalf);
+    const vat: CompanyVatSummary = {
+      payable: vatPos.payable,
+      deadline,
+      daysRemaining: daysBetween(todayIsoDate(), deadline),
+    };
+
+    // Open tasks — open exceptions grouped into Danish summary lines.
     const exceptions = listExceptions(db, { status: "open" });
-    const period = quarterPeriodForDate(asOfDate);
-    const vat = buildVatReport(db, period.start, period.end);
+    const taskGroups = groupExceptions(
+      exceptions.rows.map((row: any) => ({
+        type: row.type,
+        severity: row.severity,
+      })),
+    );
+
+    // Legacy figures retained for older consumers.
+    const invoices = buildInvoiceList(db, { status: "open", asOfDate: yearEnd });
+    const overdue = buildOverdueInvoiceList(db, { asOfDate: yearEnd });
+    const unlinked = listBankTransactions(db, { status: "unmatched" });
     const audit = verifyAuditChain(db);
+
     return {
       slug: entry.slug,
       name: company.name,
       cvr: company.cvr,
       archived: entry.archived,
       ledgerMissing: false,
+      fiscalYear: fyLabel,
+      resultat: pl.result,
+      omsaetning: pl.totalIncome,
+      actualBankBalance,
+      vat,
+      openTaskCount: exceptions.count,
+      taskGroups,
+      auditChainOk: audit.ok,
       openInvoiceCount: invoices.count,
-      openInvoiceTotal: invoices.rows.reduce((acc, r) => acc + r.openBalance, 0),
+      openInvoiceTotal: roundKroner(
+        invoices.rows.reduce((acc, r) => acc + r.openBalance, 0),
+      ),
       overdueInvoiceCount: overdue.count,
       unlinkedBankCount: unlinked.count,
       openExceptionCount: exceptions.count,
-      netVatPayable: vat.netVatPayable,
-      auditChainOk: audit.ok,
+      netVatPayable: vat.payable,
     };
   } finally {
     db.close();
@@ -161,6 +293,22 @@ export type PortfolioOverview = {
   workspace: string;
   asOf: string;
   companyCount: number;
+  /**
+   * Workspace-wide roll-up — "how is the whole portfolio doing". The figures
+   * are summed across legal entities for a portfolio glance; each company is
+   * still a separate entity and is judged on its own card.
+   */
+  rollup: {
+    /** Combined year-to-date result across all companies, kroner. */
+    resultat: number;
+    /** Combined liquidity — actual bank balance across all companies, kroner. */
+    liquidity: number;
+    /** Combined VAT owed across all companies, kroner. */
+    vatPayable: number;
+    /** Total open tasks across all companies. */
+    openTaskCount: number;
+  };
+  /** Legacy totals block, retained for older consumers. */
   totals: {
     openInvoiceCount: number;
     openInvoiceTotal: number;
@@ -172,14 +320,30 @@ export type PortfolioOverview = {
   companies: CompanySummary[];
 };
 
-/** Aggregates one summary per workspace company plus portfolio-wide totals. */
+/**
+ * Aggregates one real-figure summary per workspace company plus a
+ * workspace-wide roll-up. Each company's figures cover its current fiscal
+ * year, computed by reusing the per-company core logic (`buildProfitAndLoss`,
+ * `actualBankBalanceAsOf`, `vatPositionForPeriod`, the exception grouping).
+ * `asOfDate` is retained on the response for backwards compatibility; the
+ * figures themselves are year-to-date for each company's fiscal year.
+ */
 export function buildPortfolioOverview(
   workspaceRoot: string,
   asOfDate: string,
 ): PortfolioOverview {
   const entries = listWorkspaceCompanies(workspaceRoot);
   const companies = entries.map((entry) =>
-    summariseCompany(workspaceRoot, entry, asOfDate),
+    summariseCompany(workspaceRoot, entry),
+  );
+  const rollup = companies.reduce(
+    (acc, c) => ({
+      resultat: acc.resultat + c.resultat,
+      liquidity: acc.liquidity + (c.actualBankBalance ?? 0),
+      vatPayable: acc.vatPayable + (c.vat?.payable ?? 0),
+      openTaskCount: acc.openTaskCount + c.openTaskCount,
+    }),
+    { resultat: 0, liquidity: 0, vatPayable: 0, openTaskCount: 0 },
   );
   const totals = companies.reduce(
     (acc, c) => ({
@@ -203,7 +367,20 @@ export function buildPortfolioOverview(
     workspace: workspaceRoot,
     asOf: asOfDate,
     companyCount: companies.length,
-    totals,
+    rollup: {
+      resultat: roundKroner(rollup.resultat),
+      liquidity: roundKroner(rollup.liquidity),
+      vatPayable: roundKroner(rollup.vatPayable),
+      openTaskCount: rollup.openTaskCount,
+    },
+    totals: {
+      openInvoiceCount: totals.openInvoiceCount,
+      openInvoiceTotal: roundKroner(totals.openInvoiceTotal),
+      overdueInvoiceCount: totals.overdueInvoiceCount,
+      unlinkedBankCount: totals.unlinkedBankCount,
+      openExceptionCount: totals.openExceptionCount,
+      netVatPayable: roundKroner(totals.netVatPayable),
+    },
     companies,
   };
 }

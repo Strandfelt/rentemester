@@ -30,25 +30,63 @@ export type CompanyListResponse = {
   companies: CompanyEntry[];
 };
 
+/** One grouped open-task line on a portfolio card. */
+export type ExceptionGroup = {
+  type: string;
+  count: number;
+  severity: "low" | "medium" | "high";
+  label: string;
+  link: string | null;
+};
+
+/** The VAT block on a portfolio card — null when no VAT period is known. */
+export type CompanyVatSummary = {
+  payable: number;
+  deadline: string;
+  daysRemaining: number;
+};
+
 export type CompanySummary = {
   slug: string;
   name: string;
   cvr: string | null;
   archived: boolean;
   ledgerMissing: boolean;
+  /** The fiscal year these figures cover, e.g. "2026"; null when unknown. */
+  fiscalYear: string | null;
+  /** Year-to-date result (resultat), kroner. */
+  resultat: number;
+  /** Year-to-date revenue (omsætning), kroner. */
+  omsaetning: number;
+  /** Actual bank balance from the imported statement, kroner; null if unknown. */
+  actualBankBalance: number | null;
+  /** Current half-year VAT position + deadline; null when unknown. */
+  vat: CompanyVatSummary | null;
+  /** Open tasks across the company. */
+  openTaskCount: number;
+  /** The open tasks grouped into Danish summary lines. */
+  taskGroups: ExceptionGroup[];
+  auditChainOk: boolean;
+  // Legacy fields retained for older consumers.
   openInvoiceCount: number;
   openInvoiceTotal: number;
   overdueInvoiceCount: number;
   unlinkedBankCount: number;
   openExceptionCount: number;
   netVatPayable: number;
-  auditChainOk: boolean;
 };
 
 export type PortfolioOverview = {
   workspace: string;
   asOf: string;
   companyCount: number;
+  /** Workspace-wide roll-up — how the whole portfolio is doing. */
+  rollup: {
+    resultat: number;
+    liquidity: number;
+    vatPayable: number;
+    openTaskCount: number;
+  };
   totals: {
     openInvoiceCount: number;
     openInvoiceTotal: number;

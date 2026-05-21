@@ -1,9 +1,16 @@
-// One company in the portfolio overview. Renders the at-a-glance metrics and
-// the derived "needs attention" flags; links into the per-company dashboard.
+// One company in the portfolio overview. Renders the headline health an owner
+// judges a company on — resultat, faktisk banksaldo, omsætning, moms (beløb +
+// frist) and opgaver — plus the derived "needs attention" flags. The whole
+// card is a link into the company's Overblik.
 
 import { Link } from "react-router-dom";
 import type { CompanySummary } from "../lib/types";
-import { attentionFlags, attentionLevel, formatCurrency } from "../lib/format";
+import {
+  attentionFlags,
+  attentionLevel,
+  formatDeadline,
+  formatKroner,
+} from "../lib/format";
 
 export function CompanyCard({ company }: { company: CompanySummary }) {
   const level = attentionLevel(company);
@@ -20,6 +27,7 @@ export function CompanyCard({ company }: { company: CompanySummary }) {
           </h3>
           <div className="cc-cvr">
             {company.cvr ? `CVR ${company.cvr}` : "CVR ikke angivet"}
+            {company.fiscalYear ? ` · regnskabsår ${company.fiscalYear}` : ""}
           </div>
         </div>
         {company.archived && <span className="badge">Arkiveret</span>}
@@ -30,35 +38,71 @@ export function CompanyCard({ company }: { company: CompanySummary }) {
           Virksomheden er registreret, men har endnu intet regnskab på disken.
         </p>
       ) : (
-        <div className="metric-row">
-          <div className="metric">
-            <span className="m-label">Åbne tilgodehavender</span>
+        <div className="cc-metrics">
+          <div className={`cc-metric ${company.resultat < 0 ? "neg" : "pos"}`}>
+            <span className="m-label">Resultat (år til dato)</span>
+            <span className="m-value">{formatKroner(company.resultat)}</span>
+          </div>
+          <div className="cc-metric">
+            <span className="m-label">Faktisk banksaldo</span>
             <span className="m-value">
-              {formatCurrency(company.openInvoiceTotal)}
+              {company.actualBankBalance === null
+                ? "—"
+                : formatKroner(company.actualBankBalance)}
             </span>
+            {company.actualBankBalance === null && (
+              <span className="m-sub">intet kontoudtog importeret</span>
+            )}
           </div>
-          <div className="metric">
-            <span className="m-label">Moms for kvartalet</span>
+          <div className="cc-metric">
+            <span className="m-label">Omsætning</span>
+            <span className="m-value">{formatKroner(company.omsaetning)}</span>
+          </div>
+          <div className="cc-metric">
+            <span className="m-label">Moms at betale</span>
             <span className="m-value">
-              {formatCurrency(company.netVatPayable)}
+              {company.vat ? formatKroner(company.vat.payable) : "—"}
             </span>
+            {company.vat && (
+              <span
+                className={`m-sub${
+                  company.vat.payable > 0 && company.vat.daysRemaining <= 30
+                    ? company.vat.daysRemaining < 0
+                      ? " sub-critical"
+                      : " sub-warning"
+                    : ""
+                }`}
+              >
+                frist {company.vat.deadline} ·{" "}
+                {formatDeadline(company.vat.daysRemaining)}
+              </span>
+            )}
           </div>
-          <div className="metric">
-            <span className="m-label">Åbne fakturaer</span>
-            <span className="m-value">{company.openInvoiceCount}</span>
-          </div>
-          <div className="metric">
-            <span className="m-label">Revisionskæde</span>
-            <span className="m-value">
-              {company.auditChainOk ? "OK" : "Brudt"}
-            </span>
-          </div>
+        </div>
+      )}
+
+      {!company.ledgerMissing && (
+        <div className="cc-tasks">
+          {company.openTaskCount === 0 ? (
+            <span className="cc-task-none">Ingen åbne opgaver</span>
+          ) : (
+            <>
+              <span className="cc-task-count">
+                {company.openTaskCount} åbne opgaver
+              </span>
+              {company.taskGroups.slice(0, 2).map((g) => (
+                <span key={g.type} className={`cc-task-line sev-${g.severity}`}>
+                  {g.label}
+                </span>
+              ))}
+            </>
+          )}
         </div>
       )}
 
       <div className="flags">
         {flags.length === 0 ? (
-          <span className="flag ok">Ingen åbne punkter</span>
+          <span className="flag ok">Sund drift</span>
         ) : (
           flags.map((f) => (
             <span key={f.label} className={`flag ${f.level}`}>
