@@ -4,6 +4,7 @@ import { migrate } from "../core/db";
 import { postJournalEntry, reverseJournalEntry } from "../core/ledger";
 import { asJournalEntryId, type JournalEntryId } from "../core/ids";
 import { openCommandDb } from "../cli-dispatch";
+import { formatKroner } from "../cli-format";
 import type { CommandDispatch } from "../cli-dispatch";
 
 function resolveJournalEntryId(
@@ -87,6 +88,12 @@ export function register(dispatch: CommandDispatch): void {
     db.close();
   });
 
+  const JOURNAL_STATUS_DA: Record<string, string> = {
+    posted: "bogført",
+    reversed: "tilbageført",
+    draft: "kladde",
+  };
+
   dispatch.on("journal", "list", (ctx) => {
     const db = openCommandDb(ctx);
     migrate(db);
@@ -94,8 +101,36 @@ export function register(dispatch: CommandDispatch): void {
       .query(
         "SELECT id, entry_no, transaction_date, text, currency, amount_foreign, amount_dkk, fx_rate_to_dkk, document_id, source_bank_transaction_id, status, reversal_of_entry_id FROM journal_entries ORDER BY id DESC",
       )
-      .all();
-    console.table(rows);
+      .all() as Array<Record<string, unknown>>;
+    if (ctx.outputFormat === "json") {
+      console.log(JSON.stringify(rows, null, 2));
+      db.close();
+      return;
+    }
+    console.log(`Finansposteringer (${rows.length})`);
+    if (rows.length === 0) {
+      console.log("Ingen finansposteringer registreret.");
+    }
+    for (const row of rows) {
+      const status = JOURNAL_STATUS_DA[String(row.status)] ?? String(row.status ?? "—");
+      const currency = String(row.currency ?? "DKK").toUpperCase();
+      console.log("");
+      console.log(`#${row.entry_no ?? row.id} — ${row.transaction_date ?? "—"}`);
+      console.log(`  Tekst: ${row.text ?? "—"}`);
+      let amountLine = `  Beløb: ${formatKroner(row.amount_dkk)}`;
+      if (currency !== "DKK") {
+        amountLine += ` (${row.amount_foreign} ${currency}, kurs ${row.fx_rate_to_dkk})`;
+      }
+      console.log(amountLine);
+      console.log(`  Status: ${status}`);
+      if (row.document_id != null) console.log(`  Bilag: ${row.document_id}`);
+      if (row.source_bank_transaction_id != null) {
+        console.log(`  Kilde-banktransaktion: ${row.source_bank_transaction_id}`);
+      }
+      if (row.reversal_of_entry_id != null) {
+        console.log(`  Tilbagefører postering: ${row.reversal_of_entry_id}`);
+      }
+    }
     db.close();
   });
 }

@@ -135,8 +135,11 @@ describe("invoice list/find/overdue CLI", () => {
 
     expect(proc.exitCode).toBe(0);
     expect(proc.stderr).toBe("");
-    expect(proc.stdout).toContain("Overdue invoices as of 2026-06-20 (1)");
+    // Human output is rendered in Danish with kroner-og-øre (#211).
+    expect(proc.stdout).toContain("Forfaldne fakturaer pr. 2026-06-20 (1)");
     expect(proc.stdout).toContain("2026-0001");
+    expect(proc.stdout).toContain("1.250,00 kr.");
+    expect(proc.stdout).toContain("5 dage forfalden");
     expect(proc.stdout).not.toContain("2026-0002");
   });
 });

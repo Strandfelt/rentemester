@@ -5,6 +5,7 @@ import { suggestBankMatches } from "../core/bank-suggest-matches";
 import { buildBankReconciliationReport, listBankTransactions } from "../core/reconciliation";
 import { syncUnmatchedBankTransactionExceptions } from "../core/exceptions";
 import { openCommandDb } from "../cli-dispatch";
+import { renderHumanReport, formatKroner } from "../cli-format";
 import type { Database } from "bun:sqlite";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
 
@@ -22,6 +23,30 @@ function resolveAccountFilter(ctx: CommandContext, db: Database): number | undef
   return account.id;
 }
 // ===== END BANK CLUSTER (#187) =====
+
+const LEDGER_STATUS_DA: Record<string, string> = {
+  matched: "afstemt",
+  unmatched: "uafstemt",
+};
+
+function renderBankTransactionsHuman(rows: any[]): void {
+  console.log(`Banktransaktioner (${rows.length})`);
+  if (rows.length === 0) {
+    console.log("Ingen banktransaktioner for det valgte filter.");
+    return;
+  }
+  for (const row of rows) {
+    const status = LEDGER_STATUS_DA[String(row.ledgerStatus)] ?? row.ledgerStatus ?? "—";
+    console.log("");
+    console.log(`#${row.id} — ${row.transactionDate} | ${formatKroner(row.amount)}`);
+    console.log(`  Tekst: ${row.text ?? "—"}`);
+    const ref = row.reference ? ` | Reference: ${row.reference}` : "";
+    console.log(`  Status: ${status}${ref}`);
+    if (row.journalEntryNo) {
+      console.log(`  Bogført som postering ${row.journalEntryNo}`);
+    }
+  }
+}
 
 function renderBankSuggestionsHuman(rows: any[]): void {
   if (rows.length === 0) {
@@ -95,7 +120,7 @@ export function register(dispatch: CommandDispatch): void {
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
     } else if (result.ok) {
-      console.table(result.rows);
+      renderBankTransactionsHuman(result.rows);
     } else {
       console.error(result.errors.join("\n"));
     }
@@ -151,20 +176,8 @@ export function register(dispatch: CommandDispatch): void {
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
     } else if (result.ok) {
-      console.log(
-        `Matched: ${result.matchedCount} | Unmatched: ${result.unmatchedCount} | Period: ${result.periodStart}..${result.periodEnd}`,
-      );
-      if (result.matched.length > 0) {
-        console.log("\nMatched");
-        console.table(result.matched);
-      }
-      if (result.unmatched.length > 0) {
-        console.log("\nUnmatched");
-        console.table(result.unmatched);
-      }
-      if (result.matched.length === 0 && result.unmatched.length === 0) {
-        console.log("No rows for current filter.");
-      }
+      const human = renderHumanReport("reconcile-bank", result as Record<string, unknown>);
+      console.log(human ?? "");
     } else {
       console.error(result.errors.join("\n"));
     }

@@ -7,6 +7,7 @@ import {
 } from "../core/vat";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
+import { emitHumanReport } from "../cli-format";
 // ===== VAT FILING (#178) =====
 import { buildVatFiling } from "../core/vat-filing";
 // ===== END VAT FILING (#178) =====
@@ -22,7 +23,7 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = buildVatReport(db, from, to);
-    ctx.emitResult(result as Record<string, unknown>);
+    emitHumanReport("vat-report", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 

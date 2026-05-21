@@ -5,6 +5,7 @@ import { ingestDocument } from "../core/documents";
 import { recordException } from "../core/exceptions";
 import { resolveDocumentMasterData } from "../core/master-data";
 import { openCommandDb } from "../cli-dispatch";
+import { formatKroner } from "../cli-format";
 import type { CommandDispatch } from "../cli-dispatch";
 
 export function register(dispatch: CommandDispatch): void {
@@ -60,8 +61,26 @@ export function register(dispatch: CommandDispatch): void {
       .query(
         "SELECT id, document_no, source, original_filename, invoice_date, amount_inc_vat, currency, status, stored_path FROM documents ORDER BY id DESC",
       )
-      .all();
-    console.table(rows);
+      .all() as Array<Record<string, unknown>>;
+    if (ctx.outputFormat === "json") {
+      console.log(JSON.stringify(rows, null, 2));
+      db.close();
+      return;
+    }
+    console.log(`Bilag (${rows.length})`);
+    if (rows.length === 0) {
+      console.log("Ingen bilag gemt.");
+    }
+    for (const row of rows) {
+      const currency = String(row.currency ?? "DKK").toUpperCase();
+      console.log("");
+      console.log(`#${row.document_no ?? row.id} — ${row.original_filename ?? "—"}`);
+      console.log(`  Bilagsdato: ${row.invoice_date ?? "—"} | Kilde: ${row.source ?? "—"}`);
+      let amountLine = `  Beløb (inkl. moms): ${formatKroner(row.amount_inc_vat)}`;
+      if (currency !== "DKK") amountLine += ` ${currency}`;
+      console.log(amountLine);
+      console.log(`  Status: ${row.status ?? "—"}`);
+    }
     db.close();
   });
 }

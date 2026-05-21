@@ -2,6 +2,7 @@ import { migrate } from "../core/db";
 import { listExceptions, resolveException } from "../core/exceptions";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
+import { renderHumanReport } from "../cli-format";
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("exceptions", "list", (ctx) => {
@@ -14,21 +15,8 @@ export function register(dispatch: CommandDispatch): void {
     if (ctx.outputFormat === "json") {
       ctx.emitResult(result as Record<string, unknown>);
     } else if (result.ok) {
-      console.table(
-        result.rows.map((row: any) => ({
-          id: row.id,
-          type: row.type,
-          severity: row.severity,
-          status: row.status,
-          archived: row.archived,
-          relatedBankTransactionId: row.relatedBankTransactionId,
-          relatedDocumentId: row.relatedDocumentId,
-          message: row.message,
-          requiredAction: row.requiredAction,
-          createdAt: row.createdAt,
-          resolvedAt: row.resolvedAt,
-        })),
-      );
+      const human = renderHumanReport("exceptions-list", result as Record<string, unknown>);
+      console.log(human ?? "");
     } else {
       console.error(result.errors.join("\n"));
     }
