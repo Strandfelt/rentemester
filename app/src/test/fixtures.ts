@@ -2,16 +2,19 @@
 
 import { vi } from "vitest";
 import type {
+  CompanyArchiveYear,
   CompanyBalance,
   CompanyBank,
   CompanyDashboard,
   CompanyDocuments,
   CompanyIncomeStatement,
   CompanyJournal,
+  CompanyMultiYear,
   CompanyOverview,
   CompanySummary,
   CompanyTrialBalance,
   CompanyVat,
+  FiscalYearEntry,
 } from "../lib/types";
 
 export function summary(over: Partial<CompanySummary> = {}): CompanySummary {
@@ -351,6 +354,72 @@ export function documents(
     ],
     linkedCount: 1,
     unlinkedCount: 0,
+    ...over,
+  };
+}
+
+/** The fiscal-years payload — drives the Arkiv view's year selector. */
+export function fiscalYears(
+  over: FiscalYearEntry[] = STATEMENT_FISCAL_YEARS,
+): { slug: string; years: FiscalYearEntry[] } {
+  return { slug: "acme-aps", years: over };
+}
+
+export function archive(
+  over: Partial<CompanyArchiveYear> = {},
+): CompanyArchiveYear {
+  return {
+    slug: "acme-aps",
+    company: STATEMENT_COMPANY,
+    year: "2025",
+    sourceSystem: "dinero",
+    importedAt: "2026-01-10T09:00:00.000Z",
+    saldoBalance: [
+      { accountNo: "1000", name: "Omsætning", amount: -42000 },
+      { accountNo: "3000", name: "Vareforbrug", amount: 12500 },
+      { accountNo: "55000", name: "Bank", amount: 29500 },
+    ],
+    postings: { count: 84, grossTotal: 168000 },
+    ...over,
+  };
+}
+
+export function multiYear(
+  over: Partial<CompanyMultiYear> = {},
+): CompanyMultiYear {
+  return {
+    slug: "acme-aps",
+    company: STATEMENT_COMPANY,
+    years: [
+      {
+        year: "2023",
+        source: "archive",
+        omsaetning: 31000,
+        udgifter: 9000,
+        resultat: 22000,
+      },
+      {
+        year: "2024",
+        source: "archive",
+        omsaetning: 38000,
+        udgifter: 11000,
+        resultat: 27000,
+      },
+      {
+        year: "2025",
+        source: "archive",
+        omsaetning: 42000,
+        udgifter: 12500,
+        resultat: 29500,
+      },
+      {
+        year: "2026",
+        source: "live",
+        omsaetning: 17829.02,
+        udgifter: 4594.2,
+        resultat: 13234.82,
+      },
+    ],
     ...over,
   };
 }

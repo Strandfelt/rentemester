@@ -413,6 +413,18 @@ export function resolveYearParam(raw: string | null | undefined): number | null 
   return parseInt(raw, 10);
 }
 
+/**
+ * Validates a required four-digit `:year` taken from the URL path (e.g. the
+ * archive endpoint `/archive/:year`). Unlike `resolveYearParam` the year is
+ * mandatory here, so an absent or malformed value is a 400.
+ */
+export function resolvePathYear(raw: string): number {
+  if (!YEAR_RE.test(raw)) {
+    throw ApiError.badRequest("year must be a four-digit calendar year");
+  }
+  return parseInt(raw, 10);
+}
+
 /** The two ISO dates [start, end] for a half of the calendar year `year`. */
 function halfYearPeriod(year: number, half: 1 | 2): { start: string; end: string } {
   return half === 1
@@ -1516,6 +1528,254 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       documents,
       linkedCount,
       unlinkedCount: documents.length - linkedCount,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company archive (Arkiv — a single archived year) — cockpit-redesign it. 4
+// --------------------------------------------------------------------------
+
+/** One archived `SaldoBalance.csv` line — an account's closing balance. */
+export type ArchiveBalanceRow = {
+  accountNo: string;
+  name: string;
+  /** Closing balance, kroner, exactly as the Dinero export stored it. */
+  amount: number;
+};
+
+export type CompanyArchiveYear = ReturnType<typeof buildCompanyArchiveYear>;
+
+/**
+ * Arkiv — one archived fiscal year's read-only reference data (#197). Returns
+ * that year's full `SaldoBalance` (every account: number, name, closing
+ * amount) from `import_archive_balances`, plus a summary of its archived
+ * `Posteringer` (the line count and total). Nothing here touches the live
+ * ledger — the archive is append-only Dinero export rows, never posted.
+ *
+ * Throws `ApiError.notFound` when the slug is not registered, the ledger is
+ * missing, or the company has no archived data for `year`.
+ */
+export function buildCompanyArchiveYear(
+  workspaceRoot: string,
+  slug: string,
+  year: number,
+) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    const yearRow = db
+      .query(
+        `SELECT id, source_system AS sourceSystem,
+                posting_count AS postingCount,
+                balance_count AS balanceCount,
+                imported_at   AS importedAt
+           FROM import_archive_years
+          WHERE fiscal_year = ?
+          ORDER BY id DESC`,
+      )
+      .get(year) as
+      | {
+          id: number;
+          sourceSystem: string;
+          postingCount: number;
+          balanceCount: number;
+          importedAt: string;
+        }
+      | undefined;
+    if (!yearRow) {
+      throw ApiError.notFound(
+        `company '${slug}' has no archived data for ${year}`,
+      );
+    }
+
+    const balanceRows = db
+      .query(
+        `SELECT account_no AS accountNo, account_name AS name, amount AS amount
+           FROM import_archive_balances
+          WHERE archive_year_id = ?
+          ORDER BY account_no ASC`,
+      )
+      .all(yearRow.id) as Array<{
+      accountNo: string;
+      name: string | null;
+      amount: number;
+    }>;
+    const saldoBalance: ArchiveBalanceRow[] = balanceRows.map((r) => ({
+      accountNo: r.accountNo,
+      name: r.name ?? "",
+      amount: roundKroner(r.amount),
+    }));
+
+    // A summary of the archived postings — count + total amount. The signed
+    // archive `amount` sums to ~0 over a balanced year, so the total here is
+    // the gross posting volume (sum of absolute amounts) for an at-a-glance
+    // sense of activity.
+    const postingSummary = db
+      .query(
+        `SELECT COUNT(*) AS count,
+                COALESCE(SUM(ABS(amount)), 0) AS grossTotal
+           FROM import_archive_postings
+          WHERE archive_year_id = ?`,
+      )
+      .get(yearRow.id) as { count: number; grossTotal: number };
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      year: String(year),
+      sourceSystem: yearRow.sourceSystem,
+      importedAt: yearRow.importedAt,
+      saldoBalance,
+      postings: {
+        count: postingSummary.count,
+        grossTotal: roundKroner(postingSummary.grossTotal),
+      },
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company multi-year key figures (Flerårsoversigt) — cockpit-redesign it. 4
+// --------------------------------------------------------------------------
+
+/** Key figures for one fiscal year in the multi-year comparison. */
+export type MultiYearRow = {
+  /** The fiscal-year label, e.g. "2025". */
+  year: string;
+  /** Where the figures come from: the live ledger or the #197 archive. */
+  source: "live" | "archive";
+  /** Income / omsætning for the year, kroner. */
+  omsaetning: number;
+  /** Expenses / udgifter for the year, kroner. */
+  udgifter: number;
+  /** Result (omsætning − udgifter), kroner. */
+  resultat: number;
+};
+
+export type CompanyMultiYear = ReturnType<typeof buildCompanyMultiYear>;
+
+/**
+ * Flerårsoversigt — key figures (omsætning / udgifter / resultat) for every
+ * fiscal year available for a company, oldest→newest so a trend can be
+ * charted.
+ *
+ * The live year(s) are computed from the posted ledger via
+ * `core/financial-statements` — exactly as `/income-statement` does. The
+ * archived years (#197) are derived from `import_archive_balances`: each
+ * archived account's closing balance is classified income vs expense by
+ * joining its account number to the live `accounts` table's `type`. Income
+ * accounts are credit-normal, so the archive's signed balance is negated to
+ * read as a positive omsætning; expense accounts read positive as-is.
+ *
+ * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
+ */
+export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const years = buildCompanyFiscalYears(workspaceRoot, slug).years;
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    // Account number → type, for classifying archived balances. The archive
+    // stores raw account numbers; the live chart of accounts is the only
+    // source of an account's income/expense classification.
+    const accountTypeRows = db
+      .query("SELECT account_no AS accountNo, type AS type FROM accounts")
+      .all() as Array<{ accountNo: string; type: string }>;
+    const accountType = new Map(
+      accountTypeRows.map((r) => [r.accountNo, r.type]),
+    );
+
+    const rows: MultiYearRow[] = [];
+    for (const fy of years) {
+      if (fy.source === "live") {
+        const yearNum = parseInt(fy.label, 10);
+        const pl = buildProfitAndLoss(
+          db,
+          `${yearNum}-01-01`,
+          `${yearNum}-12-31`,
+        );
+        rows.push({
+          year: fy.label,
+          source: "live",
+          omsaetning: roundKroner(pl.totalIncome),
+          udgifter: roundKroner(pl.totalExpense),
+          resultat: roundKroner(pl.result),
+        });
+        continue;
+      }
+
+      // Archived year — classify each SaldoBalance line by account type.
+      const archiveId = db
+        .query(
+          "SELECT id FROM import_archive_years WHERE fiscal_year = ? ORDER BY id DESC",
+        )
+        .get(parseInt(fy.label, 10)) as { id: number } | undefined;
+      let omsaetning = 0;
+      let udgifter = 0;
+      if (archiveId) {
+        const balRows = db
+          .query(
+            `SELECT account_no AS accountNo, amount AS amount
+               FROM import_archive_balances
+              WHERE archive_year_id = ?`,
+          )
+          .all(archiveId.id) as Array<{ accountNo: string; amount: number }>;
+        for (const b of balRows) {
+          const type = accountType.get(b.accountNo);
+          const amount = Number(b.amount ?? 0);
+          // Income accounts are credit-normal: a closing balance reads
+          // negative in the debit-positive archive sign, so negate it.
+          if (type === "income") omsaetning += -amount;
+          else if (type === "expense") udgifter += amount;
+        }
+      }
+      omsaetning = roundKroner(omsaetning);
+      udgifter = roundKroner(udgifter);
+      rows.push({
+        year: fy.label,
+        source: "archive",
+        omsaetning,
+        udgifter,
+        resultat: roundKroner(omsaetning - udgifter),
+      });
+    }
+
+    // Oldest→newest so the SPA can chart a trend left-to-right.
+    rows.sort((a, b) => a.year.localeCompare(b.year));
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      years: rows,
     };
   } finally {
     db.close();

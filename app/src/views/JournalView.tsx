@@ -55,7 +55,7 @@ export function JournalView() {
       />
 
       {j.archived ? (
-        <ArchivedNotice year={j.selectedYear} />
+        <ArchivedNotice slug={slug} year={j.selectedYear} />
       ) : (
         <>
           <p className="statement-asof muted">
@@ -143,14 +143,20 @@ function EntryRow({
   );
 }
 
-function ArchivedNotice({ year }: { year: string }) {
+function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
   return (
     <div className="card archived-notice">
       <h3>Regnskabsår {year} er arkiveret</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Posteringerne for
-        arkiverede år kommer i en senere udgave — se Arkiv.
+        Dette år ligger i det skrivebeskyttede arkiv. De arkiverede posteringer
+        for {year} ses i Arkiv.
       </p>
+      <Link
+        className="btn secondary"
+        to={`/companies/${slug}/arkiv?year=${year}`}
+      >
+        Åbn {year} i Arkiv
+      </Link>
     </div>
   );
 }

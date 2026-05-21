@@ -11,6 +11,8 @@
 //   /companies/:slug/bank               Bank (transactions + reconciliation)
 //   /companies/:slug/moms               Moms (VAT return)
 //   /companies/:slug/bilag              Bilag (ingested documents)
+//   /companies/:slug/arkiv              Arkiv (a single archived year)
+//   /companies/:slug/fleraar            Flerårsoversigt (multi-year comparison)
 //   /companies/:slug/manage             rename / archive
 //
 // The per-company views share a sub-navigation and a fiscal-year selector
@@ -27,6 +29,8 @@ import { JournalView } from "./views/JournalView";
 import { BankView } from "./views/BankView";
 import { VatView } from "./views/VatView";
 import { DocumentsView } from "./views/DocumentsView";
+import { ArchiveView } from "./views/ArchiveView";
+import { MultiYearView } from "./views/MultiYearView";
 import { ManageCompanyView } from "./views/ManageCompanyView";
 
 export function App() {
@@ -65,6 +69,11 @@ export function App() {
           <Route path="/companies/:slug/bank" element={<BankView />} />
           <Route path="/companies/:slug/moms" element={<VatView />} />
           <Route path="/companies/:slug/bilag" element={<DocumentsView />} />
+          <Route path="/companies/:slug/arkiv" element={<ArchiveView />} />
+          <Route
+            path="/companies/:slug/fleraar"
+            element={<MultiYearView />}
+          />
           <Route
             path="/companies/:slug/manage"
             element={<ManageCompanyView />}

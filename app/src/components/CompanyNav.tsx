@@ -42,6 +42,8 @@ const TABS: { to: string; label: string }[] = [
   { to: "bank", label: "Bank" },
   { to: "moms", label: "Moms" },
   { to: "bilag", label: "Bilag" },
+  { to: "arkiv", label: "Arkiv" },
+  { to: "fleraar", label: "Flerår" },
 ];
 
 /**

@@ -695,6 +695,9 @@ table.data.compact tr:last-child td {
   margin: 0 0 var(--space-xs);
   font-size: var(--text-size-lg);
 }
+.archived-notice .btn {
+  margin-top: var(--space-md);
+}
 
 /* ==========================================================================
    Per-company sub-navigation (Overblik · Resultatopgørelse · Balance · …)
@@ -898,6 +901,43 @@ table.statement-table td.num.muted {
 
 .bank-summary {
   margin-bottom: var(--space-lg);
+}
+
+/* ==========================================================================
+   Arkiv — read-only archived year, and Flerårsoversigt
+   ========================================================================== */
+
+/* The "Arkiveret regnskabsår — skrivebeskyttet" banner above the SaldoBalance. */
+.archive-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  background: var(--surface-2);
+  border-left: 3px solid var(--warning);
+}
+.archive-banner p {
+  margin: 0;
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.archive-banner .flag {
+  flex-shrink: 0;
+}
+.archive-summary {
+  margin-bottom: var(--space-lg);
+}
+/* The small "arkiv" tag beside an archived year in the multi-year table. */
+.archive-tag {
+  margin-left: var(--space-xs);
+  font-size: var(--text-size-xs);
+}
+/* Signed result figures in the multi-year table. */
+.amount-positive {
+  color: var(--ok);
+}
+.amount-negative {
+  color: var(--accent);
 }
 
 /* ==========================================================================

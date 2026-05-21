@@ -764,6 +764,193 @@ describe("cockpit API — documents (GET .../documents)", () => {
   });
 });
 
+/**
+ * Seeds a read-only archived fiscal year (#197) directly into a company's
+ * `import_archive_*` tables — the same shape `archiveDineroYears` writes. The
+ * `balances` are `[accountNo, accountName, amount]` SaldoBalance lines; the
+ * `postings` are `[accountNo, amount]` archived Posteringer rows.
+ */
+function seedArchiveYear(
+  ws: string,
+  slug: string,
+  fiscalYear: number,
+  balances: Array<[string, string, number]>,
+  postings: Array<[string, number]> = [],
+) {
+  const db = openDb(companyPaths(companyRootForSlug(ws, slug)).db);
+  try {
+    migrate(db);
+    const info = db
+      .query(
+        `INSERT INTO import_archive_years
+           (source_system, fiscal_year, posting_count, balance_count)
+         VALUES ('dinero', ?, ?, ?)`,
+      )
+      .run(fiscalYear, postings.length, balances.length);
+    const yearId = Number(info.lastInsertRowid);
+    balances.forEach(([accountNo, name, amount], i) => {
+      db.query(
+        `INSERT INTO import_archive_balances
+           (archive_year_id, line_no, account_no, account_name, amount)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(yearId, i, accountNo, name, amount);
+    });
+    postings.forEach(([accountNo, amount], i) => {
+      db.query(
+        `INSERT INTO import_archive_postings
+           (archive_year_id, line_no, account_no, amount)
+         VALUES (?, ?, ?, ?)`,
+      ).run(yearId, i, accountNo, amount);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — archive (GET .../archive/:year)", () => {
+  test("returns the archived year's SaldoBalance and posting summary", async () => {
+    const ws = makeWorkspace("arc-live", ["Acme ApS"]);
+    try {
+      seedArchiveYear(
+        ws,
+        "acme-aps",
+        2024,
+        [
+          ["1000", "Omsætning", -5000],
+          ["3000", "Vareforbrug", 1200],
+        ],
+        [
+          ["1000", -5000],
+          ["3000", 1200],
+        ],
+      );
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/archive/2024",
+      );
+      expect(res.status).toBe(200);
+      const a = res.body.archive;
+      expect(a.slug).toBe("acme-aps");
+      expect(a.year).toBe("2024");
+      expect(a.saldoBalance).toHaveLength(2);
+      expect(a.saldoBalance[0]).toEqual({
+        accountNo: "1000",
+        name: "Omsætning",
+        amount: -5000,
+      });
+      expect(a.postings.count).toBe(2);
+      expect(a.postings.grossTotal).toBe(6200);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("an unarchived year is a safe 404", async () => {
+    const ws = makeWorkspace("arc-noyear", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/archive/2099",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a malformed year in the path is a safe 400", async () => {
+    const ws = makeWorkspace("arc-badyear", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/archive/20xx",
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("bad_request");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("archive for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("arc-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/archive/2024",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — multi-year (GET .../multi-year)", () => {
+  test("returns key figures per year, oldest-first, live + archive", async () => {
+    const ws = makeWorkspace("my-live", ["Acme ApS"]);
+    try {
+      // Archived 2025 — income account 1000 closes at −800, expense 3000 at 200.
+      seedArchiveYear(ws, "acme-aps", 2025, [
+        ["1000", "Omsætning", -800],
+        ["3000", "Vareforbrug", 200],
+      ]);
+      // Live 2026.
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/multi-year",
+      );
+      expect(res.status).toBe(200);
+      const m = res.body.multiYear;
+      expect(m.slug).toBe("acme-aps");
+      expect(m.years.map((y: any) => y.year)).toEqual(["2025", "2026"]);
+      const y2025 = m.years[0];
+      expect(y2025.source).toBe("archive");
+      expect(y2025.omsaetning).toBe(800);
+      expect(y2025.udgifter).toBe(200);
+      expect(y2025.resultat).toBe(600);
+      const y2026 = m.years[1];
+      expect(y2026.source).toBe("live");
+      expect(y2026.omsaetning).toBe(1000);
+      expect(y2026.udgifter).toBe(400);
+      expect(y2026.resultat).toBe(600);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("an empty ledger yields no years", async () => {
+    const ws = makeWorkspace("my-empty", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/multi-year",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.multiYear.years).toEqual([]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("multi-year for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("my-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/multi-year",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("cockpit API — company onboarding (POST /api/companies)", () => {
   test("creates a new company in the workspace", async () => {
     const ws = makeWorkspace("add-create");

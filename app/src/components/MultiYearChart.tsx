@@ -1,0 +1,113 @@
+// Multi-year trend chart for the Flerårsoversigt (cockpit-redesign it. 4).
+//
+// A grouped bar chart of omsætning / udgifter / resultat across every fiscal
+// year, oldest→newest. Chart.js is already registered by `PnlChart`; colours
+// are pulled from the cockpit design tokens (DESIGN.md palette) so the chart
+// stays consistent with the rest of the SPA.
+
+import {
+  type ChartData,
+  type ChartOptions,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+import type { MultiYearRow } from "../lib/types";
+
+// DESIGN.md palette — kept in sync with app/src/styles.css tokens.
+const INK_MUTED = "#4c4740";
+const INCOME = "#2e5e4e"; // --color-success
+const EXPENSE = "#a6332a"; // --color-accent
+const RESULT = "#2d5673"; // --color-info (sober blue)
+const BORDER = "#d8d2c6"; // --color-border
+
+// Full currency formatting — used for tooltips ("18.000 kr.").
+const CURRENCY = new Intl.NumberFormat("da-DK", {
+  style: "currency",
+  currency: "DKK",
+  maximumFractionDigits: 0,
+});
+
+// Plain number with a Danish thousands separator ("18.000") — Y-axis ticks.
+const AXIS_NUMBER = new Intl.NumberFormat("da-DK", {
+  maximumFractionDigits: 0,
+});
+
+export function MultiYearChart({ years }: { years: MultiYearRow[] }) {
+  const data: ChartData<"bar"> = {
+    labels: years.map((y) => y.year),
+    datasets: [
+      {
+        label: "Omsætning",
+        data: years.map((y) => y.omsaetning),
+        backgroundColor: INCOME,
+        borderRadius: 2,
+      },
+      {
+        label: "Udgifter",
+        data: years.map((y) => y.udgifter),
+        backgroundColor: EXPENSE,
+        borderRadius: 2,
+      },
+      {
+        label: "Resultat",
+        data: years.map((y) => y.resultat),
+        backgroundColor: RESULT,
+        borderRadius: 2,
+      },
+    ],
+  };
+
+  const options: ChartOptions<"bar"> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: {
+        position: "top",
+        align: "end",
+        labels: {
+          color: INK_MUTED,
+          boxWidth: 12,
+          boxHeight: 12,
+          font: { family: "IBM Plex Sans", size: 13 },
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) =>
+            `${ctx.dataset.label}: ${CURRENCY.format(Number(ctx.parsed.y))}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: {
+          color: INK_MUTED,
+          font: { family: "IBM Plex Sans", size: 12 },
+        },
+      },
+      y: {
+        beginAtZero: true,
+        // A fixed gutter width so the axis labels never clip before the web
+        // font loads — the same trick `PnlChart` uses.
+        afterFit: (scale) => {
+          scale.width = 76;
+        },
+        grid: { color: BORDER },
+        ticks: {
+          color: INK_MUTED,
+          font: { family: "IBM Plex Mono", size: 11 },
+          callback: (value) => AXIS_NUMBER.format(Number(value)),
+        },
+      },
+    },
+  };
+
+  // A fixed-height wrapper gives Chart.js a stable box to fill at every
+  // viewport width — no collapse on mobile, no unbounded growth on desktop.
+  return (
+    <div className="pnl-chart">
+      <Bar data={data} options={options} />
+    </div>
+  );
+}

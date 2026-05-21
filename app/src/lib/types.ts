@@ -456,6 +456,66 @@ export type DocumentsResponse = {
   documents: CompanyDocuments;
 };
 
+// --- archive / Arkiv (GET .../archive/:year) — cockpit-redesign it. 4 -------
+//
+// All money fields below are kroner (DKK with decimals) — use `formatKroner`.
+
+export type ArchiveBalanceRow = {
+  accountNo: string;
+  name: string;
+  /** Closing balance, kroner, exactly as the Dinero export stored it. */
+  amount: number;
+};
+
+export type CompanyArchiveYear = {
+  slug: string;
+  company: StatementCompany;
+  /** The archived fiscal-year label, e.g. "2025". */
+  year: string;
+  /** The accounting system the archive was exported from, e.g. "dinero". */
+  sourceSystem: string;
+  importedAt: string;
+  /** The year's full SaldoBalance — every account's closing balance. */
+  saldoBalance: ArchiveBalanceRow[];
+  /** A summary of the archived Posteringer for the year. */
+  postings: {
+    count: number;
+    /** Sum of the absolute posting amounts — the gross volume, kroner. */
+    grossTotal: number;
+  };
+};
+
+export type ArchiveResponse = {
+  ok: true;
+  archive: CompanyArchiveYear;
+};
+
+// --- multi-year / Flerårsoversigt (GET .../multi-year) — it. 4 --------------
+
+export type MultiYearRow = {
+  /** The fiscal-year label, e.g. "2025". */
+  year: string;
+  source: "live" | "archive";
+  /** Income / omsætning for the year, kroner. */
+  omsaetning: number;
+  /** Expenses / udgifter for the year, kroner. */
+  udgifter: number;
+  /** Result (omsætning − udgifter), kroner. */
+  resultat: number;
+};
+
+export type CompanyMultiYear = {
+  slug: string;
+  company: StatementCompany;
+  /** Key figures per fiscal year, oldest→newest for charting a trend. */
+  years: MultiYearRow[];
+};
+
+export type MultiYearResponse = {
+  ok: true;
+  multiYear: CompanyMultiYear;
+};
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;

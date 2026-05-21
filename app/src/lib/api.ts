@@ -5,6 +5,7 @@
 // only ever deal with data or a single error type.
 
 import type {
+  ArchiveResponse,
   BalanceResponse,
   BankResponse,
   CompanyListResponse,
@@ -15,6 +16,7 @@ import type {
   HealthResponse,
   IncomeStatementResponse,
   JournalResponse,
+  MultiYearResponse,
   OverviewResponse,
   PortfolioResponse,
   TrialBalanceResponse,
@@ -146,6 +148,18 @@ export const api = {
     request<DocumentsResponse>(
       `/api/companies/${encodeURIComponent(slug)}/documents`,
     ).then((r) => r.documents),
+
+  archive: (slug: string, year: string) =>
+    request<ArchiveResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/archive/${encodeURIComponent(
+        year,
+      )}`,
+    ).then((r) => r.archive),
+
+  multiYear: (slug: string) =>
+    request<MultiYearResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/multi-year`,
+    ).then((r) => r.multiYear),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

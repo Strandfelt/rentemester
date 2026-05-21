@@ -53,7 +53,7 @@ export function BalanceView() {
       />
 
       {b.archived ? (
-        <ArchivedNotice year={b.selectedYear} />
+        <ArchivedNotice slug={slug} year={b.selectedYear} />
       ) : (
         <>
           <p className="statement-asof muted">Pr. {b.asOfDate}</p>
@@ -171,14 +171,20 @@ function BalanceCheck({ balanced }: { balanced: boolean }) {
   );
 }
 
-function ArchivedNotice({ year }: { year: string }) {
+function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
   return (
     <div className="card archived-notice">
       <h3>Regnskabsår {year} er arkiveret</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Balancen for arkiverede
-        år kommer i en senere udgave — se Arkiv.
+        Dette år ligger i det skrivebeskyttede arkiv. Den arkiverede
+        saldobalance for {year} vises i Arkiv.
       </p>
+      <Link
+        className="btn secondary"
+        to={`/companies/${slug}/arkiv?year=${year}`}
+      >
+        Åbn {year} i Arkiv
+      </Link>
     </div>
   );
 }

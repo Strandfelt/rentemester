@@ -25,6 +25,7 @@ import type { ServerConfig } from "./config";
 import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
 import {
+  buildCompanyArchiveYear,
   buildCompanyBalance,
   buildCompanyBank,
   buildCompanyDashboardData,
@@ -32,11 +33,13 @@ import {
   buildCompanyFiscalYears,
   buildCompanyIncomeStatement,
   buildCompanyJournal,
+  buildCompanyMultiYear,
   buildCompanyOverview,
   buildCompanyTrialBalance,
   buildCompanyVat,
   buildPortfolioOverview,
   resolveAsOfDate,
+  resolvePathYear,
   resolveYearParam,
 } from "./data";
 import { serveStatic } from "./static";
@@ -211,6 +214,21 @@ function handleCompanyVat(
 function handleCompanyDocuments(config: ServerConfig, slug: string): Response {
   const data = buildCompanyDocuments(config.workspaceRoot, slug);
   return okResponse({ documents: data });
+}
+
+function handleCompanyArchiveYear(
+  config: ServerConfig,
+  slug: string,
+  yearRaw: string,
+): Response {
+  const year = resolvePathYear(yearRaw);
+  const data = buildCompanyArchiveYear(config.workspaceRoot, slug, year);
+  return okResponse({ archive: data });
+}
+
+function handleCompanyMultiYear(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyMultiYear(config.workspaceRoot, slug);
+  return okResponse({ multiYear: data });
 }
 
 async function handleCompanyCreate(
@@ -399,6 +417,22 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(documentsMatch[1]!);
       return handleCompanyDocuments(config, slug);
+    }
+
+    const archiveMatch =
+      /^\/api\/companies\/([^/]+)\/archive\/([^/]+)$/.exec(path);
+    if (archiveMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(archiveMatch[1]!);
+      const year = decodeURIComponent(archiveMatch[2]!);
+      return handleCompanyArchiveYear(config, slug, year);
+    }
+
+    const multiYearMatch = /^\/api\/companies\/([^/]+)\/multi-year$/.exec(path);
+    if (multiYearMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(multiYearMatch[1]!);
+      return handleCompanyMultiYear(config, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

@@ -58,7 +58,7 @@ export function DashboardView() {
       />
 
       {o.archived ? (
-        <ArchivedNotice year={o.selectedYear} />
+        <ArchivedNotice slug={slug} year={o.selectedYear} />
       ) : (
         <>
           <div className="kpi-row">
@@ -103,14 +103,19 @@ export function DashboardView() {
   );
 }
 
-function ArchivedNotice({ year }: { year: string }) {
+function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
   return (
     <div className="card archived-notice">
       <h3>Regnskabsår {year} er arkiveret</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Det fulde overblik for
-        arkiverede år kommer i en senere udgave — se Arkiv.
+        Dette år ligger i det skrivebeskyttede arkiv og vises ikke i Overblik.
       </p>
+      <Link
+        className="btn secondary"
+        to={`/companies/${slug}/arkiv?year=${year}`}
+      >
+        Åbn {year} i Arkiv
+      </Link>
     </div>
   );
 }

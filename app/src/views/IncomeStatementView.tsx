@@ -56,7 +56,7 @@ export function IncomeStatementView() {
       />
 
       {s.archived ? (
-        <ArchivedNotice year={s.selectedYear} />
+        <ArchivedNotice slug={slug} year={s.selectedYear} />
       ) : (
         <div className="card statement-card">
           <table className="data statement-table">
@@ -147,14 +147,20 @@ function StatementSection({
   );
 }
 
-function ArchivedNotice({ year }: { year: string }) {
+function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
   return (
     <div className="card archived-notice">
       <h3>Regnskabsår {year} er arkiveret</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Resultatopgørelsen for
-        arkiverede år kommer i en senere udgave — se Arkiv.
+        Dette år ligger i det skrivebeskyttede arkiv. Se den arkiverede
+        saldobalance for {year} i Arkiv.
       </p>
+      <Link
+        className="btn secondary"
+        to={`/companies/${slug}/arkiv?year=${year}`}
+      >
+        Åbn {year} i Arkiv
+      </Link>
     </div>
   );
 }

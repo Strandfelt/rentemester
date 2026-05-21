@@ -51,7 +51,7 @@ export function VatView() {
       />
 
       {v.archived ? (
-        <ArchivedNotice year={v.selectedYear} />
+        <ArchivedNotice slug={slug} year={v.selectedYear} />
       ) : (
         <>
           <p className="statement-asof muted">
@@ -94,14 +94,21 @@ export function VatView() {
   );
 }
 
-function ArchivedNotice({ year }: { year: string }) {
+function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
   return (
     <div className="card archived-notice">
       <h3>Regnskabsår {year} er arkiveret</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Momsangivelsen for
-        arkiverede år kommer i en senere udgave — se Arkiv.
+        Dette år ligger i det skrivebeskyttede arkiv. De arkiverede data for
+        {" "}
+        {year} vises i Arkiv.
       </p>
+      <Link
+        className="btn secondary"
+        to={`/companies/${slug}/arkiv?year=${year}`}
+      >
+        Åbn {year} i Arkiv
+      </Link>
     </div>
   );
 }

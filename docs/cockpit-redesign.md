@@ -146,13 +146,21 @@ rigtige tal før ledgeren er korrekt — derfor fixes importen først.
 - [x] Frontend: Moms-view — momsangivelse for perioden
 - [x] Frontend: Bilag-view — dokumenter + link til posteringer
 - [x] Sub-navigation udvidet til 8 punkter; `?year=` bæres på tværs
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — Posteringer (10 entries, drill-down), Bank
+      (saldo 41.388,03, 19 txn i 2026), Moms (3.371,20 at betale), Bilag
+      (5 stk., linket til posteringer); desktop + mobil. NB: Moms-viewet
+      lægger 64040 omvendt-betalingspligt-moms ind i salgsmoms — polish-punkt.
 
 ### Iteration 4 — Multi-år (P2–P3)
-- [ ] Backend: archive endpoints (#197-data 2023–25) + multi-year-endpoint
-- [ ] Frontend: Arkiv-view — tidligere år, read-only
-- [ ] Frontend: Flerårsoversigt — nøgletal på tværs af år (Chart.js-trend)
-- [ ] Regnskabsårs-vælger spænder over arkiv + live
+- [x] Backend: archive endpoints (#197-data 2023–25) + multi-year-endpoint —
+      `GET .../archive/:year` (saldobalance + posteringssammendrag) og
+      `GET .../multi-year` (omsætning/udgifter/resultat pr. år, ældste→nyeste;
+      arkiv-år klassificeret via `accounts.type`)
+- [x] Frontend: Arkiv-view — arkiveret års saldobalance, read-only, tydeligt
+      mærket "Arkiveret regnskabsår — skrivebeskyttet"
+- [x] Frontend: Flerårsoversigt — nøgletals-tabel + Chart.js-trendgraf (2023→26)
+- [x] Regnskabsårs-vælger spænder over arkiv + live; CompanyNav udvidet til 10
+      punkter; arkiverede år i live-views linker nu til Arkiv-viewet
 - [ ] **Visuel inspektion**
 
 ### Iteration 5 — Kontakter, fakturaer & finish (P3)
