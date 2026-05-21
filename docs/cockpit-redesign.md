@@ -294,4 +294,19 @@ er accepteret; ingen kunstig udfyldning.
       kortfattet "Om arkivet"-forklaring (hvilke år, Dinero-import #197,
       skrivebeskyttet) med links ind i de arkiv-bevidste kerne-views i stedet
       for den redundante rå saldobalance
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — Flerårsoversigt (Resultat/Balance/Nøgletal pr.
+      år 2023–26), "Om arkivet"-fane. Fandt + rettede korrektheds-fejl: den
+      arkiverede balance medregnede ikke årets resultat i egenkapitalen
+      (balancerede ikke; Flerår uenig med Balance-view). Efter fix balancerer
+      alle fire år, og egenkapital er konsistent på tværs af views.
+
+---
+
+## Status — runde 3 afsluttet
+
+Historiske år er nu fuldt browsbare: vælg et arkiveret år i regnskabsårs-
+vælgeren, og Overblik, Resultatopgørelse, Balance, Saldobalance og Posteringer
+viser arkiv-tallene (skrivebeskyttet-banner). Views uden arkiv-data viser en
+ærlig "ikke tilgængelig"-tilstand. Flerårsoversigten sammenligner nu resultat,
+balance og nøgletal på tværs af alle år. Endelig verifikation: **710 tests
+grønne · smoke grøn**; alle fire regnskabsår balancerer.
