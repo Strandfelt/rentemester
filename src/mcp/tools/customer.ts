@@ -58,7 +58,7 @@ export function registerCustomerTools(server: McpServer): void {
     {
       title: "Create customer",
       description:
-        "Opretter en append-only kundepost. write-reversible — kræver confirm:true. Kan arkiveres senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
+        "Opretter en kundepost. write-reversible — kræver confirm:true. Kan arkiveres eller rettes senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
       inputSchema: {
         company: z.string().min(1),
         // `name` is optional only because `fromCvr` can supply it; a create
@@ -68,6 +68,8 @@ export function registerCustomerTools(server: McpServer): void {
           address: z.string().optional(),
           vatOrCvr: z.string().optional(),
           email: z.string().optional(),
+          phone: z.string().optional(),
+          website: z.string().optional(),
           eanNumber: z.string().optional(),
           paymentTermsDays: z.number().int().positive().optional(),
           defaultCurrency: z.string().optional(),

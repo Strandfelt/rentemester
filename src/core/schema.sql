@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS customers (
   address TEXT,
   vat_or_cvr TEXT,
   email TEXT,
+  phone TEXT,
+  website TEXT,
   ean_number TEXT,
   payment_terms_days INTEGER NOT NULL DEFAULT 30 CHECK(payment_terms_days > 0),
   default_currency TEXT NOT NULL DEFAULT 'DKK',
@@ -114,6 +116,9 @@ CREATE TABLE IF NOT EXISTS vendors (
   name TEXT NOT NULL,
   address TEXT,
   vat_or_cvr TEXT,
+  email TEXT,
+  phone TEXT,
+  website TEXT,
   default_expense_account TEXT,
   default_vat_treatment TEXT,
   notes TEXT,
@@ -486,29 +491,12 @@ BEGIN
   SELECT RAISE(ABORT, 'fiscal year configuration is locked after the first journal entry');
 END;
 
-CREATE TRIGGER IF NOT EXISTS customers_no_update
-BEFORE UPDATE ON customers
-BEGIN
-  SELECT RAISE(ABORT, 'customers are append-only; create a new customer record instead');
-END;
-
-CREATE TRIGGER IF NOT EXISTS customers_no_delete
-BEFORE DELETE ON customers
-BEGIN
-  SELECT RAISE(ABORT, 'customers are append-only; archive or supersede them instead');
-END;
-
-CREATE TRIGGER IF NOT EXISTS vendors_no_update
-BEFORE UPDATE ON vendors
-BEGIN
-  SELECT RAISE(ABORT, 'vendors are append-only; create a new vendor record instead');
-END;
-
-CREATE TRIGGER IF NOT EXISTS vendors_no_delete
-BEFORE DELETE ON vendors
-BEGIN
-  SELECT RAISE(ABORT, 'vendors are append-only; archive or supersede them instead');
-END;
+-- customers and vendors are ordinary mutable master-data tables. They are
+-- deliberately NOT append-only: the bookkeeping law's immutability requirement
+-- covers the posted ledger and the invoice/document snapshots that materialise
+-- buyer/sender fields at issue/ingest time — not the contact records, which
+-- may be corrected and enriched freely. (Older ledgers had append-only triggers
+-- here; db.ts migrate() drops them.)
 
 CREATE TRIGGER IF NOT EXISTS journal_entries_no_update
 BEFORE UPDATE ON journal_entries

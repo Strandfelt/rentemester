@@ -398,6 +398,18 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "Arkivet bogføres aldrig i den hash-kædede journal — kun cut-over året lander i hovedbogen",
     ],
   },
+  {
+    key: "import contacts",
+    usage: "import contacts --company <path> --file <Kontakter.csv> [--enrich-cvr] [--default-role customer|vendor]",
+    description: "Importerer en Dinero kontakt-eksport (Kontakter.csv) til kunde- og leverandørkartoteket. Hver kontakt klassificeres ud fra salgs-/købshistorik. Idempotent: allerede kendte kontakter springes over.",
+    allowedFlags: ["--company", "--file", "--enrich-cvr", "--default-role"],
+    inputNotes: [
+      "--enrich-cvr beriger danske kontakter med stamdata fra CVR-registret (kræver CVR_USERNAME/CVR_PASSWORD)",
+      "CSV-værdier vinder altid over CVR-data — berigelse udfylder kun tomme felter",
+      "--default-role styrer kontakter uden salgs-/købshistorik (standard: vendor)",
+      "Selve CSV-importen er deterministisk og offline; berigelse er det valgfri netværkslag",
+    ],
+  },
   // ===== END IMPORT FRAMEWORK (#185) =====
   // ===== RUNTIME AGENT (#183) =====
   {

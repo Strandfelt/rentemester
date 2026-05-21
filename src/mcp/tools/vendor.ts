@@ -39,7 +39,7 @@ export function registerVendorTools(server: McpServer): void {
     {
       title: "Create vendor",
       description:
-        "Opretter en append-only leverandørpost. write-reversible — kræver confirm:true. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
+        "Opretter en leverandørpost. write-reversible — kræver confirm:true. Kan arkiveres eller rettes senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
       inputSchema: {
         company: z.string().min(1),
         // `name` is optional only because `fromCvr` can supply it; a create
@@ -48,6 +48,9 @@ export function registerVendorTools(server: McpServer): void {
           name: z.string().min(1).optional(),
           address: z.string().optional(),
           vatOrCvr: z.string().optional(),
+          email: z.string().optional(),
+          phone: z.string().optional(),
+          website: z.string().optional(),
           defaultExpenseAccount: z.string().optional(),
           defaultVatTreatment: z.string().optional(),
           notes: z.string().optional(),

@@ -54,6 +54,23 @@ export function migrate(db: Database) {
   if (!hasColumn(db, "companies", "cvr_status")) db.exec("ALTER TABLE companies ADD COLUMN cvr_status TEXT;");
   if (!hasColumn(db, "companies", "audit_waived")) db.exec("ALTER TABLE companies ADD COLUMN audit_waived INTEGER;");
   if (!hasColumn(db, "companies", "cvr_synced_at")) db.exec("ALTER TABLE companies ADD COLUMN cvr_synced_at TEXT;");
+  // Contact-detail columns on customers/vendors — older ledgers predate the
+  // Dinero contacts import + CVR enrichment.
+  if (!hasColumn(db, "customers", "phone")) db.exec("ALTER TABLE customers ADD COLUMN phone TEXT;");
+  if (!hasColumn(db, "customers", "website")) db.exec("ALTER TABLE customers ADD COLUMN website TEXT;");
+  if (!hasColumn(db, "vendors", "email")) db.exec("ALTER TABLE vendors ADD COLUMN email TEXT;");
+  if (!hasColumn(db, "vendors", "phone")) db.exec("ALTER TABLE vendors ADD COLUMN phone TEXT;");
+  if (!hasColumn(db, "vendors", "website")) db.exec("ALTER TABLE vendors ADD COLUMN website TEXT;");
+  // customers/vendors are no longer append-only — drop the legacy guard
+  // triggers from ledgers created before that change.
+  for (const trigger of [
+    "customers_no_update",
+    "customers_no_delete",
+    "vendors_no_update",
+    "vendors_no_delete",
+  ]) {
+    db.run(`DROP TRIGGER IF EXISTS ${trigger}`);
+  }
   if (!hasColumn(db, "documents", "retain_until")) db.exec("ALTER TABLE documents ADD COLUMN retain_until TEXT;");
   if (!hasColumn(db, "bank_transactions", "retain_until")) db.exec("ALTER TABLE bank_transactions ADD COLUMN retain_until TEXT;");
   if (!hasColumn(db, "journal_entries", "retain_until")) db.exec("ALTER TABLE journal_entries ADD COLUMN retain_until TEXT;");

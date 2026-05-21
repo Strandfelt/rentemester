@@ -11,6 +11,8 @@ export type CustomerRecord = {
   address: string | null;
   vatOrCvr: string | null;
   email: string | null;
+  phone: string | null;
+  website: string | null;
   eanNumber: string | null;
   paymentTermsDays: number;
   defaultCurrency: string;
@@ -24,6 +26,9 @@ export type VendorRecord = {
   name: string;
   address: string | null;
   vatOrCvr: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
   defaultExpenseAccount: string | null;
   defaultVatTreatment: string | null;
   notes: string | null;
@@ -36,6 +41,8 @@ export type CreateCustomerInput = {
   address?: string;
   vatOrCvr?: string;
   email?: string;
+  phone?: string;
+  website?: string;
   eanNumber?: string;
   paymentTermsDays?: number;
   defaultCurrency?: string;
@@ -46,6 +53,9 @@ export type CreateVendorInput = {
   name: string;
   address?: string;
   vatOrCvr?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
   defaultExpenseAccount?: string;
   defaultVatTreatment?: string;
   notes?: string;
@@ -67,14 +77,16 @@ export function createCustomer(db: Database, input: CreateCustomerInput) {
 
   const inserted = db.transaction(() => {
     const row = db.query(
-      `INSERT INTO customers (name, address, vat_or_cvr, email, ean_number, payment_terms_days, default_currency, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO customers (name, address, vat_or_cvr, email, phone, website, ean_number, payment_terms_days, default_currency, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id, created_at`
     ).get(
       name,
       trimToNull(input.address),
       trimToNull(input.vatOrCvr),
       trimToNull(input.email),
+      trimToNull(input.phone),
+      trimToNull(input.website),
       eanNumber,
       paymentTermsDays,
       defaultCurrency,
@@ -96,12 +108,12 @@ export function createCustomer(db: Database, input: CreateCustomerInput) {
 
 export function listCustomers(db: Database, options: { archived?: boolean } = {}) {
   const rows = db.query(
-    `SELECT id, name, address, vat_or_cvr, email, ean_number, payment_terms_days, default_currency, notes, archived, created_at
+    `SELECT id, name, address, vat_or_cvr, email, phone, website, ean_number, payment_terms_days, default_currency, notes, archived, created_at
      FROM customers
      WHERE archived = CASE WHEN ? THEN archived ELSE 0 END
      ORDER BY lower(name) ASC, id ASC`
   ).all(options.archived ? 1 : 0) as Array<{
-    id: number; name: string; address: string | null; vat_or_cvr: string | null; email: string | null; ean_number: string | null; payment_terms_days: number; default_currency: string; notes: string | null; archived: number; created_at: string;
+    id: number; name: string; address: string | null; vat_or_cvr: string | null; email: string | null; phone: string | null; website: string | null; ean_number: string | null; payment_terms_days: number; default_currency: string; notes: string | null; archived: number; created_at: string;
   }>;
 
   return {
@@ -113,6 +125,8 @@ export function listCustomers(db: Database, options: { archived?: boolean } = {}
       address: row.address,
       vatOrCvr: row.vat_or_cvr,
       email: row.email,
+      phone: row.phone,
+      website: row.website,
       eanNumber: row.ean_number,
       paymentTermsDays: row.payment_terms_days,
       defaultCurrency: row.default_currency,
@@ -130,13 +144,16 @@ export function createVendor(db: Database, input: CreateVendorInput) {
 
   const inserted = db.transaction(() => {
     const row = db.query(
-      `INSERT INTO vendors (name, address, vat_or_cvr, default_expense_account, default_vat_treatment, notes)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO vendors (name, address, vat_or_cvr, email, phone, website, default_expense_account, default_vat_treatment, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id, created_at`
     ).get(
       name,
       trimToNull(input.address),
       trimToNull(input.vatOrCvr),
+      trimToNull(input.email),
+      trimToNull(input.phone),
+      trimToNull(input.website),
       trimToNull(input.defaultExpenseAccount),
       trimToNull(input.defaultVatTreatment),
       trimToNull(input.notes),
@@ -157,12 +174,12 @@ export function createVendor(db: Database, input: CreateVendorInput) {
 
 export function listVendors(db: Database, options: { archived?: boolean } = {}) {
   const rows = db.query(
-    `SELECT id, name, address, vat_or_cvr, default_expense_account, default_vat_treatment, notes, archived, created_at
+    `SELECT id, name, address, vat_or_cvr, email, phone, website, default_expense_account, default_vat_treatment, notes, archived, created_at
      FROM vendors
      WHERE archived = CASE WHEN ? THEN archived ELSE 0 END
      ORDER BY lower(name) ASC, id ASC`
   ).all(options.archived ? 1 : 0) as Array<{
-    id: number; name: string; address: string | null; vat_or_cvr: string | null; default_expense_account: string | null; default_vat_treatment: string | null; notes: string | null; archived: number; created_at: string;
+    id: number; name: string; address: string | null; vat_or_cvr: string | null; email: string | null; phone: string | null; website: string | null; default_expense_account: string | null; default_vat_treatment: string | null; notes: string | null; archived: number; created_at: string;
   }>;
 
   return {
@@ -173,6 +190,9 @@ export function listVendors(db: Database, options: { archived?: boolean } = {}) 
       name: row.name,
       address: row.address,
       vatOrCvr: row.vat_or_cvr,
+      email: row.email,
+      phone: row.phone,
+      website: row.website,
       defaultExpenseAccount: row.default_expense_account,
       defaultVatTreatment: row.default_vat_treatment,
       notes: row.notes,
@@ -185,20 +205,34 @@ export function listVendors(db: Database, options: { archived?: boolean } = {}) 
 
 export function getCustomerById(db: Database, id: number) {
   return db.query(
-    `SELECT id, name, address, vat_or_cvr, email, ean_number, payment_terms_days, default_currency, notes, archived, created_at
+    `SELECT id, name, address, vat_or_cvr, email, phone, website, ean_number, payment_terms_days, default_currency, notes, archived, created_at
      FROM customers WHERE id = ? LIMIT 1`
   ).get(id) as {
-    id: number; name: string; address: string | null; vat_or_cvr: string | null; email: string | null; ean_number: string | null; payment_terms_days: number; default_currency: string; notes: string | null; archived: number; created_at: string;
+    id: number; name: string; address: string | null; vat_or_cvr: string | null; email: string | null; phone: string | null; website: string | null; ean_number: string | null; payment_terms_days: number; default_currency: string; notes: string | null; archived: number; created_at: string;
   } | null;
 }
 
 export function getVendorById(db: Database, id: number) {
   return db.query(
-    `SELECT id, name, address, vat_or_cvr, default_expense_account, default_vat_treatment, notes, archived, created_at
+    `SELECT id, name, address, vat_or_cvr, email, phone, website, default_expense_account, default_vat_treatment, notes, archived, created_at
      FROM vendors WHERE id = ? LIMIT 1`
   ).get(id) as {
-    id: number; name: string; address: string | null; vat_or_cvr: string | null; default_expense_account: string | null; default_vat_treatment: string | null; notes: string | null; archived: number; created_at: string;
+    id: number; name: string; address: string | null; vat_or_cvr: string | null; email: string | null; phone: string | null; website: string | null; default_expense_account: string | null; default_vat_treatment: string | null; notes: string | null; archived: number; created_at: string;
   } | null;
+}
+
+/** Find a customer by its (vat_or_cvr, name) natural key, or null. */
+export function findCustomerByKey(db: Database, vatOrCvr: string | null, name: string) {
+  return db.query(
+    `SELECT id FROM customers WHERE name = ? AND vat_or_cvr IS ? LIMIT 1`,
+  ).get(name, vatOrCvr) as { id: number } | null;
+}
+
+/** Find a vendor by its (vat_or_cvr, name) natural key, or null. */
+export function findVendorByKey(db: Database, vatOrCvr: string | null, name: string) {
+  return db.query(
+    `SELECT id FROM vendors WHERE name = ? AND vat_or_cvr IS ? LIMIT 1`,
+  ).get(name, vatOrCvr) as { id: number } | null;
 }
 
 export function resolveInvoiceMasterData(db: Database, payload: InvoicePayload, options: { customerId?: number | null }) {
@@ -230,8 +264,8 @@ function addDays(isoDate: string, days: number) {
 
 // ---------------------------------------------------------------------------
 // CVR autofill — prefill an unset master-data field from the CVR register.
-// The lookup runs once at creation time; the resulting snapshot is copied into
-// the (append-only) customer/vendor row and never re-fetched afterwards.
+// The lookup runs once at creation time and the snapshot is copied into the
+// customer/vendor row; an explicit caller value always wins over CVR.
 // ---------------------------------------------------------------------------
 
 /** A one-line postal address built from a CVR snapshot, or undefined. */
@@ -267,6 +301,8 @@ export async function customerInputFromCvr(
       address: trimToNull(base.address) ?? cvrFullAddress(company),
       vatOrCvr: trimToNull(base.vatOrCvr) ?? `DK${company.cvr}`,
       email: trimToNull(base.email) ?? company.email ?? undefined,
+      phone: trimToNull(base.phone) ?? company.phone ?? undefined,
+      website: trimToNull(base.website) ?? company.website ?? undefined,
     },
   };
 }
@@ -292,6 +328,9 @@ export async function vendorInputFromCvr(
       name: trimToNull(base.name) ?? company.name,
       address: trimToNull(base.address) ?? cvrFullAddress(company),
       vatOrCvr: trimToNull(base.vatOrCvr) ?? `DK${company.cvr}`,
+      email: trimToNull(base.email) ?? company.email ?? undefined,
+      phone: trimToNull(base.phone) ?? company.phone ?? undefined,
+      website: trimToNull(base.website) ?? company.website ?? undefined,
     },
   };
 }

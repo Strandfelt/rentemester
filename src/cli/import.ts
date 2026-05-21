@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { migrate } from "../core/db";
 import { runImportFromSource } from "../core/import/framework";
 import { queryArchive } from "../core/import/dinero-archive";
+import { importDineroContacts } from "../core/import/dinero-contacts";
 import { PARSERS } from "../core/import/synthetic-csv";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
@@ -39,6 +40,36 @@ export function register(dispatch: CommandDispatch): void {
     const result = runImportFromSource(db, parser, file, {
       createdBy: ctx.cliActor ?? ctx.inferredMutationActor() ?? undefined,
       createdByProgram: "rentemester-import-cli",
+    });
+    ctx.emitResult(result as unknown as Record<string, unknown>);
+    db.close();
+    if (!result.ok) process.exit(1);
+  });
+
+  // `import contacts` — migrates a Dinero "Kontakter" CSV export into the
+  // customer/vendor master data. Separate from `import run` (which lands a
+  // ledger primobalance): this only touches master data, posts nothing.
+  dispatch.on("import", "contacts", async (ctx) => {
+    const file = ctx.arg("--file");
+    if (!file) {
+      console.error("Missing required --file <Kontakter.csv>");
+      process.exit(2);
+    }
+    if (!existsSync(file)) {
+      console.error(`Contacts CSV does not exist: ${file}`);
+      process.exit(2);
+    }
+    const defaultRole = ctx.trimToNull(ctx.arg("--default-role"));
+    if (defaultRole !== null && defaultRole !== "customer" && defaultRole !== "vendor") {
+      console.error("--default-role must be 'customer' or 'vendor'");
+      process.exit(2);
+    }
+
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const result = await importDineroContacts(db, readFileSync(file, "utf8"), {
+      enrichCvr: ctx.hasFlag("--enrich-cvr"),
+      defaultRole: defaultRole ?? undefined,
     });
     ctx.emitResult(result as unknown as Record<string, unknown>);
     db.close();
