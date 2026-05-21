@@ -57,4 +57,25 @@ describe("api client", () => {
     const updated = await api.updateCompany("acme-aps", { archived: true });
     expect(updated).toMatchObject({ name: "Renamed", archived: true });
   });
+
+  test("resolveException POSTs and returns the resolved exception", async () => {
+    mockFetch({
+      "POST /api/companies/acme-aps/exceptions/7/resolve": {
+        exception: { id: 7, resolved: true },
+      },
+    });
+    const result = await api.resolveException("acme-aps", 7, "Afstemt");
+    expect(result).toEqual({ id: 7, resolved: true });
+  });
+
+  test("resolveException surfaces a 409 backup-lock conflict as a typed ApiError", async () => {
+    mockFetch({
+      "POST /api/companies/acme-aps/exceptions/7/resolve": {
+        __error: { code: "conflict", message: "Bogføring er låst" },
+      },
+    });
+    await expect(
+      api.resolveException("acme-aps", 7),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
 });

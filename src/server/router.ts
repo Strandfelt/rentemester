@@ -7,11 +7,14 @@
 // Request flow, in order, for EVERY request:
 //   1. authMiddleware  — the single auth seam (throws ApiError to reject)
 //   2. route dispatch  — match method + path
-//   3. handler         — reads/workspace-management only, never a mutation
+//   3. handler         — a read, a workspace-management op, or a write
 //   4. error edge      — any throw is mapped to a safe JSON error here
 //
 // No handler does its own auth and no handler shapes its own errors: both
-// concerns live exactly once, here.
+// concerns live exactly once, here. Bookkeeping WRITE routes (#213) go through
+// the `withCompanyMutation` pipeline in `mutations.ts`, which adds the backup
+// lock, the confirm gate, actor attribution and the localhost hard-gate that
+// the agent CLI / MCP stacks enforce — the server does not inherit them.
 
 import { createCompany } from "../core/company";
 import {
@@ -49,6 +52,7 @@ import {
   syncCompanyCvr,
 } from "./data";
 import { serveStatic } from "./static";
+import { handleResolveException } from "./write-handlers";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -536,6 +540,16 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(cashflowMatch[1]!);
       return handleCompanyCashflow(config, slug, url);
+    }
+
+    // Bookkeeping write route (#213, slice 1): resolve an open exception.
+    const resolveExceptionMatch =
+      /^\/api\/companies\/([^/]+)\/exceptions\/([^/]+)\/resolve$/.exec(path);
+    if (resolveExceptionMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(resolveExceptionMatch[1]!);
+      const id = decodeURIComponent(resolveExceptionMatch[2]!);
+      return await handleResolveException(config, request, slug, id);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

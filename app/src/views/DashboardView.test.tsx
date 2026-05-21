@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DashboardView } from "./DashboardView";
 import { renderAt } from "../test/render";
@@ -197,5 +197,118 @@ describe("DashboardView — Overblik", () => {
       await screen.findByRole("heading", { name: "Bank" })
     ).closest("a")!;
     expect(bankCard).toHaveAttribute("href", "/companies/acme-aps/bank?year=2026");
+  });
+});
+
+// --------------------------------------------------------------------------
+// #213 slice 1 — the "Løs" write action on open exceptions
+// --------------------------------------------------------------------------
+
+const ONE_EXCEPTION = {
+  exceptions: {
+    count: 1,
+    rows: [
+      {
+        id: 7,
+        type: "UNMATCHED_BANK_TRANSACTION",
+        severity: "medium",
+        message: "Banktransaktion 12 mangler afstemning",
+      },
+    ],
+    groups: [
+      {
+        type: "UNMATCHED_BANK_TRANSACTION",
+        count: 1,
+        severity: "medium" as const,
+        label: "1 banktransaktion mangler afstemning",
+        link: "bank",
+      },
+    ],
+  },
+};
+
+describe("DashboardView — resolve exception (#213)", () => {
+  test("each open exception row carries a Løs action", async () => {
+    mockFetch(overviewRoute(ONE_EXCEPTION));
+    renderDashboard();
+    expect(
+      await screen.findByText("Banktransaktion 12 mangler afstemning"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Løs" })).toBeInTheDocument();
+  });
+
+  test("clicking Løs opens a confirm modal with a note field", async () => {
+    mockFetch(overviewRoute(ONE_EXCEPTION));
+    renderDashboard();
+    await userEvent.click(await screen.findByRole("button", { name: "Løs" }));
+    expect(
+      screen.getByRole("dialog", { name: "Løs opgave" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Note (valgfri)")).toBeInTheDocument();
+  });
+
+  test("confirming the modal POSTs the resolve and reloads the overview", async () => {
+    mockFetch({
+      "GET /api/companies/acme-aps/overview": { overview: overview(ONE_EXCEPTION) },
+      "POST /api/companies/acme-aps/exceptions/7/resolve": {
+        exception: { id: 7, resolved: true },
+      },
+    });
+    renderDashboard();
+    await userEvent.click(await screen.findByRole("button", { name: "Løs" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Løs opgave" }),
+    );
+    // The resolve endpoint was called.
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const resolveCall = calls.find((c) =>
+      String(c[0]).includes("/exceptions/7/resolve"),
+    );
+    expect(resolveCall).toBeDefined();
+    expect((resolveCall![1] as RequestInit).method).toBe("POST");
+    // The modal closes after success.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Løs opgave" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  test("a 409 backup-lock conflict is shown kindly inside the modal", async () => {
+    mockFetch({
+      "GET /api/companies/acme-aps/overview": { overview: overview(ONE_EXCEPTION) },
+      "POST /api/companies/acme-aps/exceptions/7/resolve": {
+        __error: {
+          code: "conflict",
+          message:
+            "Bogføring er låst: en ugentlig backup er overskredet. Kør en backup.",
+        },
+      },
+    });
+    renderDashboard();
+    await userEvent.click(await screen.findByRole("button", { name: "Løs" }));
+    await userEvent.click(screen.getByRole("button", { name: "Løs opgave" }));
+    expect(
+      await screen.findByText("Bogføringen er låst"),
+    ).toBeInTheDocument();
+    // The modal stays open so the operator can read the lock message.
+    expect(
+      screen.getByRole("dialog", { name: "Løs opgave" }),
+    ).toBeInTheDocument();
+  });
+
+  test("an archived year offers no Løs action", async () => {
+    mockFetch(
+      overviewRoute({
+        ...ONE_EXCEPTION,
+        archived: true,
+        archivedSource: "dinero",
+        selectedYear: "2025",
+        vat: null,
+      }),
+    );
+    renderDashboard();
+    await screen.findByText(/Arkiveret regnskabsår 2025/);
+    expect(screen.queryByRole("button", { name: "Løs" })).not.toBeInTheDocument();
   });
 });

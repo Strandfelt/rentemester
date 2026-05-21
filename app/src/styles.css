@@ -592,6 +592,82 @@ td.num,
 }
 
 /* ==========================================================================
+   Modal dialog (#213) — shared by the Cockpit write actions
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 26, 23, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  z-index: 100;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.modal-title {
+  margin: 0;
+  font-size: var(--text-size-lg);
+}
+.modal-body {
+  font-size: var(--text-size-md);
+  color: var(--text-dim);
+}
+.modal-body p {
+  margin: 0;
+}
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.modal-field textarea {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-size-md);
+  font-family: var(--font-body);
+  resize: vertical;
+}
+.modal-field textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+/* The per-exception "Løs" row in the Opgaver card. */
+.task-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.task-row .btn {
+  flex: none;
+  padding: var(--space-xxs) var(--space-sm);
+  font-size: var(--text-size-sm);
+}
+
+/* ==========================================================================
    Dashboard tiles & sections
    ========================================================================== */
 

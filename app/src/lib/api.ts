@@ -220,4 +220,20 @@ export const api = {
       `/api/companies/${encodeURIComponent(slug)}/sync-cvr`,
       { method: "POST" },
     ).then((r) => r.sync),
+
+  // --- write actions (#213) -----------------------------------------------
+  //
+  // Bookkeeping mutations. The server routes these through the
+  // `withCompanyMutation` pipeline (backup lock, actor attribution); a 409
+  // means the backup lock is engaged — callers render that kindly.
+
+  /** Resolves an open exception. `note` is optional free text. */
+  resolveException: (slug: string, id: number, note?: string) =>
+    request<{ ok: true; exception: { id: number; resolved: boolean } }>(
+      `/api/companies/${encodeURIComponent(slug)}/exceptions/${id}/resolve`,
+      {
+        method: "POST",
+        body: JSON.stringify(note ? { note } : {}),
+      },
+    ).then((r) => r.exception),
 };

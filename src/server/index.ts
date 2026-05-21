@@ -1,7 +1,9 @@
-// Cockpit backend (#170) — public surface barrel.
+// Cockpit backend (#170, #213) — public surface barrel.
 //
 // A local JSON API on Bun.serve over the workspace + core. Reads and
-// workspace-management only; bookkeeping mutations stay in the agent/CLI path.
+// workspace-management, plus the #213 human-mode write routes — each routed
+// through the `withCompanyMutation` write pipeline (backup lock, confirm gate,
+// actor attribution, localhost hard-gate).
 
 export { resolveServerConfig, DEFAULT_APP_HOST, DEFAULT_APP_PORT } from "./config";
 export type { ServerConfig } from "./config";
@@ -11,6 +13,14 @@ export { handleRequest } from "./router";
 export { authMiddleware, LOCALHOST_PRINCIPAL } from "./auth";
 export type { Principal } from "./auth";
 export { ApiError, toErrorResponse } from "./errors";
+export { withCompanyMutation } from "./mutations";
+export type { MutationContext, CoreResult } from "./mutations";
+export {
+  resolveCockpitActor,
+  withCockpitActor,
+  COCKPIT_ACTOR_ID,
+  COCKPIT_ACTOR_PROGRAM,
+} from "./actor";
 export {
   buildPortfolioOverview,
   buildCompanyDashboardData,
