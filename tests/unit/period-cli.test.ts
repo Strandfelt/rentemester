@@ -54,3 +54,86 @@ describe("period close CLI", () => {
     expect(blocked.errors).toContain("transactionDate 2026-05-16 falls in closed period vat_quarter 2026-05-01..2026-05-31 ref SKAT-Q2-2026");
   });
 });
+
+describe("period reopen CLI (#247)", () => {
+  test("requires an actor, then reopens a closed period and unblocks posting", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-periodreopen-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+
+    // Close 2026-05.
+    await Bun.$`bun run src/cli.ts period close --company ${company} --from 2026-05-01 --to 2026-05-31 --kind vat_quarter --actor user:ejer`.quiet();
+
+    // Reopen with no actor at all — must be refused (clearly attributable).
+    const noActor = Bun.spawn(
+      ["bun", "run", "src/cli.ts", "period", "reopen", "--company", company,
+        "--from", "2026-05-01", "--to", "2026-05-31", "--kind", "vat_quarter",
+        "--reason", "Manglende bilag", "--format", "json"],
+      {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+        // Strip every actor-bearing env var so no actor can be inferred.
+        env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      },
+    );
+    const noActorStderr = await new Response(noActor.stderr).text();
+    const noActorExit = await noActor.exited;
+    expect(noActorExit).toBe(2);
+    expect(noActorStderr).toContain("actor required for mutations");
+
+    // Reopen properly with an explicit allow-listed actor.
+    const reopen = Bun.spawn(
+      ["bun", "run", "src/cli.ts", "period", "reopen", "--company", company,
+        "--from", "2026-05-01", "--to", "2026-05-31", "--kind", "vat_quarter",
+        "--reason", "Restaurantbilag bogført for sent", "--actor", "user:ejer", "--format", "json"],
+      { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+    );
+    const reopenStdout = await new Response(reopen.stdout).text();
+    const reopenStderr = await new Response(reopen.stderr).text();
+    const reopenExit = await reopen.exited;
+    expect({ reopenExit, reopenStderr }).toEqual({ reopenExit: 0, reopenStderr: "" });
+    const reopened = JSON.parse(reopenStdout);
+    expect(reopened.ok).toBe(true);
+    expect(reopened.effectiveStatus).toBe("open");
+    expect(reopened.reopenedBy).toContain("user:ejer");
+
+    // A posting inside the reopened period is now accepted.
+    const post = Bun.spawn(
+      ["bun", "run", "src/cli.ts", "journal", "post", "--company", company,
+        "--input", "examples/journal-entry.owner-contribution.json", "--actor", "user:ejer"],
+      {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, RENTEMESTER_TODAY: "2026-06-15" },
+      },
+    );
+    const postStdout = await new Response(post.stdout).text();
+    const postExit = await post.exited;
+    expect(postExit).toBe(0);
+    expect(JSON.parse(postStdout).ok).toBe(true);
+
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("refuses to reopen without a reason", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-periodreopen-noreason-"));
+    const company = join(root, "company");
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts period close --company ${company} --from 2026-05-01 --to 2026-05-31 --kind vat_quarter --actor user:ejer`.quiet();
+
+    const proc = Bun.spawn(
+      ["bun", "run", "src/cli.ts", "period", "reopen", "--company", company,
+        "--from", "2026-05-01", "--to", "2026-05-31", "--kind", "vat_quarter", "--actor", "user:ejer"],
+      { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+    );
+    const stderr = await new Response(proc.stderr).text();
+    const exit = await proc.exited;
+    expect(exit).toBe(2);
+    expect(stderr).toContain("Missing required --reason");
+
+    rmSync(root, { recursive: true, force: true });
+  });
+});

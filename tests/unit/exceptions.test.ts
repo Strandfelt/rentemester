@@ -46,6 +46,88 @@ describe("exceptions workflow", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  // #237: the unmatched-bank exception text must be sign-aware. A money-IN
+  // line (customer payment / payout) is income, not a deductible expense.
+  test("describes a money-in bank line as income, not as a deductible expense", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-exc-income-"));
+    const company = ensureCompanyDirs(root);
+    const db = openDb(company.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const csv = join(root, "bank.csv");
+    writeFileSync(csv, "transaction_date,text,amount\n2026-05-18,Stripe payout,4200\n");
+    expect(importBankCsv(db, root, csv).ok).toBe(true);
+
+    expect(syncUnmatchedBankTransactionExceptions(db).created).toBe(1);
+
+    const listed = listExceptions(db, { status: "open" });
+    expect(listed.count).toBe(1);
+    const row = listed.rows[0];
+    // Income wording — never the expense/momsfradrag sentence.
+    expect(row.message).toContain("Indbetalingen \"Stripe payout\"");
+    expect(row.requiredAction).toContain("indtægten");
+    expect(row.requiredAction).not.toContain("udgiften kan ikke bogføres");
+    expect(row.requiredAction).not.toContain("momsen ikke fratrækkes");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // #237: a money-OUT line stays expense-shaped and keeps the momsfradrag text.
+  test("describes a money-out bank line as an expense", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-exc-expense-"));
+    const company = ensureCompanyDirs(root);
+    const db = openDb(company.db);
+    migrate(db);
+    seedAccounts(db);
+
+    const csv = join(root, "bank.csv");
+    writeFileSync(csv, "transaction_date,text,amount\n2026-05-18,Kontorartikler,-850\n");
+    expect(importBankCsv(db, root, csv).ok).toBe(true);
+
+    expect(syncUnmatchedBankTransactionExceptions(db).created).toBe(1);
+
+    const row = listExceptions(db, { status: "open" }).rows[0];
+    expect(row.message).toContain("Banktransaktionen \"Kontorartikler\"");
+    expect(row.requiredAction).toContain("momsen ikke fratrækkes");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // #237: when a matching bilag IS ingested, the text must name the real
+  // reason it still needs attention — never falsely claim "no bilag found".
+  test("names the real reason when a matching restaurant bilag exists", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-exc-bilag-"));
+    const company = ensureCompanyDirs(root);
+    const db = openDb(company.db);
+    migrate(db);
+    seedAccounts(db);
+
+    // A restaurant receipt of exactly 1.205,00 kr. is ingested as a document.
+    db.run(
+      `INSERT INTO documents (document_no, source, sha256_hash, supplier_name, amount_inc_vat, document_type, delivery_description)
+       VALUES ('BILAG-501', 'email', 'hash-restaurant-501', 'Restaurant Kanalen', 1205.00, 'cash_register_receipt', 'Frokost')`,
+    );
+    const csv = join(root, "bank.csv");
+    writeFileSync(csv, "transaction_date,text,amount\n2026-05-18,Restaurant Kanalen,-1205\n");
+    expect(importBankCsv(db, root, csv).ok).toBe(true);
+
+    expect(syncUnmatchedBankTransactionExceptions(db).created).toBe(1);
+
+    const row = listExceptions(db, { status: "open" }).rows[0];
+    // Does NOT falsely say no bilag was found.
+    expect(row.message).not.toContain("Der er ikke fundet et bilag");
+    // Names the bilag and the real reason: missing purpose + attendees.
+    expect(row.message).toContain("bilag BILAG-501");
+    expect(row.message).toContain("mangler formål og deltagere");
+    expect(row.relatedDocumentId).toBeGreaterThan(0);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("records generic blocked-work exceptions with evidence", () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-exception-record-"));
     const db = openDb(ensureCompanyDirs(root).db);

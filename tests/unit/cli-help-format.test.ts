@@ -145,6 +145,7 @@ describe("CLI help, examples, and human formatting", () => {
   });
 
   // #227: `period close` must document the closed/reported contract.
+  // #247: it must point to the controlled `period reopen` recovery path.
   test("period close help documents the closed-vs-reported contract", async () => {
     const proc = Bun.spawn(["bun", "run", "src/cli.ts", "period", "close", "--help"], {
       cwd: process.cwd(),
@@ -157,7 +158,28 @@ describe("CLI help, examples, and human formatting", () => {
     expect(stdout).toContain("Inputnoter:");
     expect(stdout).toContain("Standard: closed");
     expect(stdout).toMatch(/reported/);
-    expect(stdout).toMatch(/IKKE reversibel/i);
+    // The dead-end "edit the database directly" advice is gone; the help now
+    // points at the controlled, audit-logged reopen path.
+    expect(stdout).not.toMatch(/redigere ledger-databasen/i);
+    expect(stdout).toContain("period reopen");
+  });
+
+  // #247: `period reopen` help must document the controlled, audit-logged
+  // recovery path and the actor + reason requirements.
+  test("period reopen help documents the controlled recovery path", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "period", "reopen", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Inputnoter:");
+    expect(stdout).toContain("--reason");
+    expect(stdout).toMatch(/revisionssporet/i);
+    expect(stdout).toMatch(/audit-log/i);
+    expect(stdout).toMatch(/reported.*kan IKKE åbnes igen/i);
   });
 
   // #231: asset commands must carry inputNotes.

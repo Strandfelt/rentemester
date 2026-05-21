@@ -305,10 +305,24 @@ function formatKroner(amount: number): string {
 }
 
 /**
+ * The bookkeeping direction of a bank line, derived from the amount's sign.
+ * A positive amount is money IN (a customer payment / payout — income); a
+ * negative amount is money OUT (a supplier payment — an expense). A zero
+ * amount has no direction and is treated as an expense for wording purposes.
+ */
+type BankDirection = "income" | "expense";
+
+function bankDirection(amount: number): BankDirection {
+  return amount > 0 ? "income" : "expense";
+}
+
+/**
  * Builds the human-facing Danish message + required action for an unmatched
- * bank transaction (#224). The text names the transaction concretely, and —
- * when a likely bilag is found — says exactly what is missing and what the
- * owner must do, in plain Danish without technical command jargon.
+ * bank transaction (#224, #237). The text names the transaction concretely,
+ * is sign-aware — an inbound payment is described as income, never as a
+ * deductible expense — and, when a likely bilag is found, says exactly what
+ * is still missing and what the owner must do, in plain Danish without
+ * technical command jargon.
  */
 function describeUnmatchedBankTransaction(
   bank: { id: number; transaction_date: string; text: string | null; amount: number; currency: string },
@@ -316,10 +330,28 @@ function describeUnmatchedBankTransaction(
 ): { message: string; requiredAction: string } {
   const beløb = `${formatKroner(bank.amount)}${bank.currency && bank.currency !== "DKK" ? ` ${bank.currency}` : ""}`;
   const tekst = (bank.text ?? "").trim() || "(ingen tekst)";
-  const linje = `Banktransaktionen "${tekst}" den ${bank.transaction_date} på ${beløb} er endnu ikke bogført`;
+  const direction = bankDirection(bank.amount);
+  // Sign-aware nouns: an inbound payment is income (an "indbetaling"), an
+  // outbound one an expense (a "betaling"/"udgift"). #237: a money-in line
+  // must never be described as a deductible expense.
+  const kindNoun = direction === "income" ? "indbetalingen" : "betalingen";
+  const linje =
+    direction === "income"
+      ? `Indbetalingen "${tekst}" den ${bank.transaction_date} på ${beløb} er endnu ikke bogført`
+      : `Banktransaktionen "${tekst}" den ${bank.transaction_date} på ${beløb} er endnu ikke bogført`;
 
-  // No bilag at all — the owner is missing the underlying receipt/invoice.
+  // No bilag at all — the owner is missing the underlying voucher.
   if (!bilag) {
+    if (direction === "income") {
+      return {
+        message:
+          `${linje}. Der er ikke fundet et bilag (faktura eller anden indtægtsdokumentation), ` +
+          `der passer til beløbet.`,
+        requiredAction:
+          "Find fakturaen eller dokumentationen for denne indbetaling og læg den i bogføringen. " +
+          "Uden et bilag kan indtægten ikke bogføres korrekt, og evt. salgsmoms kan ikke afregnes.",
+      };
+    }
     return {
       message: `${linje}. Der er ikke fundet et bilag (kvittering eller faktura), der passer til beløbet.`,
       requiredAction:
@@ -333,6 +365,8 @@ function describeUnmatchedBankTransaction(
 
   // Representation / restaurant voucher missing its purpose + attendees — the
   // exact case from the README: "Restaurantbilag mangler formål og deltagere".
+  // Representation is by definition an outbound expense; the wording stays
+  // expense-shaped here regardless of any odd sign.
   if (looksLikeRepresentation(bilag, tekst)) {
     return {
       message:
@@ -345,10 +379,21 @@ function describeUnmatchedBankTransaction(
     };
   }
 
-  // A matching bilag exists but the link is not yet posted.
+  // A matching bilag exists but the link is not yet posted. #237: do NOT
+  // claim "no bilag found" here — name the real reason it still needs
+  // attention (the bilag is not yet booked against the bank line) and keep
+  // the income/expense wording aligned with the amount's sign.
+  if (direction === "income") {
+    return {
+      message:
+        `${linje}. Den passer til ${bilagNavn}${leverandør}, men bilaget er endnu ikke bogført mod indbetalingen.`,
+      requiredAction:
+        `Kontroller, at ${bilagNavn} hører til denne indbetaling, og bogfør indtægten mod banktransaktionen.`,
+    };
+  }
   return {
     message:
-      `${linje}. Den passer til ${bilagNavn}${leverandør}, men bilaget er endnu ikke bogført mod betalingen.`,
+      `${linje}. Den passer til ${bilagNavn}${leverandør}, men bilaget er endnu ikke bogført mod ${kindNoun}.`,
     requiredAction:
       `Kontroller, at ${bilagNavn} hører til denne betaling, og bogfør udgiften mod banktransaktionen.`,
   };
