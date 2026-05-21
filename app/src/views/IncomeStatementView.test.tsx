@@ -66,4 +66,14 @@ describe("IncomeStatementView — Resultatopgørelse", () => {
     const lastUrl = String(calls[calls.length - 1]![0]);
     expect(lastUrl).toContain("year=2025");
   });
+
+  test("account rows drill into that account's postings, carrying the year", async () => {
+    mockFetch(route());
+    renderView();
+    const link = await screen.findByRole("link", { name: "1000" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/companies/acme-aps/posteringer?year=2026&account=1000",
+    );
+  });
 });

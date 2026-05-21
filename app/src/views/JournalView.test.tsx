@@ -68,4 +68,28 @@ describe("JournalView — Posteringer", () => {
       await screen.findByText(/Regnskabsår 2025 er arkiveret/),
     ).toBeInTheDocument();
   });
+
+  test("an ?account= filter fetches the filtered journal and names the account", async () => {
+    mockFetch(
+      route({
+        accountFilter: { accountNo: "55000", name: "Bank" },
+      }),
+    );
+    renderAt(<JournalView />, {
+      route: "/companies/acme-aps/posteringer?account=55000",
+      path: "/companies/:slug/posteringer",
+    });
+    // The filter banner names the account.
+    expect(await screen.findByText("Bank")).toBeInTheDocument();
+    expect(screen.getByText("55000")).toBeInTheDocument();
+    // The fetch carried the account param.
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.some((c) => String(c[0]).includes("account=55000"))).toBe(
+      true,
+    );
+    // "Vis alle posteringer" clears the filter.
+    expect(
+      screen.getByRole("button", { name: "Vis alle posteringer" }),
+    ).toBeInTheDocument();
+  });
 });

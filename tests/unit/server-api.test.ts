@@ -14,6 +14,7 @@ import { postJournalEntry } from "../../src/core/ledger";
 import { ingestDocument } from "../../src/core/documents";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { createCustomer, createVendor } from "../../src/core/master-data";
+import { recordException } from "../../src/core/exceptions";
 
 function tmpRoot(label: string) {
   return mkdtempSync(join(tmpdir(), `rentemester-${label}-`));
@@ -395,6 +396,14 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       expect(res.body.overview.bank.balance).toBe(750);
       expect(res.body.overview.recentEntries.length).toBeGreaterThan(0);
       expect(res.body.overview.fiscalYears[0].label).toBe("2026");
+      // "Senest bogført" — the most recent posted transaction date.
+      expect(res.body.overview.lastPostedDate).toBe("2026-03-15");
+      // Nøgletal: bruttomargin = resultat ÷ omsætning = 600/1000 = 0.6.
+      expect(res.body.overview.keyFigures.bruttomargin).toBeCloseTo(0.6, 6);
+      // Egenkapitalandel is a fraction (0–1) when the balance has assets.
+      expect(
+        typeof res.body.overview.keyFigures.egenkapitalandel,
+      ).toBe("number");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -438,6 +447,56 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       );
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("bank block reports actual balance and the gap to the booked balance", async () => {
+    const ws = makeWorkspace("ov-bank-actual", ["Acme ApS"]);
+    try {
+      // Booked balance on account 2000 nets +1250 (sale) −500 (purchase) = 750.
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      // Statement closes at 500 — short of the booked 750 by 250.
+      seedBankTransaction(ws, "acme-aps", "2026-04-01", "Indbetaling", 700, 700);
+      seedBankTransaction(ws, "acme-aps", "2026-04-10", "Gebyr", -200, 500);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const bank = res.body.overview.bank;
+      expect(bank.balance).toBe(750);
+      expect(bank.actualBalance).toBe(500);
+      expect(bank.difference).toBe(250);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("groups same-type exceptions into one Danish summary line", async () => {
+    const ws = makeWorkspace("ov-exc-group", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      seedException(ws, "acme-aps", "UNMATCHED_BANK_TRANSACTION", "Bank transaction 1 unmatched");
+      seedException(ws, "acme-aps", "UNMATCHED_BANK_TRANSACTION", "Bank transaction 2 unmatched");
+      seedException(ws, "acme-aps", "UNMATCHED_BANK_TRANSACTION", "Bank transaction 3 unmatched");
+      seedException(ws, "acme-aps", "MAIL_INTAKE_NO_ATTACHMENT", "Mail without attachment");
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const exc = res.body.overview.exceptions;
+      expect(exc.count).toBe(4);
+      // Two groups: 3 bank rows + 1 mail row, each one line.
+      expect(exc.groups.length).toBe(2);
+      const bankGroup = exc.groups.find(
+        (g: { type: string }) => g.type === "UNMATCHED_BANK_TRANSACTION",
+      );
+      expect(bankGroup.count).toBe(3);
+      expect(bankGroup.label).toContain("3 banktransaktioner");
+      expect(bankGroup.link).toBe("bank");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -618,6 +677,39 @@ describe("cockpit API — journal (GET .../journal)", () => {
     }
   });
 
+  test("an ?account= filter limits the journal to that account's entries", async () => {
+    const ws = makeWorkspace("jrn-acct", ["Acme ApS"]);
+    try {
+      // A sale (touches 1000/1200/2000) and a purchase (3000/4000/2000).
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const cfg = config({ workspaceRoot: ws });
+
+      // Account 1000 only appears on the sale — exactly one entry.
+      const sale = await get(
+        cfg,
+        "/api/companies/acme-aps/journal?year=2026&account=1000",
+      );
+      expect(sale.status).toBe(200);
+      expect(sale.body.journal.accountFilter.accountNo).toBe("1000");
+      expect(sale.body.journal.entries.length).toBe(1);
+      expect(sale.body.journal.entries[0].text).toBe("Overblik salg");
+
+      // Account 2000 (bank) is on both — two entries.
+      const bank = await get(
+        cfg,
+        "/api/companies/acme-aps/journal?year=2026&account=2000",
+      );
+      expect(bank.body.journal.entries.length).toBe(2);
+
+      // Without the filter, accountFilter is null and all entries are shown.
+      const all = await get(cfg, "/api/companies/acme-aps/journal?year=2026");
+      expect(all.body.journal.accountFilter).toBeNull();
+      expect(all.body.journal.entries.length).toBe(2);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   test("journal for an unknown slug is a safe 404", async () => {
     const ws = makeWorkspace("jrn-404", ["Acme ApS"]);
     try {
@@ -633,13 +725,18 @@ describe("cockpit API — journal (GET .../journal)", () => {
   });
 });
 
-/** Inserts an imported bank transaction directly into a company's ledger. */
+/**
+ * Inserts an imported bank transaction directly into a company's ledger.
+ * When `balanceAfter` is given the import's running balance is recorded — the
+ * statement figure the actual-balance helper reads.
+ */
 function seedBankTransaction(
   ws: string,
   slug: string,
   transactionDate: string,
   text: string,
   amount: number,
+  balanceAfter?: number,
 ) {
   const companyRoot = companyRootForSlug(ws, slug);
   const db = openDb(companyPaths(companyRoot).db);
@@ -647,9 +744,33 @@ function seedBankTransaction(
     migrate(db);
     db.query(
       `INSERT INTO bank_transactions
-         (transaction_date, text, amount, currency, transaction_hash, status)
-       VALUES (?, ?, ?, 'DKK', ?, 'imported')`,
-    ).run(transactionDate, text, amount, `hash-${transactionDate}-${text}`);
+         (transaction_date, text, amount, currency, transaction_hash, status,
+          balance_after)
+       VALUES (?, ?, ?, 'DKK', ?, 'imported', ?)`,
+    ).run(
+      transactionDate,
+      text,
+      amount,
+      `hash-${transactionDate}-${text}`,
+      balanceAfter ?? null,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/** Records an open exception of the given type directly in a company's ledger. */
+function seedException(
+  ws: string,
+  slug: string,
+  type: string,
+  message: string,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    recordException(db, { type, severity: "medium", message });
   } finally {
     db.close();
   }
@@ -672,6 +793,27 @@ describe("cockpit API — bank (GET .../bank)", () => {
       expect(b.transactions[0].reconciliationStatus).toBe("unmatched");
       expect(b.unmatchedCount).toBe(1);
       expect(b).toHaveProperty("bookedBalance");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("reports the actual statement balance and the gap to booked", async () => {
+    const ws = makeWorkspace("bnk-actual", ["Acme ApS"]);
+    try {
+      // Booked balance on account 2000 = 750 (see postPnlEntry).
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      seedBankTransaction(ws, "acme-aps", "2026-04-01", "Indbetaling", 700, 700);
+      seedBankTransaction(ws, "acme-aps", "2026-04-10", "Gebyr", -200, 500);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/bank?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const b = res.body.bank;
+      expect(b.bookedBalance).toBe(750);
+      expect(b.actualBalance).toBe(500);
+      expect(b.difference).toBe(250);
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -746,6 +888,10 @@ describe("cockpit API — documents (GET .../documents)", () => {
       expect(d.documents[0]).toHaveProperty("journalEntryNo");
       expect(d).toHaveProperty("linkedCount");
       expect(d).toHaveProperty("unlinkedCount");
+      // Each row carries the linked journal entry's text + total fields, so
+      // the Bilag view can show what the receipt is for (null when unlinked).
+      expect(d.documents[0]).toHaveProperty("journalEntryText");
+      expect(d.documents[0]).toHaveProperty("journalEntryTotal");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -1104,6 +1250,281 @@ describe("cockpit API — contacts (GET .../contacts)", () => {
       );
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Posts a balanced liability accrual into a company's ledger: a credit to a
+ * liability account (created on the fly if absent) against a debit to bank
+ * account `2000`. Neither side is an income/expense account, so no document
+ * is required. This is the shape that surfaces in the obligations endpoint.
+ */
+function postLiability(
+  ws: string,
+  slug: string,
+  transactionDate: string,
+  accountNo: string,
+  accountName: string,
+  amount: number,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    db.query(
+      `INSERT OR IGNORE INTO accounts (account_no, name, type, normal_balance)
+       VALUES (?, ?, 'liability', 'credit')`,
+    ).run(accountNo, accountName);
+    const entry = postJournalEntry(db, {
+      transactionDate,
+      text: `Hensættelse ${accountName}`,
+      lines: [
+        { accountNo: "2000", debitAmount: amount },
+        { accountNo, creditAmount: amount },
+      ],
+    });
+    if (!entry.ok) throw new Error("liability post failed: " + entry.errors.join("; "));
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — obligations (GET .../obligations)", () => {
+  test("surfaces VAT with its statutory deadline and liability payables", async () => {
+    const ws = makeWorkspace("obl-live", ["Acme ApS"]);
+    try {
+      // postPnlEntry → 250 output VAT − 100 input VAT = 150 payable for H1.
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      postLiability(ws, "acme-aps", "2026-06-30", "63060", "Skyldig selskabsskat", 2000);
+      postLiability(ws, "acme-aps", "2026-06-30", "63000", "Kreditorer", 500);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/obligations?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const o = res.body.obligations;
+      expect(o.slug).toBe("acme-aps");
+      expect(o.archived).toBe(false);
+      const vat = o.obligations.find((r: any) => r.kind === "vat");
+      expect(vat.amount).toBe(150);
+      // 1. halvår 2026 is filed/paid by 1 September 2026.
+      expect(vat.dueDate).toBe("2026-09-01");
+      const tax = o.obligations.find((r: any) => r.kind === "corporation-tax");
+      expect(tax.amount).toBe(2000);
+      expect(tax.dueDate).toBe("2027-11-01");
+      const creditors = o.obligations.find((r: any) => r.kind === "creditors");
+      expect(creditors.amount).toBe(500);
+      expect(creditors.dueDate).toBeNull();
+      expect(o.totalOwed).toBe(2650);
+      // Sorted soonest-first: dated rows before the dateless creditor row.
+      expect(o.obligations[o.obligations.length - 1].kind).toBe("creditors");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("VAT is not double-counted: gross 64xxx VAT accounts never become liability rows", async () => {
+    // A Dinero-imported chart books VAT into the standard Danish 64xxx block,
+    // where the VAT accounts are typed `liability` (not `vat`). The net VAT
+    // obligation is already surfaced by `vatPositionForPeriod`; the gross
+    // output/input/reverse-charge accounts are merely its *components* and
+    // must NOT also appear as their own per-account obligations — counting
+    // both double-counts VAT (the Helheim 2026 "Skyldige beløb i alt" bug).
+    const ws = makeWorkspace("obl-vat-dedupe", ["Acme ApS"]);
+    try {
+      // Gross output-side 64xxx VAT accounts, liability-typed, with credit
+      // balances — the exact shape of the Helheim 2026 bug. They feed the
+      // *net* VAT computation (here output-only: 4457.25 + 62.50 = 4519.75
+      // payable for H1) and must NOT also surface as their own per-account
+      // obligations.
+      postLiability(ws, "acme-aps", "2026-06-30", "64000", "Salgsmoms (udgående moms)", 4457.25);
+      postLiability(ws, "acme-aps", "2026-06-30", "64040", "Moms af ydelser fra udlandet", 62.5);
+      // A genuine, non-VAT liability that MUST still surface unchanged.
+      postLiability(ws, "acme-aps", "2026-06-30", "63060", "Skyldig selskabsskat", 264);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/obligations?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const o = res.body.obligations;
+      // Exactly one VAT row — the dedicated net obligation.
+      const vatRows = o.obligations.filter((r: any) => r.kind === "vat");
+      expect(vatRows.length).toBe(1);
+      expect(vatRows[0].amount).toBe(4519.75);
+      // No gross 64xxx account leaks through as its own liability row.
+      expect(
+        o.obligations.some(
+          (r: any) =>
+            r.accountNo !== null &&
+            r.accountNo >= "64000" &&
+            r.accountNo < "64100",
+        ),
+      ).toBe(false);
+      // The genuine non-VAT liability still surfaces.
+      const tax = o.obligations.find((r: any) => r.kind === "corporation-tax");
+      expect(tax.amount).toBe(264);
+      // Total = net VAT (4519.75) + corporation tax (264), VAT counted ONCE.
+      // Pre-fix this was 4519.75 + 4457.25 + 62.50 (gross leaking) + 264.
+      expect(o.totalOwed).toBe(4783.75);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a company that owes nothing returns an empty list", async () => {
+    const ws = makeWorkspace("obl-empty", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/obligations?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.obligations.obligations).toEqual([]);
+      expect(res.body.obligations.totalOwed).toBe(0);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("obligations for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("obl-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/obligations",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — cash flow (GET .../cashflow)", () => {
+  test("computes monthly in/out and the balance trajectory from bank rows", async () => {
+    const ws = makeWorkspace("cf-live", ["Acme ApS"]);
+    try {
+      seedBankTransaction(ws, "acme-aps", "2026-02-10", "Indbetaling", 1000, 1000);
+      seedBankTransaction(ws, "acme-aps", "2026-02-20", "Gebyr", -200, 800);
+      seedBankTransaction(ws, "acme-aps", "2026-05-05", "Indbetaling", 500, 1300);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/cashflow?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const cf = res.body.cashflow;
+      expect(cf.slug).toBe("acme-aps");
+      expect(cf.archived).toBe(false);
+      expect(cf.hasTransactions).toBe(true);
+      expect(cf.months.length).toBe(12);
+      // February: 1000 in, 200 out, 800 net.
+      const feb = cf.months[1];
+      expect(feb.indbetalinger).toBe(1000);
+      expect(feb.udbetalinger).toBe(200);
+      expect(feb.netto).toBe(800);
+      // May: 500 in only.
+      expect(cf.months[4].indbetalinger).toBe(500);
+      // Year totals + closing balance from the latest balance_after.
+      expect(cf.totalIn).toBe(1500);
+      expect(cf.totalOut).toBe(200);
+      expect(cf.closingBalance).toBe(1300);
+      expect(cf.balanceSeries.length).toBe(3);
+      expect(cf.balanceSeries[cf.balanceSeries.length - 1].balance).toBe(1300);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("opening balance is the actual balance before the year starts", async () => {
+    const ws = makeWorkspace("cf-opening", ["Acme ApS"]);
+    try {
+      seedBankTransaction(ws, "acme-aps", "2025-12-15", "Primo", 400, 400);
+      seedBankTransaction(ws, "acme-aps", "2026-03-01", "Indbetaling", 600, 1000);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/cashflow?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const cf = res.body.cashflow;
+      expect(cf.openingBalance).toBe(400);
+      expect(cf.closingBalance).toBe(1000);
+      expect(cf.totalIn).toBe(600);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a company with no bank transactions reports an empty cash flow", async () => {
+    const ws = makeWorkspace("cf-empty", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/cashflow?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const cf = res.body.cashflow;
+      expect(cf.hasTransactions).toBe(false);
+      expect(cf.totalIn).toBe(0);
+      expect(cf.totalOut).toBe(0);
+      expect(cf.balanceSeries).toEqual([]);
+      expect(cf.months.length).toBe(12);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("cashflow for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("cf-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/cashflow",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — VAT deadline (GET .../vat & .../overview)", () => {
+  test("vat carries the statutory filing deadline and a countdown", async () => {
+    const ws = makeWorkspace("vat-deadline", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(res.status).toBe(200);
+      // 1. halvår 2026 → filed/paid by 1 September 2026.
+      expect(res.body.vat.deadline).toBe("2026-09-01");
+      expect(typeof res.body.vat.daysRemaining).toBe("number");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("overview's VAT card and receivables block carry the new fields", async () => {
+    const ws = makeWorkspace("ov-deadline", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.overview.vat.deadline).toBe("2026-09-01");
+      // No issued invoices → a clean zero receivables block.
+      expect(res.body.overview.receivables).toEqual({
+        openCount: 0,
+        openTotal: 0,
+      });
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

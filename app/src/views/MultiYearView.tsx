@@ -30,6 +30,13 @@ export function MultiYearView() {
 
   const m = state.data!;
   const currency = m.company.currency || "DKK";
+  // The live/current fiscal year is a partial year next to the full archived
+  // ones — the newest "live" row. Mark it "(år til dato)" so the comparison
+  // is not read as like-for-like.
+  const currentYear =
+    [...m.years]
+      .filter((y) => y.source === "live")
+      .sort((a, b) => b.year.localeCompare(a.year))[0]?.year ?? null;
   // The fiscal-year selector is shown for consistency with the other views;
   // newest-first like everywhere else. The Flerårsoversigt itself shows every
   // year, so the selected year only routes the other views.
@@ -80,7 +87,7 @@ export function MultiYearView() {
           <div className="section">
             <h3>Udvikling — omsætning, udgifter og resultat</h3>
             <div className="card chart-card">
-              <MultiYearChart years={m.years} />
+              <MultiYearChart years={m.years} currentYear={currentYear} />
             </div>
           </div>
 
@@ -104,6 +111,11 @@ export function MultiYearView() {
                         {y.source === "archive" ? (
                           <span className="flag warning archive-tag">
                             arkiv
+                          </span>
+                        ) : null}
+                        {y.year === currentYear ? (
+                          <span className="multi-year-current muted">
+                            (år til dato)
                           </span>
                         ) : null}
                       </td>

@@ -8,9 +8,9 @@
 //     reload, and every in-app link below preserves it automatically.
 //
 //   * `CompanyNav` — the sub-navigation bar plus the fiscal-year selector,
-//     rendered at the top of each company view. The twelve views are arranged
-//     in four labelled groups (Regnskab · Bogføring · Salg · Historik) so the
-//     bar stays scannable and wraps tidily on a phone.
+//     rendered at the top of each company view. The fourteen views are
+//     arranged in four labelled groups (Regnskab · Bogføring · Salg ·
+//     Historik) so the bar stays scannable and wraps tidily on a phone.
 
 import { NavLink, useSearchParams } from "react-router-dom";
 import type { FiscalYearEntry } from "../lib/types";
@@ -34,10 +34,28 @@ export function useCompanyYear(): {
   return { year, setYear };
 }
 
+/**
+ * The route for a single account's postings — the Posteringer view filtered
+ * to one account via `?account=`. The fiscal year is carried through so the
+ * drill-down lands on the same year the statement was showing. Used by the
+ * statement views (Resultatopgørelse · Balance · Saldobalance) to make every
+ * account row a drill-down link.
+ */
+export function accountPostingsTo(
+  slug: string,
+  year: string,
+  accountNo: string,
+): string {
+  const params = new URLSearchParams();
+  if (year) params.set("year", year);
+  params.set("account", accountNo);
+  return `/companies/${slug}/posteringer?${params.toString()}`;
+}
+
 type NavTab = { to: string; label: string };
 
 /**
- * The twelve company views, arranged into four labelled groups. The grouping
+ * The fourteen company views, arranged into four labelled groups. The grouping
  * keeps the bar scannable — and gives narrow viewports a deliberate wrap
  * boundary rather than an arbitrary one.
  */
@@ -49,6 +67,8 @@ const TAB_GROUPS: { name: string; tabs: NavTab[] }[] = [
       { to: "resultatopgorelse", label: "Resultatopgørelse" },
       { to: "balance", label: "Balance" },
       { to: "saldobalance", label: "Saldobalance" },
+      { to: "forpligtelser", label: "Forpligtelser" },
+      { to: "likviditet", label: "Likviditet" },
     ],
   },
   {

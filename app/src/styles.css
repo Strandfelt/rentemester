@@ -730,6 +730,163 @@ table.data.compact tr:last-child td {
   margin-top: var(--space-md);
 }
 
+/* ---- Overblik: period header ("Senest bogført pr. …") ---- */
+.period-head {
+  margin: 0 0 var(--space-md);
+  font-size: var(--text-size-sm);
+}
+
+/* ---- Overblik: drill-down KPI / status cards ---- */
+/* KPI cards become links to the Resultatopgørelse — keep the card look,
+   strip the underline, add a quiet hover lift. */
+.kpi-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.kpi-link:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.kpi-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Status cards that deep-link into a detailed view. */
+a.status-card-link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+a.status-card-link:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+a.status-card-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Overblik: Nøgletal (bruttomargin / egenkapitalandel) ---- */
+.key-figures {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+.key-figure {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+.key-figure-label {
+  font-size: var(--text-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+.key-figure-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-xl);
+  font-weight: var(--text-weight-bold);
+}
+.key-figure-note {
+  font-size: var(--text-size-xs);
+  color: var(--text-dim);
+}
+
+/* ---- Overblik: Seneste posteringer (readable, wraps cleanly) ---- */
+.recent-entries {
+  list-style: none;
+  margin: var(--space-xxs) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.recent-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-size-sm);
+}
+.recent-entry:last-child {
+  border-bottom: none;
+}
+.recent-entry-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Wrap rather than truncate to one letter — the description stays readable. */
+  overflow-wrap: anywhere;
+}
+.recent-entry-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+.recent-entry-amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--text-weight-semibold);
+}
+
+/* ---- Statement views: clickable account rows (drill-down) ---- */
+.account-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.account-link:hover,
+.account-link:focus-visible {
+  text-decoration: underline;
+}
+tr.account-row:hover {
+  background: var(--surface-2);
+}
+
+/* ---- Posteringer: the "filtered to one account" banner ---- */
+.account-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+.account-filter p {
+  margin: 0;
+  font-size: var(--text-size-sm);
+}
+
+/* ---- Bilag: the linked-posting text under the entry badge ---- */
+.doc-posting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  align-items: flex-start;
+}
+.doc-posting-text {
+  font-size: var(--text-size-sm);
+}
+
+/* ---- Flerårsoversigt: "(år til dato)" marker on the live year ---- */
+.multi-year-current {
+  margin-left: var(--space-xs);
+  font-size: var(--text-size-sm);
+}
+
 /* ==========================================================================
    Per-company sub-navigation — twelve views in four labelled groups
    ========================================================================== */
@@ -891,6 +1048,29 @@ table.statement-table td.num.muted {
   color: var(--text);
 }
 
+/* The VAT filing/payment deadline strip on the Moms view. */
+.vat-deadline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-top: var(--space-sm);
+}
+.vat-deadline-label {
+  display: block;
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.vat-deadline-date {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-lg);
+  font-weight: var(--text-weight-bold);
+  color: var(--text);
+}
+
 /* ==========================================================================
    Posteringer — journal entry list with drill-down to lines
    ========================================================================== */
@@ -964,8 +1144,78 @@ table.statement-table td.num.muted {
    ========================================================================== */
 
 .bank-summary,
-.invoices-summary {
+.invoices-summary,
+.cashflow-summary {
   margin-bottom: var(--space-lg);
+}
+/* Bank summary carries three cards (faktisk · bogført · afstemning). */
+.bank-summary {
+  grid-template-columns: repeat(3, 1fr);
+}
+/* Cash-flow summary strip: primo · ind · ud · ultimo. */
+.cashflow-summary {
+  grid-template-columns: repeat(4, 1fr);
+}
+/* The ind/ud figures borrow the chart's green/red so the summary strip and
+   the graph below it read as one. */
+.status-figure.status-in {
+  color: var(--color-success);
+}
+.status-figure.status-out {
+  color: var(--color-accent);
+}
+
+/* The booked-vs-actual gap banner — the headline of the Bank view. */
+.bank-diff-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+.bank-diff-banner p {
+  margin: 0;
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.bank-diff-banner .flag {
+  flex-shrink: 0;
+}
+.bank-diff-banner.alert {
+  background: var(--surface-2);
+  border-left: 3px solid var(--warning);
+}
+.bank-diff-banner.ok {
+  border-left: 3px solid var(--ok);
+}
+.bank-diff-banner.neutral {
+  border-left: 3px solid var(--border);
+}
+.bank-diff-figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-xl);
+  font-weight: var(--text-weight-bold);
+  color: var(--warning);
+}
+
+/* The booked-vs-actual note inside the Overblik Bank card. */
+.bank-diff.alert {
+  color: var(--warning);
+  font-weight: var(--text-weight-semibold);
+}
+.bank-diff.ok {
+  color: var(--ok);
+  font-weight: var(--text-weight-semibold);
+}
+
+/* A grouped exception line that deep-links into another view. */
+.status-link {
+  color: inherit;
+  text-decoration: none;
+}
+.status-link:hover,
+.status-link:focus-visible {
+  text-decoration: underline;
 }
 
 /* ==========================================================================
@@ -1013,6 +1263,10 @@ table.statement-table td.num.muted {
   .kpi-row {
     grid-template-columns: 1fr;
   }
+  /* The three bank summary cards stack to two, then one (see 640px). */
+  .bank-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
   /* The grouped sub-nav wraps group-by-group; once it does, drop the
      hairline dividers and indent — each group reads as its own short row. */
   .company-tab-group {
@@ -1039,8 +1293,22 @@ table.statement-table td.num.muted {
     gap: var(--space-sm);
     margin-bottom: var(--space-lg);
   }
+  .key-figures {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+  }
   .status-grid {
     grid-template-columns: 1fr;
+  }
+  /* On a phone the recent-entry meta drops below the description. */
+  .recent-entry {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-xxs);
+  }
+  .recent-entry-meta {
+    justify-content: space-between;
   }
   .pnl-chart {
     height: 300px;

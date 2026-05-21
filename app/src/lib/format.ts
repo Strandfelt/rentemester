@@ -25,6 +25,19 @@ export function formatKroner(kroner: number, currency = "DKK"): string {
   }).format(kroner);
 }
 
+/**
+ * Danish-style percentage formatting for a ratio expressed as a fraction
+ * (0–1) — e.g. the Overblik nøgletal (bruttomargin, egenkapitalandel). Returns
+ * "—" when the ratio is null (an undefined figure, never a fabricated 0%).
+ */
+export function formatPercent(fraction: number | null): string {
+  if (fraction === null || !Number.isFinite(fraction)) return "—";
+  return new Intl.NumberFormat("da-DK", {
+    style: "percent",
+    maximumFractionDigits: 1,
+  }).format(fraction);
+}
+
 /** Today as YYYY-MM-DD (local) — the default `asOf` for the cockpit. */
 export function todayIso(): string {
   const d = new Date();

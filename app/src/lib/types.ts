@@ -157,6 +157,20 @@ export type OverviewExceptionRow = {
   message: string;
 };
 
+/**
+ * One grouped exception line for the "Opgaver" card — every open exception of
+ * one `type` collapsed into a single Danish, actionable summary line.
+ */
+export type OverviewExceptionGroup = {
+  type: string;
+  count: number;
+  severity: "low" | "medium" | "high";
+  /** Danish one-liner, e.g. "362 banktransaktioner mangler afstemning". */
+  label: string;
+  /** The cockpit sub-view this group links to (e.g. "bank"); null when none. */
+  link: string | null;
+};
+
 export type OverviewRecentEntry = {
   id: number;
   entryNo: string;
@@ -189,7 +203,21 @@ export type CompanyOverview = {
     resultat: number;
     months: OverviewMonth[];
   };
-  bank: { balance: number };
+  bank: {
+    /** Booked ledger balance of the bank/cash accounts at the year end, kroner. */
+    balance: number;
+    /** Actual statement balance (latest imported `balance_after`), kroner; null when unknown. */
+    actualBalance: number | null;
+    /** balance − actualBalance; the unreconciled gap, kroner; null when unknown. */
+    difference: number | null;
+  };
+  /** Money owed TO the company — open issued-invoice balances at year end. */
+  receivables: {
+    /** Number of issued invoices still carrying an open balance. */
+    openCount: number;
+    /** Sum of the open balances, kroner. */
+    openTotal: number;
+  };
   vat: {
     periodStart: string;
     periodEnd: string;
@@ -200,9 +228,26 @@ export type CompanyOverview = {
     inputVat: number;
     /** outputVat − inputVat; positive is payable to SKAT, kroner. */
     payable: number;
+    /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
+    deadline: string;
+    /** Signed countdown from today to the deadline; negative once passed. */
+    daysRemaining: number;
   };
-  exceptions: { count: number; rows: OverviewExceptionRow[] };
+  exceptions: {
+    count: number;
+    rows: OverviewExceptionRow[];
+    groups: OverviewExceptionGroup[];
+  };
   recentEntries: OverviewRecentEntry[];
+  /** Transaction date of the most recent posted entry; null when none. */
+  lastPostedDate: string | null;
+  /** Key ratios as fractions (0–1); each null when its denominator is zero. */
+  keyFigures: {
+    /** Resultat ÷ omsætning. */
+    bruttomargin: number | null;
+    /** Egenkapital ÷ balancesum. */
+    egenkapitalandel: number | null;
+  };
 };
 
 export type OverviewResponse = {
@@ -351,6 +396,8 @@ export type CompanyJournal = {
   periodStart: string;
   periodEnd: string;
   entries: JournalEntry[];
+  /** The account the entries are filtered to, when `?account=` is set. */
+  accountFilter: { accountNo: string; name: string } | null;
 };
 
 export type JournalResponse = {
@@ -390,6 +437,10 @@ export type CompanyBank = {
   accounts: BankAccountInfo[];
   /** Booked ledger balance of the bank/cash accounts at the year end, kroner. */
   bookedBalance: number;
+  /** Actual statement balance (latest imported `balance_after`), kroner; null when unknown. */
+  actualBalance: number | null;
+  /** bookedBalance − actualBalance; the unreconciled gap, kroner; null when unknown. */
+  difference: number | null;
   transactions: BankTransactionRow[];
   matchedCount: number;
   unmatchedCount: number;
@@ -417,6 +468,10 @@ export type CompanyVat = {
   inputVat: number;
   /** outputVat − inputVat; positive is payable to SKAT, kroner. */
   payable: number;
+  /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
+  deadline: string;
+  /** Signed countdown from today to the deadline; negative once passed. */
+  daysRemaining: number;
 };
 
 export type VatResponse = {
@@ -441,6 +496,10 @@ export type DocumentRow = {
   voucherRef: string | null;
   journalEntryNo: string | null;
   journalEntryId: number | null;
+  /** The linked journal entry's posting text — what the voucher is for. */
+  journalEntryText: string | null;
+  /** The linked journal entry's total (summed debit side), kroner. */
+  journalEntryTotal: number | null;
 };
 
 export type CompanyDocuments = {
@@ -593,6 +652,96 @@ export type CompanyContacts = {
 export type ContactsResponse = {
   ok: true;
   contacts: CompanyContacts;
+};
+
+// --- obligations / Forpligtelser (GET .../obligations?year=) — it. 7 --------
+//
+// All money fields below are kroner (DKK with decimals) — use `formatKroner`.
+
+export type ObligationKind =
+  | "vat"
+  | "corporation-tax"
+  | "creditors"
+  | "auditor"
+  | "other";
+
+export type ObligationRow = {
+  kind: ObligationKind;
+  /** A human Danish label, e.g. "Moms — 1. halvår 2026". */
+  label: string;
+  /** The amount owed, kroner; positive is payable. */
+  amount: number;
+  /** The filing/payment deadline as YYYY-MM-DD, or null when none is known. */
+  dueDate: string | null;
+  /** Signed countdown from today to `dueDate`; null when `dueDate` is null. */
+  daysRemaining: number | null;
+  /** The ledger account the figure was read from, when one applies. */
+  accountNo: string | null;
+};
+
+export type CompanyObligations = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  /** Payables sorted by due date, soonest first; dateless rows last. */
+  obligations: ObligationRow[];
+  /** Sum of every obligation's amount, kroner. */
+  totalOwed: number;
+};
+
+export type ObligationsResponse = {
+  ok: true;
+  obligations: CompanyObligations;
+};
+
+// --- cash flow / Likviditet (GET .../cashflow?year=) ----------------------
+
+export type CashflowMonth = {
+  /** 1–12. */
+  month: number;
+  label: string;
+  /** Money in: sum of positive bank-transaction amounts, kroner. */
+  indbetalinger: number;
+  /** Money out: sum of negative amounts as a positive figure, kroner. */
+  udbetalinger: number;
+  /** indbetalinger − udbetalinger, kroner. */
+  netto: number;
+};
+
+export type CashflowBalancePoint = {
+  date: string;
+  /** The imported running balance at this point, kroner. */
+  balance: number;
+};
+
+export type CompanyCashflow = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  /** False when the company has no bank transactions in the year. */
+  hasTransactions: boolean;
+  months: CashflowMonth[];
+  /** The real bank-balance trajectory, oldest-first. */
+  balanceSeries: CashflowBalancePoint[];
+  /** Actual balance the day before the year starts, kroner; null when unknown. */
+  openingBalance: number | null;
+  /** Actual balance at the year end, kroner; null when unknown. */
+  closingBalance: number | null;
+  /** Total money in across the year, kroner. */
+  totalIn: number;
+  /** Total money out across the year, kroner. */
+  totalOut: number;
+};
+
+export type CashflowResponse = {
+  ok: true;
+  cashflow: CompanyCashflow;
 };
 
 export type CreateCompanyInput = {

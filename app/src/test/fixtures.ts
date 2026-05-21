@@ -5,6 +5,7 @@ import type {
   CompanyArchiveYear,
   CompanyBalance,
   CompanyBank,
+  CompanyCashflow,
   CompanyContacts,
   CompanyDashboard,
   CompanyDocuments,
@@ -12,6 +13,7 @@ import type {
   CompanyInvoices,
   CompanyJournal,
   CompanyMultiYear,
+  CompanyObligations,
   CompanyOverview,
   CompanySettings,
   CompanySummary,
@@ -106,7 +108,8 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
         expense: i === 0 ? 4563.04 : 0,
       })),
     },
-    bank: { balance: 41388.03 },
+    bank: { balance: 41388.03, actualBalance: 23654.75, difference: 17733.28 },
+    receivables: { openCount: 0, openTotal: 0 },
     vat: {
       periodStart: "2026-01-01",
       periodEnd: "2026-06-30",
@@ -114,9 +117,13 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
       outputVat: 4457,
       inputVat: 1086,
       payable: 3371,
+      deadline: "2026-09-01",
+      daysRemaining: 103,
     },
-    exceptions: { count: 0, rows: [] },
+    exceptions: { count: 0, rows: [], groups: [] },
     recentEntries: [],
+    lastPostedDate: "2026-02-27",
+    keyFigures: { bruttomargin: 0.7423, egenkapitalandel: 0.9186 },
     ...over,
   };
 }
@@ -265,6 +272,7 @@ export function journal(over: Partial<CompanyJournal> = {}): CompanyJournal {
         ],
       },
     ],
+    accountFilter: null,
     ...over,
   };
 }
@@ -288,6 +296,8 @@ export function bank(over: Partial<CompanyBank> = {}): CompanyBank {
       },
     ],
     bookedBalance: 41388.03,
+    actualBalance: 23654.75,
+    difference: 17733.28,
     transactions: [
       {
         id: 1,
@@ -327,6 +337,85 @@ export function vat(over: Partial<CompanyVat> = {}): CompanyVat {
     outputVat: 4457,
     inputVat: 1086,
     payable: 3371,
+    deadline: "2026-09-01",
+    daysRemaining: 103,
+    ...over,
+  };
+}
+
+export function obligations(
+  over: Partial<CompanyObligations> = {},
+): CompanyObligations {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    obligations: [
+      {
+        kind: "vat",
+        label: "Moms — 1. halvår 2026",
+        amount: 3371,
+        dueDate: "2026-09-01",
+        daysRemaining: 103,
+        accountNo: null,
+      },
+      {
+        kind: "corporation-tax",
+        label: "Skyldig selskabsskat",
+        amount: 2906.66,
+        dueDate: "2027-11-01",
+        daysRemaining: 529,
+        accountNo: "63060",
+      },
+      {
+        kind: "creditors",
+        label: "Kreditorer (leverandørgæld)",
+        amount: 1250,
+        dueDate: null,
+        daysRemaining: null,
+        accountNo: "63000",
+      },
+    ],
+    totalOwed: 7527.66,
+    ...over,
+  };
+}
+
+const CASHFLOW_MONTHS = [
+  "jan", "feb", "mar", "apr", "maj", "jun",
+  "jul", "aug", "sep", "okt", "nov", "dec",
+];
+
+export function cashflow(
+  over: Partial<CompanyCashflow> = {},
+): CompanyCashflow {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    hasTransactions: true,
+    months: CASHFLOW_MONTHS.map((label, i) => ({
+      month: i + 1,
+      label,
+      indbetalinger: i === 1 ? 12000 : i === 4 ? 5829.02 : 0,
+      udbetalinger: i === 1 ? 2000 : i === 4 ? 2594.2 : 0,
+      netto: i === 1 ? 10000 : i === 4 ? 3234.82 : 0,
+    })),
+    balanceSeries: [
+      { date: "2026-02-10", balance: 12000 },
+      { date: "2026-02-20", balance: 10000 },
+      { date: "2026-05-05", balance: 13234.82 },
+    ],
+    openingBalance: 4000,
+    closingBalance: 13234.82,
+    totalIn: 17829.02,
+    totalOut: 4594.2,
     ...over,
   };
 }
@@ -353,6 +442,8 @@ export function documents(
         voucherRef: "1",
         journalEntryNo: "B-2026-0002",
         journalEntryId: 2,
+        journalEntryText: "Køb af kontorartikler",
+        journalEntryTotal: 1250,
       },
     ],
     linkedCount: 1,

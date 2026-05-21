@@ -83,6 +83,15 @@ export function VatView() {
               </tbody>
             </table>
           </div>
+
+          <div className="card statement-card vat-deadline">
+            <div>
+              <span className="vat-deadline-label">Angives og betales senest</span>
+              <span className="vat-deadline-date">{v.deadline}</span>
+            </div>
+            <DeadlineCountdown days={v.daysRemaining} />
+          </div>
+
           <p className="statement-check ok">
             {payablePositive
               ? "Salgsmoms minus købsmoms — beløbet skal afregnes til SKAT."
@@ -91,6 +100,29 @@ export function VatView() {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * The "X dage tilbage" countdown to the VAT filing deadline. Turns critical
+ * once the deadline is near or passed, so an owner sees the urgency at a
+ * glance — the half-yearly momsangivelse is easy to forget.
+ */
+function DeadlineCountdown({ days }: { days: number }) {
+  if (days < 0) {
+    return (
+      <span className="flag critical">
+        Fristen er overskredet {Math.abs(days)}{" "}
+        {Math.abs(days) === 1 ? "dag" : "dage"}
+      </span>
+    );
+  }
+  if (days === 0) return <span className="flag critical">Frist i dag</span>;
+  const tone = days <= 30 ? "warning" : "ok";
+  return (
+    <span className={`flag ${tone}`}>
+      {days} {days === 1 ? "dag" : "dage"} tilbage
+    </span>
   );
 }
 
