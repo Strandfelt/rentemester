@@ -26,11 +26,15 @@ import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
 import {
   buildCompanyBalance,
+  buildCompanyBank,
   buildCompanyDashboardData,
+  buildCompanyDocuments,
   buildCompanyFiscalYears,
   buildCompanyIncomeStatement,
+  buildCompanyJournal,
   buildCompanyOverview,
   buildCompanyTrialBalance,
+  buildCompanyVat,
   buildPortfolioOverview,
   resolveAsOfDate,
   resolveYearParam,
@@ -172,6 +176,41 @@ function handleCompanyTrialBalance(
   const year = resolveYearParam(url.searchParams.get("year"));
   const data = buildCompanyTrialBalance(config.workspaceRoot, slug, year);
   return okResponse({ trialBalance: data });
+}
+
+function handleCompanyJournal(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyJournal(config.workspaceRoot, slug, year);
+  return okResponse({ journal: data });
+}
+
+function handleCompanyBank(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyBank(config.workspaceRoot, slug, year);
+  return okResponse({ bank: data });
+}
+
+function handleCompanyVat(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyVat(config.workspaceRoot, slug, year);
+  return okResponse({ vat: data });
+}
+
+function handleCompanyDocuments(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyDocuments(config.workspaceRoot, slug);
+  return okResponse({ documents: data });
 }
 
 async function handleCompanyCreate(
@@ -332,6 +371,34 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(trialBalanceMatch[1]!);
       return handleCompanyTrialBalance(config, slug, url);
+    }
+
+    const journalMatch = /^\/api\/companies\/([^/]+)\/journal$/.exec(path);
+    if (journalMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(journalMatch[1]!);
+      return handleCompanyJournal(config, slug, url);
+    }
+
+    const bankMatch = /^\/api\/companies\/([^/]+)\/bank$/.exec(path);
+    if (bankMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(bankMatch[1]!);
+      return handleCompanyBank(config, slug, url);
+    }
+
+    const vatMatch = /^\/api\/companies\/([^/]+)\/vat$/.exec(path);
+    if (vatMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(vatMatch[1]!);
+      return handleCompanyVat(config, slug, url);
+    }
+
+    const documentsMatch = /^\/api\/companies\/([^/]+)\/documents$/.exec(path);
+    if (documentsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(documentsMatch[1]!);
+      return handleCompanyDocuments(config, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

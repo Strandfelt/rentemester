@@ -38,6 +38,10 @@ const TABS: { to: string; label: string }[] = [
   { to: "resultatopgorelse", label: "Resultatopgørelse" },
   { to: "balance", label: "Balance" },
   { to: "saldobalance", label: "Saldobalance" },
+  { to: "posteringer", label: "Posteringer" },
+  { to: "bank", label: "Bank" },
+  { to: "moms", label: "Moms" },
+  { to: "bilag", label: "Bilag" },
 ];
 
 /**

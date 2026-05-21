@@ -49,7 +49,9 @@ describe("DashboardView — Overblik", () => {
     mockFetch(overviewRoute());
     renderDashboard();
     expect(await screen.findByTestId("pnl-chart")).toBeInTheDocument();
-    const vat = screen.getByText("Moms").closest(".status-card")!;
+    const vat = screen
+      .getByRole("heading", { name: "Moms" })
+      .closest(".status-card")!;
     expect(within(vat as HTMLElement).getByText(/3\.371,00/)).toBeInTheDocument();
     expect(
       within(vat as HTMLElement).getByText(/1\. halvår 2026/),

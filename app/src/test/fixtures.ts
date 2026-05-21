@@ -3,11 +3,15 @@
 import { vi } from "vitest";
 import type {
   CompanyBalance,
+  CompanyBank,
   CompanyDashboard,
+  CompanyDocuments,
   CompanyIncomeStatement,
+  CompanyJournal,
   CompanyOverview,
   CompanySummary,
   CompanyTrialBalance,
+  CompanyVat,
 } from "../lib/types";
 
 export function summary(over: Partial<CompanySummary> = {}): CompanySummary {
@@ -210,6 +214,143 @@ export function trialBalance(
     totalDebit: 59217.05,
     totalCredit: 59217.05,
     balanced: true,
+    ...over,
+  };
+}
+
+export function journal(over: Partial<CompanyJournal> = {}): CompanyJournal {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    entries: [
+      {
+        id: 1,
+        entryNo: "B-2026-0001",
+        date: "2026-03-15",
+        text: "Salg af ydelse",
+        total: 22286.28,
+        lines: [
+          {
+            accountNo: "55000",
+            accountName: "Bank",
+            debit: 22286.28,
+            credit: 0,
+            text: null,
+          },
+          {
+            accountNo: "1000",
+            accountName: "Omsætning",
+            debit: 0,
+            credit: 17829.02,
+            text: null,
+          },
+          {
+            accountNo: "64000",
+            accountName: "Salgsmoms",
+            debit: 0,
+            credit: 4457.26,
+            text: null,
+          },
+        ],
+      },
+    ],
+    ...over,
+  };
+}
+
+export function bank(over: Partial<CompanyBank> = {}): CompanyBank {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    accounts: [
+      {
+        id: 1,
+        name: "Driftskonto",
+        bankName: "Danske Bank",
+        accountNo: "12345678",
+        ledgerAccountNo: "55000",
+      },
+    ],
+    bookedBalance: 41388.03,
+    transactions: [
+      {
+        id: 1,
+        date: "2026-03-15",
+        text: "Indbetaling faktura 1001",
+        amount: 22286.28,
+        runningBalance: 22286.28,
+        reconciliationStatus: "matched",
+        journalEntryNo: "B-2026-0001",
+      },
+      {
+        id: 2,
+        date: "2026-04-02",
+        text: "Gebyr",
+        amount: -45,
+        runningBalance: 22241.28,
+        reconciliationStatus: "unmatched",
+        journalEntryNo: null,
+      },
+    ],
+    matchedCount: 1,
+    unmatchedCount: 1,
+    ...over,
+  };
+}
+
+export function vat(over: Partial<CompanyVat> = {}): CompanyVat {
+  return {
+    slug: "acme-aps",
+    selectedYear: "2026",
+    archived: false,
+    company: STATEMENT_COMPANY,
+    fiscalYears: STATEMENT_FISCAL_YEARS,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-06-30",
+    periodLabel: "1. halvår 2026",
+    outputVat: 4457,
+    inputVat: 1086,
+    payable: 3371,
+    ...over,
+  };
+}
+
+export function documents(
+  over: Partial<CompanyDocuments> = {},
+): CompanyDocuments {
+  return {
+    slug: "acme-aps",
+    company: STATEMENT_COMPANY,
+    documents: [
+      {
+        id: 1,
+        documentNo: "DOC-2026-000001",
+        source: "dinero-import",
+        filename: "2026-Bilag-1.pdf",
+        documentType: "purchase_sale",
+        supplierName: "Leverandør ApS",
+        invoiceNo: "F-1001",
+        invoiceDate: "2026-02-01",
+        amountIncVat: 1250,
+        currency: "DKK",
+        status: "ingested",
+        voucherRef: "1",
+        journalEntryNo: "B-2026-0002",
+        journalEntryId: 2,
+      },
+    ],
+    linkedCount: 1,
+    unlinkedCount: 0,
     ...over,
   };
 }

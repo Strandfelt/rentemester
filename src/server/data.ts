@@ -1076,3 +1076,448 @@ export function buildCompanyTrialBalance(
     ctx.db.close();
   }
 }
+
+// --------------------------------------------------------------------------
+// Per-company journal (Posteringer, year-aware) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type JournalLine = {
+  accountNo: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  text: string | null;
+};
+
+export type JournalEntry = {
+  id: number;
+  entryNo: string;
+  date: string;
+  text: string;
+  /** Sum of the debit side — the entry total, kroner. */
+  total: number;
+  lines: JournalLine[];
+};
+
+export type CompanyJournal = ReturnType<typeof buildCompanyJournal>;
+
+/**
+ * Posteringer — every posted journal entry for the selected calendar fiscal
+ * year, newest first, each carrying its debit/credit lines so the UI can drill
+ * into an entry. The entry `total` is the summed debit side. Money is kroner.
+ */
+export function buildCompanyJournal(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        entries: [] as JournalEntry[],
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    const entryRows = ctx.db
+      .query(
+        `SELECT je.id          AS id,
+                je.entry_no    AS entryNo,
+                je.transaction_date AS date,
+                je.text        AS text
+           FROM journal_entries je
+          WHERE je.status = 'posted'
+            AND je.transaction_date >= ? AND je.transaction_date <= ?
+          ORDER BY je.transaction_date DESC, je.id DESC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      id: number;
+      entryNo: string;
+      date: string;
+      text: string;
+    }>;
+
+    const lineRows = ctx.db
+      .query(
+        `SELECT jl.journal_entry_id AS entryId,
+                a.account_no        AS accountNo,
+                a.name              AS accountName,
+                jl.debit_amount     AS debit,
+                jl.credit_amount    AS credit,
+                jl.text             AS text
+           FROM journal_lines jl
+           JOIN journal_entries je ON je.id = jl.journal_entry_id
+           JOIN accounts a         ON a.id = jl.account_id
+          WHERE je.status = 'posted'
+            AND je.transaction_date >= ? AND je.transaction_date <= ?
+          ORDER BY jl.id ASC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      entryId: number;
+      accountNo: string;
+      accountName: string;
+      debit: number;
+      credit: number;
+      text: string | null;
+    }>;
+
+    const linesByEntry = new Map<number, JournalLine[]>();
+    for (const row of lineRows) {
+      const list = linesByEntry.get(row.entryId) ?? [];
+      list.push({
+        accountNo: row.accountNo,
+        accountName: row.accountName,
+        debit: roundKroner(row.debit),
+        credit: roundKroner(row.credit),
+        text: row.text,
+      });
+      linesByEntry.set(row.entryId, list);
+    }
+
+    const entries: JournalEntry[] = entryRows.map((e) => {
+      const lines = linesByEntry.get(e.id) ?? [];
+      const total = roundKroner(
+        lines.reduce((acc, l) => acc + l.debit, 0),
+      );
+      return {
+        id: e.id,
+        entryNo: e.entryNo,
+        date: e.date,
+        text: e.text,
+        total,
+        lines,
+      };
+    });
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      entries,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company bank transactions (Bank, year-aware) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type BankTransactionRow = {
+  id: number;
+  date: string;
+  text: string;
+  amount: number;
+  /** Running balance from the import, kroner; null when the export omits it. */
+  runningBalance: number | null;
+  /** "matched" when a posted journal entry references this row, else "unmatched". */
+  reconciliationStatus: "matched" | "unmatched";
+  /** The matched journal entry's number, when reconciled. */
+  journalEntryNo: string | null;
+};
+
+export type CompanyBank = ReturnType<typeof buildCompanyBank>;
+
+/**
+ * Bank — the imported `bank_transactions` rows for the selected calendar
+ * fiscal year, each with its reconciliation status (matched vs unmatched to a
+ * posted journal entry), plus the registered bank account and its booked
+ * ledger balance at the year end. Money is kroner.
+ */
+export function buildCompanyBank(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    const accounts = listBankAccounts(ctx.db).accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      bankName: a.bankName,
+      accountNo: a.accountNo,
+      ledgerAccountNo: a.ledgerAccountNo,
+    }));
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        accounts,
+        bookedBalance: 0,
+        transactions: [] as BankTransactionRow[],
+        matchedCount: 0,
+        unmatchedCount: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    // Bank rows for the year, oldest-first so the running balance reads
+    // naturally down the table. The LEFT JOIN to a posted journal entry on
+    // `source_bank_transaction_id` is the reconciliation status — the same
+    // join `core/reconciliation.listBankTransactions` uses.
+    const rows = ctx.db
+      .query(
+        `SELECT bt.id            AS id,
+                bt.transaction_date AS date,
+                bt.text          AS text,
+                bt.amount        AS amount,
+                bt.balance_after AS runningBalance,
+                je.entry_no      AS journalEntryNo
+           FROM bank_transactions bt
+           LEFT JOIN journal_entries je
+             ON je.source_bank_transaction_id = bt.id
+            AND je.status = 'posted'
+          WHERE bt.transaction_date >= ? AND bt.transaction_date <= ?
+          ORDER BY bt.transaction_date ASC, bt.id ASC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      id: number;
+      date: string;
+      text: string;
+      amount: number;
+      runningBalance: number | null;
+      journalEntryNo: string | null;
+    }>;
+    const transactions: BankTransactionRow[] = rows.map((r) => ({
+      id: r.id,
+      date: r.date,
+      text: r.text,
+      amount: roundKroner(r.amount),
+      runningBalance:
+        r.runningBalance === null || r.runningBalance === undefined
+          ? null
+          : roundKroner(r.runningBalance),
+      reconciliationStatus: r.journalEntryNo ? "matched" : "unmatched",
+      journalEntryNo: r.journalEntryNo,
+    }));
+    const matchedCount = transactions.filter(
+      (t) => t.reconciliationStatus === "matched",
+    ).length;
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      accounts,
+      bookedBalance: bankBalanceAsOf(ctx.db, yearEnd),
+      transactions,
+      matchedCount,
+      unmatchedCount: transactions.length - matchedCount,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company VAT return (Moms, year-aware) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type CompanyVat = ReturnType<typeof buildCompanyVat>;
+
+/**
+ * Moms — the VAT return for the selected calendar fiscal year. Each half-year
+ * settles separately; the first half is surfaced by default, switching to the
+ * second only when the first is empty and the second carries activity — the
+ * same selection `buildCompanyOverview` uses. The figures come from the booked
+ * VAT accounts via `vatPositionForPeriod`. Money is kroner.
+ */
+export function buildCompanyVat(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-06-30`,
+        periodLabel: `1. halvår ${ctx.selectedLabel}`,
+        outputVat: 0,
+        inputVat: 0,
+        payable: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const p1 = halfYearPeriod(yearNum, 1);
+    const p2 = halfYearPeriod(yearNum, 2);
+    const h1 = vatPositionForPeriod(ctx.db, p1.start, p1.end);
+    const h2 = vatPositionForPeriod(ctx.db, p2.start, p2.end);
+    const useSecondHalf = h1.payable === 0 && h2.payable !== 0;
+    const vat = useSecondHalf ? h2 : h1;
+    const half: 1 | 2 = useSecondHalf ? 2 : 1;
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: vat.periodStart,
+      periodEnd: vat.periodEnd,
+      periodLabel: `${half}. halvår ${yearNum}`,
+      outputVat: vat.outputVat,
+      inputVat: vat.inputVat,
+      payable: vat.payable,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company documents (Bilag) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type DocumentRow = {
+  id: number;
+  documentNo: string | null;
+  source: string;
+  filename: string | null;
+  documentType: string;
+  supplierName: string | null;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  amountIncVat: number | null;
+  currency: string;
+  status: string;
+  /** The voucher reference the document was matched on, when linked. */
+  voucherRef: string | null;
+  /** The linked journal entry's number, when one exists. */
+  journalEntryNo: string | null;
+  /** The linked journal entry's id, for drill-through. */
+  journalEntryId: number | null;
+};
+
+export type CompanyDocuments = ReturnType<typeof buildCompanyDocuments>;
+
+/**
+ * Bilag — the ingested documents/receipts in the company's `documents` table,
+ * each carrying the voucher and posted journal entry it is linked to through
+ * `import_document_links` (#196) where one exists. Newest upload first.
+ */
+export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+    const rows = db
+      .query(
+        `SELECT d.id              AS id,
+                d.document_no     AS documentNo,
+                d.source          AS source,
+                d.original_filename AS filename,
+                d.document_type   AS documentType,
+                d.supplier_name   AS supplierName,
+                d.invoice_no      AS invoiceNo,
+                d.invoice_date    AS invoiceDate,
+                d.amount_inc_vat  AS amountIncVat,
+                d.currency        AS currency,
+                d.status          AS status,
+                idl.voucher_ref   AS voucherRef,
+                je.id             AS journalEntryId,
+                je.entry_no       AS journalEntryNo
+           FROM documents d
+           LEFT JOIN import_document_links idl ON idl.document_id = d.id
+           LEFT JOIN journal_entries je        ON je.id = idl.journal_entry_id
+          ORDER BY d.upload_datetime DESC, d.id DESC`,
+      )
+      .all() as Array<{
+      id: number;
+      documentNo: string | null;
+      source: string;
+      filename: string | null;
+      documentType: string;
+      supplierName: string | null;
+      invoiceNo: string | null;
+      invoiceDate: string | null;
+      amountIncVat: number | null;
+      currency: string;
+      status: string;
+      voucherRef: string | null;
+      journalEntryId: number | null;
+      journalEntryNo: string | null;
+    }>;
+
+    const documents: DocumentRow[] = rows.map((r) => ({
+      id: r.id,
+      documentNo: r.documentNo,
+      source: r.source,
+      filename: r.filename,
+      documentType: r.documentType,
+      supplierName: r.supplierName,
+      invoiceNo: r.invoiceNo,
+      invoiceDate: r.invoiceDate,
+      amountIncVat:
+        r.amountIncVat === null || r.amountIncVat === undefined
+          ? null
+          : roundKroner(r.amountIncVat),
+      currency: r.currency,
+      status: r.status,
+      voucherRef: r.voucherRef,
+      journalEntryNo: r.journalEntryNo,
+      journalEntryId: r.journalEntryId,
+    }));
+    const linkedCount = documents.filter(
+      (d) => d.journalEntryNo !== null,
+    ).length;
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      documents,
+      linkedCount,
+      unlinkedCount: documents.length - linkedCount,
+    };
+  } finally {
+    db.close();
+  }
+}

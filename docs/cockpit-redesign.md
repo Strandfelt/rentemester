@@ -136,14 +136,16 @@ rigtige tal før ledgeren er korrekt — derfor fixes importen først.
 - [x] Frontend: Saldobalance-view
 - [x] Per-virksomhed sub-navigation (Overblik · Resultatopgørelse · Balance ·
       Saldobalance); valgt regnskabsår bæres i URL'en (`?year=`) på tværs af views
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — Resultatopgørelse (resultat 13.234,82), Balance
+      (aktiver 42.290,03, balancerer), Saldobalance verificeret desktop + mobil
 
 ### Iteration 3 — Ledger-detaljer (P1–P2)
-- [ ] Backend: journal, bank, vat, documents endpoints
-- [ ] Frontend: Posteringer-view + drill-down til entry-linjer
-- [ ] Frontend: Bank-view — transaktioner + afstemningsstatus
-- [ ] Frontend: Moms-view — momsangivelse for perioden
-- [ ] Frontend: Bilag-view — dokumenter + link til posteringer
+- [x] Backend: journal, bank, vat, documents endpoints (årsbevidste)
+- [x] Frontend: Posteringer-view + drill-down til entry-linjer
+- [x] Frontend: Bank-view — transaktioner + afstemningsstatus
+- [x] Frontend: Moms-view — momsangivelse for perioden
+- [x] Frontend: Bilag-view — dokumenter + link til posteringer
+- [x] Sub-navigation udvidet til 8 punkter; `?year=` bæres på tværs
 - [ ] **Visuel inspektion**
 
 ### Iteration 4 — Multi-år (P2–P3)

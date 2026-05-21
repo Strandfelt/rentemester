@@ -320,6 +320,142 @@ export type TrialBalanceResponse = {
   trialBalance: CompanyTrialBalance;
 };
 
+// --- journal / Posteringer (GET .../journal?year=) ------------------------
+//
+// All money fields below are kroner (DKK with decimals) — use `formatKroner`.
+
+export type JournalLine = {
+  accountNo: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  text: string | null;
+};
+
+export type JournalEntry = {
+  id: number;
+  entryNo: string;
+  date: string;
+  text: string;
+  /** Sum of the debit side — the entry total, kroner. */
+  total: number;
+  lines: JournalLine[];
+};
+
+export type CompanyJournal = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  entries: JournalEntry[];
+};
+
+export type JournalResponse = {
+  ok: true;
+  journal: CompanyJournal;
+};
+
+// --- bank / Bank (GET .../bank?year=) -------------------------------------
+
+export type BankAccountInfo = {
+  id: number;
+  name: string;
+  bankName: string | null;
+  accountNo: string | null;
+  ledgerAccountNo: string | null;
+};
+
+export type BankTransactionRow = {
+  id: number;
+  date: string;
+  text: string;
+  amount: number;
+  /** Running balance from the import, kroner; null when the export omits it. */
+  runningBalance: number | null;
+  reconciliationStatus: "matched" | "unmatched";
+  journalEntryNo: string | null;
+};
+
+export type CompanyBank = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  accounts: BankAccountInfo[];
+  /** Booked ledger balance of the bank/cash accounts at the year end, kroner. */
+  bookedBalance: number;
+  transactions: BankTransactionRow[];
+  matchedCount: number;
+  unmatchedCount: number;
+};
+
+export type BankResponse = {
+  ok: true;
+  bank: CompanyBank;
+};
+
+// --- VAT / Moms (GET .../vat?year=) ---------------------------------------
+
+export type CompanyVat = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  /** Output VAT (salgsmoms) booked for the period, kroner. */
+  outputVat: number;
+  /** Input VAT (købsmoms) booked for the period, kroner. */
+  inputVat: number;
+  /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+  payable: number;
+};
+
+export type VatResponse = {
+  ok: true;
+  vat: CompanyVat;
+};
+
+// --- documents / Bilag (GET .../documents) --------------------------------
+
+export type DocumentRow = {
+  id: number;
+  documentNo: string | null;
+  source: string;
+  filename: string | null;
+  documentType: string;
+  supplierName: string | null;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  amountIncVat: number | null;
+  currency: string;
+  status: string;
+  voucherRef: string | null;
+  journalEntryNo: string | null;
+  journalEntryId: number | null;
+};
+
+export type CompanyDocuments = {
+  slug: string;
+  company: StatementCompany;
+  documents: DocumentRow[];
+  linkedCount: number;
+  unlinkedCount: number;
+};
+
+export type DocumentsResponse = {
+  ok: true;
+  documents: CompanyDocuments;
+};
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;

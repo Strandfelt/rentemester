@@ -6,16 +6,20 @@
 
 import type {
   BalanceResponse,
+  BankResponse,
   CompanyListResponse,
   CreateCompanyInput,
   DashboardResponse,
+  DocumentsResponse,
   FiscalYearsResponse,
   HealthResponse,
   IncomeStatementResponse,
+  JournalResponse,
   OverviewResponse,
   PortfolioResponse,
   TrialBalanceResponse,
   UpdateCompanyInput,
+  VatResponse,
 } from "./types";
 
 /** A failed API call — carries the backend error code for precise handling. */
@@ -116,6 +120,32 @@ export const api = {
         year ? `?year=${encodeURIComponent(year)}` : ""
       }`,
     ).then((r) => r.trialBalance),
+
+  journal: (slug: string, year?: string) =>
+    request<JournalResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/journal${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.journal),
+
+  bank: (slug: string, year?: string) =>
+    request<BankResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/bank${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.bank),
+
+  vat: (slug: string, year?: string) =>
+    request<VatResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/vat${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.vat),
+
+  documents: (slug: string) =>
+    request<DocumentsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/documents`,
+    ).then((r) => r.documents),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

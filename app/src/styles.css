@@ -825,6 +825,82 @@ table.statement-table td.num.muted {
 }
 
 /* ==========================================================================
+   Posteringer — journal entry list with drill-down to lines
+   ========================================================================== */
+
+.entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.entry-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.entry-item.open {
+  border-color: var(--border-strong);
+}
+.entry-summary {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr auto;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-size-md);
+  color: var(--text);
+}
+.entry-summary:hover {
+  background: var(--surface-2);
+}
+.entry-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.entry-caret {
+  color: var(--text-dim);
+  font-size: var(--text-size-sm);
+}
+.entry-no {
+  font-family: var(--font-mono);
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.entry-summary .entry-total {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--text-weight-semibold);
+  white-space: nowrap;
+}
+.entry-lines {
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.entry-lines table.statement-table th,
+.entry-lines table.statement-table td {
+  padding: var(--space-xs) var(--space-md);
+}
+
+/* ==========================================================================
+   Bank — summary cards above the transaction table
+   ========================================================================== */
+
+.bank-summary {
+  margin-bottom: var(--space-lg);
+}
+
+/* ==========================================================================
    Responsive — narrow viewport
    ========================================================================== */
 
@@ -869,5 +945,12 @@ table.statement-table td.num.muted {
   table.statement-table th,
   table.statement-table td {
     padding: var(--space-xs) var(--space-sm);
+  }
+  /* Journal entry summary: drop the date column so the row stays readable. */
+  .entry-summary {
+    grid-template-columns: auto auto 1fr auto;
+  }
+  .entry-summary .entry-date {
+    display: none;
   }
 }

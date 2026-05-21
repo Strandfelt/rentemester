@@ -589,6 +589,181 @@ describe("cockpit API — trial balance (GET .../trial-balance)", () => {
   });
 });
 
+describe("cockpit API — journal (GET .../journal)", () => {
+  test("returns posted entries for the year, each with its lines", async () => {
+    const ws = makeWorkspace("jrn-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/journal?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const j = res.body.journal;
+      expect(j.slug).toBe("acme-aps");
+      expect(j.archived).toBe(false);
+      expect(j.entries.length).toBe(2);
+      const entry = j.entries[0];
+      expect(entry).toHaveProperty("entryNo");
+      expect(entry).toHaveProperty("total");
+      expect(entry.lines.length).toBeGreaterThan(0);
+      expect(entry.lines[0]).toHaveProperty("accountNo");
+      expect(entry.lines[0]).toHaveProperty("accountName");
+      expect(entry.lines[0]).toHaveProperty("debit");
+      expect(entry.lines[0]).toHaveProperty("credit");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("journal for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("jrn-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/journal",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+/** Inserts an imported bank transaction directly into a company's ledger. */
+function seedBankTransaction(
+  ws: string,
+  slug: string,
+  transactionDate: string,
+  text: string,
+  amount: number,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    db.query(
+      `INSERT INTO bank_transactions
+         (transaction_date, text, amount, currency, transaction_hash, status)
+       VALUES (?, ?, ?, 'DKK', ?, 'imported')`,
+    ).run(transactionDate, text, amount, `hash-${transactionDate}-${text}`);
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — bank (GET .../bank)", () => {
+  test("returns transactions with reconciliation status and booked balance", async () => {
+    const ws = makeWorkspace("bnk-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      seedBankTransaction(ws, "acme-aps", "2026-04-01", "Bankgebyr", -50);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/bank?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const b = res.body.bank;
+      expect(b.slug).toBe("acme-aps");
+      expect(b.transactions.length).toBe(1);
+      expect(b.transactions[0].reconciliationStatus).toBe("unmatched");
+      expect(b.unmatchedCount).toBe(1);
+      expect(b).toHaveProperty("bookedBalance");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("bank for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("bnk-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/bank",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — VAT (GET .../vat)", () => {
+  test("returns the output/input/payable VAT for the period", async () => {
+    const ws = makeWorkspace("vat-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const v = res.body.vat;
+      expect(v.slug).toBe("acme-aps");
+      expect(v.outputVat).toBe(250);
+      expect(v.inputVat).toBe(100);
+      expect(v.payable).toBe(150);
+      expect(v.periodLabel).toBe("1. halvår 2026");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("vat for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("vat-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/vat",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("cockpit API — documents (GET .../documents)", () => {
+  test("returns ingested documents with their link state", async () => {
+    const ws = makeWorkspace("doc-live", ["Acme ApS"]);
+    try {
+      // postPnlEntry ingests one minimal document for the P&L entries.
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/documents",
+      );
+      expect(res.status).toBe(200);
+      const d = res.body.documents;
+      expect(d.slug).toBe("acme-aps");
+      expect(d.documents.length).toBeGreaterThan(0);
+      expect(d.documents[0]).toHaveProperty("documentNo");
+      expect(d.documents[0]).toHaveProperty("journalEntryNo");
+      expect(d).toHaveProperty("linkedCount");
+      expect(d).toHaveProperty("unlinkedCount");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("documents for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("doc-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/documents",
+      );
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("cockpit API — company onboarding (POST /api/companies)", () => {
   test("creates a new company in the workspace", async () => {
     const ws = makeWorkspace("add-create");

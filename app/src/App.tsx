@@ -7,6 +7,10 @@
 //   /companies/:slug/resultatopgorelse  Resultatopgørelse (income statement)
 //   /companies/:slug/balance            Balance (balance sheet)
 //   /companies/:slug/saldobalance       Saldobalance (trial balance)
+//   /companies/:slug/posteringer        Posteringer (journal + drill-down)
+//   /companies/:slug/bank               Bank (transactions + reconciliation)
+//   /companies/:slug/moms               Moms (VAT return)
+//   /companies/:slug/bilag              Bilag (ingested documents)
 //   /companies/:slug/manage             rename / archive
 //
 // The per-company views share a sub-navigation and a fiscal-year selector
@@ -19,6 +23,10 @@ import { DashboardView } from "./views/DashboardView";
 import { IncomeStatementView } from "./views/IncomeStatementView";
 import { BalanceView } from "./views/BalanceView";
 import { TrialBalanceView } from "./views/TrialBalanceView";
+import { JournalView } from "./views/JournalView";
+import { BankView } from "./views/BankView";
+import { VatView } from "./views/VatView";
+import { DocumentsView } from "./views/DocumentsView";
 import { ManageCompanyView } from "./views/ManageCompanyView";
 
 export function App() {
@@ -50,6 +58,13 @@ export function App() {
             path="/companies/:slug/saldobalance"
             element={<TrialBalanceView />}
           />
+          <Route
+            path="/companies/:slug/posteringer"
+            element={<JournalView />}
+          />
+          <Route path="/companies/:slug/bank" element={<BankView />} />
+          <Route path="/companies/:slug/moms" element={<VatView />} />
+          <Route path="/companies/:slug/bilag" element={<DocumentsView />} />
           <Route
             path="/companies/:slug/manage"
             element={<ManageCompanyView />}

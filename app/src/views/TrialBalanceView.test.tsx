@@ -35,7 +35,8 @@ describe("TrialBalanceView — Saldobalance", () => {
     mockFetch(route());
     renderView();
     expect(await screen.findByText("Omsætning")).toBeInTheDocument();
-    expect(screen.getByText("Bank")).toBeInTheDocument();
+    // "Bank" also appears as a sub-nav tab, so scope to the account cell.
+    expect(screen.getByRole("cell", { name: "Bank" })).toBeInTheDocument();
   });
 
   test("shows the totals row and the balanced confirmation", async () => {
