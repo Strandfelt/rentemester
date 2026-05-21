@@ -249,4 +249,15 @@ Samme loop-protokol: underagent bygger → visuel inspektion → næste.
 - [x] Seneste posteringer (Overblik): læsbar posteringstekst — relayout fra
       afkortet tabel til ombrydende liste (desktop + mobil)
 - [x] Nøgletal (bruttomargin, egenkapitalandel) på Overblik
-- [x] **Visuel inspektion**
+- [x] **Visuel inspektion** — nøgletal (74,2 % / 47,6 %), "Senest bogført pr.
+      2026-02-27", konto-drill-down (2000 → 2 posteringer), Flerår
+      "(år til dato)", Bilag-posteringstekst, læsbare seneste posteringer
+
+---
+
+## Status — runde 2 afsluttet
+
+Alle fire drifts-iterationer (6–9) bygget og visuelt inspiceret. Cockpittet er
+nu et drifts-cockpit: faktisk banksaldo + afstemningsdifference, meningsfulde
+opgaver, forpligtelser med forfaldsdato, moms-deadline, likviditet/pengestrøm,
+drill-down, nøgletal. Endelig verifikation: **702 tests grønne · smoke grøn**.
