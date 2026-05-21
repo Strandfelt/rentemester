@@ -196,3 +196,41 @@ regnskabsårs-vælger virker. Responsivt på desktop + mobil.
   beløb at betale 3.371,20 mod Dineros 3.371,00 — præcis rubrik-opdeling mangler.
 - Resultatopgørelsens "foregående år"-kolonne viser 0 for arkiverede år; kunne
   trække arkiv-data ind.
+
+---
+
+## Runde 2 — fra regnskabs-cockpit til drifts-cockpit
+
+En virksomhedsejer-gennemgang viste: cockpittet viser regnskabet godt, men
+mangler de drifts-svar en ejer har brug for. Disse iterationer lukker gabet.
+Samme loop-protokol: underagent bygger → visuel inspektion → næste.
+
+### Iteration 6 — Bank-sandhed & meningsfulde opgaver
+- [ ] Backend: bank/overview returnerer FAKTISK banksaldo (seneste
+      `balance_after` fra kontoudtoget) + difference mod bogført saldo
+- [ ] Overblik: Bank-kortet viser faktisk saldo, bogført saldo OG difference
+- [ ] Bank-view: differencen vist prominent øverst
+- [ ] Opgaver: de mange "bank unmatched"-undtagelser grupperes til ÉN dansk,
+      klikbar linje ("362 banktransaktioner mangler afstemning" → Bank-view)
+- [ ] **Visuel inspektion**
+
+### Iteration 7 — Forpligtelser & deadlines
+- [ ] Backend: forpligtelses-endpoint (moms, selskabsskat, kreditorer, afsat
+      revisor m.fl.) med forfaldsdato/-frist hvor den kendes
+- [ ] Frontend: Forpligtelser-view — "hvad skylder jeg og hvornår"
+- [ ] Moms-view + Overblik: indberetnings-/betalingsfrist + dage tilbage
+- [ ] Overblik: debitor-kort ("hvem skylder mig", åbne tilgodehavender)
+- [ ] **Visuel inspektion**
+
+### Iteration 8 — Likviditet / pengestrøm
+- [ ] Backend: pengestrøms-endpoint — penge ind/ud + faktisk bank-udvikling
+- [ ] Frontend: Likviditet-view med graf
+- [ ] **Visuel inspektion**
+
+### Iteration 9 — Drill-down, nøgletal & klarhed
+- [ ] Drill-down: klik nøgletal → opgørelse; klik konto → kontoens posteringer
+- [ ] "Senest bogført pr. <dato>" tydeligt på Overblik
+- [ ] Flerårsoversigt: indeværende år mærket "(år til dato)"
+- [ ] Bilag-view: vis koblet posterings tekst + beløb
+- [ ] Nøgletal (bruttomargin, egenkapitalandel) på Overblik
+- [ ] **Visuel inspektion**
