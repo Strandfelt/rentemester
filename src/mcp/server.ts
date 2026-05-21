@@ -45,7 +45,7 @@ const SERVER_INSTRUCTIONS = [
   "",
   "Forudsætninger og fejl: hvert kald svarer med konvolutten { ok, data?, errors[], appliedRules? }. ok=false betyder at en forudsætning manglede — errors[] forklarer hvad (fx manglende confirm, ubalanceret postering, manglende VIES-validering, periode-lås eller en aktiv backup-lås). Ret forudsætningen og kald igen; gæt aldrig.",
   "",
-  "Idempotens: writes accepterer en valgfri `idempotencyKey` så en retry ikke dobbelt-bogfører. Backup-låsen kan blokere bogføring hvis den ugentlige backup er forsømt — kør da system_backup (archive:true) for at låse op.",
+  "Retries: der findes ingen generel idempotency-mekanisme — en gentaget write (fx journal_post) dobbelt-bogfører. Læs tilstanden tilbage (status/list) før du genudsteder en write. Backup-låsen kan blokere bogføring hvis den ugentlige backup er forsømt — kør da system_backup (archive:true) for at låse op.",
   "",
   "Den fulde kontrakt — tool-katalog, rækkefølge og konventioner — står i docs/mcp-tool-surface.md og docs/mcp-agent-contract.md.",
 ].join("\n");
