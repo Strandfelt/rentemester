@@ -164,6 +164,27 @@ export function enforceMutationActorPolicy(
     if (!isCanonicalActorId(explicitActor)) {
       fatal("explicit actor must use canonical format user:<id>, agent:<id>, or system:<id>");
     }
+    // #283: `system restore-backup` writes to `--target-company`, a path that
+    // is normally brand new (the whole point of a restore is to recreate a
+    // company from a backup). The allowlist lives in
+    // `<target>/config/policy.yaml`, which a not-yet-restored target cannot
+    // possibly have yet. Enforcing the allowlist against that absent file
+    // rejects EVERY explicit `--actor` — even a correctly allowlisted one —
+    // while a derived actor (no `--actor`) slips through, so doing the right
+    // thing is blocked and doing less works. A fresh restore has no policy to
+    // enforce against, so the allowlist check is skipped here; the canonical
+    // format check above still applies, and a restore into an EXISTING
+    // company (which does have a policy file) is still fully enforced below.
+    if (
+      commandKey === "system restore-backup" &&
+      !existsSync(join(companyPaths(root).config, "policy.yaml"))
+    ) {
+      process.env.RENTEMESTER_ACTOR = explicitActor;
+      if (cliActorVia) process.env.RENTEMESTER_ACTOR_VIA = cliActorVia;
+      else if (!trimToNull(process.env.RENTEMESTER_ACTOR_VIA))
+        process.env.RENTEMESTER_ACTOR_VIA = "rentemester-cli";
+      return;
+    }
     const allowlist = loadActorAllowlist(root);
     if (!allowlist.has(explicitActor)) {
       fatal(
