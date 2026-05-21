@@ -611,9 +611,18 @@ table.data td.num {
 .chart-card {
   padding: var(--space-md);
 }
+/* Fixed-height box that Chart.js fills via responsive + maintainAspectRatio:
+   false. The explicit width and the canvas constraint below stop the chart
+   from collapsing to a sliver on narrow viewports. */
 .pnl-chart {
   position: relative;
+  width: 100%;
   height: 320px;
+}
+.pnl-chart canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* ---- status cards ---- */
@@ -714,7 +723,7 @@ table.data.compact tr:last-child td {
     grid-template-columns: 1fr;
   }
   .pnl-chart {
-    height: 260px;
+    height: 300px;
   }
   .page-head .row-actions {
     width: 100%;
