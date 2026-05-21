@@ -212,3 +212,62 @@ describe("invoice create CLI (#212 — guided path)", () => {
     }
   });
 });
+
+describe("invoice create actor allowlist (#265)", () => {
+  // #265: `invoice create` issues a real, locked, immutable invoice through the
+  // SAME core as `invoice issue`. An unknown --actor must be rejected for
+  // `invoice create` EXACTLY as it is for `invoice issue` — otherwise the
+  // allowlist is bypassed and an unauthorised party can issue invoices.
+  test("an unknown --actor is rejected for invoice create, just like invoice issue", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-create-actor-"));
+    const company = join(root, "company");
+    try {
+      await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+
+      // Baseline: `invoice issue` correctly rejects the unknown actor.
+      const issueRun = await run([
+        "invoice",
+        "issue",
+        "--company",
+        company,
+        "--input",
+        "examples/full-invoice.dk.json",
+        "--actor",
+        "user:anyone",
+      ]);
+      expect(issueRun.exitCode).toBe(2);
+      expect(issueRun.stderr).toContain("is not in config/policy.yaml actor_allowlist");
+
+      // `invoice create` MUST reject the same unknown actor identically.
+      const createRun = await run([
+        "invoice",
+        "create",
+        "--company",
+        company,
+        "--issue-date",
+        "2026-05-21",
+        "--line",
+        "Arbejde|1|1000",
+        "--buyer-name",
+        "Kunde A/S",
+        "--buyer-address",
+        "Købervej 9, 8000 Aarhus C",
+        "--seller-name",
+        "Rentemester ApS",
+        "--seller-address",
+        "Testvej 1, 2100 København Ø",
+        "--seller-vat",
+        "DK12345678",
+        "--actor",
+        "user:anyone",
+        "--format",
+        "json",
+      ]);
+      expect(createRun.exitCode).toBe(2);
+      expect(createRun.stderr).toContain("is not in config/policy.yaml actor_allowlist");
+      expect(createRun.stderr).toContain("user:anyone");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

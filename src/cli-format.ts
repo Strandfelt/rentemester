@@ -23,8 +23,21 @@ export function printStructuredResult(commandLabel: string, result: Record<strin
   else console.error(text);
 }
 
+/**
+ * A command's `description` in `cli-meta.ts` is a full sentence (often two)
+ * meant for help text — never a heading. #268: a write command that falls
+ * through to the generic human renderer used to print that whole description
+ * as the `✔` heading. `headingFromLabel` collapses such a label to a short
+ * heading: the first clause before an em dash / period, capped in length.
+ */
+function headingFromLabel(commandLabel: string): string {
+  const firstClause = commandLabel.split(/\s+[—–-]\s+|\.\s/)[0]?.trim() ?? commandLabel;
+  const short = firstClause.length > 0 ? firstClause : commandLabel;
+  return short.length > 60 ? `${short.slice(0, 57).trimEnd()}…` : short;
+}
+
 function buildHumanSuccess(commandLabel: string, result: Record<string, unknown>) {
-  const lines = [`✔ ${commandLabel}`];
+  const lines = [`✔ ${headingFromLabel(commandLabel)}`];
   for (const line of collectSummaryLines(result)) lines.push(`  ${line}`);
   const warnings = asStringArray(result.warnings);
   if (warnings.length > 0) {
@@ -87,6 +100,33 @@ function appendPeriodCloseGuidance(lines: string[], errors: string[]): void {
   );
 }
 
+/**
+ * Danish labels for the result keys a write command commonly returns. The
+ * generic human fallback (`collectSummaryLines`) used to English-ify keys via
+ * `humanizeKey` ("Invoice Number", "Document Id"); for a Danish-facing tool
+ * that is wrong. Any key without an entry here keeps the humanized form, but
+ * the common write-result fields are now translated. (#268)
+ */
+const WRITE_RESULT_LABEL_DA: Record<string, string> = {
+  message: "Besked",
+  invoiceNumber: "Fakturanummer",
+  invoiceNo: "Fakturanummer",
+  entryNo: "Posteringsnummer",
+  entryNumber: "Posteringsnummer",
+  documentId: "Bilags-id",
+  journalEntryId: "Finanspostering-id",
+  importBatchId: "Import-batch-id",
+  imported: "Importeret",
+  skippedDuplicates: "Sprunget over (dubletter)",
+  backupId: "Backup-id",
+  exportDir: "Eksportmappe",
+  latestBackupId: "Seneste backup-id",
+  expiredCount: "Udløbne",
+  totalCount: "I alt",
+  storedPath: "Gemt fil",
+  pdfStoredPath: "PDF-fil",
+};
+
 function collectSummaryLines(result: Record<string, unknown>) {
   const preferredKeys = [
     "message",
@@ -110,7 +150,9 @@ function collectSummaryLines(result: Record<string, unknown>) {
     const value = result[key];
     const rendered = renderScalar(value);
     if (rendered === null) continue;
-    lines.push(`${humanizeKey(key)}: ${rendered}`);
+    // #268: never emit an English key on a Danish-facing tool — use the Danish
+    // label when one exists, falling back to the humanized form otherwise.
+    lines.push(`${WRITE_RESULT_LABEL_DA[key] ?? humanizeKey(key)}: ${rendered}`);
   }
   return lines;
 }
@@ -956,6 +998,100 @@ const VAT_TREATMENT_DA: Record<string, string> = {
   domestic_reverse_charge: "omvendt betalingspligt (indenlandsk)",
   foreign_reverse_charge: "omvendt betalingspligt (udenlandsk)",
 };
+
+// --- Invoice create (write command, guided path) ---------------------------
+
+/**
+ * Render an `invoice create` result as Danish human text. The payload is the
+ * `IssueInvoiceResult` enriched with `computed` (line totals, net, VAT, gross)
+ * from `src/cli/invoice.ts`. (#266, #268)
+ *
+ * Two bugs are addressed here:
+ *  - #268: the write command used to fall through to the generic renderer,
+ *    which printed the long command DESCRIPTION as the heading and English
+ *    field labels ("Invoice Number", "Document Id") and dropped the figures.
+ *    This renderer gives a short Danish heading, Danish labels and the
+ *    amounts/VAT/dates/paths that matter.
+ *  - #266: `invoice create` builds and issues the invoice but does NOT post it
+ *    to the ledger — no revenue / output-VAT posting. The output must make
+ *    that gap impossible to miss, so it states plainly that `invoice post` is
+ *    still required.
+ */
+function renderInvoiceCreate(result: Record<string, unknown>): string {
+  if (result.ok === false) {
+    return buildHumanError("Faktura kunne ikke udstedes", result).join("\n");
+  }
+  const computed = (typeof result.computed === "object" && result.computed !== null
+    ? result.computed
+    : {}) as Record<string, unknown>;
+  const number = asText(result.invoiceNumber);
+  const lines: string[] = [];
+  lines.push(`Faktura ${number} er udstedt`);
+  lines.push("");
+
+  lines.push(`  Fakturanummer:                 ${number}`);
+  if (result.documentId != null) {
+    lines.push(`  Bilags-id:                     ${asText(result.documentId)}`);
+  }
+  lines.push(`  Nettobeløb (ekskl. moms):      ${formatKroner(computed.netAmount)}`);
+  const ratePercent = computed.vatRatePercent ?? computed.vatRate;
+  if (ratePercent != null) {
+    const pct =
+      typeof computed.vatRatePercent === "number"
+        ? computed.vatRatePercent
+        : typeof computed.vatRate === "number"
+          ? computed.vatRate * 100
+          : Number(ratePercent);
+    lines.push(`  Momssats:                      ${formatPercent(pct)}`);
+  }
+  lines.push(`  Momsbeløb:                     ${formatKroner(computed.vatAmount)}`);
+  lines.push(`  Fakturabeløb (inkl. moms):     ${formatKroner(computed.grossAmount)}`);
+  if (result.storedPath) {
+    lines.push(`  Gemt faktura (JSON):           ${asText(result.storedPath)}`);
+  }
+  if (result.pdfStoredPath) {
+    lines.push(`  Faktura-PDF:                   ${asText(result.pdfStoredPath)}`);
+  }
+  lines.push("");
+  // #266: the decisive line — the invoice is issued but NOT yet booked.
+  lines.push(
+    `Fakturaen er udstedt, men endnu IKKE bogført — kør \`invoice post ${number}\``,
+  );
+  lines.push(
+    "for at få den i regnskabet (salgsindtægt og udgående moms). Indtil da indgår",
+  );
+  lines.push("den ikke i din moms eller dit resultat.");
+  appendWarnings(lines, result);
+  return lines.join("\n");
+}
+
+/** Write-command kinds with a dedicated Danish human renderer. (#266, #268) */
+export type HumanWriteKind = "invoice-create";
+
+/**
+ * Emit a write-command `result` either as the byte-stable agent JSON or as a
+ * Danish human rendering, depending on `format`. The `--format json` path is
+ * exactly `JSON.stringify(result, null, 2)` — unchanged from `emitResult` — so
+ * agents see no difference. Sets `process.exitCode = 1` on `ok: false`. (#268)
+ */
+export function emitHumanWrite(
+  kind: HumanWriteKind,
+  result: Record<string, unknown>,
+  format: OutputFormat,
+): void {
+  if (format === "json") {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    const human = kind === "invoice-create" ? renderInvoiceCreate(result) : null;
+    if (human !== null) {
+      if (result.ok === false) console.error(human);
+      else console.log(human);
+    } else {
+      printStructuredResult(kind, result, format);
+    }
+  }
+  if (result.ok === false) process.exitCode = 1;
+}
 
 // --- Exceptions list -------------------------------------------------------
 

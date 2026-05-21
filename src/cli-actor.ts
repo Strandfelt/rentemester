@@ -17,6 +17,10 @@ export const MUTATING_COMMANDS = new Set([
   "system export-authority",
   "system export-accountant",
   "invoice issue",
+  // #265: `invoice create` is the guided path that issues a real, locked,
+  // immutable invoice through the SAME core as `invoice issue` — it MUST be
+  // gated by the actor allowlist exactly like `invoice issue`.
+  "invoice create",
   "invoice render",
   "invoice credit-note",
   "invoice post",

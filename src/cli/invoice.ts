@@ -38,7 +38,7 @@ import { writeOffInvoiceBadDebt } from "../core/invoice-bad-debt";
 import { resolveInvoiceMasterData } from "../core/master-data";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch, CommandContext } from "../cli-dispatch";
-import { emitHumanReport, formatKroner } from "../cli-format";
+import { emitHumanReport, emitHumanWrite, formatKroner } from "../cli-format";
 
 type Db = ReturnType<typeof openDb>;
 
@@ -343,7 +343,11 @@ export function register(dispatch: CommandDispatch): void {
         grossAmount: computed.totals.grossAmount,
       },
     };
-    ctx.emitResult(enriched as Record<string, unknown>);
+    // #268: write commands had useless `--format human` output (the command
+    // description as heading, English labels, no figures). #266: the output
+    // never said the invoice still needs `invoice post`. `emitHumanWrite`
+    // renders both in Danish; `--format json` stays byte-identical.
+    emitHumanWrite("invoice-create", enriched as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 
