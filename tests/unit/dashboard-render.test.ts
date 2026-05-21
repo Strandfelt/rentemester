@@ -122,8 +122,26 @@ function buildFixture(): DashboardInput {
       ok: true,
       count: 2,
       rows: [
-        { id: 1, type: "bank.unmatched", severity: "medium", status: "open", message: "Bank tx without matching invoice" },
-        { id: 2, type: "vat.missing-evidence", severity: "high", status: "open", message: "Missing evidence for VAT deduction" },
+        {
+          id: 1,
+          type: "UNMATCHED_BANK_TRANSACTION",
+          severity: "medium",
+          status: "open",
+          message:
+            "Banktransaktionen \"MobilePay overførsel\" den 2026-05-12 på 1.205,00 kr. er endnu ikke bogført. Der er ikke fundet et bilag (kvittering eller faktura), der passer til beløbet.",
+          requiredAction:
+            "Find kvitteringen eller fakturaen for denne betaling og læg den i bogføringen. Uden et bilag kan udgiften ikke bogføres og momsen ikke fratrækkes.",
+        },
+        {
+          id: 2,
+          type: "MAIL_INTAKE_NO_ATTACHMENT",
+          severity: "high",
+          status: "open",
+          message:
+            "Mail fra leverandoer@eksempel.dk modtaget 2026-05-14 indeholdt ingen vedhæftede filer, så der kunne ikke indlæses et bilag.",
+          requiredAction:
+            "Bed afsenderen sende bilaget igen som vedhæftet PDF, eller indlæs bilaget manuelt.",
+        },
       ],
       errors: [],
     },
@@ -315,12 +333,72 @@ describe("renderDashboard — structure", () => {
   // attention without a trip to the terminal.
   test("lists each open exception, not just the count", () => {
     // The fixture has 2 open exceptions; both must be named on the dashboard.
-    expect(html).toContain("bank.unmatched");
-    expect(html).toContain("Bank tx without matching invoice");
-    expect(html).toContain("vat.missing-evidence");
-    expect(html).toContain("Missing evidence for VAT deduction");
+    expect(html).toContain("Banktransaktion mangler afstemning");
+    expect(html).toContain("Indkommen mail uden vedhæftet bilag");
     // The "Åbne exceptions" section heading is present.
     expect(html).toContain("Åbne exceptions");
+  });
+
+  // #270: the static dashboard must reach parity with the Cockpit SPA — a
+  // human Danish heading for the exception type (never the raw machine code),
+  // a Danish severity label (never the English code), the FULL message (not a
+  // mid-sentence-truncated fragment), and the "Sådan løser du den" guidance.
+  test("exceptions render a human Danish type heading, never the raw code", () => {
+    expect(html).toContain("Banktransaktion mangler afstemning");
+    expect(html).toContain("Indkommen mail uden vedhæftet bilag");
+    // The raw SCREAMING_SNAKE machine codes must NOT leak into the HTML.
+    expect(html).not.toContain("UNMATCHED_BANK_TRANSACTION");
+    expect(html).not.toContain("MAIL_INTAKE_NO_ATTACHMENT");
+  });
+
+  test("exception severity is a Danish label, not the English code", () => {
+    // The fixture has a medium and a high severity exception.
+    expect(html).toContain(">Mellem<");
+    expect(html).toContain(">Høj<");
+    // The raw English severity codes must not appear as the pill text.
+    expect(html).not.toContain(">medium<");
+    expect(html).not.toContain(">high<");
+  });
+
+  test("exception message is shown in full, not truncated mid-sentence", () => {
+    // The fixture's first exception message is well past the old 110-char
+    // truncation. It must appear verbatim (HTML-escaped quotes), no ellipsis.
+    expect(html).toContain(
+      "Banktransaktionen &quot;MobilePay overførsel&quot; den 2026-05-12 på 1.205,00 kr. er endnu ikke bogført. Der er ikke fundet et bilag (kvittering eller faktura), der passer til beløbet.",
+    );
+    // No mid-sentence ellipsis in the exceptions section.
+    expect(html).not.toContain("der passer til be…");
+  });
+
+  test("exception renders its requiredAction as 'Sådan løser du den' guidance", () => {
+    expect(html).toContain("Sådan løser du den:");
+    expect(html).toContain(
+      "Find kvitteringen eller fakturaen for denne betaling og læg den i bogføringen.",
+    );
+  });
+
+  test("an exception with no requiredAction omits the guidance line", () => {
+    const noAction: DashboardInput = {
+      ...buildFixture(),
+      exceptions: {
+        ok: true,
+        count: 1,
+        rows: [
+          {
+            id: 9,
+            type: "UNMATCHED_BANK_TRANSACTION",
+            severity: "low",
+            status: "open",
+            message: "En transaktion mangler afstemning.",
+          },
+        ],
+        errors: [],
+      },
+    };
+    const noActionHtml = renderDashboard(noAction);
+    // The exception is still listed, but with no "Sådan løser du den" line.
+    expect(noActionHtml).toContain("Banktransaktion mangler afstemning");
+    expect(noActionHtml).not.toContain("Sådan løser du den:");
   });
 
   test("exceptions section shows an empty state when there are no open exceptions", () => {

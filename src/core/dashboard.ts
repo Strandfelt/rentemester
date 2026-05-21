@@ -28,6 +28,13 @@ export type DashboardExceptionRow = {
   severity: string;
   status: string;
   message: string;
+  /**
+   * The concrete "what the owner must do" guidance — the most useful part of
+   * an exception. Optional: rendered as "Sådan løser du den" when present, so
+   * the static dashboard reaches parity with the Cockpit SPA (#270). The CLI
+   * passes it through from `core/exceptions`' `required_action` column.
+   */
+  requiredAction?: string | null;
 };
 
 export type DashboardExceptionsResult = {
@@ -753,6 +760,43 @@ const EXCEPTION_SEVERITY_PILL: Record<string, "danger" | "warning" | "neutral"> 
   low: "neutral",
 };
 
+// The owner faces the dashboard, not the developer. An exception heading like
+// `UNMATCHED_BANK_TRANSACTION` and an English severity pill "medium" read as
+// the system's internals — so the static dashboard renders a plain-Danish
+// label for the type and the severity, matching what the Cockpit SPA shows.
+// (#270)
+const EXCEPTION_TYPE_DA: Record<string, string> = {
+  UNMATCHED_BANK_TRANSACTION: "Banktransaktion mangler afstemning",
+  BANK_BALANCE_GAP: "Afvigelse mellem bogført og faktisk banksaldo",
+  MAIL_INTAKE_NO_ATTACHMENT: "Indkommen mail uden vedhæftet bilag",
+  MAIL_INTAKE_AMBIGUOUS_METADATA: "Bilag fra mail med uklare oplysninger",
+  MAIL_INTAKE_INGEST_BLOCKED: "Mail kunne ikke indlæses",
+  ASSET_WRITEOFF_MISSING_DOCUMENTATION: "Aktiv-afskrivning mangler dokumentation",
+  ASSET_WRITEOFF_ELIGIBILITY_UNCERTAIN: "Aktiv-afskrivning med usikker fradragsret",
+};
+
+/** Plain-Danish heading for an exception type — never a raw machine code. (#270) */
+function exceptionTypeLabel(type: string): string {
+  const known = EXCEPTION_TYPE_DA[type];
+  if (known) return known;
+  // Unknown code: humanise it (replace separators, capitalise) rather than
+  // showing the raw SCREAMING_SNAKE / dotted identifier.
+  const words = type.replace(/[_.]+/g, " ").trim().toLowerCase();
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : "Undtagelse";
+}
+
+const EXCEPTION_SEVERITY_DA: Record<string, string> = {
+  critical: "Kritisk",
+  high: "Høj",
+  medium: "Mellem",
+  low: "Lav",
+};
+
+/** Plain-Danish severity label — never the raw English code. (#270) */
+function exceptionSeverityLabel(severity: string): string {
+  return EXCEPTION_SEVERITY_DA[severity] ?? severity;
+}
+
 function exceptionsSection(input: DashboardInput): string {
   const result = input.exceptions;
   if (result.count === 0 || result.rows.length === 0) {
@@ -772,12 +816,18 @@ function exceptionsSection(input: DashboardInput): string {
   const overflow = sorted.length - visible.length;
   const items = visible.map((row) => {
     const pillClass = EXCEPTION_SEVERITY_PILL[row.severity] ?? "neutral";
+    // The full message — not a mid-sentence-truncated fragment. The Cockpit
+    // SPA shows the whole message; the static dashboard must too. (#270)
+    const action = (row.requiredAction ?? "").trim();
+    const actionHtml = action
+      ? `\n      <div class="detail"><strong>Sådan løser du den:</strong> ${escapeHtml(action)}</div>`
+      : "";
     return `  <div class="status-row">
     <div>
-      <div class="label">${escapeHtml(row.type)}</div>
-      <div class="detail">${escapeHtml(truncate(row.message, 110))}</div>
+      <div class="label">${escapeHtml(exceptionTypeLabel(row.type))}</div>
+      <div class="detail">${escapeHtml(row.message)}</div>${actionHtml}
     </div>
-    <div><span class="pill ${pillClass}">${escapeHtml(row.severity)}</span></div>
+    <div><span class="pill ${pillClass}">${escapeHtml(exceptionSeverityLabel(row.severity))}</span></div>
   </div>`;
   }).join("\n");
   const overflowRow = overflow > 0

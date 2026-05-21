@@ -68,6 +68,18 @@ export function VatView() {
                     {formatKroner(v.outputVat, currency)}
                   </td>
                 </tr>
+                {/* A bad-debt write-off (debitortab) claims back the output
+                    VAT on a receivable that will never be paid. It is shown
+                    on its own line so it never silently turns the salgsmoms
+                    headline above negative (#271). */}
+                {v.outputVatAdjustment !== 0 && (
+                  <tr>
+                    <td>Regulering for tab på debitorer (debitortab)</td>
+                    <td className="num">
+                      {formatKroner(v.outputVatAdjustment, currency)}
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td>Købsmoms (indgående moms)</td>
                   <td className="num">

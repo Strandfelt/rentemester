@@ -417,6 +417,56 @@ function postPnlEntry(
   }
 }
 
+/**
+ * Posts a bad-debt (debitortab) write-off journal entry — the same shape
+ * `core/invoice-bad-debt.ts` books: a `DK_BAD_DEBT_25` loss-basis debit, a
+ * debit on the output-VAT account `1200` to claim the VAT relief, and a credit
+ * writing off the receivable. `net` is the loss base; the VAT relief is 25% of
+ * it. Used to reproduce the cockpit VAT bugs (#271, #272).
+ */
+function postBadDebtWriteoff(
+  ws: string,
+  slug: string,
+  transactionDate: string,
+  net: number,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-baddebt-inbox-"));
+    const sourceFile = join(inbox, "doc.txt");
+    writeFileSync(sourceFile, `Debitortab ${transactionDate}\n1 DKK\n`);
+    const doc = ingestDocument(db, companyRoot, sourceFile, {
+      source: "email",
+      issueDate: transactionDate,
+      invoiceNo: `BD-${transactionDate}`,
+      deliveryDescription: "Debitortab testbilag",
+      amountIncVat: 1,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Vej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Acme ApS", address: "Vej 2", vatOrCvr: "DK12345678" },
+      vatAmount: 0,
+      paymentDetails: "Bankoverførsel",
+    });
+    if (!doc.ok) throw new Error("doc ingest failed: " + (doc.errors ?? []).join("; "));
+    const vat = net * 0.25;
+    const res = postJournalEntry(db, {
+      transactionDate,
+      text: "Tab på debitor — bad debt write-off",
+      documentId: doc.documentId,
+      lines: [
+        { accountNo: "3080", debitAmount: net, vatCode: "DK_BAD_DEBT_25" },
+        { accountNo: "1200", debitAmount: vat },
+        { accountNo: "1100", creditAmount: net + vat },
+      ],
+    });
+    if (!res.ok) throw new Error("bad-debt post failed: " + res.errors.join("; "));
+  } finally {
+    db.close();
+  }
+}
+
 describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
   test("returns the P&L, bank and VAT blocks for the live year", async () => {
     const ws = makeWorkspace("ov-live", ["Acme ApS"]);
@@ -1215,6 +1265,149 @@ describe("cockpit API — VAT (GET .../vat)", () => {
       );
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+// #271: a bad-debt write-off books a debit on the output-VAT account. The
+// cockpit VAT card must not let that debit drag the headline salgsmoms
+// negative — the adjustment belongs on its own clearly-labelled line.
+describe("cockpit API — VAT bad-debt adjustment (#271)", () => {
+  test("a write-off does not turn salgsmoms negative — it is its own line", async () => {
+    const ws = makeWorkspace("vat-baddebt", ["Acme ApS"]);
+    try {
+      // Q2 2026: genuine sales of 1000 → 250 output VAT, plus a 400 purchase.
+      postPnlEntry(ws, "acme-aps", "2026-05-15", 1000, 400);
+      // Q2 2026: a bad-debt write-off whose VAT relief (250) is large enough
+      // that a naive chart-of-accounts sum would net salgsmoms to exactly 0,
+      // and a bigger write-off would push it negative. Use 1200 net → 300
+      // relief so the booked output-VAT account sum is 250 − 300 = −50.
+      postBadDebtWriteoff(ws, "acme-aps", "2026-05-20", 1200);
+
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const v = res.body.vat;
+      // The headline salgsmoms is the genuine VAT on sales — never negative.
+      expect(v.outputVat).toBe(250);
+      // The bad-debt relief sits on its own line, as a negative adjustment.
+      expect(v.outputVatAdjustment).toBe(-300);
+      // The net payable still reflects the relief: 250 − 300 − 100 = −150.
+      expect(v.payable).toBe(-150);
+      expect(v.inputVat).toBe(100);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("with no write-off the adjustment line is a clean zero", async () => {
+    const ws = makeWorkspace("vat-noadjust", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-05-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.vat.outputVat).toBe(250);
+      expect(res.body.vat.outputVatAdjustment).toBe(0);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+// #272: the cockpit must surface the VAT quarter that is currently due — the
+// one with real activity — not a later, near-empty quarter a bad-debt
+// write-off happens to touch. It must agree with the static dashboard, which
+// keys off the quarter containing the as-of date.
+describe("cockpit API — VAT period selection (#272)", () => {
+  // The genuine activity is in Q2 2026 — the current quarter (today is in
+  // May 2026). A bad-debt write-off lands in the next quarter, Q3; the
+  // future-date ceiling is widened so the later-quarter posting is accepted.
+  const originalMaxFuture = process.env.RENTEMESTER_MAX_FUTURE_DAYS;
+  function withWideFutureWindow<T>(fn: () => T): T {
+    process.env.RENTEMESTER_MAX_FUTURE_DAYS = "120";
+    try {
+      return fn();
+    } finally {
+      if (originalMaxFuture === undefined) {
+        delete process.env.RENTEMESTER_MAX_FUTURE_DAYS;
+      } else {
+        process.env.RENTEMESTER_MAX_FUTURE_DAYS = originalMaxFuture;
+      }
+    }
+  }
+
+  test("surfaces the active quarter, not a later quarter holding only a write-off", async () => {
+    const ws = makeWorkspace("vat-period", ["Acme ApS"]);
+    try {
+      // The genuine activity is in Q2 2026 (today, May 2026, is in Q2).
+      postPnlEntry(ws, "acme-aps", "2026-05-15", 1000, 400);
+      // A bad-debt write-off lands in Q3 2026 — a later, otherwise-empty
+      // quarter. It must NOT pull the surfaced VAT period forward to Q3.
+      withWideFutureWindow(() =>
+        postBadDebtWriteoff(ws, "acme-aps", "2026-07-15", 800),
+      );
+
+      const vatRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(vatRes.status).toBe(200);
+      // Q2 2026 (Apr–Jun) is the period that is currently due.
+      expect(vatRes.body.vat.periodLabel).toBe("Q2 2026");
+      expect(vatRes.body.vat.periodStart).toBe("2026-04-01");
+      expect(vatRes.body.vat.periodEnd).toBe("2026-06-30");
+      // Q2 → momsangivelse due 1 September 2026.
+      expect(vatRes.body.vat.deadline).toBe("2026-09-01");
+
+      // The Overblik VAT card must agree with the dedicated VAT view.
+      const ovRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(ovRes.status).toBe(200);
+      expect(ovRes.body.overview.vat.periodLabel).toBe("Q2 2026");
+      expect(ovRes.body.overview.vat.periodEnd).toBe("2026-06-30");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("the cockpit VAT period agrees with the static dashboard", async () => {
+    const ws = makeWorkspace("vat-period-parity", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-05-15", 1000, 400);
+      withWideFutureWindow(() =>
+        postBadDebtWriteoff(ws, "acme-aps", "2026-07-15", 800),
+      );
+
+      // The static dashboard's VAT period is keyed off the as-of date.
+      const dashRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/dashboard?asOf=2026-05-22",
+      );
+      expect(dashRes.status).toBe(200);
+      // Static dashboard: Q2 (the as-of date's quarter).
+      expect(dashRes.body.dashboard.vat.periodStart).toBe("2026-04-01");
+      expect(dashRes.body.dashboard.vat.periodEnd).toBe("2026-06-30");
+
+      // The cockpit VAT view must land on the same period.
+      const vatRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(vatRes.body.vat.periodStart).toBe(
+        dashRes.body.dashboard.vat.periodStart,
+      );
+      expect(vatRes.body.vat.periodEnd).toBe(
+        dashRes.body.dashboard.vat.periodEnd,
+      );
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

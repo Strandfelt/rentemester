@@ -80,4 +80,46 @@ describe("VatView — Moms", () => {
       await screen.findByText(/Moms er ikke tilgængelig for 2025/),
     ).toBeInTheDocument();
   });
+
+  // #271: a bad-debt write-off books a debit on the output-VAT account. The
+  // VAT card must surface that relief on its own clearly-labelled line —
+  // never let it drag the headline salgsmoms negative.
+  test("a bad-debt adjustment is its own line, salgsmoms stays positive", async () => {
+    mockFetch(
+      route({
+        outputVat: 250,
+        outputVatAdjustment: -300,
+        inputVat: 100,
+        payable: -150,
+      }),
+    );
+    renderView();
+    // Salgsmoms keeps the genuine, positive VAT on sales.
+    const salgsmomsRow = (
+      await screen.findByText("Salgsmoms (udgående moms)")
+    ).closest("tr")!;
+    expect(
+      within(salgsmomsRow as HTMLElement).getByText(/250,00/),
+    ).toBeInTheDocument();
+    // It is NOT shown as a confusing negative salgsmoms.
+    expect(
+      within(salgsmomsRow as HTMLElement).queryByText(/-250,00/),
+    ).not.toBeInTheDocument();
+    // The bad-debt relief sits on its own dedicated line.
+    const adjustmentRow = screen
+      .getByText(/Regulering for tab på debitorer/)
+      .closest("tr")!;
+    expect(
+      within(adjustmentRow as HTMLElement).getByText(/-300,00/),
+    ).toBeInTheDocument();
+  });
+
+  test("no adjustment line is shown when there is no bad-debt write-off", async () => {
+    mockFetch(route({ outputVatAdjustment: 0 }));
+    renderView();
+    await screen.findByText("Salgsmoms (udgående moms)");
+    expect(
+      screen.queryByText(/Regulering for tab på debitorer/),
+    ).not.toBeInTheDocument();
+  });
 });
