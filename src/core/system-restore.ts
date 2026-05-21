@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { createHash, createHmac, createPublicKey, randomBytes, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
 import { openDb } from "./db";
@@ -6,6 +7,7 @@ import { verifyAuditChain } from "./ledger";
 import { companyPaths, ensureCompanyDirs } from "./paths";
 import { backupAsymmetricSignaturePath, backupManifestKeyPath, backupManifestSignaturePath } from "./system-backups";
 import type { BackupManifest, ManifestFile } from "./system-backups";
+import { extractTar } from "./tar";
 import { insertAuditLog } from "./actor";
 
 const RULE_ID = "DK-BOOKKEEPING-RESTORE-001";
@@ -376,7 +378,37 @@ export function verifyBackupSignature(input: VerifyBackupSignatureInput): Verify
   };
 }
 
+// Public entry point. `backupDir` may point at either a backup *directory*
+// or a single-file backup *archive* (.tar produced by packBackupArchive). An
+// archive is extracted into a throwaway temp directory and restored from
+// there — note that HMAC-key inference only works for a directory still
+// sitting in its original `backups/` parent, so archive restores generally
+// need an explicit `verificationKeyPath` (or an ed25519 public key).
 export function restoreSystemBackup(input: RestoreSystemBackupInput): RestoreSystemBackupResult {
+  const source = input.backupDir;
+  if (source && existsSync(source) && statSync(source).isFile()) {
+    let extractDir: string;
+    try {
+      extractDir = mkdtempSync(join(tmpdir(), "rentemester-restore-archive-"));
+    } catch (error) {
+      return { ok: false, appliedRules: [RULE_ID], errors: [`failed to stage archive extraction: ${String(error)}`] };
+    }
+    try {
+      extractTar(readFileSync(source), extractDir);
+    } catch (error) {
+      rmSync(extractDir, { recursive: true, force: true });
+      return { ok: false, appliedRules: [RULE_ID], errors: [`failed to extract backup archive: ${String(error)}`] };
+    }
+    try {
+      return restoreFromBackupDir({ ...input, backupDir: extractDir });
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true });
+    }
+  }
+  return restoreFromBackupDir(input);
+}
+
+function restoreFromBackupDir(input: RestoreSystemBackupInput): RestoreSystemBackupResult {
   const errors: string[] = [];
   if (!input.backupDir || !existsSync(input.backupDir)) errors.push(`backupDir does not exist: ${input.backupDir}`);
   if (!input.targetCompanyRoot) errors.push("targetCompanyRoot is required");

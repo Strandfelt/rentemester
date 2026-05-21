@@ -166,6 +166,64 @@ describe("MCP server scaffold", () => {
     expect(structured?.ok).toBe(false);
     expect(structured?.errors?.some((message: string) => message.includes("confirm: true required"))).toBe(true);
   });
+
+  test("the opt-in backup lock blocks a bookkeeping write tool over MCP but exempts system_backup", async () => {
+    const lockedRoot = mkdtempSync(join(tmpdir(), "mcp-lock-company-"));
+    try {
+      const paths = ensureCompanyDirs(lockedRoot);
+      const db = openDb(paths.db);
+      migrate(db);
+      seedAccounts(db);
+      // Old bookkeeping activity with no backup -> a weekly backup is overdue.
+      db.run(
+        "INSERT INTO bank_transactions (transaction_date, booking_date, text, amount, currency, reference, import_batch_id, source_file_hash, transaction_hash) VALUES (?, ?, ?, ?, 'DKK', ?, ?, ?, ?)",
+        "2026-01-01",
+        "2026-01-01",
+        "Old activity",
+        100,
+        "mcp-lock-ref",
+        "mcp-lock-batch",
+        "mcp-lock-hash",
+        "mcp-lock-tx",
+      );
+      db.close();
+
+      const lockResp = await client.send("tools/call", {
+        name: "system_backup_lock",
+        arguments: { company: lockedRoot, enforced: true, graceDays: 0, confirm: true },
+      });
+      expect(lockResp.result?.structuredContent?.ok).toBe(true);
+
+      // A bookkeeping write tool is refused — the lock holds on the agent surface.
+      const blocked = await client.send("tools/call", {
+        name: "journal_post",
+        arguments: {
+          company: lockedRoot,
+          payload: {
+            transactionDate: "2026-05-18",
+            text: "Should be locked out",
+            lines: [
+              { accountNo: "2000", debitAmount: 100 },
+              { accountNo: "1000", creditAmount: 100 },
+            ],
+          },
+          confirm: true,
+        },
+      });
+      const blockedStructured = blocked.result?.structuredContent;
+      expect(blockedStructured?.ok).toBe(false);
+      expect(blockedStructured?.errors?.some((m: string) => m.includes("låst"))).toBe(true);
+
+      // system_backup is exempt — backing up is the way out of the lock.
+      const backup = await client.send("tools/call", {
+        name: "system_backup",
+        arguments: { company: lockedRoot, at: "2026-05-21T10:00:00.000Z", confirm: true },
+      });
+      expect(backup.result?.structuredContent?.ok).toBe(true);
+    } finally {
+      rmSync(lockedRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("MCP tools full surface (#78)", () => {

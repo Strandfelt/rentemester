@@ -1,10 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { createHash, createHmac, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { companyPaths } from "./paths";
 import { insertAuditLog } from "./actor";
 import { promoteTempFile, writeFileAtomic, writeTempFileFor } from "./atomic-file";
+import { createTar, dirToTarEntries } from "./tar";
 
 const BACKUP_RULE_ID = "DK-BOOKKEEPING-BACKUP-001";
 const BACKUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -449,6 +450,95 @@ export function getBackupComplianceStatus(db: Database, companyRoot: string, asO
     checkedAt,
     backupsFound: manifests.length,
     evidence,
+    errors: [],
+  };
+}
+
+export type PackBackupArchiveResult = {
+  ok: boolean;
+  backupId?: string;
+  archivePath?: string;
+  archiveSha256?: string;
+  archiveSizeBytes?: number;
+  sha256Path?: string;
+  appliedRules: string[];
+  errors: string[];
+};
+
+// Packs an existing on-disk backup directory into ONE deterministic .tar
+// file plus a `.tar.sha256` sidecar. This is the artifact a human drops in
+// a synced folder, or an agent pushes to Dropbox/Drive/SSH — a directory is
+// not a thing you "move", a single file is. The archive carries the full
+// manifest + signatures, so a restore from the tar is just as verifiable as
+// a restore from the directory.
+export function packBackupArchive(
+  db: Database,
+  companyRoot: string,
+  input: { backupId?: string; outPath?: string } = {},
+): PackBackupArchiveResult {
+  const paths = companyPaths(companyRoot);
+  let backupId = input.backupId?.trim();
+  if (!backupId) {
+    const latest = listBackupManifests(companyRoot).at(-1);
+    if (!latest) {
+      return {
+        ok: false,
+        appliedRules: [BACKUP_RULE_ID],
+        errors: ["no backup found to archive; run 'system backup' first"],
+      };
+    }
+    backupId = latest.backupId;
+  }
+
+  const backupDir = join(paths.backups, backupId);
+  if (!existsSync(join(backupDir, "manifest.json"))) {
+    return {
+      ok: false,
+      appliedRules: [BACKUP_RULE_ID],
+      errors: [`backup not found or has no manifest: ${backupId}`],
+    };
+  }
+
+  const archivePath = input.outPath?.trim() || join(paths.backups, `${backupId}.tar`);
+  let archive: Buffer;
+  try {
+    archive = createTar(dirToTarEntries(backupDir));
+  } catch (error) {
+    return {
+      ok: false,
+      appliedRules: [BACKUP_RULE_ID],
+      errors: [`failed to pack backup archive: ${String(error)}`],
+    };
+  }
+
+  const sha256 = createHash("sha256").update(archive).digest("hex");
+  const sha256Path = `${archivePath}.sha256`;
+  try {
+    writeFileAtomic(archivePath, archive);
+    writeFileAtomic(sha256Path, `${sha256}  ${basename(archivePath)}\n`);
+  } catch (error) {
+    return {
+      ok: false,
+      appliedRules: [BACKUP_RULE_ID],
+      errors: [`failed to write backup archive: ${String(error)}`],
+    };
+  }
+
+  insertAuditLog(db, {
+    eventType: "backup_archive_created",
+    entityType: "company",
+    entityId: 1,
+    message: `Packed backup ${backupId} into single-file archive ${basename(archivePath)} (sha256:${sha256})`,
+  });
+
+  return {
+    ok: true,
+    backupId,
+    archivePath,
+    archiveSha256: sha256,
+    archiveSizeBytes: archive.length,
+    sha256Path,
+    appliedRules: [BACKUP_RULE_ID],
     errors: [],
   };
 }

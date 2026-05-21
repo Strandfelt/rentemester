@@ -4,6 +4,7 @@ const BOOLEAN_FLAGS = new Set([
   "--example",
   "--json",
   "--sign-with-ed25519",
+  "--archive",
   "--enrich-cvr",
   "--include-archived",
 ]);

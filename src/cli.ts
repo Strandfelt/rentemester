@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 import { parseCliArgs } from "./cli-args";
 import { resolveOutputFormat } from "./cli-format";
@@ -84,6 +84,9 @@ import {
   resolveConfiguredWorkspaceRoot,
   resolveWorkspaceSlug,
 } from "./core/workspace";
+import { migrate, openDb } from "./core/db";
+import { companyPaths } from "./core/paths";
+import { evaluateBackupLock } from "./core/backup-governance";
 
 function fatal(message: string): never {
   console.error(message);
@@ -285,6 +288,28 @@ if (!cmd || cmd === "help") {
       : ctx.companyRoot();
     if (mutationRoot) {
       enforceMutationActorPolicy(commandKey, mutationRoot, cliActor, cliActorVia, fatal);
+    }
+    // Opt-in backup lock: when the owner has enabled enforcement and a
+    // weekly backup (BEK 205/2024 §4) is overdue past the grace window,
+    // bookkeeping mutations are refused. `system …` commands are exempt by
+    // design — backing up and restoring must always stay possible, since
+    // that is the only way out of the lock.
+    if (mutationRoot && !commandKey.startsWith("system ") && existsSync(companyPaths(mutationRoot).db)) {
+      const lockDb = openDb(companyPaths(mutationRoot).db);
+      try {
+        migrate(lockDb);
+        const lock = evaluateBackupLock(lockDb, mutationRoot);
+        if (lock.locked) {
+          fatal(
+            `Bogføring er låst (${commandKey}): ${lock.reason}. ` +
+              "Kør 'rentemester system backup' for at låse op. Placér derefter backup-arkivet " +
+              "på en EU/EØS-destination med 'rentemester system backup-place' for at opfylde " +
+              "BEK 205/2024 § 4. Se status med 'rentemester system backup-governance'.",
+          );
+        }
+      } finally {
+        lockDb.close();
+      }
     }
   }
   await handler(ctx);

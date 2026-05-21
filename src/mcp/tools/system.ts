@@ -14,8 +14,18 @@ import { existsSync } from "node:fs";
 import {
   createSystemBackup,
   getBackupComplianceStatus,
+  packBackupArchive,
 } from "../../core/system-backups";
 import { restoreSystemBackup } from "../../core/system-restore";
+import {
+  addBackupDestination,
+  confirmBackupPlacement,
+  configureBackupLock,
+  getBackupGovernanceStatus,
+  listBackupDestinations,
+  placeBackupArchive,
+  removeBackupDestination,
+} from "../../core/backup-governance";
 import { exportAuthorityPackage } from "../../core/authority-export";
 import { companyPaths } from "../../core/paths";
 import { wrapCoreResult, successEnvelope, errorEnvelope } from "../envelope";
@@ -85,21 +95,278 @@ export function registerSystemTools(server: McpServer): void {
     "system_backup",
     {
       title: "Create system backup",
-      description: "Opretter revisionsklar backup. write-irreversible.",
+      description:
+        "Opretter revisionsklar backup. write-irreversible. Med archive:true " +
+        "pakkes backuppen straks til ét .tar-arkiv klar til off-site placering.",
       inputSchema: {
         company: z.string().min(1),
+        at: z.string().optional(),
+        archive: z.boolean().optional(),
+        confirm: z.boolean(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{ company: string; at?: string; archive?: boolean; confirm: boolean }>(
+      server,
+      "system_backup",
+      ({ db, args }) => {
+        const result = createSystemBackup(db, args.company, { createdAt: args.at });
+        if (args.archive && result.ok) {
+          const archived = packBackupArchive(db, args.company, { backupId: result.backupId });
+          return wrapCoreResult({
+            ...result,
+            ok: result.ok && archived.ok,
+            errors: [...result.errors, ...archived.errors],
+            archive: archived,
+          });
+        }
+        return wrapCoreResult(result);
+      },
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_archive",
+    {
+      title: "Pack a backup into a single-file archive",
+      description:
+        "Pakker en eksisterende backup til ét deterministisk .tar-arkiv (+ .sha256) " +
+        "klar til at agenten kan flytte det off-site. Uden backupId pakkes den nyeste.",
+      inputSchema: {
+        company: z.string().min(1),
+        backupId: z.string().optional(),
+        out: z.string().optional(),
+        confirm: z.boolean(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{ company: string; backupId?: string; out?: string; confirm: boolean }>(
+      server,
+      "system_backup_archive",
+      ({ db, args }) =>
+        wrapCoreResult(packBackupArchive(db, args.company, { backupId: args.backupId, outPath: args.out })),
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_governance",
+    {
+      title: "Backup governance status",
+      description:
+        "Samlet backup-status: forfald, bogførings-lås, destinationer og om seneste " +
+        "backup er placeret sikkert i EU/EØS. Read-only.",
+      inputSchema: { company: z.string().min(1), asOf: z.string().optional() },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    withCompanyDb<{ company: string; asOf?: string }>(server, ({ db, args }) =>
+      wrapCoreResult(getBackupGovernanceStatus(db, args.company, args.asOf)),
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_destination_list",
+    {
+      title: "List backup destinations",
+      description: "Lister konfigurerede backup-destinationer med deres attestering. Read-only.",
+      inputSchema: { company: z.string().min(1) },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    withCompanyDb<{ company: string }>(server, ({ args }) => {
+      const destinations = listBackupDestinations(args.company);
+      return successEnvelope({ ok: true, destinationCount: destinations.length, destinations });
+    }),
+  );
+
+  server.registerTool(
+    "system_backup_destination_add",
+    {
+      title: "Add a backup destination",
+      description:
+        "Tilføjer en backup-destination. inEeaOrEu attesterer at destinationen ligger " +
+        "på en server i EU/EØS, jf. BEK 205/2024 § 4, stk. 2. write.",
+      inputSchema: {
+        company: z.string().min(1),
+        label: z.string().min(1),
+        kind: z.string().min(1),
+        location: z.string().min(1),
+        inEeaOrEu: z.boolean(),
+        attestedBy: z.string().min(1),
+        regionCountry: z.string().optional(),
+        regionNote: z.string().optional(),
+        nonRelatedParty: z.boolean().optional(),
+        itSecurityMeetsStandards: z.boolean().optional(),
+        itSecurityNote: z.string().optional(),
         at: z.string().optional(),
         confirm: z.boolean(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; at?: string; confirm: boolean }>(
+    withCompanyDbConfirmed<{
+      company: string;
+      label: string;
+      kind: string;
+      location: string;
+      inEeaOrEu: boolean;
+      attestedBy: string;
+      regionCountry?: string;
+      regionNote?: string;
+      nonRelatedParty?: boolean;
+      itSecurityMeetsStandards?: boolean;
+      itSecurityNote?: string;
+      at?: string;
+      confirm: boolean;
+    }>(server, "system_backup_destination_add", ({ db, actor, args }) =>
+      wrapCoreResult(
+        addBackupDestination(db, args.company, {
+          label: args.label,
+          kind: args.kind,
+          location: args.location,
+          inEeaOrEu: args.inEeaOrEu,
+          attestedBy: args.attestedBy,
+          actor: actor.createdBy,
+          regionCountry: args.regionCountry,
+          regionNote: args.regionNote,
+          nonRelatedParty: args.nonRelatedParty,
+          itSecurityMeetsStandards: args.itSecurityMeetsStandards,
+          itSecurityNote: args.itSecurityNote,
+          at: args.at,
+        }),
+      ),
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_destination_remove",
+    {
+      title: "Remove a backup destination",
+      description: "Fjerner en konfigureret backup-destination. write.",
+      inputSchema: { company: z.string().min(1), id: z.string().min(1), confirm: z.boolean() },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{ company: string; id: string; confirm: boolean }>(
       server,
-      "system_backup",
-      ({ db, args }) => {
-        const result = createSystemBackup(db, args.company, { createdAt: args.at });
-        return wrapCoreResult(result);
+      "system_backup_destination_remove",
+      ({ db, args }) => wrapCoreResult(removeBackupDestination(db, args.company, args.id)),
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_place",
+    {
+      title: "Place a backup archive at a destination",
+      description:
+        "Kopierer et backup-arkiv til en destination med en lokal/synkroniseret mappe " +
+        "(fx en Dropbox-desktopmappe) og verificerer kopien med sha256. write.",
+      inputSchema: {
+        company: z.string().min(1),
+        archivePath: z.string().min(1),
+        destinationId: z.string().min(1),
+        actorKind: z.enum(["human", "agent"]).optional(),
+        at: z.string().optional(),
+        note: z.string().optional(),
+        confirm: z.boolean(),
       },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{
+      company: string;
+      archivePath: string;
+      destinationId: string;
+      actorKind?: "human" | "agent";
+      at?: string;
+      note?: string;
+      confirm: boolean;
+    }>(server, "system_backup_place", ({ db, actor, args }) =>
+      wrapCoreResult(
+        placeBackupArchive(db, args.company, {
+          archivePath: args.archivePath,
+          destinationId: args.destinationId,
+          actorKind: args.actorKind ?? "agent",
+          actor: actor.createdBy,
+          at: args.at,
+          note: args.note,
+        }),
+      ),
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_confirm_placement",
+    {
+      title: "Record an externally-performed backup placement",
+      description:
+        "Registrerer en backup-placering foretaget uden for Rentemester — fx en agent " +
+        "der har pushet arkivet til Dropbox/Drive/SSH med egne værktøjer. Verificeres " +
+        "med sha256 hvis destinationen er læsbar. write.",
+      inputSchema: {
+        company: z.string().min(1),
+        destinationId: z.string().min(1),
+        backupId: z.string().min(1),
+        archiveSha256: z.string().min(1),
+        archiveSizeBytes: z.number().optional(),
+        actorKind: z.enum(["human", "agent"]).optional(),
+        at: z.string().optional(),
+        note: z.string().optional(),
+        confirm: z.boolean(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{
+      company: string;
+      destinationId: string;
+      backupId: string;
+      archiveSha256: string;
+      archiveSizeBytes?: number;
+      actorKind?: "human" | "agent";
+      at?: string;
+      note?: string;
+      confirm: boolean;
+    }>(server, "system_backup_confirm_placement", ({ db, actor, args }) =>
+      wrapCoreResult(
+        confirmBackupPlacement(db, args.company, {
+          destinationId: args.destinationId,
+          backupId: args.backupId,
+          archiveSha256: args.archiveSha256,
+          archiveSizeBytes: args.archiveSizeBytes,
+          actorKind: args.actorKind ?? "agent",
+          actor: actor.createdBy,
+          at: args.at,
+          note: args.note,
+        }),
+      ),
+    ),
+  );
+
+  server.registerTool(
+    "system_backup_lock",
+    {
+      title: "Configure the opt-in bookkeeping lock",
+      description:
+        "Konfigurerer den frivillige bogførings-lås. Slået til blokeres ny bogføring " +
+        "hvis den ugentlige backup (BEK 205/2024 § 4) er forsømt ud over grace-perioden. write.",
+      inputSchema: {
+        company: z.string().min(1),
+        enforced: z.boolean().optional(),
+        graceDays: z.number().optional(),
+        at: z.string().optional(),
+        confirm: z.boolean(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{
+      company: string;
+      enforced?: boolean;
+      graceDays?: number;
+      at?: string;
+      confirm: boolean;
+    }>(server, "system_backup_lock", ({ db, args }) =>
+      wrapCoreResult(
+        configureBackupLock(db, args.company, {
+          enforced: args.enforced,
+          graceDays: args.graceDays,
+          at: args.at,
+        }),
+      ),
     ),
   );
 

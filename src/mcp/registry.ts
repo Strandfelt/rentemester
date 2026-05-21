@@ -24,7 +24,13 @@
  * `src/cli-meta.ts` og holder hver fil overskuelig.
  */
 
+import { existsSync } from "node:fs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { migrate, openDb } from "../core/db";
+import { companyPaths } from "../core/paths";
+import { evaluateBackupLock } from "../core/backup-governance";
+import { resolveCompanyArg } from "./tool-runtime";
+import { envelopeToCallResult, errorEnvelope } from "./envelope";
 import { registerAccountsTools } from "./tools/accounts";
 import { registerAuditTools } from "./tools/audit";
 import { registerBankTools } from "./tools/bank";
@@ -63,7 +69,65 @@ import { registerEmailTools } from "./tools/email";
 import { registerImportTools } from "./tools/import";
 // ===== END IMPORT ARCHIVE (#197) =====
 
+// Wraps a write tool's callback with the opt-in backup lock. The MCP tool
+// files are not uniform — some use the withCompanyDbConfirmed helper, some
+// have inline handlers — so the lock cannot live in one helper. Intercepting
+// registerTool catches every tool regardless of how its handler is written.
+function lockGuardedCallback(
+  toolName: string,
+  callback: (...args: unknown[]) => unknown,
+): (...args: unknown[]) => unknown {
+  return (...invocation: unknown[]) => {
+    const args = invocation[0] as { company?: unknown } | undefined;
+    const company = args?.company;
+    if (typeof company === "string" && company.length > 0) {
+      const resolution = resolveCompanyArg(company);
+      if (resolution.ok && existsSync(companyPaths(resolution.companyRoot).db)) {
+        const db = openDb(companyPaths(resolution.companyRoot).db);
+        try {
+          migrate(db);
+          const lock = evaluateBackupLock(db, resolution.companyRoot);
+          if (lock.locked) {
+            return envelopeToCallResult(
+              errorEnvelope(
+                `Bogføring er låst (${toolName}): ${lock.reason}. ` +
+                  "Kør system_backup med archive:true for at låse op; placér derefter " +
+                  "kopien på en EU/EØS-destination med system_backup_place.",
+              ),
+            );
+          }
+        } finally {
+          db.close();
+        }
+      }
+    }
+    return callback(...invocation);
+  };
+}
+
+// A registerTool-intercepting proxy: every write tool (not read-only, not a
+// `system_*` tool) gets its callback wrapped with the backup lock. Read tools
+// and system/backup tools pass through untouched — backing up must always
+// stay possible, since that is the only way out of the lock.
+function lockGuardServer(server: McpServer): McpServer {
+  return new Proxy(server, {
+    get(target, prop, receiver) {
+      if (prop === "registerTool") {
+        return (name: string, config: { annotations?: { readOnlyHint?: boolean } }, callback: (...a: unknown[]) => unknown) => {
+          const readOnly = config?.annotations?.readOnlyHint === true;
+          const guarded =
+            readOnly || name.startsWith("system_") ? callback : lockGuardedCallback(name, callback);
+          return (target.registerTool as (...a: unknown[]) => unknown)(name, config, guarded);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 export function registerAllTools(server: McpServer): void {
+  server = lockGuardServer(server);
   registerAccountsTools(server);
   registerAuditTools(server);
   registerBankTools(server);
