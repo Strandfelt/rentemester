@@ -13,19 +13,20 @@ const GLOBAL_FLAGS = ["--help", "--example", "--format", "--json", "--actor", "-
 export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "init",
-    usage: "init --company <path> [--workspace <dir>] [--cvr <DK12345678>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
-    description: "Initialiserer en virksomhed og opretter standardkontoplan.",
-    allowedFlags: ["--company", "--workspace", "--cvr", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    usage: "init --company <path> [--workspace <dir>] [--name <text>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
+    description: "Initialiserer en virksomhed og opretter standardkontoplan. Virksomhedens egen identitet (navn, adresse, CVR) og betalingsoplysninger (bankkonto/IBAN, betalingsfrist) registreres her én gang og flyder automatisk med på hver udstedt faktura og dens PDF.",
+    allowedFlags: ["--company", "--workspace", "--name", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--bank-name", "--bank-reg", "--bank-account", "--iban", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
     inputNotes: [
       "Ligger virksomhedsmappen i et workspace (via --workspace eller RENTEMESTER_WORKSPACE), registreres virksomheden også i workspacet, så Cockpittet kan se den.",
       "Momsperioden antages at være kvartal — afstem dine momsperioder hvis du afregner måneds- eller halvårsmoms.",
+      "Virksomhedsprofilen kan rettes senere med 'company set-profile' — du behøver aldrig at indtaste din egen stamdata på en faktura igen.",
     ],
   },
   {
     key: "company add",
-    usage: "company add [--workspace <dir>] --name <text> [--slug <slug>] [--cvr <DK12345678>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
-    description: "Opretter en ny virksomhed i workspacet (opretter workspacet ved første kørsel).",
-    allowedFlags: ["--workspace", "--name", "--slug", "--cvr", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    usage: "company add [--workspace <dir>] --name <text> [--slug <slug>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
+    description: "Opretter en ny virksomhed i workspacet (opretter workspacet ved første kørsel). Virksomhedens identitet og betalingsoplysninger registreres her én gang og flyder automatisk med på hver udstedt faktura og dens PDF.",
+    allowedFlags: ["--workspace", "--name", "--slug", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--bank-name", "--bank-reg", "--bank-account", "--iban", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
   },
   {
     key: "company list",

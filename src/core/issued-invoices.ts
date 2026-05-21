@@ -11,6 +11,11 @@ import { retainUntilForDate } from "./retention";
 import { requireCachedViesValidation } from "./vies";
 import { buildIssuedInvoicePdf } from "./invoice-pdf";
 import {
+  companyAddressLine,
+  getCompanySettings,
+  resolveCompanyPaymentDetails,
+} from "./company";
+import {
   asDocumentId,
   asInvoiceNumber,
   type DocumentId,
@@ -32,6 +37,58 @@ export type IssueInvoiceResult = {
 
 const RULE_ID = "DK-INVOICE-ISSUE-001";
 const LOCK_RULE_ID = "DK-INVOICE-LOCK-001";
+
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function addDays(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * #221: enrich the invoice with the company's own master data so the owner
+ * never re-types it. Seller identity (name / address / CVR) is filled from the
+ * stored company profile whenever the payload leaves a field blank; an explicit
+ * payload value always wins. When the company profile exists and the payload
+ * has no due date, the due date defaults to the company's payment terms. The
+ * result still goes through `validateInvoice`, so a company with no CVR/address
+ * configured still fails with the same clear error.
+ */
+function enrichInvoiceFromCompany(db: Database, payload: InvoicePayload): InvoicePayload {
+  let settings: ReturnType<typeof getCompanySettings>;
+  let companyRowExists = false;
+  try {
+    settings = getCompanySettings(db);
+    companyRowExists =
+      (db.query("SELECT id FROM companies WHERE id = 1").get() as { id: number } | null) !== null;
+  } catch {
+    // Older ledgers without the profile columns: leave the payload untouched.
+    return payload;
+  }
+  const companyAddress = companyAddressLine(settings);
+  const seller = {
+    name: hasText(payload.seller?.name) ? payload.seller!.name : settings.name || undefined,
+    address: hasText(payload.seller?.address)
+      ? payload.seller!.address
+      : companyAddress ?? undefined,
+    vatOrCvr: hasText(payload.seller?.vatOrCvr)
+      ? payload.seller!.vatOrCvr
+      : settings.cvr ?? undefined,
+  };
+  // The due date only defaults from the company's payment terms when the
+  // company profile actually exists — a never-initialised ledger keeps the
+  // payload's (possibly absent) due date untouched.
+  const dueDate =
+    hasText(payload.dueDate)
+      ? payload.dueDate
+      : companyRowExists && hasText(payload.issueDate) && settings.paymentTermsDays >= 0
+        ? addDays(payload.issueDate!, settings.paymentTermsDays)
+        : payload.dueDate;
+  return { ...payload, seller, ...(dueDate !== undefined ? { dueDate } : {}) };
+}
 
 function deliveryDescription(payload: InvoicePayload) {
   if (payload.deliveryDate) return `Delivery date ${payload.deliveryDate}`;
@@ -96,10 +153,18 @@ function nextIssuedInvoiceNumber(db: Database, issueDate: string) {
   return canonicalInvoiceNumber(scope, nextValue);
 }
 
-export function issueInvoice(db: Database, companyRoot: string, payload: InvoicePayload): IssueInvoiceResult {
+export function issueInvoice(db: Database, companyRoot: string, rawPayload: InvoicePayload): IssueInvoiceResult {
+  // #221: fill the seller identity + due date from the stored company profile
+  // before validation, so the owner never re-types their own master data.
+  const payload = enrichInvoiceFromCompany(db, rawPayload);
   const validation = validateInvoice(payload);
   const appliedRules = [...new Set([...(validation.appliedRules ?? []), RULE_ID, LOCK_RULE_ID])];
   if (!validation.ok) return { ok: false, appliedRules, errors: validation.errors };
+
+  // #221: resolve the company's payment details once, so the customer-facing
+  // PDF built at issue time always carries the BETALING block (where to pay).
+  const invoiceCurrency = (payload.currency ?? "DKK").trim().toUpperCase();
+  const paymentDetails = resolveCompanyPaymentDetails(db, invoiceCurrency);
 
   let viesValidation: ReturnType<typeof requireCachedViesValidation>["validation"] | undefined;
   if (payload.vatTreatment === "foreign_reverse_charge") {
@@ -139,6 +204,9 @@ export function issueInvoice(db: Database, companyRoot: string, payload: Invoice
         issuedAt,
         status: "issued",
         ...(viesValidation ? { viesValidation } : {}),
+        // #221: persist the resolved payment details into the snapshot so the
+        // at-issue PDF — and any later `invoice render` — show where to pay.
+        ...(paymentDetails ? { payment: paymentDetails } : {}),
       };
       const serialized = JSON.stringify(issuedPayload, null, 2);
       const hash = sha256(serialized);

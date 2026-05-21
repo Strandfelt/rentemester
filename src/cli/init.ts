@@ -111,9 +111,22 @@ export function register(dispatch: CommandDispatch): void {
     let summary: CompanyOnboardingSummary;
     try {
       initialiseCompanyVolume(root, {
+        // #221: capture the company's own identity + payment details once, so
+        // every issued invoice and its PDF inherit them without re-typing.
+        name: ctx.trimToNull(ctx.arg("--name")) ?? undefined,
         cvr: ctx.arg("--cvr"),
         fiscalYearStartMonth: ctx.arg("--fiscal-year-start-month"),
         fiscalYearLabelStrategy: ctx.arg("--fiscal-year-label-strategy"),
+        address: ctx.trimToNull(ctx.arg("--address")) ?? undefined,
+        postalCode: ctx.trimToNull(ctx.arg("--postal-code")) ?? undefined,
+        city: ctx.trimToNull(ctx.arg("--city")) ?? undefined,
+        paymentTermsDays: ctx.arg("--payment-terms"),
+        payment: {
+          bankName: ctx.trimToNull(ctx.arg("--bank-name")) ?? undefined,
+          registrationNo: ctx.trimToNull(ctx.arg("--bank-reg")) ?? undefined,
+          accountNo: ctx.trimToNull(ctx.arg("--bank-account")) ?? undefined,
+          iban: ctx.trimToNull(ctx.arg("--iban")) ?? undefined,
+        },
       });
       summary = summariseCompanyVolume(root);
     } catch (error) {
