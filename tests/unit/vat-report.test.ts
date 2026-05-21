@@ -6,8 +6,30 @@ import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { ingestDocument } from "../../src/core/documents";
-import { buildVatReport } from "../../src/core/vat";
+import { buildVatReport, vatFilingDeadline } from "../../src/core/vat";
 import { postJournalEntry, reverseJournalEntry, seedAccounts } from "../../src/core/ledger";
+
+describe("vatFilingDeadline (#236)", () => {
+  test("returns the 1st of the third month after the period ends", () => {
+    // Q1 ends 31-03 → due 1 June.
+    expect(vatFilingDeadline("2026-03-31")).toBe("2026-06-01");
+    // Q2 ends 30-06 → due 1 September.
+    expect(vatFilingDeadline("2026-06-30")).toBe("2026-09-01");
+    // Q3 ends 30-09 → due 1 December.
+    expect(vatFilingDeadline("2026-09-30")).toBe("2026-12-01");
+  });
+
+  test("rolls into the next year for a Q4 period", () => {
+    // Q4 ends 31-12 → due 1 March the following year.
+    expect(vatFilingDeadline("2026-12-31")).toBe("2027-03-01");
+    expect(vatFilingDeadline("2026-11-30")).toBe("2027-02-01");
+  });
+
+  test("returns null for an invalid period-end date", () => {
+    expect(vatFilingDeadline("not-a-date")).toBeNull();
+    expect(vatFilingDeadline("")).toBeNull();
+  });
+});
 
 describe("vat report", () => {
   test("builds deterministic VAT totals from journal entries in a period", () => {

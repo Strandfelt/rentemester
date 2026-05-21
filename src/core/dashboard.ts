@@ -218,6 +218,35 @@ function daysAgoLabel(days: number | null): string {
   return `${days} dage siden`;
 }
 
+/**
+ * SKAT filing/payment deadline for a quarter — the 1st of the third month
+ * after the period ends (e.g. Q2 ends 30-06 → due 01-09). This is the date
+ * that costs money with SKAT if missed; the dashboard previously counted down
+ * to the period END date, which is too early and wrong. (#236)
+ *
+ * Pure calendar math from `endMonth`/`year`; the render-engine stays
+ * deterministic.
+ */
+function vatFilingDeadlineForQuarter(year: number, endMonth: number): string {
+  let deadlineMonth = endMonth + 3;
+  let deadlineYear = year;
+  while (deadlineMonth > 12) {
+    deadlineMonth -= 12;
+    deadlineYear += 1;
+  }
+  return `${deadlineYear}-${String(deadlineMonth).padStart(2, "0")}-01`;
+}
+
+/** Signed day difference `toDate - fromDate` between two YYYY-MM-DD dates, UTC-based, pure. */
+function signedDaysBetween(fromDate: string, toDate: string): number {
+  const pf = /^(\d{4})-(\d{2})-(\d{2})/.exec(fromDate);
+  const pt = /^(\d{4})-(\d{2})-(\d{2})/.exec(toDate);
+  if (!pf || !pt) return 0;
+  const from = Date.UTC(parseInt(pf[1]!, 10), parseInt(pf[2]!, 10) - 1, parseInt(pf[3]!, 10));
+  const to = Date.UTC(parseInt(pt[1]!, 10), parseInt(pt[2]!, 10) - 1, parseInt(pt[3]!, 10));
+  return Math.round((to - from) / 86400000);
+}
+
 // --------------------------------------------------------------------------
 // CSS (inline, generated from TOKENS)
 // --------------------------------------------------------------------------
@@ -434,6 +463,15 @@ table.dash-table td.center, table.dash-table th.center { text-align: center; }
 }
 .footer .row { display: flex; justify-content: space-between; gap: var(--space-md); }
 .footer .mono { color: var(--ink-muted); }
+.footer .provenance {
+  margin-top: var(--space-xs);
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+.footer .provenance summary {
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
 .activity-log {
   display: grid;
   grid-template-columns: auto auto auto 1fr;
@@ -627,13 +665,23 @@ ${items}
 
 function deadlineSection(input: DashboardInput): string {
   const period = quarterPeriod(input.asOfDate);
-  const daysRemaining = input.vatDaysRemaining;
+  // The countdown must target the real SKAT filing/payment deadline — the 1st
+  // of the third month after the quarter ends — NOT the period-end date the
+  // wrong `vatDaysRemaining` measured. (#236)
+  const endMonth = period.quarter > 0 ? (period.quarter - 1) * 3 + 3 : 0;
+  const deadline = period.quarter > 0
+    ? vatFilingDeadlineForQuarter(period.year, endMonth)
+    : null;
+  const daysRemaining = deadline ? signedDaysBetween(input.asOfDate, deadline) : 0;
   const errors = input.vatPeriod.errors ?? [];
   let pill: string;
   let detail: string;
   if (errors.length > 0) {
     pill = `<span class="pill warning">Kan ikke beregne</span>`;
     detail = truncate(errors[0]!, 80);
+  } else if (!deadline) {
+    pill = `<span class="pill warning">Kan ikke beregne</span>`;
+    detail = "";
   } else if (daysRemaining < 0) {
     pill = `<span class="pill danger">Forfalden</span>`;
     detail = `${Math.abs(daysRemaining)} dage over`;
@@ -644,13 +692,17 @@ function deadlineSection(input: DashboardInput): string {
     pill = `<span class="pill success">${daysRemaining} dage tilbage</span>`;
     detail = "";
   }
+  const deadlineLine = deadline
+    ? `<div class="muted" style="font-size: 13px; margin-top: var(--space-xxs);">SKAT-frist: <span class="mono">${escapeHtml(deadline)}</span></div>`
+    : "";
   const net = input.vatPeriod.netVatPayable;
   const netLabel = net < 0 ? "Til gode" : "Est. nettomoms";
   const netValue = formatDkk(net);
   return `<div class="deadline-card">
   <div>
-    <div class="label-sm">Næste momsperiode</div>
+    <div class="label-sm">Næste momsfrist</div>
     <div class="headline" style="font-size: 18px;">${escapeHtml(period.label)}</div>
+    ${deadlineLine}
     <div class="muted" style="font-size: 13px; margin-top: var(--space-xxs);">${pill} ${escapeHtml(detail)}</div>
   </div>
   <div style="text-align: right;">
@@ -720,11 +772,20 @@ function statusSection(input: DashboardInput): string {
 
 function footer(input: DashboardInput): string {
   const generated = formatTimestampShort(input.generatedAt);
+  // The footer faces the owner, not a developer. The raw commit hash and the
+  // long rule-bundle-version string are build provenance — kept for support
+  // traceability but tucked into a small <details>, never dumped on the calm
+  // cockpit surface. The visible line is just "genereret <tid>". (#246)
+  const provenance =
+    `<details class="provenance"><summary>Teknisk version</summary>` +
+    `<span class="mono">commit ${escapeHtml(input.commitSha)}</span> · ` +
+    `<span class="mono">regelsæt ${escapeHtml(input.ruleBundleVersion)}</span></details>`;
   return `<footer class="footer">
   <div class="row">
-    <div>Commit <span class="mono">${escapeHtml(input.commitSha)}</span> · rules <span class="mono">${escapeHtml(input.ruleBundleVersion)}</span> · genereret <span class="mono">${escapeHtml(generated)}</span></div>
+    <div>Genereret <span class="mono">${escapeHtml(generated)}</span> · Rentemester</div>
     <div class="mono">github.com/mikkelkrogsholm/rentemester</div>
   </div>
+  ${provenance}
 </footer>`;
 }
 

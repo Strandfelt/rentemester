@@ -40,6 +40,36 @@ const RULE_ID = "DK-VAT-REPORT-001";
 const REVERSE_CHARGE_RULE_ID = "DK-VAT-REVERSE-CHARGE-001";
 const REPRESENTATION_RULE_ID = "DK-VAT-REPRESENTATION-001";
 
+/**
+ * SKAT filing/payment deadline for a VAT period (#236).
+ *
+ * For quarterly VAT (the only cadence Rentemester supports) the momsangivelse
+ * must be filed and the moms paid by the 1st day of the third month after the
+ * period ends — e.g. Q2 (ends 30-06) is due 1 September. This is the single
+ * date that costs money with SKAT if missed, so it is computed here from the
+ * period-end date and surfaced on every VAT output.
+ *
+ * Returns the deadline as a YYYY-MM-DD ISO date, or `null` when `periodEnd`
+ * is not a valid ISO date.
+ */
+export function vatFilingDeadline(periodEnd: string): string | null {
+  if (!looksLikeIsoDate(periodEnd)) return null;
+  const [yearStr, monthStr] = periodEnd.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (!Number.isInteger(year) || !Number.isInteger(month)) return null;
+  // The 1st of the third month after the period-end month. month is 1-based;
+  // adding 3 and normalising the year keeps quarter-end → deadline correct
+  // (06 → 09 same year, 12 → 03 next year).
+  let deadlineMonth = month + 3;
+  let deadlineYear = year;
+  while (deadlineMonth > 12) {
+    deadlineMonth -= 12;
+    deadlineYear += 1;
+  }
+  return `${deadlineYear}-${String(deadlineMonth).padStart(2, "0")}-01`;
+}
+
 export type ReverseChargePurchaseInput = {
   transactionDate: string;
   text: string;

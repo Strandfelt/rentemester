@@ -81,7 +81,7 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = buildVatFiling(db, from, to);
-    ctx.emitResult(result as Record<string, unknown>);
+    emitHumanReport("vat-filing", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
   };
   dispatch.on("vat", "momsangivelse", emitVatFiling);

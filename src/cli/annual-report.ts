@@ -15,6 +15,7 @@ import { buildAnnualReport } from "../core/annual-report";
 import { generateIxbrl } from "../core/ixbrl";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandDispatch } from "../cli-dispatch";
+import { emitHumanReport } from "../cli-format";
 
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("report", "annual", (ctx) => {
@@ -50,7 +51,7 @@ export function register(dispatch: CommandDispatch): void {
       }
     }
 
-    ctx.emitResult(result);
+    emitHumanReport("report-annual", result, ctx.outputFormat);
     db.close();
   });
 }

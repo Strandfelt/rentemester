@@ -296,6 +296,35 @@ describe("renderDashboard — structure", () => {
     expect(html).not.toContain("ULINKEDE BANK-TX");
     expect(html).toContain("BANKPOSTER UDEN BILAG");
   });
+
+  // #236: the deadline box must count down to the real SKAT filing/payment
+  // deadline (1st of the third month after the quarter ends), not the
+  // period-end date. The fixture's 2026-05-17 is in Q2 → due 2026-09-01.
+  test("deadline box shows the real SKAT filing deadline, not the period end", () => {
+    expect(html).toContain("SKAT-frist:");
+    expect(html).toContain("2026-09-01");
+    // The old behaviour counted to 30-06; 44 days (the wrong period-end
+    // countdown) must not appear.
+    expect(html).not.toContain("44 dage tilbage");
+    // 2026-05-17 → 2026-09-01 is 107 days.
+    expect(html).toContain("107 dage tilbage");
+  });
+
+  // #246: the footer must not dump a raw commit hash + rule-version on the
+  // calm cockpit surface — they are tucked into a collapsed <details>.
+  test("footer does not dump raw commit hash / rule-version in the visible row", () => {
+    const footerMatch = /<footer class="footer">[\s\S]*?<\/footer>/.exec(html);
+    expect(footerMatch).not.toBeNull();
+    const footer = footerMatch![0];
+    const visibleRow = /<div class="row">[\s\S]*?<\/div>\s*<\/div>/.exec(footer)?.[0] ?? "";
+    // The visible row is just "Genereret ..." — no commit/rules dump.
+    expect(visibleRow).not.toContain("abc1234");
+    expect(visibleRow).not.toContain("2026-05");
+    expect(visibleRow).toContain("Genereret");
+    // Build provenance is still available, but de-emphasised in <details>.
+    expect(footer).toContain("<details");
+    expect(footer).toContain("abc1234");
+  });
 });
 
 // --------------------------------------------------------------------------

@@ -144,6 +144,220 @@ describe("profit-loss human output (#225)", () => {
   });
 });
 
+describe("vat momsangivelse human output (#235, #236)", () => {
+  test("renders the SKAT rubrikker and filing deadline in Danish", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-momsangivelse-human-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
+    await Bun.$`bun run src/cli.ts journal post --company ${company} --input examples/journal-entry.expense.json`.quiet();
+    await Bun.$`bun run src/cli.ts period close --company ${company} --from 2026-05-01 --to 2026-05-31 --kind vat_quarter --status closed`.quiet();
+
+    const human = await runCli([
+      "vat", "momsangivelse", "--company", company,
+      "--from", "2026-05-01", "--to", "2026-05-31",
+      "--format", "human",
+    ]);
+    const jsonRun = await runCli([
+      "vat", "filing", "--company", company,
+      "--from", "2026-05-01", "--to", "2026-05-31",
+      "--format", "json",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    // Real readable Danish output — not a blank screen.
+    expect(human.stdout).toContain("Momsangivelse for perioden 2026-05-01 til 2026-05-31");
+    expect(human.stdout).toContain("Rubrikker til TastSelv Erhverv:");
+    expect(human.stdout).toContain("Salgsmoms:");
+    expect(human.stdout).toContain("Købsmoms:");
+    expect(human.stdout).toContain("Momstilsvar:");
+    expect(human.stdout).toContain("250,00 kr.");
+    // No raw JSON field names / structure leak through. ("momstilsvar" is a
+    // real Danish word and is allowed in prose; the camelCase JSON keys and
+    // braces are what must not appear.)
+    expect(human.stdout).not.toContain("momsAfVarekobUdland");
+    expect(human.stdout).not.toContain("periodStatus");
+    expect(human.stdout).not.toContain("{");
+    // The SKAT filing/payment deadline — 1st of the third month after the
+    // period ends (May → August). (#236)
+    expect(human.stdout).toContain("SKAT-frist for indberetning og betaling: 2026-08-01");
+
+    // The json path stays byte-stable and now carries filingDeadline.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.rubrikker.momstilsvar).toBe(-250);
+    expect(parsed.filingDeadline).toBe("2026-08-01");
+  });
+});
+
+describe("vat report shows the SKAT deadline (#236)", () => {
+  test("a quarterly VAT report carries the filing/payment deadline", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-vat-deadline-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
+    await Bun.$`bun run src/cli.ts journal post --company ${company} --input examples/journal-entry.expense.json`.quiet();
+
+    const human = await runCli([
+      "vat", "report", "--company", company,
+      "--from", "2026-04-01", "--to", "2026-06-30",
+      "--format", "human",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    // Q2 ends 30-06 → deadline 1 September, not the period-end date.
+    expect(human.stdout).toContain("SKAT-frist for indberetning og betaling: 2026-09-01");
+  });
+});
+
+describe("report annual human output (#235)", () => {
+  test("renders the income statement, balance and management statement", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-annual-human-"));
+    const company = join(root, "company");
+    const journalDir = mkdtempSync(join(tmpdir(), "rentemester-annual-human-j-"));
+
+    await Bun.$`bun run src/cli.ts init --company ${company} --cvr DK12345678`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
+
+    const open = join(journalDir, "open.json");
+    const sale = join(journalDir, "sale.json");
+    writeFileSync(open, JSON.stringify({
+      transactionDate: "2025-01-02",
+      text: "Indskud",
+      lines: [
+        { accountNo: "2000", debitAmount: 50000 },
+        { accountNo: "5000", creditAmount: 50000 },
+      ],
+    }));
+    writeFileSync(sale, JSON.stringify({
+      transactionDate: "2025-06-15",
+      text: "Konsulentsalg",
+      documentId: 1,
+      lines: [
+        { accountNo: "2000", debitAmount: 1250 },
+        { accountNo: "1000", creditAmount: 1000, vatCode: "DK_SALE_25" },
+        { accountNo: "1200", creditAmount: 250 },
+      ],
+    }));
+    await Bun.$`bun run src/cli.ts journal post --company ${company} --input ${open}`.quiet();
+    await Bun.$`bun run src/cli.ts journal post --company ${company} --input ${sale}`.quiet();
+    await Bun.$`bun run src/cli.ts period close --company ${company} --from 2025-01-01 --to 2025-12-31 --kind fiscal_year`.quiet();
+
+    const human = await runCli([
+      "report", "annual", "--company", company,
+      "--from", "2025-01-01", "--to", "2025-12-31",
+      "--format", "human",
+    ]);
+    const jsonRun = await runCli([
+      "report", "annual", "--company", company,
+      "--from", "2025-01-01", "--to", "2025-12-31",
+      "--format", "json",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+    rmSync(journalDir, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    // The owner sees real figures, not a blank "✔" screen.
+    expect(human.stdout).toContain("Årsrapport (regnskabsklasse B) for regnskabsåret 2025-01-01 til 2025-12-31");
+    expect(human.stdout).toContain("Resultatopgørelse");
+    expect(human.stdout).toContain("Årets resultat: overskud på 1.000,00 kr.");
+    expect(human.stdout).toContain("Balance pr. 2025-12-31");
+    expect(human.stdout).toContain("Ledelsespåtegning:");
+    expect(human.stdout).not.toContain("aretsResultat");
+    expect(human.stdout).not.toContain("{");
+
+    // The json path stays byte-stable.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.aretsResultat).toBe(1000);
+  });
+});
+
+describe("system backup-status human output (#240)", () => {
+  test("states the backup duty is met and when the next is due", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-backup-status-human-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
+    await Bun.$`bun run src/cli.ts system backup --company ${company} --at 2026-05-17T02:09:00.000Z`.quiet();
+
+    const human = await runCli([
+      "system", "backup-status", "--company", company,
+      "--as-of", "2026-05-17T02:10:00.000Z",
+      "--format", "human",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    expect(human.stdout).toContain("Backup-status pr.");
+    // Plainly states whether the duty is met — not just "Latest Backup Id".
+    expect(human.stdout).toContain("Backup-pligten er opfyldt");
+    expect(human.stdout).toContain("ugentlig");
+    expect(human.stdout).not.toContain("Latest Backup Id");
+    expect(human.stdout).not.toContain("{");
+  });
+
+  test("states the duty is NOT met when no backup has been taken", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-backup-status-due-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
+
+    const human = await runCli([
+      "system", "backup-status", "--company", company,
+      "--as-of", "2026-05-17T02:10:00.000Z",
+      "--format", "human",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    // backupDue makes ok:false, so exit 1 — but the output is still a useful
+    // status, not the generic "fejlede uden en specifik fejlbesked" template.
+    expect(human.exitCode).toBe(1);
+    const out = human.stdout + human.stderr;
+    expect(out).toContain("Backup-pligten er IKKE opfyldt");
+    expect(out).toContain("Tag en backup nu");
+    expect(out).not.toContain("fejlede uden en specifik fejlbesked");
+  });
+});
+
+describe("accounts list human output (#246)", () => {
+  test("shows account numbers and no raw array-index column", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-accounts-list-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+
+    const human = await runCli(["accounts", "list", "--company", company, "--format", "human"]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain("Kontoplan");
+    expect(human.stdout).toContain("Kontonr.");
+    expect(human.stdout).toContain("1200");
+    // console.table's "(index)" column with 0,1,2… is gone.
+    expect(human.stdout).not.toContain("(index)");
+    const headerLine = human.stdout.split("\n").find((l) => l.includes("Kontonr.")) ?? "";
+    // The first column is the account number — the header must not begin with
+    // a numeric index column.
+    expect(headerLine.trimStart().startsWith("Kontonr.")).toBe(true);
+  });
+});
+
 describe("momsangivelse prerequisite guidance (#227)", () => {
   test("an un-closed VAT period failure guides the owner to 'period close'", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-momsangivelse-guide-"));

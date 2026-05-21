@@ -1,3 +1,5 @@
+import { vatFilingDeadline } from "./core/vat";
+
 export type OutputFormat = "json" | "human";
 
 export function resolveOutputFormat(flags: Map<string, string | true>): OutputFormat | null {
@@ -144,13 +146,16 @@ function asStringArray(value: unknown) {
 /** Report kinds with a dedicated Danish human renderer. */
 export type HumanReportKind =
   | "vat-report"
+  | "vat-filing"
+  | "report-annual"
   | "invoice-status"
   | "exceptions-list"
   | "report-trial-balance"
   | "report-profit-loss"
   | "report-balance"
   | "retention-status"
-  | "reconcile-bank";
+  | "reconcile-bank"
+  | "backup-status";
 
 /**
  * Format a DKK amount as Danish kroner-og-øre, e.g. 38.3 -> "38,30 kr.",
@@ -217,12 +222,23 @@ export function renderHumanReport(
   kind: HumanReportKind,
   result: Record<string, unknown>,
 ): string | null {
+  // `backup-status` reports `ok: false` when the weekly backup duty is NOT met
+  // — that is a valid compliance status to render, not a command failure. Its
+  // renderer handles both states, so it must run before the generic
+  // ok-false-as-error path. (#240)
+  if (kind === "backup-status") {
+    return renderBackupStatus(result);
+  }
   if (result.ok === false) {
     return buildHumanError(humanReportTitle(kind), result).join("\n");
   }
   switch (kind) {
     case "vat-report":
       return renderVatReport(result);
+    case "vat-filing":
+      return renderVatFiling(result);
+    case "report-annual":
+      return renderAnnualReport(result);
     case "invoice-status":
       return renderInvoiceStatus(result);
     case "exceptions-list":
@@ -238,6 +254,8 @@ export function renderHumanReport(
     case "reconcile-bank":
       return renderBankReconciliation(result);
     default:
+      // `backup-status` is handled before this switch (its renderer covers the
+      // ok:false "duty not met" state too), so it never reaches here.
       return null;
   }
 }
@@ -273,6 +291,10 @@ function humanReportTitle(kind: HumanReportKind): string {
   switch (kind) {
     case "vat-report":
       return "Momsrapport";
+    case "vat-filing":
+      return "Momsangivelse";
+    case "report-annual":
+      return "Årsrapport";
     case "invoice-status":
       return "Fakturastatus";
     case "exceptions-list":
@@ -287,6 +309,8 @@ function humanReportTitle(kind: HumanReportKind): string {
       return "Opbevaringsstatus";
     case "reconcile-bank":
       return "Bankafstemning";
+    case "backup-status":
+      return "Backup-status";
   }
 }
 
@@ -342,6 +366,256 @@ function renderVatReport(result: Record<string, unknown>): string {
     `Rapporten dækker ${entries} finanspostering${entries === 1 ? "" : "er"}` +
       ` (${postLines} posteringslinje${postLines === 1 ? "" : "r"}).`,
   );
+  // SKAT filing/payment deadline — the date that costs money if missed. (#236)
+  const deadline = vatFilingDeadline(to);
+  if (deadline) {
+    lines.push("");
+    lines.push(`SKAT-frist for indberetning og betaling: ${deadline}`);
+    lines.push(
+      "  (kvartalsmoms skal angives og betales senest den 1. i tredje måned efter periodens udløb)",
+    );
+  }
+  appendWarnings(lines, result);
+  return lines.join("\n");
+}
+
+// --- VAT filing (momsangivelse) --------------------------------------------
+
+/**
+ * Render a `vat momsangivelse` / `vat filing` payload as Danish human text.
+ * The payload is the `VatFilingReport` from `buildVatFiling` — the SKAT
+ * rubrikker plus momstilsvar and the filing deadline. (#235, #236)
+ */
+function renderVatFiling(result: Record<string, unknown>): string {
+  const from = asText(result.periodStart);
+  const to = asText(result.periodEnd);
+  const lines: string[] = [];
+  lines.push(`Momsangivelse for perioden ${from} til ${to}`);
+  lines.push("");
+
+  const rubrikker = (typeof result.rubrikker === "object" && result.rubrikker !== null
+    ? result.rubrikker
+    : {}) as Record<string, unknown>;
+  const tilsvar = typeof rubrikker.momstilsvar === "number"
+    ? rubrikker.momstilsvar
+    : Number(rubrikker.momstilsvar);
+
+  if (Number.isFinite(tilsvar) && tilsvar > 0) {
+    lines.push(`Du skal betale ${formatKroner(tilsvar)} i moms til SKAT for perioden.`);
+  } else if (Number.isFinite(tilsvar) && tilsvar < 0) {
+    lines.push(`Du har ${formatKroner(-tilsvar)} til gode i moms (negativt momstilsvar).`);
+  } else {
+    lines.push("Momstilsvaret for perioden er 0,00 kr.");
+  }
+  lines.push("");
+  lines.push("Rubrikker til TastSelv Erhverv:");
+  lines.push(`  Salgsmoms:                       ${formatKroner(rubrikker.salgsmoms)}`);
+  lines.push(`  Moms af varekøb i udlandet:      ${formatKroner(rubrikker.momsAfVarekobUdland)}`);
+  lines.push(`  Moms af ydelseskøb i udlandet:   ${formatKroner(rubrikker.momsAfYdelseskobUdland)}`);
+  lines.push(`  Købsmoms:                        ${formatKroner(rubrikker.kobsmoms)}`);
+  lines.push(`  Momstilsvar:                     ${formatKroner(rubrikker.momstilsvar)}`);
+  lines.push(`  Rubrik A (køb i udlandet):       ${formatKroner(rubrikker.rubrikA)}`);
+  lines.push(`  Rubrik B (salg i udlandet):      ${formatKroner(rubrikker.rubrikB)}`);
+  lines.push(`  Rubrik C (øvrigt momsfrit salg): ${formatKroner(rubrikker.rubrikC)}`);
+  lines.push("");
+
+  const statusDa = result.periodStatus === "reported"
+    ? "indberettet"
+    : result.periodStatus === "closed"
+      ? "lukket"
+      : "åben";
+  lines.push(`  Periodestatus:                   ${statusDa}`);
+  if (result.periodReference) {
+    lines.push(`  Periodereference:                ${asText(result.periodReference)}`);
+  }
+  const deadline = asText(result.filingDeadline, "") || vatFilingDeadline(to) || "";
+  if (deadline) {
+    lines.push("");
+    lines.push(`SKAT-frist for indberetning og betaling: ${deadline}`);
+    lines.push(
+      "  (kvartalsmoms skal angives og betales senest den 1. i tredje måned efter periodens udløb)",
+    );
+  }
+  lines.push("");
+  lines.push(
+    "Rentemester producerer tallene — du indberetter dem selv via TastSelv Erhverv.",
+  );
+  appendWarnings(lines, result);
+  return lines.join("\n");
+}
+
+// --- Annual report (årsrapport) --------------------------------------------
+
+/**
+ * Render a `report annual` payload as Danish human text — resultatopgørelse,
+ * balance, årets resultat, noter-skelet and ledelsespåtegning. The payload is
+ * the `AnnualReport` from `buildAnnualReport`. (#235)
+ */
+function renderAnnualReport(result: Record<string, unknown>): string {
+  const from = asText(result.fiscalYearStart);
+  const to = asText(result.fiscalYearEnd);
+  const company = (typeof result.company === "object" && result.company !== null
+    ? result.company
+    : {}) as Record<string, unknown>;
+  const lines: string[] = [];
+  lines.push(`Årsrapport (regnskabsklasse B) for regnskabsåret ${from} til ${to}`);
+  if (company.name) {
+    const cvr = company.cvr ? `, CVR ${asText(company.cvr)}` : "";
+    lines.push(`${asText(company.name)}${cvr}`);
+  }
+  lines.push("");
+
+  // Resultatopgørelse — reuse the profit-and-loss renderer's body.
+  const pl = (typeof result.profitAndLoss === "object" && result.profitAndLoss !== null
+    ? result.profitAndLoss
+    : {}) as Record<string, unknown>;
+  lines.push("Resultatopgørelse");
+  lines.push("");
+  const income = asArray(pl.income);
+  lines.push("Indtægter:");
+  if (income.length === 0) {
+    lines.push("  (ingen)");
+  } else {
+    for (const line of income) {
+      lines.push(`  ${asText(line.accountNo)} ${asText(line.name)}: ${formatKroner(line.amount)}`);
+    }
+  }
+  lines.push(`  Indtægter i alt:               ${formatKroner(pl.totalIncome)}`);
+  lines.push("");
+  const expense = asArray(pl.expense);
+  lines.push("Omkostninger:");
+  if (expense.length === 0) {
+    lines.push("  (ingen)");
+  } else {
+    for (const line of expense) {
+      lines.push(`  ${asText(line.accountNo)} ${asText(line.name)}: ${formatKroner(line.amount)}`);
+    }
+  }
+  lines.push(`  Omkostninger i alt:            ${formatKroner(pl.totalExpense)}`);
+  lines.push("");
+
+  const arets = typeof result.aretsResultat === "number"
+    ? result.aretsResultat
+    : Number(result.aretsResultat);
+  if (Number.isFinite(arets) && arets > 0) {
+    lines.push(`Årets resultat: overskud på ${formatKroner(arets)}`);
+  } else if (Number.isFinite(arets) && arets < 0) {
+    lines.push(`Årets resultat: underskud på ${formatKroner(-arets)}`);
+  } else {
+    lines.push("Årets resultat: 0,00 kr.");
+  }
+  lines.push("");
+
+  // Balance.
+  const bs = (typeof result.balanceSheet === "object" && result.balanceSheet !== null
+    ? result.balanceSheet
+    : {}) as Record<string, unknown>;
+  lines.push(`Balance pr. ${asText(bs.asOfDate, to)}`);
+  lines.push("");
+  renderBalanceSection(lines, "Aktiver", bs.assets);
+  lines.push("");
+  renderBalanceSection(lines, "Passiver", bs.liabilities);
+  lines.push("");
+  renderBalanceSection(lines, "Egenkapital", bs.equity);
+  lines.push(`  Periodens resultat:`.padEnd(33) + formatKroner(bs.periodResult));
+  lines.push("");
+  lines.push(`  Aktiver i alt:                 ${formatKroner(bs.totalAssets)}`);
+  lines.push(`  Passiver og egenkapital i alt: ${formatKroner(bs.totalLiabilitiesAndEquity)}`);
+  lines.push(
+    bs.balanced === true
+      ? "  Balancen går op (aktiver = passiver + egenkapital)."
+      : "  ADVARSEL: balancen går ikke op.",
+  );
+  lines.push("");
+
+  // Notes skeleton.
+  const notes = asArray(result.notes);
+  if (notes.length > 0) {
+    lines.push("Noter:");
+    for (const note of notes) {
+      const flag = note.placeholder === true ? " (skabelon — udfyldes)" : "";
+      lines.push(`  - ${asText(note.title)}${flag}`);
+    }
+    lines.push("");
+  }
+
+  // Ledelsespåtegning.
+  const led = (typeof result.ledelsespategning === "object" && result.ledelsespategning !== null
+    ? result.ledelsespategning
+    : {}) as Record<string, unknown>;
+  if (led.text) {
+    lines.push("Ledelsespåtegning:");
+    lines.push(`  ${asText(led.text)}`);
+    if (led.placeholder === true) {
+      lines.push("  (skabelon — gennemgås og godkendes af ledelsen)");
+    }
+    lines.push("");
+  }
+
+  if (result.disclaimer) {
+    lines.push(asText(result.disclaimer));
+  }
+  appendWarnings(lines, result);
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines.join("\n");
+}
+
+// --- Backup status ---------------------------------------------------------
+
+/**
+ * Render a `system backup-status` payload as Danish human text. The payload is
+ * the `BackupComplianceStatus` from `getBackupComplianceStatus`. States
+ * plainly whether the weekly backup duty is met and when the next is due. (#240)
+ */
+function renderBackupStatus(result: Record<string, unknown>): string {
+  const lines: string[] = [];
+  lines.push(`Backup-status pr. ${asText(result.checkedAt)}`);
+  lines.push("");
+
+  const backupsFound = asCount(result.backupsFound);
+  const due = result.backupDue === true;
+  const hasActivity = result.hasActivitySinceBackup === true;
+
+  if (backupsFound === 0) {
+    if (hasActivity) {
+      lines.push("Backup-pligten er IKKE opfyldt: der er bogført data, men ingen backup er taget endnu.");
+    } else {
+      lines.push("Backup-pligten er opfyldt: der er endnu ingen bogført data, der kræver backup.");
+    }
+  } else if (due) {
+    lines.push("Backup-pligten er IKKE opfyldt: en ny backup er forfalden.");
+  } else {
+    lines.push("Backup-pligten er opfyldt: seneste backup dækker den nuværende bogføring.");
+  }
+  lines.push("");
+
+  if (result.latestBackupId) {
+    lines.push(`  Seneste backup:                ${asText(result.latestBackupId)}`);
+  } else {
+    lines.push("  Seneste backup:                ingen registreret");
+  }
+  if (result.latestBackupAt) {
+    lines.push(`  Taget:                         ${asText(result.latestBackupAt)}`);
+  }
+  const days = result.daysSinceLatestBackup;
+  if (typeof days === "number" && Number.isFinite(days)) {
+    lines.push(`  Dage siden seneste backup:     ${days}`);
+  }
+  lines.push(
+    `  Ændringer siden seneste backup: ${hasActivity ? "ja" : "nej"}`,
+  );
+  lines.push("");
+
+  if (backupsFound === 0 && hasActivity) {
+    // No backup taken yet, but data has been booked — the duty is due now.
+    lines.push("Tag en backup nu: der er bogført data, som endnu ikke er sikkerhedskopieret.");
+  } else if (result.requiredBy) {
+    const verb = due ? "Næste backup skulle have været taget senest" : "Næste backup skal tages senest";
+    lines.push(`${verb} ${asText(result.requiredBy)}.`);
+  } else if (!hasActivity) {
+    lines.push("Ingen frist: backup kræves først, når der bogføres nye data.");
+  }
+  lines.push("Backup-pligten er ugentlig — tag en backup mindst hver 7. dag, når der bogføres.");
   appendWarnings(lines, result);
   return lines.join("\n");
 }

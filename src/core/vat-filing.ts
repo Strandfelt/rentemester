@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { buildVatReport, type VatPeriodReport } from "./vat";
+import { buildVatReport, vatFilingDeadline, type VatPeriodReport } from "./vat";
 import { isValidIsoDate as looksLikeIsoDate } from "./dates";
 import { addDkk, percentOfDkk, subtractDkk } from "./money";
 
@@ -44,6 +44,11 @@ export type VatFilingReport = {
   periodStatus: "open" | "closed" | "reported";
   /** Reference recorded on the closed accounting period, if any. */
   periodReference: string | null;
+  /**
+   * SKAT filing/payment deadline (YYYY-MM-DD) — the 1st of the third month
+   * after the period ends. `null` only when periodEnd is not a valid date.
+   */
+  filingDeadline: string | null;
   rubrikker: VatFilingRubrikker;
   /** The underlying raw VAT report, for traceability. */
   vatReport: VatPeriodReport;
@@ -74,6 +79,7 @@ function failure(periodStart: string, periodEnd: string, periodStatus: VatFiling
     periodEnd,
     periodStatus,
     periodReference: null,
+    filingDeadline: vatFilingDeadline(periodEnd),
     rubrikker: emptyRubrikker(),
     vatReport,
     warnings: [],
@@ -160,6 +166,7 @@ export function buildVatFiling(db: Database, periodStart: string, periodEnd: str
     periodEnd,
     periodStatus: period.status,
     periodReference: period.reference,
+    filingDeadline: vatFilingDeadline(periodEnd),
     rubrikker: {
       salgsmoms,
       momsAfVarekobUdland,

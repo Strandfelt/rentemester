@@ -22,6 +22,7 @@ import { exportAuthorityPackage } from "../core/authority-export";
 import { exportSaftPackage } from "../core/saft-export";
 import { openCommandDb } from "../cli-dispatch";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
+import { emitHumanReport } from "../cli-format";
 
 function requireBool(ctx: CommandContext, flag: string): boolean {
   const value = ctx.arg(flag);
@@ -299,7 +300,7 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const result = getBackupComplianceStatus(db, ctx.companyRoot(), ctx.arg("--as-of"));
-    ctx.emitResult(result as Record<string, unknown>);
+    emitHumanReport("backup-status", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 
