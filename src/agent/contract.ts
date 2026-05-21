@@ -52,6 +52,26 @@ export const AUTO_BOOK_CONFIDENCE_THRESHOLD = 0.65;
 export const DEADLINE_HORIZON_DAYS = 45;
 
 /**
+ * Gross-amount (DKK, incl. moms) at or above which a purchase in an asset-like
+ * category is treated as a *possible capitalisable fixed asset* and routed to
+ * the exception queue for a human/asset decision instead of being booked
+ * straight to a P&L expense account (#223).
+ *
+ * The sourced reference point is the Danish small-asset (straksafskrivning)
+ * threshold `STRAKSAFSKRIVNING_THRESHOLD_DKK` (33.100 DKK, see
+ * `src/core/assets.ts`, rule `DK-ASSET-WRITEOFF-001`): a purchase below it may
+ * be eligible for immediate write-off, one above it generally has to be
+ * capitalised and depreciated. Either way — small-asset write-off or
+ * capitalisation — is a tax/asset judgement the deterministic loop cannot make,
+ * so the loop never books such a purchase silently as an operating expense.
+ *
+ * The review floor is set well below that threshold so that a materially
+ * sized asset-like purchase (e.g. a 12.000 DKK arbejdscomputer) is always
+ * surfaced for the asset decision, while trivial accessories are not.
+ */
+export const FIXED_ASSET_REVIEW_THRESHOLD_DKK = 5000;
+
+/**
  * Supplier classification rule. A rule maps a token found in the (lower-cased)
  * supplier name to a deterministic expense account + VAT treatment. The agent
  * only auto-books a transaction when exactly one rule matches; an unknown
@@ -62,6 +82,14 @@ export type SupplierRule = {
   expenseAccount: string;
   vatTreatment: "standard" | "reverse_charge" | "representation" | "exempt";
   label: string;
+  /**
+   * True when the rule's category buys *physical equipment* — hardware,
+   * machinery, inventory — i.e. the kind of purchase that may be a
+   * capitalisable fixed asset rather than an operating expense (#223). A
+   * materially sized purchase in an asset-like category is never auto-booked:
+   * it is routed to the exception queue for a human/asset decision.
+   */
+  assetLike?: boolean;
 };
 
 /**
@@ -78,7 +106,9 @@ export const SUPPLIER_RULES: readonly SupplierRule[] = [
   { token: "amazon", expenseAccount: "3020", vatTreatment: "reverse_charge", label: "Hosting og cloud" },
   { token: "aws", expenseAccount: "3020", vatTreatment: "reverse_charge", label: "Hosting og cloud" },
   { token: "dsb", expenseAccount: "3050", vatTreatment: "standard", label: "Rejse og transport" },
-  { token: "elgiganten", expenseAccount: "3120", vatTreatment: "standard", label: "Hardware og udstyr" },
+  // Hardware is an asset-like category: a purchase here may be a capitalisable
+  // fixed asset, so a materially sized one is routed for an asset decision (#223).
+  { token: "elgiganten", expenseAccount: "3120", vatTreatment: "standard", label: "Hardware og udstyr", assetLike: true },
 ];
 
 /**
@@ -91,4 +121,21 @@ export function resolveSupplierRule(supplierName: string | null | undefined): Su
   const lower = supplierName.toLowerCase();
   const matches = SUPPLIER_RULES.filter((rule) => lower.includes(rule.token));
   return matches.length === 1 ? matches[0]! : null;
+}
+
+/**
+ * Whether a confidently-matched purchase looks like a *capitalisable fixed
+ * asset* and must therefore go to a human/asset decision instead of being
+ * booked straight to a P&L expense account (#223).
+ *
+ * Deterministic and conservative: a purchase is flagged only when its rule's
+ * category is asset-like (physical equipment) AND its gross amount (incl. moms)
+ * is at or above `FIXED_ASSET_REVIEW_THRESHOLD_DKK`. A subscription/service
+ * category is never flagged regardless of amount; a trivially small equipment
+ * purchase is not flagged either. The loop does not decide capitalisation vs
+ * straksafskrivning — it only refuses to guess and routes the decision.
+ */
+export function looksLikeFixedAsset(rule: SupplierRule, grossAmountDkk: number): boolean {
+  if (!rule.assetLike) return false;
+  return Math.abs(grossAmountDkk) >= FIXED_ASSET_REVIEW_THRESHOLD_DKK;
 }

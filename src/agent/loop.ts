@@ -44,9 +44,12 @@ import {
   AGENT_RULE_ID,
   AUTO_BOOK_CONFIDENCE_THRESHOLD,
   DEADLINE_HORIZON_DAYS,
+  FIXED_ASSET_REVIEW_THRESHOLD_DKK,
+  looksLikeFixedAsset,
   resolveSupplierRule,
   type SupplierRule,
 } from "./contract";
+import { STRAKSAFSKRIVNING_THRESHOLD_DKK } from "../core/assets";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -355,6 +358,49 @@ function runPhases(db: Database, input: AgentRunInput, report: AgentRunReport): 
         relatedBankTransactionId: row.bankTransactionId,
         relatedDocumentId: best.documentId,
         sourceEvidence: { rule: AGENT_RULE_ID, supplierName: best.supplierName ?? null },
+      });
+      continue;
+    }
+    // Fixed-asset judgement (#223): a confident match with a single account
+    // rule is normally booked straight away — but a materially sized purchase
+    // in an asset-like category (hardware/equipment) may be a capitalisable
+    // fixed asset that belongs in the asset register, not a P&L operating
+    // expense. The loop cannot deterministically decide capitalise-and-
+    // depreciate vs straksafskrivning vs ordinary expense, so it does NOT
+    // guess: it routes the purchase to the exception queue for a human/asset
+    // decision and never books it silently to an expense account.
+    const grossAmount = Math.abs(row.amount);
+    if (looksLikeFixedAsset(rule, grossAmount)) {
+      const aboveSmallAsset = grossAmount >= STRAKSAFSKRIVNING_THRESHOLD_DKK;
+      routeException(db, report, {
+        type: "AGENT_POSSIBLE_FIXED_ASSET",
+        severity: "high",
+        message:
+          `Banktransaktion ${row.bankTransactionId} "${row.text}" på ${grossAmount.toLocaleString("da-DK")} kr. ` +
+          `matcher bilag ${best.documentId} (leverandør '${best.supplierName ?? "ukendt"}') i kategorien ` +
+          `'${rule.label}'. Købet ligner et anlægsaktiv (driftsmiddel) og er ikke automatisk bogført ` +
+          `som en driftsudgift — om det skal aktiveres og afskrives eller straksafskrives er en ` +
+          `aktiv-/skattevurdering, som agenten ikke gætter på.`,
+        requiredAction:
+          aboveSmallAsset
+            ? `Beløbet er over småaktiv-grænsen på ${STRAKSAFSKRIVNING_THRESHOLD_DKK.toLocaleString("da-DK")} kr. ` +
+              `og skal som udgangspunkt aktiveres og afskrives. Opret aktivet med 'asset register' og ` +
+              `afskriv det med 'asset depreciate', eller bogfør udgiften manuelt hvis den ikke er et anlægsaktiv.`
+            : `Beløbet er under småaktiv-grænsen på ${STRAKSAFSKRIVNING_THRESHOLD_DKK.toLocaleString("da-DK")} kr. ` +
+              `Vurder om det skal straksafskrives ('asset write-off'), aktiveres og afskrives ('asset register'), ` +
+              `eller bogføres som en almindelig driftsudgift — og bogfør det derefter.`,
+        relatedBankTransactionId: row.bankTransactionId,
+        relatedDocumentId: best.documentId,
+        sourceEvidence: {
+          rule: AGENT_RULE_ID,
+          supplierName: best.supplierName ?? null,
+          category: rule.label,
+          expenseAccount: rule.expenseAccount,
+          grossAmountDkk: grossAmount,
+          fixedAssetReviewThresholdDkk: FIXED_ASSET_REVIEW_THRESHOLD_DKK,
+          straksafskrivningThresholdDkk: STRAKSAFSKRIVNING_THRESHOLD_DKK,
+          aboveSmallAssetThreshold: aboveSmallAsset,
+        },
       });
       continue;
     }

@@ -228,9 +228,140 @@ export function resolveOpenExceptionsForBankTransaction(db: Database, bankTransa
   return { ok: true, resolvedCount: openRows.length, errors: [] };
 }
 
+/**
+ * A purchase/cash-register document that has not yet been booked to a journal
+ * entry, found by exact gross-amount match against an unmatched bank line.
+ * Used to make the unmatched-bank-transaction exception concrete in Danish:
+ * we can name the bilag and say what the owner must add to book it (#224).
+ */
+type CandidateBilag = {
+  documentId: number;
+  documentNo: string | null;
+  documentType: string;
+  supplierName: string | null;
+  deliveryDescription: string | null;
+};
+
+/** Crude representation/bevirtning detector — restaurant, café, bar, kro … */
+function looksLikeRepresentation(bilag: CandidateBilag, bankText: string): boolean {
+  const haystack = [
+    bilag.documentType,
+    bilag.supplierName ?? "",
+    bilag.deliveryDescription ?? "",
+    bankText,
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (bilag.documentType === "cash_register_receipt") return true;
+  return /restaurant|café|cafe|bistro|kro|brasserie|brasseri|spisehus|diner|bevirtning|frokost|middag/.test(
+    haystack,
+  );
+}
+
+/**
+ * Finds the single unbooked purchase/cash-register bilag whose gross amount
+ * equals the absolute bank-line amount. Returns null on no match or on an
+ * ambiguous match (more than one candidate) — ambiguity is never guessed.
+ */
+function findCandidateBilag(db: Database, bankTransactionId: number, amount: number): CandidateBilag | null {
+  if (!(Math.abs(amount) > 0)) return null;
+  // Round to integer øre to compare a raw float bank amount against the
+  // document gross safely (matches the comparison the matcher uses).
+  const ore = Math.round(Math.abs(amount) * 100);
+  const rows = db
+    .query(
+      `SELECT d.id, d.document_no, d.document_type, d.supplier_name, d.delivery_description
+       FROM documents d
+       LEFT JOIN journal_entries je ON je.document_id = d.id AND je.status = 'posted'
+       WHERE d.document_type IN ('purchase_sale', 'cash_register_receipt')
+         AND je.id IS NULL
+         AND CAST(ROUND(d.amount_inc_vat * 100) AS INTEGER) = ?
+       LIMIT 2`,
+    )
+    .all(ore) as Array<{
+      id: number;
+      document_no: string | null;
+      document_type: string;
+      supplier_name: string | null;
+      delivery_description: string | null;
+    }>;
+  if (rows.length !== 1) return null;
+  const row = rows[0]!;
+  return {
+    documentId: row.id,
+    documentNo: row.document_no,
+    documentType: row.document_type,
+    supplierName: row.supplier_name,
+    deliveryDescription: row.delivery_description,
+  };
+}
+
+/** Danish kroner rendering of a raw bank/document amount (e.g. "1.205,00 kr."). */
+function formatKroner(amount: number): string {
+  return `${Math.abs(amount).toLocaleString("da-DK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} kr.`;
+}
+
+/**
+ * Builds the human-facing Danish message + required action for an unmatched
+ * bank transaction (#224). The text names the transaction concretely, and —
+ * when a likely bilag is found — says exactly what is missing and what the
+ * owner must do, in plain Danish without technical command jargon.
+ */
+function describeUnmatchedBankTransaction(
+  bank: { id: number; transaction_date: string; text: string | null; amount: number; currency: string },
+  bilag: CandidateBilag | null,
+): { message: string; requiredAction: string } {
+  const beløb = `${formatKroner(bank.amount)}${bank.currency && bank.currency !== "DKK" ? ` ${bank.currency}` : ""}`;
+  const tekst = (bank.text ?? "").trim() || "(ingen tekst)";
+  const linje = `Banktransaktionen "${tekst}" den ${bank.transaction_date} på ${beløb} er endnu ikke bogført`;
+
+  // No bilag at all — the owner is missing the underlying receipt/invoice.
+  if (!bilag) {
+    return {
+      message: `${linje}. Der er ikke fundet et bilag (kvittering eller faktura), der passer til beløbet.`,
+      requiredAction:
+        "Find kvitteringen eller fakturaen for denne betaling og læg den i bogføringen. " +
+        "Uden et bilag kan udgiften ikke bogføres og momsen ikke fratrækkes.",
+    };
+  }
+
+  const bilagNavn = bilag.documentNo ? `bilag ${bilag.documentNo}` : `et bilag (id ${bilag.documentId})`;
+  const leverandør = bilag.supplierName ? ` fra ${bilag.supplierName}` : "";
+
+  // Representation / restaurant voucher missing its purpose + attendees — the
+  // exact case from the README: "Restaurantbilag mangler formål og deltagere".
+  if (looksLikeRepresentation(bilag, tekst)) {
+    return {
+      message:
+        `${linje}. Den passer til ${bilagNavn}${leverandør}, som ligner et restaurant-/bevirtningsbilag. ` +
+        `Bilaget mangler formål og deltagere — det skal fremgå, hvem der deltog, og hvad anledningen var.`,
+      requiredAction:
+        "Skriv formålet med bevirtningen og navnene på deltagerne på bilaget (fx \"kundemøde, " +
+        "Anders Jensen, Acme A/S\"). Formål og deltagere er et lovkrav for, at udgiften kan " +
+        "fradrages som repræsentation. Bogfør derefter bilaget mod betalingen.",
+    };
+  }
+
+  // A matching bilag exists but the link is not yet posted.
+  return {
+    message:
+      `${linje}. Den passer til ${bilagNavn}${leverandør}, men bilaget er endnu ikke bogført mod betalingen.`,
+    requiredAction:
+      `Kontroller, at ${bilagNavn} hører til denne betaling, og bogfør udgiften mod banktransaktionen.`,
+  };
+}
+
 export function syncUnmatchedBankTransactionExceptions(db: Database) {
+  // Every bank transaction with no posted journal entry — together with its
+  // currently-open UNMATCHED_BANK_TRANSACTION exception (if any). A new
+  // transaction has no exception yet; one synced before its bilag was ingested
+  // has a stale one. Both are handled below: missing ⇒ create, stale ⇒ refresh.
   const unmatchedRows = db.query(
-    `SELECT bt.id, bt.transaction_date, bt.booking_date, bt.text, bt.amount, bt.currency, bt.reference, bt.import_batch_id
+    `SELECT bt.id, bt.transaction_date, bt.booking_date, bt.text, bt.amount, bt.currency, bt.reference, bt.import_batch_id,
+            ex.id AS exception_id, ex.message AS exception_message, ex.required_action AS exception_required_action
      FROM bank_transactions bt
      LEFT JOIN journal_entries je
        ON je.source_bank_transaction_id = bt.id
@@ -240,35 +371,76 @@ export function syncUnmatchedBankTransactionExceptions(db: Database) {
       AND ex.type = 'UNMATCHED_BANK_TRANSACTION'
       AND ex.status = 'open'
      WHERE je.id IS NULL
-       AND ex.id IS NULL
      ORDER BY bt.transaction_date ASC, bt.id ASC`
   ).all() as Array<any>;
 
   let created = 0;
+  let refreshed = 0;
   for (const row of unmatchedRows) {
+    const amount = Number(row.amount);
+    const bilag = findCandidateBilag(db, row.id, amount);
+    const { message, requiredAction } = describeUnmatchedBankTransaction(
+      {
+        id: row.id,
+        transaction_date: row.transaction_date,
+        text: row.text,
+        amount,
+        currency: row.currency,
+      },
+      bilag,
+    );
+    const sourceEvidence = JSON.stringify({
+      bankTransactionId: row.id,
+      transactionDate: row.transaction_date,
+      bookingDate: row.booking_date,
+      text: row.text,
+      amount,
+      currency: row.currency,
+      reference: row.reference,
+      importBatchId: row.import_batch_id,
+      candidateBilagId: bilag?.documentId ?? null,
+      candidateBilagNo: bilag?.documentNo ?? null,
+    });
+
+    if (row.exception_id != null) {
+      // An exception already exists. Refresh it in place when its Danish text
+      // has gone stale — typically because the matching bilag has since been
+      // ingested, so the generic "no bilag found" message can now name the
+      // bilag and (for a restaurant voucher) the missing formål + deltagere.
+      const stale =
+        row.exception_message !== message ||
+        (row.exception_required_action ?? "") !== requiredAction;
+      if (stale) {
+        db.run(
+          `UPDATE exceptions
+             SET message = ?, required_action = ?, related_document_id = ?, source_evidence = ?
+           WHERE id = ?`,
+          message,
+          requiredAction,
+          bilag?.documentId ?? null,
+          sourceEvidence,
+          row.exception_id,
+        );
+        refreshed += 1;
+      }
+      continue;
+    }
+
     const result = recordException(db, {
       type: "UNMATCHED_BANK_TRANSACTION",
       severity: "medium",
       relatedBankTransactionId: row.id,
-      message: `Bank transaction ${row.id} is still unmatched`,
-      requiredAction: "Review bank transaction, run suggest-matches, then settle or book it.",
-      sourceEvidence: {
-        bankTransactionId: row.id,
-        transactionDate: row.transaction_date,
-        bookingDate: row.booking_date,
-        text: row.text,
-        amount: Number(row.amount),
-        currency: row.currency,
-        reference: row.reference,
-        importBatchId: row.import_batch_id,
-      },
+      relatedDocumentId: bilag?.documentId ?? null,
+      message,
+      requiredAction,
+      sourceEvidence: JSON.parse(sourceEvidence),
       postingPreview: {
-        nextStep: "bank suggest-matches",
         bankTransactionId: row.id,
+        candidateBilagId: bilag?.documentId ?? null,
       },
     });
     if (result.ok && !result.duplicate) created += 1;
   }
 
-  return { ok: true, created, errors: [] };
+  return { ok: true, created, refreshed, errors: [] };
 }

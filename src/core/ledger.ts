@@ -70,28 +70,66 @@ const LEDGER_RULES = {
 const RULE_VERSION = currentRuleBundleVersion();
 
 export function seedAccounts(db: Database) {
+  // The seeded chart of accounts covers what an ordinary Danish small business
+  // (incl. a one-person ApS) actually needs (#226). Numbering keeps the Danish
+  // kontoplan ranges already in use:
+  //   1xxx  income + debtors + salgsmoms
+  //   2xxx  bank
+  //   3xxx  external operating expenses (driftsomkostninger) + staff costs
+  //   4xxx  VAT settlement accounts (4000 Købsmoms, 4500 Momsafregning)
+  //   5xxx  equity + fixed assets
+  //   7xxx  short-term liabilities (creditors + payroll-related gæld)
   const rows = [
+    // --- Income (1xxx) ---
     ["1000", "Omsætning, ydelser", "income", "credit", null],
     ["1010", "Gebyr- og kompensationsindtægter", "income", "credit", null],
     ["1100", "Debitorer", "asset", "debit", null],
     ["1200", "Salgsmoms", "vat", "credit", null],
+    // --- Bank (2xxx) ---
     ["2000", "Bank", "asset", "debit", null],
+    // --- External operating expenses (3xxx, 3000-3399) ---
     ["3000", "Software og SaaS", "expense", "debit", "DK_PURCHASE_25"],
     ["3010", "AI-værktøjer", "expense", "debit", "EU_SERVICE_REVERSE_CHARGE"],
     ["3020", "Hosting og cloud", "expense", "debit", "EU_SERVICE_REVERSE_CHARGE"],
     ["3050", "Rejse og transport", "expense", "debit", "DK_PURCHASE_25"],
+    ["3055", "Kørselsgodtgørelse", "expense", "debit", null],
     ["3070", "Repræsentation", "expense", "debit", "REPRESENTATION_SPECIAL"],
     ["3080", "Tab på debitorer", "expense", "debit", "DK_BAD_DEBT_25"],
+    ["3100", "Husleje", "expense", "debit", "DK_PURCHASE_25"],
+    ["3110", "El, vand og varme", "expense", "debit", "DK_PURCHASE_25"],
     ["3120", "Hardware og udstyr", "expense", "debit", "DK_PURCHASE_25"],
+    ["3130", "Kontorartikler og småanskaffelser", "expense", "debit", "DK_PURCHASE_25"],
+    ["3140", "Telefon og internet", "expense", "debit", "DK_PURCHASE_25"],
+    ["3150", "Forsikringer", "expense", "debit", null],
+    ["3160", "Revisor og bogføring", "expense", "debit", "DK_PURCHASE_25"],
+    ["3170", "Advokat og rådgivning", "expense", "debit", "DK_PURCHASE_25"],
+    ["3180", "Markedsføring og annoncering", "expense", "debit", "DK_PURCHASE_25"],
+    ["3190", "Kontingenter og abonnementer", "expense", "debit", "DK_PURCHASE_25"],
+    ["3200", "Porto og fragt", "expense", "debit", "DK_PURCHASE_25"],
+    ["3300", "Gebyrer, bank og betalingskort", "expense", "debit", null],
+    ["3310", "Renteudgifter", "expense", "debit", null],
+    // --- Staff costs (3xxx, 3500-3599) ---
+    ["3500", "Lønninger", "expense", "debit", null],
+    ["3510", "Pension", "expense", "debit", null],
+    ["3520", "ATP og lovpligtige bidrag", "expense", "debit", null],
+    ["3530", "Personaleomkostninger", "expense", "debit", "DK_PURCHASE_25"],
+    // --- VAT settlement accounts (4xxx) ---
     ["4000", "Købsmoms", "vat", "debit", null],
     ["4500", "Momsafregning", "liability", "credit", null],
+    // --- Equity + fixed assets (5xxx) ---
     ["5000", "Egenkapital", "equity", "credit", null],
     // Fixed-asset accounts (#124, #125), 5800-5899 range. 5800 capitalises
     // driftsmidler; 5810 is the contra-asset accumulated-depreciation account
     // (credit-normal); 5820 carries the period depreciation expense.
     ["5800", "Driftsmidler og inventar", "asset", "debit", null],
     ["5810", "Akkumulerede afskrivninger", "asset", "credit", null],
-    ["5820", "Afskrivninger", "expense", "debit", null]
+    ["5820", "Afskrivninger", "expense", "debit", null],
+    // --- Short-term liabilities (7xxx): trade creditors + payroll gæld ---
+    ["7000", "Leverandørgæld (kreditorer)", "liability", "credit", null],
+    ["7100", "Skyldig A-skat", "liability", "credit", null],
+    ["7110", "Skyldigt AM-bidrag", "liability", "credit", null],
+    ["7120", "Skyldig ATP", "liability", "credit", null],
+    ["7130", "Skyldig løn", "liability", "credit", null]
   ];
   const insert = db.prepare("INSERT OR IGNORE INTO accounts (account_no,name,type,normal_balance,default_vat_code) VALUES (?,?,?,?,?)");
   db.transaction(() => rows.forEach((r) => insert.run(...r)))();

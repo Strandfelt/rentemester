@@ -59,17 +59,22 @@ describe("runtime bookkeeper agent — deterministic agent-run (#183)", () => {
       expect(report.documentsRejected).toBe(0);
       expect(report.bankTransactionsImported).toBe(7);
 
-      // The unambiguous standard-VAT expenses (deterministic account rule, no
-      // foreign-VAT guardrail) book automatically: DSB and Elgiganten are DK
-      // suppliers; Google Ireland bills DK VAT for Workspace so it is standard
-      // too. The reverse-charge EU purchases (OpenAI, AWS) do NOT auto-book —
-      // the VIES guardrail fires and the agent obeys it.
+      // The unambiguous standard-VAT operating expenses (deterministic account
+      // rule, no foreign-VAT guardrail) book automatically: DSB is a DK
+      // supplier; Google Ireland bills DK VAT for Workspace so it is standard
+      // too. The Elgiganten purchase is a 12.000 DKK MacBook — an asset-like
+      // category — so the loop does NOT auto-book it as an operating expense;
+      // it routes it for a fixed-asset decision (#223). The reverse-charge EU
+      // purchases (OpenAI, AWS) do NOT auto-book either — the VIES guardrail
+      // fires and the agent obeys it.
       const bookedSuppliers = report.expensesBooked.map((e) => e.supplier).sort();
-      expect(bookedSuppliers).toEqual(["DSB", "Elgiganten A/S", "Google Ireland Limited"]);
+      expect(bookedSuppliers).toEqual(["DSB", "Google Ireland Limited"]);
       for (const e of report.expensesBooked) {
         expect(e.journalEntryNo).toBeTruthy();
         expect(e.vatTreatment).toBe("standard");
       }
+      // The asset-sized hardware purchase is never silently expensed.
+      expect(bookedSuppliers).not.toContain("Elgiganten A/S");
 
       // Everything uncertain is in the exception queue — never guessed.
       expect(report.openExceptions.length).toBeGreaterThan(0);
@@ -78,6 +83,15 @@ describe("runtime bookkeeper agent — deterministic agent-run (#183)", () => {
       expect(exTypes).toContain("AGENT_BOOKING_BLOCKED");
       // The Stripe payout + restaurant receipt are unmatched bank lines.
       expect(exTypes).toContain("UNMATCHED_BANK_TRANSACTION");
+      // The 12.000 DKK MacBook is routed for a fixed-asset decision, not
+      // booked straight to a P&L expense account (#223).
+      expect(exTypes).toContain("AGENT_POSSIBLE_FIXED_ASSET");
+      const assetException = report.openExceptions.find(
+        (x) => x.type === "AGENT_POSSIBLE_FIXED_ASSET",
+      );
+      expect(assetException).toBeDefined();
+      expect(assetException!.message).toContain("anlægsaktiv");
+      expect(assetException!.requiredAction).toContain("asset register");
 
       // The deadline check surfaces the VAT quarter the company is currently
       // accruing in (Q2 2026, the one containing the as-of date).

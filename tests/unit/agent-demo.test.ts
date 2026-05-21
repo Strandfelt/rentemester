@@ -92,7 +92,7 @@ describe("examples/agent-demo/run.ts (rule-based)", () => {
     }
   });
 
-  test("exception queue contains the restaurant-bon", () => {
+  test("exception queue contains the restaurant-bon with an actionable Danish message", () => {
     const db = openDb(companyPaths(COMPANY).db);
     try {
       migrate(db);
@@ -101,11 +101,23 @@ describe("examples/agent-demo/run.ts (rule-based)", () => {
       const rows = result.rows ?? [];
       // Restaurant + Stripe payout begge unmatched.
       expect(rows.length).toBeGreaterThanOrEqual(1);
-      const restaurant = rows.find((row) =>
-        String(row.message ?? "").includes("Bank transaction") &&
-        String(row.type ?? "") === "UNMATCHED_BANK_TRANSACTION",
+      // The restaurant voucher surfaces with a clear, fully-Danish exception
+      // (#224): it names the transaction concretely (date, amount) and gives a
+      // plain-language required action — no half-English generic technical
+      // code, no English command hint.
+      const restaurant = rows.find(
+        (row) =>
+          String(row.type ?? "") === "UNMATCHED_BANK_TRANSACTION" &&
+          String(row.message ?? "").includes("Restaurant Madklubben"),
       );
       expect(restaurant).toBeTruthy();
+      const message = String(restaurant!.message ?? "");
+      const action = String(restaurant!.requiredAction ?? "");
+      expect(message).toContain("er endnu ikke bogført");
+      // No English leakage in the human-facing text.
+      expect(message).not.toContain("Bank transaction");
+      expect(action).not.toContain("suggest-matches");
+      expect(action.length).toBeGreaterThan(0);
     } finally {
       db.close();
     }
