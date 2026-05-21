@@ -117,6 +117,18 @@ describe("rule citation parser rejects malformed input", () => {
     expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/tab indentation/);
   });
 
+  test("a duplicated text_hash within one entry throws", () => {
+    const yaml = [
+      ...ruleHead,
+      "    provisions:",
+      '      - ref: "§ 3, stk. 1"',
+      '        text_hash: "sha256:abc"',
+      '        text_hash: "sha256:def"',
+      "    severity: hard_stop",
+    ].join("\n");
+    expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/duplicate text_hash/);
+  });
+
   test("a well-formed citation parses to a ref/text_hash pair", () => {
     const yaml = [
       ...ruleHead,

@@ -251,17 +251,25 @@ function isAmendmentDocument(root: XmlNode): boolean {
 
 const COMMENCEMENT_PHRASE = "træder i kraft";
 
-// A commencement provision opens with the phrase ("Loven/Bekendtgørelsen træder
-// i kraft …"). Matching the phrase anywhere would misclassify operative
-// provisions that merely reference commencement timing, so the phrase must sit
-// near the start of the provision text.
+// A commencement provision either opens with the phrase ("Bekendtgørelsen
+// træder i kraft …") or leads with a bare paragraf enumeration before it
+// ("§§ 1-14, 18 og 38 træder i kraft …"). The phrase sitting after real prose —
+// a delegation clause that merely mentions commencement timing — is not itself
+// a commencement provision, so the prefix must carry no words other than "og".
+function looksLikeCommencement(text: string): boolean {
+  const idx = text.toLowerCase().indexOf(COMMENCEMENT_PHRASE);
+  if (idx < 0) return false;
+  if (idx <= 30) return true;
+  const prefix = text.slice(0, idx).toLowerCase();
+  return /^[§\s\d.,()\-–]*(?:\bog\b[§\s\d.,()\-–]*)*$/.test(prefix);
+}
+
 function classify(
   text: string,
   commencementContext: boolean,
   amendmentContext: boolean,
 ): ProvisionKind {
-  const idx = text.toLowerCase().indexOf(COMMENCEMENT_PHRASE);
-  if (commencementContext || (idx >= 0 && idx <= 30)) return "commencement";
+  if (commencementContext || looksLikeCommencement(text)) return "commencement";
   if (amendmentContext) return "amendment";
   return "operative";
 }

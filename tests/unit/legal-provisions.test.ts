@@ -72,21 +72,19 @@ describe("extractProvisions structural anchors", () => {
 });
 
 describe("commencement classification", () => {
-  test("the phrase 'træder i kraft' only marks commencement when it anchors the provision", () => {
+  test("commencement is told apart from prose that merely mentions it", () => {
     const sourceId = "DK-BOGFORINGSLOVEN-2022-700";
     const provisions = extractProvisions(readSource(sourceId), sourceId);
 
-    // The corpus contains provisions that mention commencement timing
-    // mid-sentence without being commencement provisions themselves.
-    const midPhrase = provisions.filter(
-      (p) => p.text.toLowerCase().indexOf("træder i kraft") > 30,
-    );
-    expect(midPhrase.length).toBeGreaterThan(0);
-    for (const provision of midPhrase) {
-      expect(provision.kind).not.toBe("commencement");
-    }
+    // A genuine commencement provision, even one led by a paragraf enumeration
+    // ("§§ 1-14, 18 … træder i kraft …") rather than the phrase itself.
+    expect(findProvision(provisions, "§ 34, stk. 1")?.kind).toBe("commencement");
 
-    // A genuine commencement provision is still detected.
+    // A delegation clause that mentions commencement timing inside real prose
+    // is not a commencement provision.
+    expect(findProvision(provisions, "§ 34, stk. 2")?.kind).toBe("operative");
+
+    // A genuine commencement provision in a bekendtgørelse is still detected.
     const bilag = "DK-BILAG-OPBEVARING-2023-1383";
     const bilagProvisions = extractProvisions(readSource(bilag), bilag);
     expect(findProvision(bilagProvisions, "§ 2, stk. 1")?.kind).toBe("commencement");

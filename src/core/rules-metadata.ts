@@ -190,8 +190,20 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
         continue;
       }
       if (indent >= 8) {
+        if (/^\s*#/.test(line)) continue;
         const hashMatch = line.match(/^\s*text_hash:\s*(.+)$/);
-        if (hashMatch) pendingHash = stripQuotes(hashMatch[1]);
+        if (!hashMatch) {
+          throw new Error(
+            `${bundle}.yaml: rule ${current.ruleId} provisions entry has an ` +
+              `unexpected line — expected \`text_hash: "..."\`, got: ${line.trim()}`,
+          );
+        }
+        if (pendingHash !== null) {
+          throw new Error(
+            `${bundle}.yaml: rule ${current.ruleId} provisions entry has a duplicate text_hash`,
+          );
+        }
+        pendingHash = stripQuotes(hashMatch[1]);
         continue;
       }
     }
