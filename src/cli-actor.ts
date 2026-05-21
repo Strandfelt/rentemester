@@ -40,6 +40,7 @@ export const MUTATING_COMMANDS = new Set([
   "vat post-eu-service-purchase",
   "vat post-representation-purchase",
   "period close",
+  "period reopen",
   "journal post",
   "journal reverse",
   "exceptions resolve",
