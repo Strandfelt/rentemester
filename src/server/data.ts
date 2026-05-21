@@ -2260,10 +2260,18 @@ const KNOWN_LIABILITY_ACCOUNTS: Record<
 
 /**
  * The credit-signed balance (credit − debit, kroner) of every `liability`-type
- * account at `asOfDate`. A VAT account is never a liability row here — VAT is
- * surfaced as its own obligation from the booked VAT position. Settlement
- * accounts (`Momsafregning` / the `64100` block) only shuttle money between
- * the VAT accounts and the bank, so they are excluded too.
+ * account at `asOfDate`, excluding the entire standard Danish VAT block.
+ *
+ * No VAT account may appear as a liability row here — VAT is surfaced as its
+ * own single obligation from the booked VAT position (`vatPositionForPeriod`),
+ * and that net figure already represents the *whole* VAT obligation. The gross
+ * VAT accounts (output VAT `64000`, foreign-services reverse-charge `64040`,
+ * input VAT `64060`, …) are merely *components* of that computation, so
+ * counting them here as well would double-count VAT. The exclusion uses the
+ * same VAT-account identification as `vatPositionForPeriod`: `type = 'vat'`
+ * (native-Rentemester chart) or the standard Danish block `64000`–`64099`.
+ * The `64100`-block settlement accounts (`Momsafregning`) only shuttle money
+ * between the VAT accounts and the bank, so they are excluded too.
  */
 function liabilityBalancesAsOf(
   db: Database,
@@ -2280,6 +2288,8 @@ function liabilityBalancesAsOf(
         WHERE a.type = 'liability'
           AND je.status = 'posted'
           AND je.transaction_date <= ?
+          AND a.type != 'vat'
+          AND NOT (a.account_no >= '64000' AND a.account_no < '64100')
           AND lower(a.name) NOT LIKE '%momsafregning%'
           AND a.account_no NOT GLOB '641[0-9][0-9]'
         GROUP BY a.id
