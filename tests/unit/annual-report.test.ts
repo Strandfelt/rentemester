@@ -164,7 +164,8 @@ describe("buildAnnualReport (arsrapport, regnskabsklasse B)", () => {
     const report = buildAnnualReport(db, "2025-01-01", "2025-12-31");
     expect(report.ok).toBe(false);
     expect(report.errors.length).toBeGreaterThan(0);
-    expect(report.errors.some((e) => /lock|luk|closed/i.test(e))).toBe(true);
+    // #242: the error is Danish — "ikke låst", "period close".
+    expect(report.errors.some((e) => /låst|lukket|close/i.test(e))).toBe(true);
 
     db.close();
     cleanup(root, inbox);
@@ -199,7 +200,8 @@ describe("buildAnnualReport (arsrapport, regnskabsklasse B)", () => {
     const report = buildAnnualReport(db, "2025-01-01", "2025-12-31");
     expect(report.ok).toBe(false);
     expect(report.errors.length).toBeGreaterThan(0);
-    expect(report.errors.some((e) => /lock|luk|closed/i.test(e))).toBe(true);
+    // #242: the error is Danish — "ikke låst", "period close".
+    expect(report.errors.some((e) => /låst|lukket|close/i.test(e))).toBe(true);
 
     db.close();
     cleanup(root, inbox);

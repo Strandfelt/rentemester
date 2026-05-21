@@ -11,6 +11,7 @@ import {
   resolveWorkspaceRoot,
   type WorkspaceAutoRegisterResult,
 } from "../core/workspace";
+import { inferredMutationActor } from "../cli-actor";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
 
 const MONTH_NAMES_DA = [
@@ -74,6 +75,26 @@ function buildOnboardingLines(
     lines.push(`  - Allerede registreret i Cockpit-workspacet som '${registration.slug}'`);
   }
 
+  // #241: an issued invoice's PDF only carries a BETALING-blok (konto/IBAN/
+  // reference) when payment details were given. Warn loudly when they were
+  // not, so the owner does not unknowingly send invoices a customer cannot pay.
+  if (!summary.hasPaymentDetails) {
+    lines.push("");
+    lines.push("ADVARSEL — ingen betalingsoplysninger:");
+    lines.push(
+      "  Du har ikke angivet bank/IBAN. Fakturaer udstedt nu får INGEN",
+    );
+    lines.push(
+      "  betalingsanvisning (BETALING-blok) på PDF'en — kunden kan ikke se,",
+    );
+    lines.push(
+      "  hvor pengene skal hen. Sæt dem med 'rentemester company set-profile'",
+    );
+    lines.push(
+      "  (--bank-name --bank-reg --bank-account --iban), før du sender fakturaer.",
+    );
+  }
+
   lines.push("");
   lines.push("Tjek disse indstillinger — de er svære at ændre senere:");
   lines.push(`  - Regnskabsår: starter 1. ${monthName} (${fiscalLabel})`);
@@ -108,6 +129,12 @@ export function register(dispatch: CommandDispatch): void {
     const root = ctx.companyRoot();
     const workspaceRoot = resolveInitWorkspaceRoot(ctx);
 
+    // #248: seed whoever runs onboarding into the actor_allowlist so the
+    // derived OS actor and an explicit --actor with the same id behave
+    // consistently. An explicit --actor wins; otherwise the derived actor.
+    const onboardingActor =
+      ctx.trimToNull(ctx.arg("--actor")) ?? inferredMutationActor();
+
     let summary: CompanyOnboardingSummary;
     try {
       initialiseCompanyVolume(root, {
@@ -127,6 +154,7 @@ export function register(dispatch: CommandDispatch): void {
           accountNo: ctx.trimToNull(ctx.arg("--bank-account")) ?? undefined,
           iban: ctx.trimToNull(ctx.arg("--iban")) ?? undefined,
         },
+        onboardingActor,
       });
       summary = summariseCompanyVolume(root);
     } catch (error) {
@@ -155,6 +183,9 @@ export function register(dispatch: CommandDispatch): void {
       fiscalYearStartMonth: summary.fiscalYearStartMonth,
       fiscalYearLabelStrategy: summary.fiscalYearLabelStrategy,
       vatPeriod: summary.vatPeriod,
+      // #241: agents (and the Cockpit) can surface the same payment-details
+      // warning the human onboarding block prints.
+      hasPaymentDetails: summary.hasPaymentDetails,
       workspace: workspaceRoot,
       workspaceRegistered: registration?.status === "registered",
       workspaceSlug:

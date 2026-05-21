@@ -171,23 +171,50 @@ export function normalizePaymentTermsDays(value?: number | string | null): numbe
   return days as number;
 }
 
-const DEFAULT_POLICY_YAML =
-  "company_policy:\n" +
-  "  country: DK\n" +
-  "  currency: DKK\n" +
-  "  allow_direct_sql_write: false\n" +
-  "  block_if_uncertain: true\n" +
-  "\n" +
-  "# Aktører der må køre muterende kommandoer med et eksplicit --actor-flag.\n" +
-  "# Hver muterende kommando kræver en actor; et eksplicit --actor skal stå her,\n" +
-  "# ellers afvises kaldet. Tilføj din egen bruger/agent i listerne nedenfor.\n" +
-  "actor_allowlist:\n" +
-  "  users:\n" +
-  "    - user:ejer\n" +
-  "  agents:\n" +
-  "    - agent:rentemester-bookkeeper\n" +
-  "  systems:\n" +
-  "    - system:rentemester\n";
+/**
+ * Builds the default `policy.yaml`. #248: the allowlist behaves consistently —
+ * a derived actor (OS username) and an explicit `--actor` with the same id are
+ * held to the same rule. To make that usable out of the box, the person who
+ * runs `init` is seeded into `actor_allowlist.users` (canonical `user:` form),
+ * so they can mutate immediately whether or not they pass `--actor`.
+ */
+function buildDefaultPolicyYaml(onboardingActor?: string | null): string {
+  const userLines: string[] = ["    - user:ejer"];
+  const agentLines: string[] = ["    - agent:rentemester-bookkeeper"];
+  const systemLines: string[] = ["    - system:rentemester"];
+  const actor = onboardingActor?.trim();
+  if (actor && /^(user|agent|system):\S.+$/.test(actor)) {
+    const [kind] = actor.split(":", 1) as [string];
+    const line = `    - ${actor}`;
+    if (kind === "agent") {
+      if (!agentLines.includes(line)) agentLines.push(line);
+    } else if (kind === "system") {
+      if (!systemLines.includes(line)) systemLines.push(line);
+    } else if (!userLines.includes(line)) {
+      userLines.push(line);
+    }
+  }
+  return (
+    "company_policy:\n" +
+    "  country: DK\n" +
+    "  currency: DKK\n" +
+    "  allow_direct_sql_write: false\n" +
+    "  block_if_uncertain: true\n" +
+    "\n" +
+    "# Aktører der må køre muterende kommandoer.\n" +
+    "# Hver muterende kommando kræver en actor — enten et eksplicit --actor-flag\n" +
+    "# eller en afledt actor (OS-brugernavn via USER/LOGNAME, eller en\n" +
+    "# agent-miljøvariabel). Begge holdes op mod denne liste. Tilføj din egen\n" +
+    "# bruger/agent under den rette sektion nedenfor (linjen '    - user:dit-navn').\n" +
+    "actor_allowlist:\n" +
+    "  users:\n" +
+    userLines.join("\n") + "\n" +
+    "  agents:\n" +
+    agentLines.join("\n") + "\n" +
+    "  systems:\n" +
+    systemLines.join("\n") + "\n"
+  );
+}
 
 /**
  * #221: the company's own payment details captured at `init` (or later via the
@@ -216,6 +243,14 @@ export type CompanyInitOptions = {
   paymentTermsDays?: number | string | null;
   /** #221: payment details; when any field is set a bank account is created. */
   payment?: CompanyPaymentInput;
+  /**
+   * #248: the canonical actor id (user:.../agent:.../system:...) of whoever is
+   * running onboarding — seeded into the `actor_allowlist` so the person who
+   * runs `init` can immediately mutate, whether they pass `--actor` explicitly
+   * or rely on the derived OS username. Keeps the allowlist consistent: the
+   * derived actor and an explicit `--actor` with the same id behave the same.
+   */
+  onboardingActor?: string | null;
 };
 
 /** True when at least one payment-detail field carries real information. */
@@ -327,7 +362,9 @@ export function initialiseCompanyVolume(
       upsertPrimaryBankAccount(db, DEFAULT_COMPANY_SETTINGS.currency, options.payment);
     }
     const policy = join(p.config, "policy.yaml");
-    if (!existsSync(policy)) writeFileSync(policy, DEFAULT_POLICY_YAML);
+    if (!existsSync(policy)) {
+      writeFileSync(policy, buildDefaultPolicyYaml(options.onboardingActor));
+    }
     db.run(
       "INSERT INTO audit_log (event_type, entity_type, message) VALUES ('init','company','Company volume initialized')",
     );
@@ -357,6 +394,12 @@ export type CompanyOnboardingSummary = {
   vatPeriod: typeof ASSUMED_VAT_PERIOD;
   /** Number of accounts seeded into the chart of accounts. */
   accountCount: number;
+  /**
+   * #241: true when the company has bank/payment details on file (a primary
+   * bank account row). Without them an issued invoice's PDF carries no BETALING
+   * block, so onboarding must warn the owner.
+   */
+  hasPaymentDetails: boolean;
 };
 
 /**
@@ -377,6 +420,10 @@ export function summariseCompanyVolume(companyRoot: string): CompanyOnboardingSu
       fiscalYearLabelStrategy: settings.fiscalYearLabelStrategy,
       vatPeriod: ASSUMED_VAT_PERIOD,
       accountCount: Number(row?.n ?? 0),
+      // #241: an issued invoice's PDF carries a BETALING block only when a
+      // payment account is configured. Reuse the invoice-side resolver so the
+      // onboarding warning matches what the invoice would actually print.
+      hasPaymentDetails: resolveCompanyPaymentDetails(db, settings.currency) !== undefined,
     };
   } finally {
     db.close();
@@ -429,6 +476,7 @@ export function createCompany(
     city: options.city,
     paymentTermsDays: options.paymentTermsDays,
     payment: options.payment,
+    onboardingActor: options.onboardingActor,
   });
   // registerWorkspaceCompany throws on a duplicate slug, so the manifest and
   // the on-disk directory cannot drift apart silently.

@@ -77,8 +77,8 @@ export function seedAccounts(db: Database) {
   //   2xxx  bank
   //   3xxx  external operating expenses (driftsomkostninger) + staff costs
   //   4xxx  VAT settlement accounts (4000 Købsmoms, 4500 Momsafregning)
-  //   5xxx  equity + fixed assets
-  //   7xxx  short-term liabilities (creditors + payroll-related gæld)
+  //   5xxx  equity (incl. owner's draw/contribution) + fixed assets
+  //   7xxx  short-term liabilities (creditors + payroll-related gæld + tax)
   const rows = [
     // --- Income (1xxx) ---
     ["1000", "Omsætning, ydelser", "income", "credit", null],
@@ -118,6 +118,12 @@ export function seedAccounts(db: Database) {
     ["4500", "Momsafregning", "liability", "credit", null],
     // --- Equity + fixed assets (5xxx) ---
     ["5000", "Egenkapital", "equity", "credit", null],
+    // Owner's draw / contribution (#249): for an enkeltmandsvirksomhed money
+    // moved between the owner and the business is an equity movement, not an
+    // expense or income. 5010 records hævninger (debit reduces equity), 5020
+    // records indskud (credit increases equity).
+    ["5010", "Privat hævning", "equity", "debit", null],
+    ["5020", "Privat indskud", "equity", "credit", null],
     // Fixed-asset accounts (#124, #125), 5800-5899 range. 5800 capitalises
     // driftsmidler; 5810 is the contra-asset accumulated-depreciation account
     // (credit-normal); 5820 carries the period depreciation expense.
@@ -129,7 +135,11 @@ export function seedAccounts(db: Database) {
     ["7100", "Skyldig A-skat", "liability", "credit", null],
     ["7110", "Skyldigt AM-bidrag", "liability", "credit", null],
     ["7120", "Skyldig ATP", "liability", "credit", null],
-    ["7130", "Skyldig løn", "liability", "credit", null]
+    ["7130", "Skyldig løn", "liability", "credit", null],
+    // Tax payable / skattekonto (#249): the everyday account for tax owed to
+    // SKAT — B-skat / restskat for an enkeltmandsvirksomhed, selskabsskat for
+    // an ApS. Credit-normal short-term liability, alongside the payroll gæld.
+    ["7200", "Skyldig skat (skattekonto)", "liability", "credit", null]
   ];
   const insert = db.prepare("INSERT OR IGNORE INTO accounts (account_no,name,type,normal_balance,default_vat_code) VALUES (?,?,?,?,?)");
   db.transaction(() => rows.forEach((r) => insert.run(...r)))();

@@ -2,6 +2,7 @@ import {
   createCompany,
   getCompanySettings,
   setCompanyProfile,
+  summariseCompanyVolume,
   syncCompanyFromCvr,
   type CreateCompanyResult,
 } from "../core/company";
@@ -14,6 +15,7 @@ import {
   workspaceExists,
 } from "../core/workspace";
 import { openCommandDb } from "../cli-dispatch";
+import { inferredMutationActor } from "../cli-actor";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
 
 /**
@@ -71,10 +73,18 @@ export function register(dispatch: CommandDispatch): void {
           accountNo: ctx.trimToNull(ctx.arg("--bank-account")) ?? undefined,
           iban: ctx.trimToNull(ctx.arg("--iban")) ?? undefined,
         },
+        // #248: seed whoever runs onboarding into the actor_allowlist so the
+        // derived OS actor and an explicit --actor stay consistent.
+        onboardingActor:
+          ctx.trimToNull(ctx.arg("--actor")) ?? inferredMutationActor(),
       });
     } catch (error) {
       return ctx.fatal(error instanceof Error ? error.message : String(error));
     }
+
+    // #241: an issued invoice's PDF only carries a BETALING-blok when payment
+    // details were given. Surface the same warning `init` shows.
+    const summary = summariseCompanyVolume(result.companyRoot);
 
     ctx.emitResult({
       ok: true,
@@ -87,7 +97,27 @@ export function register(dispatch: CommandDispatch): void {
       name: result.name,
       companyRoot: result.companyRoot,
       ledger: result.dbPath,
+      hasPaymentDetails: summary.hasPaymentDetails,
     });
+
+    // The structured JSON above stays machine-stable; the payment-details
+    // warning is human-output only, mirroring `init`.
+    if (ctx.outputFormat === "human" && !summary.hasPaymentDetails) {
+      console.log("");
+      console.log("ADVARSEL — ingen betalingsoplysninger:");
+      console.log(
+        "  Du har ikke angivet bank/IBAN. Fakturaer udstedt nu får INGEN",
+      );
+      console.log(
+        "  betalingsanvisning (BETALING-blok) på PDF'en — kunden kan ikke se,",
+      );
+      console.log(
+        "  hvor pengene skal hen. Sæt dem med 'rentemester company set-profile'",
+      );
+      console.log(
+        "  (--bank-name --bank-reg --bank-account --iban), før du sender fakturaer.",
+      );
+    }
   });
 
   dispatch.on("company", "sync-cvr", async (ctx) => {
