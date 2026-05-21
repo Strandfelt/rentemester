@@ -224,10 +224,10 @@ export function buildAnnualReport(
     currency: companyRow?.currency ?? "DKK",
   };
   if (!companyRow) {
-    errors.push("company master data is missing — initialise the company first");
+    errors.push("virksomhedens stamdata mangler — initialisér virksomheden først");
   } else if (!companyRow.cvr || !/^DK\d{8}$/.test(companyRow.cvr)) {
     errors.push(
-      "company CVR is missing or invalid — an arsrapport requires a registered 8-digit CVR",
+      "virksomhedens CVR-nummer mangler eller er ugyldigt — en årsrapport kræver et registreret 8-cifret CVR-nummer",
     );
   }
 
@@ -247,9 +247,9 @@ export function buildAnnualReport(
     .get(fiscalYearStart, fiscalYearEnd) as PeriodRow | null;
   if (!lockingPeriod) {
     errors.push(
-      `fiscal year ${fiscalYearStart}..${fiscalYearEnd} is not locked: an arsrapport ` +
-        "requires a closed or reported accounting period covering the whole fiscal " +
-        "year — run 'period close' first",
+      `regnskabsåret ${fiscalYearStart}..${fiscalYearEnd} er ikke låst: en årsrapport ` +
+        "kræver en lukket eller indberettet regnskabsperiode, der dækker hele " +
+        "regnskabsåret — kør 'period close' først",
     );
   }
 
@@ -257,8 +257,8 @@ export function buildAnnualReport(
   const trialBalance = buildTrialBalance(db, fiscalYearStart, fiscalYearEnd);
   if (trialBalance.ok && !trialBalance.balanced) {
     errors.push(
-      `books do not balance for ${fiscalYearStart}..${fiscalYearEnd}: ` +
-        `total debit ${trialBalance.totalDebit} != total credit ${trialBalance.totalCredit}`,
+      `bøgerne balancerer ikke for ${fiscalYearStart}..${fiscalYearEnd}: ` +
+        `samlet debet ${trialBalance.totalDebit} != samlet kredit ${trialBalance.totalCredit}`,
     );
   }
   if (!profitAndLoss.ok) errors.push(...profitAndLoss.errors);

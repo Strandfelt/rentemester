@@ -130,6 +130,22 @@ export function inferredMutationActor(): string | null {
   );
 }
 
+/**
+ * #248: the actor-allowlist section of `policy.yaml` describes who may run
+ * mutating commands. The allowlist's section keys (`users:`/`agents:`/
+ * `systems:`) follow from the actor's `kind:` prefix, so the hint can name the
+ * exact line a user needs to add.
+ */
+function howToAddActorHint(actor: string): string {
+  const [kind] = actor.split(":", 1);
+  const section =
+    kind === "agent" ? "agents" : kind === "system" ? "systems" : "users";
+  return (
+    `Tilføj '${actor}' under actor_allowlist.${section} i config/policy.yaml ` +
+    `(linjen '    - ${actor}'), eller kør med en allerede tilladt --actor.`
+  );
+}
+
 export function enforceMutationActorPolicy(
   commandKey: string,
   root: string,
@@ -146,7 +162,8 @@ export function enforceMutationActorPolicy(
     const allowlist = loadActorAllowlist(root);
     if (!allowlist.has(explicitActor)) {
       fatal(
-        `actor '${explicitActor}' is not in config/policy.yaml actor_allowlist; add it or run without --actor`,
+        `actor '${explicitActor}' is not in config/policy.yaml actor_allowlist. ` +
+          howToAddActorHint(explicitActor),
       );
     }
     process.env.RENTEMESTER_ACTOR = explicitActor;
@@ -155,7 +172,16 @@ export function enforceMutationActorPolicy(
       process.env.RENTEMESTER_ACTOR_VIA = "rentemester-cli";
     return;
   }
-  if (!inferredMutationActor()) {
+  // No explicit --actor: the entry is attributed to a derived actor (OS
+  // username / agent env var). #248: onboarding (`init` / `company add`) seeds
+  // this derived actor into config/policy.yaml's actor_allowlist, so for the
+  // person who set the company up the derived actor and an explicit `--actor`
+  // with the same id behave identically — the allowlist is consistent. The
+  // derived fallback itself stays lenient (it is the no-friction default for
+  // scripts and agents); when the derived actor differs from what onboarding
+  // seeded, `howToAddActorHint` on the explicit path explains how to add it.
+  const derivedActor = inferredMutationActor();
+  if (!derivedActor) {
     fatal(
       "actor required for mutations: pass --actor <user:...|agent:...|system:...> or run with USER/LOGNAME/OPENCLAW_AGENT set",
     );

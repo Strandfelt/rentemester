@@ -12,6 +12,36 @@ type CommandSpec = {
 
 const GLOBAL_FLAGS = ["--help", "--example", "--format", "--json", "--actor", "--actor-via"];
 
+/**
+ * Global flags valid for every command regardless of spec. `--example` is
+ * deliberately excluded: it only works for commands that registered an
+ * `examplePath`, so it is added per-command in `flagsForSpec`. Advertising it
+ * everywhere let callers pass `--example` to a command with no example, which
+ * then failed with exit 2. (#244)
+ */
+const UNIVERSAL_GLOBAL_FLAGS = GLOBAL_FLAGS.filter((flag) => flag !== "--example");
+
+/** The global flags a given command actually accepts (adds `--example` only when it has one). */
+function flagsForSpec(spec: CommandSpec): string[] {
+  return spec.examplePath
+    ? [...UNIVERSAL_GLOBAL_FLAGS, "--example"]
+    : UNIVERSAL_GLOBAL_FLAGS;
+}
+
+/**
+ * Commands that write files or records but are NOT actor-gated ledger
+ * mutations — so they fall outside `MUTATING_COMMANDS`, yet are emphatically
+ * not read-only. `init`/`company add` create company directories, ledger
+ * databases and the workspace manifest; `import contacts` writes customer and
+ * vendor records. The global help must not invite an agent to call these
+ * speculatively under a "read-only" heading. (#239)
+ */
+const SIDE_EFFECTING_COMMANDS = new Set([
+  "init",
+  "company add",
+  "import contacts",
+]);
+
 export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "init",
@@ -341,6 +371,18 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "expense book --company <path> --document-id <n> --bank-transaction-id <n> --expense-account <konto> [--vat-treatment standard|reverse_charge|representation|exempt] [--payment-account <konto>] [--date <YYYY-MM-DD>] [--text <tekst>]",
     description: "Bogfører en leverandørudgift direkte fra bilag + bankpost.",
     allowedFlags: ["--company", "--document-id", "--bank-transaction-id", "--expense-account", "--vat-treatment", "--payment-account", "--date", "--text"],
+    inputNotes: [
+      "--document-id og --bank-transaction-id binder udgiften til et indlæst bilag og en importeret bankpost (heltal-id'er)",
+      "--expense-account: kontonummeret udgiften bogføres på (fx 3000 Software og SaaS)",
+      "--vat-treatment styrer momsbehandlingen; udelades den, udledes den af udgiftskontoens default_vat_code:",
+      "  standard = dansk købsmoms 25 % løftes af bilaget",
+      "  reverse_charge = EU-servicekøb, omvendt betalingspligt (ingen dansk købsmoms på fakturaen)",
+      "  representation = repræsentation, kun delvis momsfradrag efter de særlige regler",
+      "  exempt = momsfri udgift, intet købsmomsfradrag",
+      "  Har kontoen ingen (eller en umappet) default_vat_code, er --vat-treatment påkrævet",
+      "--payment-account: betalingskontoen udgiften krediteres på; standard er 2000 (Bank) — sæt den kun, hvis betalingen kom fra en anden konto",
+      "--date: bogføringsdato YYYY-MM-DD; udelades den, bruges bankpostens dato",
+    ],
   },
   { key: "vat report", usage: "vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en momsrapport for perioden.", allowedFlags: ["--company", "--from", "--to"] },
   {
@@ -547,6 +589,13 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "asset write-off --company <path> --name <text> --category <text> --acquisition-date <YYYY-MM-DD> --cost <n> --document-id <n> --expense-account <konto> --date <YYYY-MM-DD> --threshold-source <text> --confirm yes [--payment-account <konto>] [--note <text>]",
     description: "Bogfører straksafskrivning af et mindre aktiv. Kræver --confirm yes og kildehenvisning til reglen; bruger/revisor ejer den skattemæssige vurdering.",
     allowedFlags: ["--company", "--name", "--category", "--acquisition-date", "--cost", "--document-id", "--expense-account", "--date", "--threshold-source", "--confirm", "--payment-account", "--note"],
+    inputNotes: [
+      "--confirm yes er PÅKRÆVET: straksafskrivning er en skattemæssig vurdering, som du/din revisor selv tager ansvaret for — kun den ordrette værdi 'yes' bekræfter; alt andet (også at udelade flaget) blokerer kommandoen.",
+      "--threshold-source er PÅKRÆVET og skal indeholde en konkret kildehenvisning til den regel/beløbsgrænse, du anvender (fx 'AL § 6, stk. 1, nr. 2' eller en SKAT-vejledning) — Rentemester gemmer henvisningen, men afgør ikke skattereglen for dig.",
+      "Beløbsgrænsen Rentemester bruger som arbejdsgang-værn er vejledende (ca. 33.100 kr.); overskrider --cost den, blokeres straksafskrivningen, og en undtagelse lægges i kø til manuel vurdering.",
+      "--document-id skal pege på et indlæst købsbilag; mangler bilaget, blokeres write-off'en, og en undtagelse lægges i kø.",
+      "--expense-account: kontoen omkostningen bogføres på. --payment-account: betalingskontoen (standard 2000 Bank). --date: bogføringsdato YYYY-MM-DD.",
+    ],
   },
   { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
   // ===== END FIXED ASSETS (#124, #125) =====
@@ -594,6 +643,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: ["--company", "--document-id", "--invoice-number", "--kind", "--to"],
     inputNotes: [
       "SMTP-config (host, port, fromAddress, fromName, dryRun) læses fra config/smtp.json",
+      "Den indbyggede SMTP-transport er DRY-RUN: den validerer og logger afsendelsen, men sender ingen rigtig email. Reel levering kræver en ekstern SMTP-integration — afsendelsen markeres derfor i loggen, ikke i kundens indbakke.",
       "--to overstyrer modtageren; ellers slås kundens email op fra kundekartoteket",
       "--kind reminder kræver at fakturaen er udstedt; standard er invoice",
     ],
@@ -741,13 +791,23 @@ export function renderGlobalUsage() {
     "Brug:  rentemester <kommando> [underkommando] [flags]",
     "       rentemester <kommando> --help     # detaljeret hjælp + inputnoter for én kommando",
     "",
-    "Læsekommandoer (read-only — kræver ingen actor):",
+    "Læsekommandoer (read-only — ingen sideeffekter, kræver ingen actor):",
   ];
-  // The actor policy's MUTATING_COMMANDS set is the single source of truth for
-  // which commands mutate bookkeeping state; deriving the help grouping from it
-  // keeps the two from drifting apart. (#231)
+  // Three groups, not two: MUTATING_COMMANDS is the single source of truth for
+  // actor-gated ledger mutations (#231), but a command can write files/records
+  // without being an actor-gated ledger mutation — `init`, `company add` and
+  // `import contacts` do exactly that. Labelling those "read-only" invites an
+  // agent to call them speculatively, so they get their own heading. (#239)
   for (const spec of COMMAND_SPECS) {
-    if (MUTATING_COMMANDS.has(spec.key)) continue;
+    if (MUTATING_COMMANDS.has(spec.key) || SIDE_EFFECTING_COMMANDS.has(spec.key)) continue;
+    lines.push(`  ${spec.key.padEnd(34)} ${firstSentence(spec.description)}`);
+  }
+  lines.push(
+    "",
+    "Opsætningskommandoer (opretter mapper/databaser/poster — ingen actor, men ikke read-only):",
+  );
+  for (const spec of COMMAND_SPECS) {
+    if (!SIDE_EFFECTING_COMMANDS.has(spec.key)) continue;
     lines.push(`  ${spec.key.padEnd(34)} ${firstSentence(spec.description)}`);
   }
   lines.push("", "Skrivekommandoer (muterer bogføringen — kræver en actor, se nedenfor):");
@@ -790,14 +850,14 @@ export function renderCommandHelp(spec: CommandSpec) {
     lines.push("", "Eksempel:", `  ${spec.exampleHint ?? `rentemester ${spec.key} --example`}`, `  # Kilde: ${spec.examplePath}`);
   }
   lines.push("", "Tilladte flags:");
-  for (const flag of [...spec.allowedFlags, ...GLOBAL_FLAGS]) lines.push(`  ${flag}`);
+  for (const flag of [...spec.allowedFlags, ...flagsForSpec(spec)]) lines.push(`  ${flag}`);
   return lines.join("\n");
 }
 
 export function validateCommandFlags(cmd: string | undefined, sub: string | undefined, flags: Iterable<string>) {
   const spec = getCommandSpec(cmd, sub);
   if (!spec) return [] as string[];
-  const allowed = new Set([...spec.allowedFlags, ...GLOBAL_FLAGS]);
+  const allowed = new Set([...spec.allowedFlags, ...flagsForSpec(spec)]);
   const errors: string[] = [];
   for (const flag of flags) {
     if (allowed.has(flag)) continue;
