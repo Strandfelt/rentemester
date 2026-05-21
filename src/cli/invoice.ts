@@ -213,7 +213,9 @@ export function register(dispatch: CommandDispatch): void {
     }
     const payload = JSON.parse(readFileSync(input, "utf8"));
     const result = validateInvoice(payload);
-    ctx.emitResult(result as Record<string, unknown>);
+    // #250: render the validation verdict — valid/invalid plus every concrete
+    // rejection reason — in Danish for a human; `--format json` is unchanged.
+    emitHumanReport("invoice-validate", result as Record<string, unknown>, ctx.outputFormat);
   });
 
   dispatch.on("invoice", "issue", (ctx) => {
@@ -703,7 +705,10 @@ export function register(dispatch: CommandDispatch): void {
       asOfDate,
       referenceRatePercent,
     });
-    ctx.emitResult(result as Record<string, unknown>);
+    // #250: render the late-interest figures (reference rate, statutory annual
+    // rate, overdue window, computed amount) in Danish; `--format json` is
+    // unchanged.
+    emitHumanReport("invoice-interest", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 
@@ -770,7 +775,9 @@ export function register(dispatch: CommandDispatch): void {
       asOfDate,
       compensationAmountDkk,
     });
-    ctx.emitResult(result as Record<string, unknown>);
+    // #250: render the compensation assessment — eligibility, amount and a
+    // clear reason — in Danish; `--format json` is unchanged.
+    emitHumanReport("invoice-compensation", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
   });
 

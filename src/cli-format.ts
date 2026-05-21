@@ -149,6 +149,9 @@ export type HumanReportKind =
   | "vat-filing"
   | "report-annual"
   | "invoice-status"
+  | "invoice-interest"
+  | "invoice-compensation"
+  | "invoice-validate"
   | "exceptions-list"
   | "report-trial-balance"
   | "report-profit-loss"
@@ -229,6 +232,14 @@ export function renderHumanReport(
   if (kind === "backup-status") {
     return renderBackupStatus(result);
   }
+  // `invoice validate` reports `ok: false` when the payload is INVALID — that
+  // is a valid validation verdict to render in full (the figures and every
+  // rejection reason), not a command crash. Its renderer covers both the
+  // valid and invalid verdict, so it must run before the generic
+  // ok-false-as-error path. (#250)
+  if (kind === "invoice-validate") {
+    return renderInvoiceValidate(result);
+  }
   if (result.ok === false) {
     return buildHumanError(humanReportTitle(kind), result).join("\n");
   }
@@ -241,6 +252,10 @@ export function renderHumanReport(
       return renderAnnualReport(result);
     case "invoice-status":
       return renderInvoiceStatus(result);
+    case "invoice-interest":
+      return renderInvoiceInterest(result);
+    case "invoice-compensation":
+      return renderInvoiceCompensation(result);
     case "exceptions-list":
       return renderExceptionsList(result);
     case "report-trial-balance":
@@ -254,8 +269,9 @@ export function renderHumanReport(
     case "reconcile-bank":
       return renderBankReconciliation(result);
     default:
-      // `backup-status` is handled before this switch (its renderer covers the
-      // ok:false "duty not met" state too), so it never reaches here.
+      // `backup-status` and `invoice-validate` are handled before this switch
+      // (their renderers cover the ok:false state too), so they never reach
+      // here.
       return null;
   }
 }
@@ -297,6 +313,12 @@ function humanReportTitle(kind: HumanReportKind): string {
       return "Årsrapport";
     case "invoice-status":
       return "Fakturastatus";
+    case "invoice-interest":
+      return "Morarente";
+    case "invoice-compensation":
+      return "Kompensation for sen betaling";
+    case "invoice-validate":
+      return "Fakturavalidering";
     case "exceptions-list":
       return "Exceptions-kø";
     case "report-trial-balance":
@@ -725,6 +747,215 @@ function renderInvoiceStatus(result: Record<string, unknown>): string {
   appendWarnings(lines, result);
   return lines.join("\n");
 }
+
+// --- Invoice late interest (morarente) -------------------------------------
+
+/**
+ * Format a percentage with Danish decimal comma, e.g. 8.05 -> "8,05 %".
+ * Non-finite/missing input yields "—".
+ */
+function formatPercent(value: unknown): string {
+  const num = typeof value === "number" ? value : Number(value);
+  if (value == null || value === "" || !Number.isFinite(num)) return "—";
+  const text = (Math.round(num * 100) / 100)
+    .toString()
+    .replace(".", ",");
+  return `${text} %`;
+}
+
+/**
+ * Render an `invoice interest` / `invoice claim-interest` payload as Danish
+ * human text. The payload is the `CalculateInvoiceLateInterestResult` from
+ * `calculateInvoiceLateInterest` (optionally with the `claimId` /
+ * `claimOpenBalance` registration fields). Shows the reference rate, the
+ * statutory annual rate, the overdue window and the computed interest amount
+ * — the figures that previously only appeared under `--format json`. (#250)
+ */
+function renderInvoiceInterest(result: Record<string, unknown>): string {
+  const lines: string[] = [];
+  lines.push(`Morarente for faktura ${asText(result.invoiceNumber)}`);
+  lines.push("");
+
+  const overdueDays = asCount(result.overdueDays);
+  const interest =
+    typeof result.accruedInterestAmount === "number"
+      ? result.accruedInterestAmount
+      : Number(result.accruedInterestAmount);
+  const registered = result.claimId != null;
+
+  if (overdueDays > 0 && Number.isFinite(interest) && interest > 0) {
+    lines.push(
+      `Fakturaen er ${overdueDays} dage forfalden — der er påløbet ${formatKroner(interest)} i morarente.`,
+    );
+  } else if (overdueDays > 0) {
+    lines.push(
+      `Fakturaen er ${overdueDays} dage forfalden, men der er ingen morarente at opkræve` +
+        " (ingen åben saldo at forrente).",
+    );
+  } else {
+    lines.push("Fakturaen er ikke forfalden — der er ingen morarente at opkræve.");
+  }
+  lines.push("");
+
+  lines.push(`  Forfaldsdato:                  ${asText(result.effectiveDueDate)}`);
+  lines.push(`  Opgjort pr.:                   ${asText(result.asOfDate)}`);
+  lines.push(`  Antal forfaldne dage:          ${overdueDays}`);
+  lines.push(`  Åben hovedstol:                ${formatKroner(result.principalOpenBalance)}`);
+  lines.push(`  Referencesats (Nationalbanken): ${formatPercent(result.referenceRatePercent)}`);
+  lines.push(
+    `  Morarentesats (reference + 8 %): ${formatPercent(result.annualInterestRatePercent)}`,
+  );
+  lines.push(`  Påløbet morarente:             ${formatKroner(result.accruedInterestAmount)}`);
+
+  if (registered) {
+    lines.push("");
+    lines.push(`Morarentekravet er registreret (krav-id ${asText(result.claimId)}).`);
+    if (result.claimDate) {
+      lines.push(`  Kravdato:                      ${asText(result.claimDate)}`);
+    }
+    if (result.claimOpenBalance !== undefined) {
+      lines.push(`  Åben saldo på krav:            ${formatKroner(result.claimOpenBalance)}`);
+    }
+  }
+  appendWarnings(lines, result);
+  return lines.join("\n");
+}
+
+// --- Invoice late compensation (kompensationsbeløb) ------------------------
+
+/**
+ * Render an `invoice compensation` / `invoice claim-compensation` payload as
+ * Danish human text. The payload is the `CalculateInvoiceLateCompensationResult`
+ * from `calculateInvoiceLateCompensation` (optionally with the registration
+ * fields). Shows whether the invoice is eligible for the statutory fixed
+ * compensation for late commercial payment, the amount and a clear reason
+ * — figures that previously only appeared under `--format json`. (#250)
+ */
+function renderInvoiceCompensation(result: Record<string, unknown>): string {
+  const lines: string[] = [];
+  lines.push(`Kompensation for sen betaling — faktura ${asText(result.invoiceNumber)}`);
+  lines.push("");
+
+  const eligible = result.eligible === true;
+  const amount =
+    typeof result.compensationAmountDkk === "number"
+      ? result.compensationAmountDkk
+      : Number(result.compensationAmountDkk);
+  const registered = result.claimId != null;
+
+  if (eligible && Number.isFinite(amount) && amount > 0) {
+    lines.push(
+      `Fakturaen er berettiget til ${formatKroner(amount)} i fast kompensation for sen betaling.`,
+    );
+  } else {
+    lines.push("Fakturaen er IKKE berettiget til kompensation for sen betaling.");
+    lines.push(`  Årsag: ${reasonInDanish(result.reason)}`);
+  }
+  lines.push("");
+
+  lines.push(`  Forfaldsdato:                  ${asText(result.effectiveDueDate)}`);
+  lines.push(`  Opgjort pr.:                   ${asText(result.asOfDate)}`);
+  lines.push(`  Antal forfaldne dage:          ${asCount(result.overdueDays)}`);
+  lines.push(`  Åben hovedstol:                ${formatKroner(result.principalOpenBalance)}`);
+  lines.push(
+    `  Erhvervshandel (CVR/VAT):      ${result.isCommercialTransaction === true ? "ja" : "nej"}`,
+  );
+  lines.push(`  Berettiget:                    ${eligible ? "ja" : "nej"}`);
+  lines.push(`  Kompensationsbeløb:            ${formatKroner(result.compensationAmountDkk)}`);
+
+  if (registered) {
+    lines.push("");
+    lines.push(`Kompensationskravet er registreret (krav-id ${asText(result.claimId)}).`);
+    if (result.claimDate) {
+      lines.push(`  Kravdato:                      ${asText(result.claimDate)}`);
+    }
+    if (result.claimOpenBalance !== undefined) {
+      lines.push(`  Åben saldo på krav:            ${formatKroner(result.claimOpenBalance)}`);
+    }
+  }
+  appendWarnings(lines, result);
+  return lines.join("\n");
+}
+
+/**
+ * Translate the machine-readable `reason` from the compensation core into a
+ * plain-Danish explanation for the human renderer. Falls back to the raw
+ * reason string for any reason without a dedicated translation.
+ */
+function reasonInDanish(reason: unknown): string {
+  const text = typeof reason === "string" ? reason : "";
+  if (text === "eligible" || text === "registered") {
+    return "fakturaen er berettiget";
+  }
+  if (/commercial transaction not proven/i.test(text)) {
+    return "købers CVR/VAT-nummer mangler — handlen kan ikke dokumenteres som erhvervshandel";
+  }
+  if (/no collectible open balance/i.test(text)) {
+    return "fakturaen har ingen åben saldo at opkræve kompensation for";
+  }
+  if (/not overdue/i.test(text)) {
+    return "fakturaen er ikke forfalden på den valgte dato";
+  }
+  if (/predates statutory compensation start date/i.test(text)) {
+    return "fakturaen ligger før den lovbestemte ikrafttrædelsesdato for kompensation (1. marts 2013)";
+  }
+  return text.length > 0 ? text : "ukendt";
+}
+
+// --- Invoice payload validation --------------------------------------------
+
+/**
+ * Render an `invoice validate` payload as Danish human text. The payload is
+ * the `InvoiceValidationResult` from `validateInvoice`. Both verdicts are
+ * rendered in full: a valid payload states it plainly, an invalid payload
+ * lists every concrete rejection reason — instead of a blank command
+ * description with no result. (#250)
+ */
+function renderInvoiceValidate(result: Record<string, unknown>): string {
+  const lines: string[] = [];
+  const valid = result.ok !== false;
+  lines.push("Fakturavalidering");
+  lines.push("");
+
+  if (valid) {
+    lines.push("Fakturaen er gyldig og kan udstedes.");
+  } else {
+    const errors = asStringArray(result.errors);
+    lines.push(
+      `Fakturaen er IKKE gyldig — ${errors.length} ${errors.length === 1 ? "fejl" : "fejl"} skal rettes:`,
+    );
+    if (errors.length === 0) {
+      lines.push("  → Valideringen fejlede uden en specifik fejlbesked.");
+    } else {
+      for (const error of errors) lines.push(`  → ${error}`);
+    }
+  }
+  lines.push("");
+
+  const invoiceTypeDa =
+    result.invoiceType === "simplified"
+      ? "forenklet faktura"
+      : result.invoiceType === "full"
+        ? "fuld faktura"
+        : asText(result.invoiceType);
+  const vatTreatmentDa = VAT_TREATMENT_DA[String(result.vatTreatment)] ?? asText(result.vatTreatment);
+  lines.push(`  Fakturatype:                   ${invoiceTypeDa}`);
+  lines.push(`  Momsbehandling:                ${vatTreatmentDa}`);
+
+  const rules = asStringArray(result.appliedRules);
+  if (rules.length > 0) {
+    lines.push(`  Anvendte regler:               ${rules.join(", ")}`);
+  }
+  appendWarnings(lines, result);
+  return lines.join("\n");
+}
+
+/** Danish labels for the invoice VAT treatments. */
+const VAT_TREATMENT_DA: Record<string, string> = {
+  standard: "standardmoms",
+  domestic_reverse_charge: "omvendt betalingspligt (indenlandsk)",
+  foreign_reverse_charge: "omvendt betalingspligt (udenlandsk)",
+};
 
 // --- Exceptions list -------------------------------------------------------
 

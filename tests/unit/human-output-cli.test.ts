@@ -334,6 +334,180 @@ describe("system backup-status human output (#240)", () => {
   });
 });
 
+describe("invoice interest human output (#250)", () => {
+  test("renders the morarente figures in Danish, not a blank description", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-interest-human-"));
+    const company = join(root, "company");
+    const paymentInput = join(root, "partial-payment.json");
+
+    writeFileSync(paymentInput, JSON.stringify({
+      invoiceDocumentId: 1,
+      paymentDate: "2026-05-20",
+      amount: 1000,
+      note: "Partial payment",
+    }, null, 2));
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
+    await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
+
+    const human = await runCli([
+      "invoice", "interest", "--company", company,
+      "--invoice-number", "2026-0001", "--as-of", "2026-06-20", "--reference-rate", "2.2",
+      "--format", "human",
+    ]);
+    const jsonRun = await runCli([
+      "invoice", "interest", "--company", company,
+      "--invoice-number", "2026-0001", "--as-of", "2026-06-20", "--reference-rate", "2.2",
+      "--format", "json",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    // Real readable Danish output — the namesake interest feature must not be blank.
+    expect(human.stdout).toContain("Morarente for faktura 2026-0001");
+    // The actual figures: overdue window, statutory rate and computed amount.
+    expect(human.stdout).toContain("Referencesats (Nationalbanken): 2,2 %");
+    expect(human.stdout).toContain("Morarentesats (reference + 8 %): 10,2 %");
+    expect(human.stdout).toContain("Påløbet morarente:");
+    expect(human.stdout).toContain("0,35 kr.");
+    expect(human.stdout).toContain("Antal forfaldne dage:");
+    // No raw JSON field names / structure leaks through.
+    expect(human.stdout).not.toContain("accruedInterestAmount");
+    expect(human.stdout).not.toContain("annualInterestRatePercent");
+    expect(human.stdout).not.toContain("{");
+
+    // The json path stays byte-stable.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.annualInterestRatePercent).toBe(10.2);
+    expect(parsed.accruedInterestAmount).toBe(0.35);
+  });
+});
+
+describe("invoice compensation human output (#250)", () => {
+  test("renders the compensation assessment in Danish with a clear reason", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-compensation-human-"));
+    const company = join(root, "company");
+    const paymentInput = join(root, "partial-payment.json");
+
+    writeFileSync(paymentInput, JSON.stringify({
+      invoiceDocumentId: 1,
+      paymentDate: "2026-05-20",
+      amount: 1000,
+      note: "Partial payment",
+    }, null, 2));
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
+    await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
+
+    const human = await runCli([
+      "invoice", "compensation", "--company", company,
+      "--invoice-number", "2026-0001", "--as-of", "2026-06-20",
+      "--format", "human",
+    ]);
+    const jsonRun = await runCli([
+      "invoice", "compensation", "--company", company,
+      "--invoice-number", "2026-0001", "--as-of", "2026-06-20",
+      "--format", "json",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    expect(human.stdout).toContain("Kompensation for sen betaling — faktura 2026-0001");
+    // The actual verdict and figures, not a blank description.
+    expect(human.stdout).toContain("Berettiget:");
+    expect(human.stdout).toContain("Kompensationsbeløb:");
+    expect(human.stdout).toContain("Antal forfaldne dage:");
+    expect(human.stdout).not.toContain("compensationAmountDkk");
+    expect(human.stdout).not.toContain("isCommercialTransaction");
+    expect(human.stdout).not.toContain("{");
+
+    // The json path stays byte-stable.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(true);
+    expect(typeof parsed.eligible).toBe("boolean");
+    expect(typeof parsed.reason).toBe("string");
+  });
+});
+
+describe("invoice validate human output (#250)", () => {
+  test("renders a valid verdict in Danish", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rentemester-validate-human-ok-"));
+    const file = join(dir, "invoice.json");
+    writeFileSync(file, JSON.stringify({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      invoiceNumber: "2026-0100",
+      seller: { name: "Rentemester ApS", address: "Testvej 1, 2100 København Ø", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9, 8000 Aarhus C" },
+      lines: [{ description: "Bogføring" }],
+      totals: { netAmount: 400, vatRate: 0.25, vatAmount: 100, grossAmount: 500 },
+      currency: "DKK",
+    }, null, 2));
+
+    const human = await runCli(["invoice", "validate", "--input", file, "--format", "human"]);
+    const jsonRun = await runCli(["invoice", "validate", "--input", file, "--format", "json"]);
+
+    rmSync(dir, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    expect(human.stdout).toContain("Fakturavalidering");
+    expect(human.stdout).toContain("Fakturaen er gyldig og kan udstedes.");
+    expect(human.stdout).toContain("Fakturatype:");
+    expect(human.stdout).toContain("Momsbehandling:");
+    expect(human.stdout).not.toContain("appliedRules");
+    expect(human.stdout).not.toContain("{");
+
+    // The json path stays byte-stable.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(true);
+  });
+
+  test("renders an invalid verdict with every concrete rejection reason", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rentemester-validate-human-bad-"));
+    const file = join(dir, "invoice.json");
+    // Missing seller details and gross amount — several rejection reasons.
+    writeFileSync(file, JSON.stringify({
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-16",
+      seller: {},
+      buyer: {},
+      lines: [{ description: "Bogføring" }],
+      totals: {},
+      currency: "DKK",
+    }, null, 2));
+
+    const human = await runCli(["invoice", "validate", "--input", file, "--format", "human"]);
+    const jsonRun = await runCli(["invoice", "validate", "--input", file, "--format", "json"]);
+
+    rmSync(dir, { recursive: true, force: true });
+
+    // An invalid payload is a business rejection — exit 1 — but the output is a
+    // useful verdict, not the generic "fejlede uden en specifik fejlbesked".
+    expect(human.exitCode).toBe(1);
+    const out = human.stdout + human.stderr;
+    expect(out).toContain("Fakturaen er IKKE gyldig");
+    expect(out).toContain("seller.name is required");
+    expect(out).toContain("totals.grossAmount is required");
+    expect(out).not.toContain("fejlede uden en specifik fejlbesked");
+    expect(out).not.toContain("{");
+
+    // The json path stays byte-stable and still carries the raw errors array.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(false);
+    expect(Array.isArray(parsed.errors)).toBe(true);
+  });
+});
+
 describe("accounts list human output (#246)", () => {
   test("shows account numbers and no raw array-index column", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-accounts-list-"));

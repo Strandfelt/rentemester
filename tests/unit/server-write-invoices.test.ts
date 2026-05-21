@@ -145,7 +145,8 @@ describe("Cockpit write — invoice issue (happy path)", () => {
       expect(res.body.invoice.grossAmount).toBe(2500);
       expect(res.body.invoice.vatRate).toBe(0.25);
       expect(typeof res.body.invoice.documentId).toBe("number");
-      expect(res.body.invoice.invoiceNumber).toMatch(/-\d{5}$/);
+      // #251: invoice numbers use one canonical four-digit fortløbende format.
+      expect(res.body.invoice.invoiceNumber).toMatch(/-\d{4}$/);
 
       // The issued invoice is in the ledger as an issued_invoice document.
       withLedger(ws, slug, (db) => {

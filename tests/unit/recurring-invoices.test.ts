@@ -114,7 +114,7 @@ describe("recurring invoice generation", () => {
     expect(result.created).toBe(true);
     expect(result.periodIndex).toBe(0);
     expect(result.issueDate).toBe("2026-01-15");
-    expect(result.invoiceNumber).toBe("2026-00001");
+    expect(result.invoiceNumber).toBe("2026-0001");
     expect(result.deliveryPeriodStart).toBe("2026-01-01");
     expect(result.deliveryPeriodEnd).toBe("2026-01-31");
     expect(result.appliedRules).toContain("DK-RECURRING-INVOICE-GENERATE-001");
