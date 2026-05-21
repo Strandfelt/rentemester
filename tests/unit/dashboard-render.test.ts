@@ -154,9 +154,9 @@ function buildFixture(): DashboardInput {
     },
     vatDaysRemaining: 44,
     recentActivity: [
-      { id: 200, eventType: "backup.create", entityType: "system", entityId: null, message: "Backup created", actor: "system", createdAt: "2026-05-17 02:09:00" },
-      { id: 199, eventType: "invoice.post", entityType: "document", entityId: "102", message: "Posted 2026-0002", actor: "cli", createdAt: "2026-05-17 01:55:00" },
-      { id: 198, eventType: "invoice.issue", entityType: "document", entityId: "102", message: "Issued 2026-0002", actor: "cli", createdAt: "2026-05-16 14:21:00" },
+      { id: 200, eventType: "system_backup", entityType: "system", entityId: null, message: "Backup created", actor: "system", createdAt: "2026-05-17 02:09:00" },
+      { id: 199, eventType: "journal_reverse", entityType: "journal", entityId: "55", message: "Reversed journal entry 2026-J-0014: posting error in VAT account", actor: "cli", createdAt: "2026-05-17 01:55:00" },
+      { id: 198, eventType: "document_ingest", entityType: "document", entityId: "102", message: "Ingested supporting document DOC-2026-000004 (a8626d2599f1b3c0)", actor: "cli", createdAt: "2026-05-16 14:21:00" },
     ],
     backup: {
       ok: true,
@@ -272,6 +272,29 @@ describe("renderDashboard — structure", () => {
   test("contains no JavaScript", () => {
     expect(html).not.toMatch(/<script/i);
     expect(html).not.toMatch(/on(click|load|mouseover)=/i);
+  });
+
+  // #233: the recent-activity strip must read in plain Danish — no internal
+  // event codes, no mid-word truncation, no "ULINKEDE BANK-TX" jargon.
+  test("recent activity renders plain-Danish event labels, not internal codes", () => {
+    expect(html).toContain("Backup oprettet");
+    expect(html).toContain("Finanspostering tilbageført");
+    expect(html).toContain("Bilag indlæst");
+    // The raw snake_case codes must NOT leak into the rendered HTML.
+    expect(html).not.toContain("system_backup");
+    expect(html).not.toContain("journal_reverse");
+    expect(html).not.toContain("document_ingest");
+  });
+
+  test("recent activity messages are shown in full without truncation", () => {
+    // The fixture's longest message must appear verbatim, not cut mid-word.
+    expect(html).toContain("Ingested supporting document DOC-2026-000004 (a8626d2599f1b3c0)");
+    expect(html).not.toContain("a8626d2599f1b3c0…");
+  });
+
+  test("metric label avoids internal jargon for unlinked bank entries", () => {
+    expect(html).not.toContain("ULINKEDE BANK-TX");
+    expect(html).toContain("BANKPOSTER UDEN BILAG");
   });
 });
 

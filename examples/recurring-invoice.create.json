@@ -1,0 +1,37 @@
+{
+  "name": "Månedlig bogføringsabonnement — Kunde A/S",
+  "interval": "monthly",
+  "firstIssueDate": "2026-06-01",
+  "paymentTermsDays": 30,
+  "deliveryPeriodMode": "issue_month",
+  "notes": "Fast abonnement; genereres deterministisk pr. periode med 'recurring-invoice generate'.",
+  "invoice": {
+    "invoiceType": "full",
+    "vatTreatment": "standard",
+    "seller": {
+      "name": "Rentemester ApS",
+      "address": "Testvej 1, 2100 København Ø",
+      "vatOrCvr": "DK12345678"
+    },
+    "buyer": {
+      "name": "Kunde A/S",
+      "address": "Købervej 9, 8000 Aarhus C",
+      "vatOrCvr": "DK87654321"
+    },
+    "lines": [
+      {
+        "description": "Løbende bogføring og momsafstemning",
+        "quantity": 1,
+        "unitPriceExVat": 2000,
+        "lineTotalExVat": 2000
+      }
+    ],
+    "totals": {
+      "netAmount": 2000,
+      "vatRate": 0.25,
+      "vatAmount": 500,
+      "grossAmount": 2500
+    },
+    "currency": "DKK"
+  }
+}

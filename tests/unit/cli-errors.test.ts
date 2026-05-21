@@ -96,6 +96,10 @@ describe("CLI input boundary errors", () => {
 
     expect(exitCode).toBe(2);
     expect(stderr).toContain("Unknown command: nonsense command");
-    expect(stdout).toContain("Commands:");
+    // The global usage lists commands grouped by read vs write, with the
+    // actor contract among the global flags. (#231)
+    expect(stdout).toContain("Læsekommandoer");
+    expect(stdout).toContain("Skrivekommandoer");
+    expect(stdout).toContain("--actor");
   });
 });

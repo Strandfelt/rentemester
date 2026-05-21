@@ -1,0 +1,21 @@
+{
+  "cutOverDate": "2026-01-01",
+  "note": "Primobalance ved overgang til Rentemester.",
+  "lines": [
+    {
+      "accountNo": "2000",
+      "debitAmount": 50000.00,
+      "text": "Bankindestående ved skæring"
+    },
+    {
+      "accountNo": "1100",
+      "debitAmount": 12500.00,
+      "text": "Udestående debitorer"
+    },
+    {
+      "accountNo": "5000",
+      "creditAmount": 62500.00,
+      "text": "Egenkapital primo"
+    }
+  ]
+}
