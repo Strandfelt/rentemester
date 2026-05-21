@@ -14,7 +14,7 @@ import {
   closeAccountingPeriod,
   type AccountingPeriodKind,
 } from "../../core/periods";
-import { wrapCoreResult, successEnvelope } from "../envelope";
+import { envelopeShape, successEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerPeriodTools(server: McpServer): void {
@@ -24,6 +24,7 @@ export function registerPeriodTools(server: McpServer): void {
       title: "List accounting periods",
       description: "Lister regnskabsperioder (open/closed/reported). Read-only.",
       inputSchema: { company: z.string().min(1) },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ db }) => {
@@ -71,6 +72,7 @@ export function registerPeriodTools(server: McpServer): void {
         reference: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{

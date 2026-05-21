@@ -6,7 +6,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { successEnvelope } from "../envelope";
+import { envelopeShape, successEnvelope } from "../envelope";
 import { withCompanyDb } from "../tool-runtime";
 
 const inputSchema = {
@@ -20,6 +20,7 @@ export function registerAccountsTools(server: McpServer): void {
       title: "List chart of accounts",
       description: "Lister kontoplanen for virksomheden. Read-only.",
       inputSchema,
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ db }) => {

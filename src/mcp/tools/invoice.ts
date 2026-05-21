@@ -55,7 +55,7 @@ import {
   buildOverdueInvoiceList,
   type InvoiceQueryStatus,
 } from "../../core/invoice-list";
-import { wrapCoreResult, errorEnvelope } from "../envelope";
+import { envelopeShape, errorEnvelope, wrapCoreResult } from "../envelope";
 import {
   withCompanyDb,
   withCompanyDbConfirmed,
@@ -404,6 +404,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Validerer faktura-payload uden at gemme. Read-only. " +
         "Alle beløb er i kroner (decimal DKK, 2 decimaler — ikke øre); vatRate er en brøk (0.25 = 25%).",
       inputSchema: { payload: invoicePayloadSchema },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ payload }) => {
@@ -422,6 +423,7 @@ export function registerInvoiceTools(server: McpServer): void {
       title: "Invoice status",
       description: "Viser åben saldo og status på en faktura. Read-only.",
       inputSchema: { ...docIdOrNumberSchema, asOf: z.string().optional() },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; documentId?: number; invoiceNumber?: string; asOf?: string }>(
@@ -452,6 +454,7 @@ export function registerInvoiceTools(server: McpServer): void {
         maxAmount: z.number().optional(),
         asOf: z.string().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{
@@ -494,6 +497,7 @@ export function registerInvoiceTools(server: McpServer): void {
         amount: z.number().optional(),
         asOf: z.string().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{
@@ -526,6 +530,7 @@ export function registerInvoiceTools(server: McpServer): void {
         asOf: z.string().optional(),
         minDays: z.number().int().nonnegative().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; asOf?: string; minDays?: number }>(server, ({ db, args }) => {
@@ -544,6 +549,7 @@ export function registerInvoiceTools(server: McpServer): void {
         asOf: z.string().min(1),
         referenceRate: z.number(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{
@@ -574,6 +580,7 @@ export function registerInvoiceTools(server: McpServer): void {
         asOf: z.string().min(1),
         amountDkk: z.number().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{
@@ -609,6 +616,7 @@ export function registerInvoiceTools(server: McpServer): void {
         customerId: z.number().int().positive().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -631,6 +639,7 @@ export function registerInvoiceTools(server: McpServer): void {
       description:
         "Renderer (eller genskaber) deterministisk PDF for udstedt faktura. write-irreversible.",
       inputSchema: { ...docIdOrNumberSchema, confirm: confirmField },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -658,6 +667,7 @@ export function registerInvoiceTools(server: McpServer): void {
         payload: creditNotePayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; payload: IssueCreditNoteInput; confirm?: boolean }>(
@@ -677,6 +687,7 @@ export function registerInvoiceTools(server: McpServer): void {
       title: "Post invoice to ledger",
       description: "Bogfører en udstedt faktura i finansen. write-irreversible.",
       inputSchema: { ...docIdOrNumberSchema, confirm: confirmField },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -704,6 +715,7 @@ export function registerInvoiceTools(server: McpServer): void {
         payload: bankSettlementPayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -729,6 +741,7 @@ export function registerInvoiceTools(server: McpServer): void {
         payload: bankSettlementPayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -754,6 +767,7 @@ export function registerInvoiceTools(server: McpServer): void {
         payload: badDebtPayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -779,6 +793,7 @@ export function registerInvoiceTools(server: McpServer): void {
         payload: applyPaymentPayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -804,6 +819,7 @@ export function registerInvoiceTools(server: McpServer): void {
         payload: refundBankPayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -829,6 +845,7 @@ export function registerInvoiceTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -863,6 +880,7 @@ export function registerInvoiceTools(server: McpServer): void {
         date: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -896,6 +914,7 @@ export function registerInvoiceTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -930,6 +949,7 @@ export function registerInvoiceTools(server: McpServer): void {
         date: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -963,6 +983,7 @@ export function registerInvoiceTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -996,6 +1017,7 @@ export function registerInvoiceTools(server: McpServer): void {
         date: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{

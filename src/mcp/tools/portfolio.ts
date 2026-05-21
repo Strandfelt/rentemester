@@ -34,7 +34,7 @@ import {
   resolveConfiguredWorkspaceRoot,
   resolveWorkspaceRoot,
 } from "../../core/workspace";
-import { errorEnvelope, successEnvelope, envelopeToCallResult } from "../envelope";
+import { envelopeShape, envelopeToCallResult, errorEnvelope, successEnvelope } from "../envelope";
 import { redactPaths } from "../tool-runtime";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -178,6 +178,7 @@ export function registerPortfolioTools(server: McpServer): void {
         fiscalYearStartMonth: z.number().int().min(1).max(12).optional(),
         fiscalYearLabelStrategy: z.enum(["end-year", "start-year", "span"]).optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (args: {
@@ -225,6 +226,7 @@ export function registerPortfolioTools(server: McpServer): void {
         workspace: z.string().optional(),
         asOf: z.string().regex(ISO_DATE_RE, "asOf must be YYYY-MM-DD").optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (args: { workspace?: string; asOf?: string }) => {

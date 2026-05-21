@@ -15,7 +15,7 @@ import {
   type ReverseChargePurchaseInput,
   type RepresentationPurchaseInput,
 } from "../../core/vat";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 // All monetary fields below are in kroner — decimal DKK with 2 decimals (NOT øre).
@@ -134,6 +134,7 @@ export function registerVatTools(server: McpServer): void {
         from: z.string().min(1),
         to: z.string().min(1),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; from: string; to: string }>(server, ({ db, args }) => {
@@ -155,6 +156,7 @@ export function registerVatTools(server: McpServer): void {
         payload: euServicePurchasePayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -195,6 +197,7 @@ export function registerVatTools(server: McpServer): void {
         payload: representationPurchasePayloadSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{

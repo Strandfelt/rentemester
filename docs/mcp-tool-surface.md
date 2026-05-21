@@ -67,10 +67,15 @@ med det samme i komprimeret form.
 5. **Actor-attribution er obligatorisk.** Hvert MCP-call tilskrives som
    `agent:<client-info>` (jf. #63). `auditActor` skrives ind i
    `audit_log.actor` og udgør traceable kæde fra agent-call til bogføring.
-6. **Idempotency-keys på writes.** Klienten kan sende
-   `idempotencyKey: "<uuid>"` i input på de writes der understøtter det.
-   Beskytter mod dobbelt-bogføring ved netværks-retry. Flere intake-/
-   generér-tools er derudover idempotente af natur (`annotations.idempotentHint`).
+6. **Ingen generel idempotency-key på writes.** Der findes *ikke* en
+   `idempotencyKey`-mekanisme med en retry-cache på writes. En agent kan
+   derfor ikke regne med at en gentaget `journal_post` (eller anden write)
+   automatisk de-dupes — en retry efter en uafklaret netværksfejl kan
+   dobbelt-bogføre. Flere intake-/generér-tools er derimod idempotente *af
+   natur* (`annotations.idempotentHint`) — de de-duper på indhold/periode,
+   ikke på en klient-leveret nøgle; se de enkelte tool-rækker nedenfor.
+   En generel write-idempotency-cache er en mulig fremtidig udvidelse, ikke
+   et nuværende løfte.
 7. **Eksplicit `company`-parameter overalt.** Aldrig implicit "current
    company"; agent skal altid pege på den absolutte sti. Workspace-tools
    (`company_add`, `portfolio_overview`) tager i stedet en `workspace`-sti.
@@ -87,6 +92,58 @@ med det samme i komprimeret form.
 `journal_reverse` er klassificeret som `write-irreversible`: den skriver en ny
 post i den append-only kæde — den modposterer en tidligere post, men kæden
 selv ændres ikke.
+
+## Resultat-shapes (`outputSchema`)
+
+**Alle 81 tools deklarerer et `outputSchema`** (#202). Det er det samme
+delte schema for hver tool — konvolutten — så en agent kan læse
+resultat-kontrakten fra `tools/list` *uden* at kalde tool'et først.
+Schemaet er defineret én gang i `src/mcp/envelope.ts` (`envelopeShape`).
+
+Konvolutten (`structuredContent` på et `tools/call`-svar):
+
+| Felt | Type | Hvornår |
+|---|---|---|
+| `ok` | `boolean` | Altid. `true` ⇒ kaldet lykkedes; `false` ⇒ se `errors`. |
+| `data` | `object` | Kun ved `ok:true`. Kerne-resultatet. Udeladt ved `ok:false`. |
+| `errors` | `string[]` | Altid. Tom ved `ok:true`; ikke-tom ved `ok:false`. |
+| `appliedRules` | `string[]` | Valgfri. Regel-id'er der fyrede (sættes for bogførings-tools). |
+
+`outputSchema` typer bevidst `data` som et **åbent objekt** (`passthrough`):
+den konkrete feltliste i `data` varierer pr. tool, og MCP-SDK'en validerer
+kun `structuredContent` mod schemaet for *succes*-svar (`isError:false`) —
+fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
+81 gange; de er dokumenteret nedenfor og i tool-brief'ene.
+
+### `data`-felter pr. tool — det der har betydning
+
+`read`-tools returnerer typisk en liste plus en tæller:
+
+| Tool(s) | `data`-felter |
+|---|---|
+| `accounts_list` | `{ accounts: [{ accountNo, name, type, defaultVatCode }], count }` |
+| `journal_list` | `{ entries: [{ id, entryNo, transactionDate, text, currency, amountForeign, amountDkk, fxRateToDkk, documentId, sourceBankTransactionId, status, reversalOfEntryId }], count }` |
+| `bank_list` | `{ rows: [...], count }` |
+| `invoice_list` | `{ invoices: [...], count }` |
+| `exceptions_list` | `{ exceptions: [...], count }` |
+| `period_list` | `{ periods: [...], count }` |
+| `audit_verify` | `{ entries: <number>, ok }` (kerne-resultatets `errors` ligger på konvoluttens niveau) |
+| `invoice_status` | `{ documentId, invoiceNo, grossAmount, paidAmount, openBalance, status, dueDate, daysOverdue }` |
+
+`write`-tools returnerer id'er + hashes på den nyligt oprettede entitet:
+
+| Tool | `data`-felter |
+|---|---|
+| `journal_post` | `{ entryId, entryNo, entryHash }` |
+| `invoice_issue` | `{ documentId, invoiceNumber, storedPath, sha256, pdfDocumentId?, pdfStoredPath?, pdfSha256? }` — feltet hedder `documentId` (ikke `invoiceDocumentId`); `invoiceNumber` (ikke `invoiceNo`). |
+| `customer_create` / `vendor_create` | `{ customerId }` / `{ vendorId }` |
+| `journal_reverse` | `{ entryId, entryNo, entryHash }` for modposten |
+
+> **Discovery-kontrakten:** Konvolut-formen er maskin-kendt via `outputSchema`
+> i `tools/list`. Den præcise `data`-feltliste står her og i kildens
+> `*Result`-typer (`src/core/*.ts`, fx `IssueInvoiceResult`,
+> `JournalEntryResult`). En agent behøver derfor ikke kalde et tool blot for
+> at lære dets resultat-shape at kende.
 
 ## Tool-count summary
 
@@ -195,7 +252,7 @@ modpostering.
 | `invoice_settle_bank` | `invoice settle-bank` | `{ company, payload: SettlementPayload, confirm }` | Matcher bankbetaling mod faktura. |
 | `invoice_settle_claim_bank` | `invoice settle-claim-bank` | `{ company, payload: ClaimSettlementPayload, confirm }` | Matcher bankbetaling mod fakturakrav. |
 | `invoice_write_off_bad_debt` | `invoice write-off-bad-debt` | `{ company, payload: BadDebtPayload, confirm }` | Bogfører tab på debitor. |
-| `journal_post` | `journal post` | `{ company, payload: JournalEntryInput, confirm, idempotencyKey? }` | Bogfører manuel finanspostering. |
+| `journal_post` | `journal post` | `{ company, payload: JournalEntryInput, confirm }` | Bogfører manuel finanspostering. |
 | `journal_reverse` | `journal reverse` | `{ company, entryId? \| entryNo? \| matchText?, matchDate?, matchDocumentId?, date, reason, confirm }` | Tilbagefører bogført finanspostering ved at oprette modpost. |
 | `peppol_submit_public_invoice` | `invoice submit-public-peppol` | `{ company, documentId? \| invoiceNumber?, accessPoint, acknowledgement?, confirm }` | Bygger en idempotent PEPPOL-submission-envelope og registrerer forsøget. |
 | `period_close` | `period close` | `{ company, from, to, kind?, status?, reference?, confirm }` | Lukker eller markerer regnskabsperiode. |
@@ -331,8 +388,7 @@ Input:
         { "accountNo": "5820", "creditAmount": 400.00 }
       ]
     },
-    "confirm": true,
-    "idempotencyKey": "8c2a6b1e-1d4f-4b9b-9c43-aa5e0f6f3d11"
+    "confirm": true
   }
 }
 ```

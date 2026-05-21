@@ -22,12 +22,7 @@ import {
   type JournalEntryInput,
 } from "../../core/ledger";
 import { deriveMcpActor, withActor } from "../actor";
-import {
-  envelopeToCallResult,
-  errorEnvelope,
-  successEnvelope,
-  wrapCoreResult,
-} from "../envelope";
+import { envelopeShape, envelopeToCallResult, errorEnvelope, successEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, resolveJournalEntryId, confirmField } from "../tool-runtime";
 
 const lineSchema = z.object({
@@ -119,8 +114,8 @@ export function registerJournalTools(server: McpServer): void {
         company: z.string().min(1, "company path is required"),
         payload: payloadSchema,
         confirm: confirmField,
-        idempotencyKey: z.string().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -170,6 +165,7 @@ export function registerJournalTools(server: McpServer): void {
         reason: z.string().min(1, "reason is required"),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -211,6 +207,7 @@ export function registerJournalTools(server: McpServer): void {
       title: "List journal entries",
       description: "Lister finansposteringer i append-only kæden. Read-only.",
       inputSchema: { company: z.string().min(1) },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ db }) => {

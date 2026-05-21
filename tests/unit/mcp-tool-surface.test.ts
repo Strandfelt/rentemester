@@ -84,6 +84,26 @@ describe("docs/mcp-tool-surface.md", () => {
     const content = readFileSync(DOC_PATH, "utf8");
     expect(content).toContain("mcp-agent-contract.md");
   });
+
+  test("documents that every tool declares an outputSchema", () => {
+    // #202 — the result contract must be discoverable from the surface doc.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).toContain("outputSchema");
+    // The shared envelope shape must be spelled out for the agent.
+    expect(content).toMatch(/Resultat-shapes/);
+  });
+
+  test("does not promise an unbacked idempotencyKey on writes", () => {
+    // #204 — the doc once promised retry-safe idempotency keys with a 24h
+    // cache that was never implemented. The false promise must stay removed.
+    const content = readFileSync(DOC_PATH, "utf8");
+    // journal_post's input row must not advertise the dropped field.
+    expect(content).not.toMatch(/journal_post[^\n]*idempotencyKey/);
+    // No example handshake may pass an idempotencyKey argument.
+    expect(content).not.toContain('"idempotencyKey"');
+    // The doc must explicitly state there is no general idempotency mechanism.
+    expect(content).toMatch(/[Ii]ngen generel idempotency-key/);
+  });
 });
 
 describe("docs/mcp-agent-contract.md", () => {
@@ -110,6 +130,17 @@ describe("docs/mcp-agent-contract.md", () => {
     }
     // It must distinguish itself from the agent run loop contract.
     expect(content).toContain("runtime-agent-contract.md");
+  });
+
+  test("does not promise retry-safe idempotency keys (#204)", () => {
+    // #204 — the contract previously told agents that re-sending a write
+    // with the same idempotencyKey would not double-post. That mechanism
+    // does not exist; the contract must warn the opposite.
+    const content = readFileSync(CONTRACT_PATH, "utf8");
+    expect(content).toMatch(/no general `idempotencyKey` mechanism/i);
+    expect(content).toMatch(/double-post/);
+    // It must not still claim a key-keyed retry returns the original result.
+    expect(content).not.toMatch(/same key does not double-post/);
   });
 });
 

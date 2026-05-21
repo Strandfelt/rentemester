@@ -15,7 +15,7 @@ import {
   listRecurringInvoiceTemplates,
   type RecurringInvoiceTemplateInput,
 } from "../../core/recurring-invoices";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerRecurringInvoiceTools(server: McpServer): void {
@@ -36,6 +36,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
         notes: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -74,6 +75,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
         asOfDate: z.string().min(1),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -99,6 +101,7 @@ export function registerRecurringInvoiceTools(server: McpServer): void {
         company: z.string().min(1),
         includeInactive: z.boolean().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; includeInactive?: boolean }>(server, ({ db, args }) => {

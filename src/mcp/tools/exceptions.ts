@@ -12,7 +12,7 @@ import {
   resolveException,
   type ExceptionStatus,
 } from "../../core/exceptions";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerExceptionTools(server: McpServer): void {
@@ -27,6 +27,7 @@ export function registerExceptionTools(server: McpServer): void {
         status: z.enum(["open", "resolved", "all"]).optional(),
         includeArchived: z.boolean().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; status?: ExceptionStatus; includeArchived?: boolean }>(
@@ -54,6 +55,7 @@ export function registerExceptionTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; id: number; note?: string; confirm?: boolean }>(

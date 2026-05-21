@@ -23,7 +23,7 @@ import {
 } from "../../core/reconciliation";
 import { suggestBankMatches } from "../../core/bank-suggest-matches";
 import { syncUnmatchedBankTransactionExceptions } from "../../core/exceptions";
-import { wrapCoreResult, successEnvelope } from "../envelope";
+import { envelopeShape, successEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const statusSchema = z.enum(["all", "matched", "unmatched"]).optional();
@@ -46,6 +46,7 @@ export function registerBankTools(server: McpServer): void {
         account: z.string().optional(),
         // ===== END BANK CLUSTER (#187) =====
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{
@@ -90,6 +91,7 @@ export function registerBankTools(server: McpServer): void {
         bankTransactionId: z.number().int().positive().optional(),
         max: z.number().int().positive().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; bankTransactionId?: number; max?: number }>(
@@ -121,6 +123,7 @@ export function registerBankTools(server: McpServer): void {
         account: z.string().optional(),
         // ===== END BANK CLUSTER (#187) =====
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{
@@ -170,6 +173,7 @@ export function registerBankTools(server: McpServer): void {
         // ===== END BANK CLUSTER (#187,#186) =====
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; profile?: string; confirm?: boolean }>(

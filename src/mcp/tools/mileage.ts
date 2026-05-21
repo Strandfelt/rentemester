@@ -19,7 +19,7 @@ import {
   listMileageEntries,
   type CreateMileageEntryInput,
 } from "../../core/mileage";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerMileageTools(server: McpServer): void {
@@ -29,6 +29,7 @@ export function registerMileageTools(server: McpServer): void {
       title: "List mileage entries",
       description: "Lister registrerede kørselsposter (kørselsregnskab). Read-only.",
       inputSchema: { company: z.string().min(1) },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ db }) => {
@@ -47,6 +48,7 @@ export function registerMileageTools(server: McpServer): void {
         from: z.string().min(1),
         to: z.string().min(1),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; from: string; to: string }>(server, ({ db, args }) => {
@@ -79,6 +81,7 @@ export function registerMileageTools(server: McpServer): void {
         }),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; input: CreateMileageEntryInput; confirm?: boolean }>(
@@ -104,6 +107,7 @@ export function registerMileageTools(server: McpServer): void {
         outputDir: z.string().min(1),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; from: string; to: string; outputDir: string; confirm?: boolean }>(

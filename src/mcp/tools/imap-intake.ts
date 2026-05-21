@@ -21,7 +21,7 @@ import {
   type PollImapOptions,
 } from "../../core/imap-intake";
 import type { MailIntakeMetadataInput } from "../../core/mail-intake";
-import { successEnvelope, errorEnvelope } from "../envelope";
+import { envelopeShape, errorEnvelope, successEnvelope } from "../envelope";
 import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const metadataSchema = z
@@ -55,6 +55,7 @@ export function registerImapIntakeTools(server: McpServer): void {
         force: z.boolean().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withCompanyDbConfirmed<{

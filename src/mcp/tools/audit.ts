@@ -14,7 +14,7 @@ import { existsSync } from "node:fs";
 import { companyPaths } from "../../core/paths";
 import { openDb, migrate } from "../../core/db";
 import { verifyAuditChain } from "../../core/ledger";
-import { envelopeToCallResult, errorEnvelope, wrapCoreResult } from "../envelope";
+import { envelopeShape, envelopeToCallResult, errorEnvelope, wrapCoreResult } from "../envelope";
 
 const inputSchema = {
   company: z.string().min(1, "company path is required"),
@@ -29,6 +29,7 @@ export function registerAuditTools(server: McpServer): void {
         "Verificerer hash-chain og bogføringsintegritet for virksomhedsmappen. " +
         "Returnerer { ok, entries, errors[] }. Read-only — ingen state-bivirkninger.",
       inputSchema,
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

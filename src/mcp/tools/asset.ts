@@ -15,7 +15,7 @@ import {
   postImmediateWriteOff,
   buildAssetRegisterReport,
 } from "../../core/assets";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerAssetTools(server: McpServer): void {
@@ -39,6 +39,7 @@ export function registerAssetTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -84,6 +85,7 @@ export function registerAssetTools(server: McpServer): void {
         date: z.string().min(1),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -123,6 +125,7 @@ export function registerAssetTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -166,6 +169,7 @@ export function registerAssetTools(server: McpServer): void {
       inputSchema: {
         company: z.string().min(1),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ db }) => {

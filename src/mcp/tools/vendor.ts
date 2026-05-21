@@ -13,7 +13,7 @@ import {
   vendorInputFromCvr,
   type CreateVendorInput,
 } from "../../core/master-data";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerVendorTools(server: McpServer): void {
@@ -26,6 +26,7 @@ export function registerVendorTools(server: McpServer): void {
         company: z.string().min(1),
         archived: z.boolean().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; archived?: boolean }>(server, ({ db, args }) => {
@@ -58,6 +59,7 @@ export function registerVendorTools(server: McpServer): void {
         fromCvr: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{

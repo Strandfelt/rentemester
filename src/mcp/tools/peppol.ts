@@ -19,7 +19,7 @@ import {
   type PeppolAccessPointConfig,
   type PeppolTransportAcknowledgement,
 } from "../../core/public-einvoice";
-import { wrapCoreResult, errorEnvelope } from "../envelope";
+import { envelopeShape, errorEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDbConfirmed, resolveIssuedInvoiceDocumentId, confirmField } from "../tool-runtime";
 
 const accessPointSchema = z
@@ -55,6 +55,7 @@ export function registerPeppolTools(server: McpServer): void {
         acknowledgement: acknowledgementSchema,
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

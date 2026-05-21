@@ -12,12 +12,65 @@
  *  - `appliedRules` listes altid for bogførings-tools (sporbarhed)
  */
 
+import { z } from "zod";
+
 export type Envelope<TData = Record<string, unknown>> = {
   ok: boolean;
   data?: TData;
   errors: string[];
   appliedRules?: string[];
 };
+
+/**
+ * Delt `outputSchema` for ALLE 81 MCP-tools (#202).
+ *
+ * Hver tool returnerer den samme `Envelope`-wrapper. Ved at deklarere
+ * den som tool'ets `outputSchema` bliver wrapper-kontrakten
+ * (`ok`/`errors`/`appliedRules`/`data`) maskin-kendt: en agent kan læse
+ * resultatformen fra `tools/list` uden først at kalde tool'et.
+ *
+ * `data` er bevidst en åben (`passthrough`) objekt-form: den konkrete
+ * per-tool `data`-shape varierer (`JournalPostResult`, `InvoiceListResult`
+ * osv.) og er dokumenteret i docs/mcp-tool-surface.md frem for at blive
+ * hånd-typet 81 gange. Schemaet siger derfor: "data er et objekt" — den
+ * præcise feltliste står i kontrakt-dokumentet.
+ *
+ * Bemærk SDK-validering: MCP-SDK'en validerer kun `structuredContent`
+ * mod dette schema for *succes*-svar (`isError:false`). Fejl-envelopes
+ * (`isError:true`) springes over — derfor er `data` `.optional()`.
+ */
+export const envelopeShape = {
+  ok: z
+    .boolean()
+    .describe("true ⇒ kaldet lykkedes og `data` er sat; false ⇒ se `errors`."),
+  data: z
+    .object({})
+    .passthrough()
+    .optional()
+    .describe(
+      "Kerne-resultatet ved ok=true. Den præcise feltliste er per-tool og " +
+        "dokumenteret i docs/mcp-tool-surface.md. Udeladt ved ok=false.",
+    ),
+  errors: z
+    .array(z.string())
+    .describe(
+      "Menneskelæsbare fejl-/forudsætnings-strenge. Tom ved ok=true; " +
+        "ikke-tom ved ok=false.",
+    ),
+  appliedRules: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Regel-id'er der fyrede for denne handling (sporbarhed). Sættes for " +
+        "bogførings-tools; udeladt ellers.",
+    ),
+} as const;
+
+/**
+ * `envelopeShape` som et zod-objekt — praktisk hvis man vil parse/validere
+ * en envelope programmatisk.
+ */
+export const envelopeOutputSchema = z.object(envelopeShape);
 
 /**
  * Wrapper et kerne-resultat i MCP-envelope-format.

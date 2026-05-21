@@ -258,6 +258,68 @@ describe("#200/#206/#208/#210 — write tools expose fully-typed input schemas",
   });
 });
 
+describe("#202 — every tool declares the shared envelope outputSchema", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  test("all 81 tools expose an outputSchema in tools/list", () => {
+    expect(tools.length).toBeGreaterThanOrEqual(81);
+    const missing = tools.filter((t) => !t.outputSchema).map((t) => t.name);
+    expect(missing).toEqual([]);
+  });
+
+  test("the outputSchema is the shared { ok, data?, errors[], appliedRules? } envelope", () => {
+    for (const tool of tools) {
+      const schema = tool.outputSchema;
+      expect(schema?.type, `tool ${tool.name} outputSchema`).toBe("object");
+      const props = schema?.properties ?? {};
+      // The machine-known envelope contract.
+      expect(props.ok?.type, `${tool.name}.ok`).toBe("boolean");
+      expect(props.errors?.type, `${tool.name}.errors`).toBe("array");
+      expect(props.data?.type, `${tool.name}.data`).toBe("object");
+      expect(props.appliedRules?.type, `${tool.name}.appliedRules`).toBe("array");
+      // ok + errors are always present on the envelope.
+      expect(schema?.required).toContain("ok");
+      expect(schema?.required).toContain("errors");
+    }
+  });
+
+  test("a success response's structuredContent validates against the outputSchema", async () => {
+    // audit_verify is a read tool: a fresh company yields a clean ok envelope.
+    const response = await client.send("tools/call", {
+      name: "audit_verify",
+      arguments: { company: companyRoot },
+    });
+    // With an outputSchema declared the SDK validates structuredContent on
+    // success — a malformed envelope would come back as isError with no
+    // structuredContent. Getting structuredContent back proves it validated.
+    expect(response.error).toBeUndefined();
+    expect(response.result?.isError).toBe(false);
+    const structured = response.result?.structuredContent;
+    expect(structured?.ok).toBe(true);
+    expect(Array.isArray(structured?.errors)).toBe(true);
+  });
+});
+
+describe("#204 — journal_post no longer advertises an unbacked idempotencyKey", () => {
+  test("journal_post inputSchema does not contain idempotencyKey", async () => {
+    const response = await client.send("tools/list");
+    const tool = (response.result?.tools ?? []).find(
+      (t: any) => t.name === "journal_post",
+    );
+    expect(tool, "journal_post not found").toBeDefined();
+    const props = tool.inputSchema?.properties ?? {};
+    // The field was documented as retry-safe but had no backing cache — #204
+    // removed the false promise. It must not reappear in the schema.
+    expect(props.idempotencyKey).toBeUndefined();
+    expect(Object.keys(props).sort()).toEqual(["company", "confirm", "payload"]);
+  });
+});
+
 describe("#200 — typed schemas reject structurally invalid payloads", () => {
   test("invoice_issue rejects a payload missing the required invoiceType", async () => {
     // With the typed schema the SDK rejects this before the handler. The point

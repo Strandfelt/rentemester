@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { buildRetentionStatusReport } from "../../core/retention";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb } from "../tool-runtime";
 
 export function registerRetentionTools(server: McpServer): void {
@@ -18,6 +18,7 @@ export function registerRetentionTools(server: McpServer): void {
         company: z.string().min(1),
         asOf: z.string().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; asOf?: string }>(server, ({ db, args }) => {

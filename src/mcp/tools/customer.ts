@@ -15,7 +15,7 @@ import {
   type CreateCustomerInput,
 } from "../../core/master-data";
 import { validateVatAgainstVies } from "../../core/vies";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerCustomerTools(server: McpServer): void {
@@ -28,6 +28,7 @@ export function registerCustomerTools(server: McpServer): void {
         company: z.string().min(1),
         archived: z.boolean().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; archived?: boolean }>(server, ({ db, args }) => {
@@ -45,6 +46,7 @@ export function registerCustomerTools(server: McpServer): void {
         company: z.string().min(1),
         cvr: z.string().min(1),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withCompanyDb<{ company: string; cvr: string }>(server, async ({ db, args }) => {
@@ -78,6 +80,7 @@ export function registerCustomerTools(server: McpServer): void {
         fromCvr: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{

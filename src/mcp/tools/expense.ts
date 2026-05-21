@@ -8,7 +8,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { bookExpenseFromBank } from "../../core/expense-booking";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const vatTreatmentEnum = z
@@ -33,6 +33,7 @@ export function registerExpenseTools(server: McpServer): void {
         text: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{

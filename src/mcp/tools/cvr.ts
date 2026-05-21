@@ -9,7 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { lookupCvrCompany } from "../../core/cvr";
 import { syncCompanyFromCvr } from "../../core/company";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 export function registerCvrTools(server: McpServer): void {
@@ -23,6 +23,7 @@ export function registerCvrTools(server: McpServer): void {
         company: z.string().min(1),
         cvr: z.string().min(1),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withCompanyDb<{ company: string; cvr: string }>(server, async ({ db, args }) => {
@@ -41,6 +42,7 @@ export function registerCvrTools(server: McpServer): void {
         company: z.string().min(1),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     withCompanyDbConfirmed<{ company: string; confirm?: boolean }>(

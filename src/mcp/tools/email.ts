@@ -19,7 +19,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { companyPaths } from "../../core/paths";
 import { createSmtpTransport, sendInvoiceEmail, type SmtpConfig } from "../../core/email";
-import { wrapCoreResult, errorEnvelope } from "../envelope";
+import { envelopeShape, errorEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDbConfirmed, resolveIssuedInvoiceDocumentId, confirmField } from "../tool-runtime";
 
 function loadSmtpConfig(
@@ -69,6 +69,7 @@ export function registerEmailTools(server: McpServer): void {
         to: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

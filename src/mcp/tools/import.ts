@@ -15,7 +15,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { queryArchive } from "../../core/import/dinero-archive";
-import { wrapCoreResult } from "../envelope";
+import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb } from "../tool-runtime";
 
 export function registerImportTools(server: McpServer): void {
@@ -29,6 +29,7 @@ export function registerImportTools(server: McpServer): void {
         company: z.string().min(1),
         sourceSystem: z.string().min(1).optional(),
       },
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -53,6 +54,7 @@ export function registerImportTools(server: McpServer): void {
         fiscalYear: z.number().int(),
         sourceSystem: z.string().min(1).optional(),
       },
+      outputSchema: envelopeShape,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

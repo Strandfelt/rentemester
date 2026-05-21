@@ -28,7 +28,7 @@ import {
 } from "../../core/backup-governance";
 import { exportAuthorityPackage } from "../../core/authority-export";
 import { companyPaths } from "../../core/paths";
-import { wrapCoreResult, successEnvelope, errorEnvelope } from "../envelope";
+import { envelopeShape, errorEnvelope, successEnvelope, wrapCoreResult } from "../envelope";
 import {
   withCompanyDb,
   withCompanyDbConfirmed,
@@ -43,6 +43,7 @@ export function registerSystemTools(server: McpServer): void {
       title: "Company directory healthcheck",
       description: "Tjekker at virksomhedsmappen og kernefilerne findes. Read-only.",
       inputSchema: { company: z.string().min(1) },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ company }: { company: string }) => {
@@ -84,6 +85,7 @@ export function registerSystemTools(server: McpServer): void {
         company: z.string().min(1),
         asOf: z.string().optional(),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; asOf?: string }>(server, ({ db, args }) => {
@@ -105,6 +107,7 @@ export function registerSystemTools(server: McpServer): void {
         archive: z.boolean().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; at?: string; archive?: boolean; confirm?: boolean }>(
@@ -139,6 +142,7 @@ export function registerSystemTools(server: McpServer): void {
         out: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; backupId?: string; out?: string; confirm?: boolean }>(
@@ -157,6 +161,7 @@ export function registerSystemTools(server: McpServer): void {
         "Samlet backup-status: forfald, bogførings-lås, destinationer og om seneste " +
         "backup er placeret sikkert i EU/EØS. Read-only.",
       inputSchema: { company: z.string().min(1), asOf: z.string().optional() },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string; asOf?: string }>(server, ({ db, args }) =>
@@ -170,6 +175,7 @@ export function registerSystemTools(server: McpServer): void {
       title: "List backup destinations",
       description: "Lister konfigurerede backup-destinationer med deres attestering. Read-only.",
       inputSchema: { company: z.string().min(1) },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ args }) => {
@@ -200,6 +206,7 @@ export function registerSystemTools(server: McpServer): void {
         at: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -242,6 +249,7 @@ export function registerSystemTools(server: McpServer): void {
       title: "Remove a backup destination",
       description: "Fjerner en konfigureret backup-destination. write.",
       inputSchema: { company: z.string().min(1), id: z.string().min(1), confirm: confirmField },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; id: string; confirm?: boolean }>(
@@ -267,6 +275,7 @@ export function registerSystemTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -310,6 +319,7 @@ export function registerSystemTools(server: McpServer): void {
         note: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -352,6 +362,7 @@ export function registerSystemTools(server: McpServer): void {
         at: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -385,6 +396,7 @@ export function registerSystemTools(server: McpServer): void {
         requester: z.string().optional(),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
@@ -422,6 +434,7 @@ export function registerSystemTools(server: McpServer): void {
         confirm: confirmField,
         confirmText: z.string().min(1),
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
     withDestructiveConfirm<{

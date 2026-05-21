@@ -119,16 +119,24 @@ Common precondition failures and the fix:
 cannot be resolved deterministically, surface it to the human rather than
 forcing the operation a different way.
 
-## Idempotency — safe retries
+## Idempotency — retries are NOT automatically safe
 
-- Writes that support it accept an optional `idempotencyKey` (a UUID).
-  Re-sending the same call with the same key does not double-post — it
-  returns the original result. Use it whenever a network retry is possible,
-  especially for `journal_post`.
-- Several tools are idempotent by nature (`annotations.idempotentHint`):
-  intake polls (`mail_intake_ingest`, `imap_intake_poll`),
-  `recurring_invoice_generate`, `invoice_render`, `invoice_send_email`.
-  Re-running them produces no duplicate state.
+- **There is no general `idempotencyKey` mechanism.** Writes do *not* accept
+  a client-supplied `idempotencyKey` backed by a retry cache. Re-sending the
+  same write after an unresolved network error **can double-post** — most
+  importantly `journal_post`, which appends a fresh entry every call. Do not
+  blindly retry a write whose outcome is unknown: first read back the state
+  (`journal_list`, `invoice_status`, …) and only re-issue the write if the
+  earlier attempt verifiably did not land.
+- Several tools *are* idempotent **by nature** (`annotations.idempotentHint`)
+  — they de-dupe on content or period, not on a client key: intake polls
+  (`mail_intake_ingest`, `imap_intake_poll`), `recurring_invoice_generate`
+  (per template/period), `invoice_render` (deterministic PDF) and
+  `invoice_send_email` (reuses the send log). Re-running *these* produces no
+  duplicate state. For every other write, the agent is responsible for
+  retry-safety via read-back.
+- A general write-idempotency cache is a possible future feature; until it
+  ships, treat this section as the contract.
 
 ## The append-only invariant
 

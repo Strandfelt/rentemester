@@ -10,7 +10,7 @@ import { z } from "zod";
 import { ingestDocument, type DocumentMetadata } from "../../core/documents";
 import { resolveDocumentMasterData } from "../../core/master-data";
 import { recordException } from "../../core/exceptions";
-import { wrapCoreResult, successEnvelope, errorEnvelope } from "../envelope";
+import { envelopeShape, errorEnvelope, successEnvelope, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
 const documentPartySchema = z.object({
@@ -70,6 +70,7 @@ export function registerDocumentTools(server: McpServer): void {
       title: "List documents",
       description: "Lister gemte bilag i virksomhedsmappen. Read-only.",
       inputSchema: { company: z.string().min(1) },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDb<{ company: string }>(server, ({ db }) => {
@@ -142,6 +143,7 @@ export function registerDocumentTools(server: McpServer): void {
           .describe("Set true to force ingest even if a document with the same logical identity already exists."),
         confirm: confirmField,
       },
+      outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     withCompanyDbConfirmed<{
