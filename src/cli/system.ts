@@ -310,6 +310,23 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --backup-dir <dir> or --target-company <path>");
       process.exit(2);
     }
+    // restore-backup is destructive: it can overwrite files in
+    // --target-company. The MCP equivalent gates this as a destructive tool
+    // (confirm:true + confirmText). The CLI matches the `asset write-off`
+    // convention — a valued `--confirm yes` flag (bare booleans cannot be
+    // added to the append-only cli-args BOOLEAN_FLAGS set). Without it the
+    // command is refused before the filesystem is touched.
+    const confirmValue = (ctx.arg("--confirm") ?? "").trim().toLowerCase();
+    if (confirmValue !== "yes") {
+      ctx.emitResult({
+        ok: false,
+        errors: [
+          "system restore-backup is destructive: it can overwrite files in --target-company. " +
+            "Re-run with --confirm yes to proceed.",
+        ],
+      });
+      process.exit(1);
+    }
     const result = restoreSystemBackup({
       backupDir,
       targetCompanyRoot,
@@ -317,6 +334,7 @@ export function register(dispatch: CommandDispatch): void {
       publicKeyPath: ctx.arg("--public-key") ?? undefined,
     });
     ctx.emitResult(result as Record<string, unknown>);
+    if (!result.ok) process.exit(1);
   });
 
   dispatch.on("system", "export-authority", (ctx) => {

@@ -1,3 +1,15 @@
+## CLI-kontrakt for agenter
+
+Før du kalder `rentemester`-CLI'en muterende, læs `docs/cli-contract.md`. Kort:
+
+- **Actor-politik**: enhver muterende kommando kræver en actor — `--actor
+  <user:...|agent:...|system:...>` (skal stå i `config/policy.yaml`), eller en
+  `USER`/`LOGNAME`/`RENTEMESTER_AGENT`/`OPENCLAW_AGENT` miljøvariabel. Uden
+  actor afvises kommandoen med `actor required for mutations`.
+- **Exit-koder**: `0` = succes (`ok:true`); `2` = parse-/brugsfejl (forkert
+  kald — ret flag/argumenter); `1` = forretnings-/ledger-afvisning (kaldet var
+  korrekt, men resultatet er `ok:false` — læs `errors[]`).
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
