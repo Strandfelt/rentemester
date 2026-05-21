@@ -58,39 +58,40 @@ Rentemester agent-demo
 ======================
 mode:        rule-based
 company:     /tmp/agent-demo
+demo-dir:    examples/agent-demo
 
 — Initialiserer frisk virksomhedsmappe —
   ✓ company init OK (/tmp/agent-demo)
 
 — Spawner MCP-server —
-  ✓ MCP klar — 52 tools registered
+  ✓ MCP klar — 81 tools registered
 
 — Importerer bank-CSV —
   ✓ 7 banktransaktioner importeret
 
 — Læser inbox og ingester bilag —
   ✓ 3 EU-leverandør(er) VIES-validated (offline-seed)
-  ✓ aws-hosting-2026-05.txt    → DOC-2026-000001 (980,00 DKK)
-  ✓ dsb-rejse-2026-05.txt      → DOC-2026-000002 (450,00 DKK)
-  ✓ elgiganten-hardware-…      → DOC-2026-000003 (12.000,00 DKK)
-  ✓ google-workspace-2026-05   → DOC-2026-000004 (750,00 DKK)
-  ✓ openai-2026-05.txt         → DOC-2026-000005 (425,00 DKK)
-  ✓ restaurant-2026-05.txt     → DOC-2026-000006 (1.205,00 DKK)
+  ✓ aws-hosting-2026-05.txt → DOC-2026-000001 (id=1, 980,00 DKK)
+  ✓ dsb-rejse-2026-05.txt → DOC-2026-000002 (id=2, 450,00 DKK)
+  ✓ elgiganten-hardware-2026-05.txt → DOC-2026-000003 (id=3, 12.000,00 DKK)
+  ✓ google-workspace-2026-05.txt → DOC-2026-000004 (id=4, 750,00 DKK)
+  ✓ openai-2026-05.txt → DOC-2026-000005 (id=5, 425,00 DKK)
+  ✓ restaurant-2026-05.txt → DOC-2026-000006 (id=6, 1.205,00 DKK)
 
 — Foreslår og bogfører matches —
-  ✓ Bogført DSB                 -450,00 DKK → konto 3050 (Rejse og transport)
-  ✓ Bogført AWS EMEA           -980,00 DKK → konto 3020 (Hosting, reverse_charge)
-  ✓ Bogført Elgiganten A/S   -12.000,00 DKK → konto 3120 (Hardware)
-  ✓ Bogført OpenAI Ireland Ltd -425,00 DKK → konto 3010 (AI-værktøjer, reverse_charge)
-  ✓ Bogført Google Ireland     -750,00 DKK → konto 3000 (Software og SaaS)
+  ✓ Bogført DSB -450,00 DKK → konto 3050 (Rejse og transport, VAT=standard)
+  ✓ Bogført Amazon Web Services EMEA SARL -980,00 DKK → konto 3020 (Hosting og cloud, VAT=reverse_charge)
+  ✓ Bogført Elgiganten A/S -12.000,00 DKK → konto 3120 (Hardware og udstyr, VAT=standard)
+  ✓ Bogført OpenAI Ireland Ltd -425,00 DKK → konto 3010 (AI-værktøjer, VAT=reverse_charge)
+  ✓ Bogført Google Ireland Limited -750,00 DKK → konto 3000 (Software og SaaS, VAT=standard)
 
   … 2 banktransaktion(er) sprunget over:
-    · bank-tx 7 "Stripe payout"        — ingen høj-confidence match
-    · bank-tx 6 "Restaurant Madklubben" — ingen høj-confidence match
+    · bank-tx 7 "Stripe payout" — ingen høj-confidence match foreslået
+    · bank-tx 6 "Restaurant Madklubben" — ingen høj-confidence match foreslået
 
 — Exceptions-kø —
-  ! [medium] #7 UNMATCHED_BANK_TRANSACTION: Bank transaction 7 is still unmatched
-  ! [medium] #6 UNMATCHED_BANK_TRANSACTION: Bank transaction 6 is still unmatched
+  ! [medium] #7 UNMATCHED_BANK_TRANSACTION: Indbetalingen "Stripe payout" den 2026-05-20 på 3.125,00 kr. er endnu ikke bogført. Der er ikke fundet et bilag (faktura eller anden indtægtsdokumentation), der passer til beløbet.
+  ! [medium] #6 UNMATCHED_BANK_TRANSACTION: Banktransaktionen "Restaurant Madklubben" den 2026-05-15 på 1.205,00 kr. er endnu ikke bogført. Der er ikke fundet et bilag (kvittering eller faktura), der passer til beløbet.
 
 — Momsrapport (2026-05) —
   ✓ udgående moms 351,25 DKK, indgående moms 2.991,25 DKK, netto -2.640,00 DKK
@@ -108,8 +109,11 @@ company:     /tmp/agent-demo
   • 2 i exception queue
   • Audit-chain: OK (5 entries)
   • Næste momsangivelse: Q2 2026, udgående moms 351,25 DKK, indgående moms 2.991,25 DKK
-  • Tid brugt: 0.3 sekunder
+  • Tid brugt: 0.6 sekunder
 ```
+
+> Tidsforbruget varierer mellem kørsler; alt andet er deterministisk på samme
+> fixture.
 
 ## Hvad det her viser
 
@@ -154,9 +158,12 @@ det udvidelsespunkt sidder.
 ## Fra demo til pakket runtime-agent (#183)
 
 Denne demo viser thesisen uformelt. Den **pakkede runtime-bogholder-agent**
-kører den samme idé deterministisk og replaybart:
+kører den samme idé deterministisk og replaybart. Den kræver en
+**allerede initialiseret** virksomhedsmappe — den initialiserer ikke selv
+(modsat denne demo, der spinner en frisk mappe op). Kør `init` først:
 
 ```
+rentemester init --company /tmp/agent-demo
 rentemester agent run \
   --company /tmp/agent-demo \
   --as-of 2026-05-20 \
@@ -165,11 +172,27 @@ rentemester agent run \
   --bank-csv examples/agent-demo/bank.csv
 ```
 
+Uden et forudgående `init` afvises `agent run` med
+`no initialised company ... (run 'rentemester init' first)`.
+
 Agenten ingester bilag, bogfører det entydige, ruter alt usikkert til
 exception-køen (gætter aldrig), afstemmer banken, tjekker moms-/årsrapport-
 deadlines og udskriver en slutrapport. Samme fixture + samme `--as-of` giver
 identisk output. Se `docs/runtime-agent-contract.md` for driftskontrakten og
 `src/agent/` for koden.
+
+**Bemærk — demoen og `agent run` bogfører ikke det samme antal:** denne demo
+pre-seeder VIES-validering for EU-leverandørerne offline (så AWS og OpenAI
+kan reverse-charge-bogføres uden netværk), og den bogfører Elgiganten-købet
+direkte. Den pakkede `agent run` gør ingen af delene: den VIES-validerer
+ikke, så de to EU reverse-charge-køb (AWS, OpenAI) blokeres af ledger-
+guardrailen og rutes til exception-køen, og det 12.000 kr. store
+hardware-køb fra Elgiganten rutes som et muligt anlægsaktiv til en
+menneske-/aktivvurdering (#223). `agent run` bogfører derfor kun de to
+entydige standard-moms-udgifter (DSB, Google Workspace) automatisk og lægger
+resten i køen. Det er bevidst: den pakkede agent gætter aldrig og rører
+aldrig netværket — den demoen viser her er den optimistiske, offline-seedede
+udgave af det samme flow.
 
 ## Bonus: video
 

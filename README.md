@@ -227,7 +227,7 @@ Rentemester er stadig under udvikling og bør endnu ikke være din eneste kilde 
 **Brug og drift**
 
 - alt kan køres fra kommandolinjen (menneske-betjent) og via MCP-værktøjer (agent-betjent)
-- en runtime-agent (`agent run`), der kører én komplet, gentagelig bogføringsrunde
+- en runtime-agent (`agent run`), der kører én komplet, gentagelig bogføringsrunde på en allerede `init`-initialiseret virksomhedsmappe
 - danske retskilder downloades og hash-verificeres, så regler kan spores til en kilde
 - automatiske tests, og en container til drift med din virksomhedsmappe monteret
 

@@ -16,7 +16,7 @@ Hele den deterministiske kerne er på plads og dækket af tests. Det her er det 
 - **Bilag**: ingest med SHA-256, leverandør-stamdata, expense-bogføring, VIES-validering af EU-numre og fremmedvaluta-køb med DKK-bankafregning.
 - **Moms**: rapport, EU reverse charge, repræsentation, bad-debt relief, TastSelv-rubrik-mapping.
 - **System**: signed backups (HMAC + opt-in ed25519 til 3.-parts revisor-verifikation), restore med audit-chain-verifikation, periodelås, 5-års retention, myndighedseksport, første deterministiske SAF-T-slice og deterministisk lokal bogholder-/revisor-handoff-pakke.
-- **Agent-grænseflade**: MCP-server med 52 tools, agent-agnostisk (Claude, Mistral, Ollama lokalt, eller intet).
+- **Agent-grænseflade**: MCP-server med 81 tools, agent-agnostisk (Claude, Mistral, Ollama lokalt, eller intet).
 - **Dashboard**: statisk HTML, deterministisk, bygger på DESIGN.md-tokens.
 - **CI**: `bun test` + `bun run smoke` håndhævet på hver PR.
 - **Lovgrundlag**: alle regler i `rules/dk/*.yaml` med SHA-256-citation mod retsinformation.dk's faktiske XML-tekster.

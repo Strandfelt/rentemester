@@ -310,6 +310,28 @@ describe("renderDashboard — structure", () => {
     expect(html).toContain("107 dage tilbage");
   });
 
+  // #263: the dashboard must not stop at a bare exception count — it lists
+  // each open exception as a short line so the owner sees *what* needs
+  // attention without a trip to the terminal.
+  test("lists each open exception, not just the count", () => {
+    // The fixture has 2 open exceptions; both must be named on the dashboard.
+    expect(html).toContain("bank.unmatched");
+    expect(html).toContain("Bank tx without matching invoice");
+    expect(html).toContain("vat.missing-evidence");
+    expect(html).toContain("Missing evidence for VAT deduction");
+    // The "Åbne exceptions" section heading is present.
+    expect(html).toContain("Åbne exceptions");
+  });
+
+  test("exceptions section shows an empty state when there are no open exceptions", () => {
+    const empty: DashboardInput = {
+      ...buildFixture(),
+      exceptions: { ok: true, count: 0, rows: [], errors: [] },
+    };
+    const emptyHtml = renderDashboard(empty);
+    expect(emptyHtml).toContain("Ingen åbne exceptions");
+  });
+
   // #246: the footer must not dump a raw commit hash + rule-version on the
   // calm cockpit surface — they are tucked into a collapsed <details>.
   test("footer does not dump raw commit hash / rule-version in the visible row", () => {

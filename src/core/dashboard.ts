@@ -742,6 +742,53 @@ ${metricCard("ÅBNE EXCEPTIONS", String(input.exceptions.count), undefined, inpu
 </section>`;
 }
 
+// A bare exception count tells the owner *that* something needs attention but
+// not *what* — which only creates unease and forces a trip to the terminal.
+// The dashboard therefore lists each open exception as a short line: severity,
+// type, and a (truncated) message. (#263)
+const EXCEPTION_SEVERITY_PILL: Record<string, "danger" | "warning" | "neutral"> = {
+  high: "danger",
+  critical: "danger",
+  medium: "warning",
+  low: "neutral",
+};
+
+function exceptionsSection(input: DashboardInput): string {
+  const result = input.exceptions;
+  if (result.count === 0 || result.rows.length === 0) {
+    return `<div class="empty-state">Ingen åbne exceptions</div>`;
+  }
+  // Stable order: highest severity first, then by id so the render is
+  // deterministic regardless of the row order the CLI passes in.
+  const severityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const sorted = [...result.rows].sort((a, b) => {
+    const ra = severityRank[a.severity] ?? 9;
+    const rb = severityRank[b.severity] ?? 9;
+    if (ra !== rb) return ra - rb;
+    return a.id - b.id;
+  });
+  const maxRows = 12;
+  const visible = sorted.slice(0, maxRows);
+  const overflow = sorted.length - visible.length;
+  const items = visible.map((row) => {
+    const pillClass = EXCEPTION_SEVERITY_PILL[row.severity] ?? "neutral";
+    return `  <div class="status-row">
+    <div>
+      <div class="label">${escapeHtml(row.type)}</div>
+      <div class="detail">${escapeHtml(truncate(row.message, 110))}</div>
+    </div>
+    <div><span class="pill ${pillClass}">${escapeHtml(row.severity)}</span></div>
+  </div>`;
+  }).join("\n");
+  const overflowRow = overflow > 0
+    ? `<div class="muted" style="margin-top: var(--space-xs); font-size: 13px;">… og ${overflow} yderligere</div>`
+    : "";
+  return `<div class="section">
+${items}
+</div>
+${overflowRow}`;
+}
+
 function statusSection(input: DashboardInput): string {
   const backupPill = backupStatusPill(input.backup);
   const backupSub = input.backup.latestBackupAt
@@ -800,6 +847,7 @@ export function renderDashboard(input: DashboardInput, _options: RenderOptions =
   const sections = [
     header(input),
     metricsSection(input),
+    `<section class="section"><h2>Åbne exceptions</h2>${exceptionsSection(input)}</section>`,
     `<section class="section"><h2>Næste deadline</h2>${deadlineSection(input)}</section>`,
     `<section class="section"><h2>Åbne fakturaer</h2>${invoiceTable(input.invoices)}</section>`,
     `<section class="section"><h2>Seneste aktivitet</h2>${activityList(input.recentActivity)}</section>`,
