@@ -55,6 +55,9 @@ import { serveStatic } from "./static";
 import {
   handleBankImport,
   handleDocumentIngest,
+  handleInvoiceIssue,
+  handleInvoicePost,
+  handleInvoiceSettle,
   handleResolveException,
 } from "./write-handlers";
 
@@ -572,6 +575,33 @@ export async function handleRequest(
       if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
       const slug = decodeURIComponent(documentIngestMatch[1]!);
       return await handleDocumentIngest(config, request, slug);
+    }
+
+    // Bookkeeping write route (#213, slice 4): issue a sales invoice.
+    const invoiceIssueMatch =
+      /^\/api\/companies\/([^/]+)\/invoices\/issue$/.exec(path);
+    if (invoiceIssueMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(invoiceIssueMatch[1]!);
+      return await handleInvoiceIssue(config, request, slug);
+    }
+
+    // Bookkeeping write route (#213, slice 4): post an issued invoice.
+    const invoicePostMatch =
+      /^\/api\/companies\/([^/]+)\/invoices\/post$/.exec(path);
+    if (invoicePostMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(invoicePostMatch[1]!);
+      return await handleInvoicePost(config, request, slug);
+    }
+
+    // Bookkeeping write route (#213, slice 4): settle an invoice from bank.
+    const invoiceSettleMatch =
+      /^\/api\/companies\/([^/]+)\/invoices\/settle$/.exec(path);
+    if (invoiceSettleMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(invoiceSettleMatch[1]!);
+      return await handleInvoiceSettle(config, request, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

@@ -1,4 +1,5 @@
-// Fakturaer — the per-company issued invoices (cockpit-redesign iteration 5).
+// Fakturaer — the per-company issued invoices (cockpit-redesign iteration 5;
+// human write-actions added in #213, slice 4).
 //
 // Renders `/api/companies/:slug/invoices?year=`: the sales invoices issued in
 // the selected fiscal year, each with its settlement status (kladde / bogført
@@ -6,14 +7,28 @@
 // total, the outstanding total and the overdue count. A company with no issued
 // invoices shows a graceful empty state. All money fields are kroner —
 // `formatKroner` is used throughout.
+//
+// Slice 4 makes the view write-capable for the human-mode invoice actions:
+//   - "Udsted faktura" (page action) opens the multi-line InvoiceIssueModal;
+//   - per row, "Bogfør" posts an issued invoice to the ledger and "Afstem"
+//     settles it against a bank payment — both via a ConfirmDialog because
+//     the postings are write-irreversible.
+// Every write action is hidden for an archived (read-only) year.
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
-import type { CompanyInvoices, InvoiceStatus } from "../lib/types";
+import type {
+  CompanyInvoiceRow,
+  CompanyInvoices,
+  InvoiceStatus,
+} from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { InvoiceIssueModal } from "../components/InvoiceIssueModal";
 
 /** Human label + flag tone for each settlement status. */
 const STATUS_META: Record<
@@ -36,6 +51,11 @@ export function InvoicesView() {
     () => api.invoices(slug, year),
     [slug, year],
   );
+  // True while the invoice-issue modal (#213, slice 4) is open.
+  const [issuing, setIssuing] = useState(false);
+  // The invoice row whose "Bogfør" / "Afstem" ConfirmDialog is open, if any.
+  const [posting, setPosting] = useState<CompanyInvoiceRow | null>(null);
+  const [settling, setSettling] = useState<CompanyInvoiceRow | null>(null);
 
   if (state.loading && !state.data)
     return <Loading label="Henter fakturaer…" />;
@@ -56,6 +76,17 @@ export function InvoicesView() {
           </p>
         </div>
         <div className="row-actions">
+          {/* The issue write action — hidden for an archived (read-only) year,
+              where no live ledger is available to issue into. */}
+          {!inv.archived && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setIssuing(true)}
+            >
+              Udsted faktura
+            </button>
+          )}
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
             Administrér
           </Link>
@@ -69,6 +100,65 @@ export function InvoicesView() {
         onYearChange={setYear}
       />
 
+      {issuing && (
+        <InvoiceIssueModal
+          slug={slug}
+          onIssued={state.reload}
+          onClose={() => setIssuing(false)}
+        />
+      )}
+
+      {posting && (
+        <ConfirmDialog
+          title="Bogfør faktura"
+          body={
+            <p>
+              Bogfør faktura <strong>{posting.invoiceNo}</strong> til
+              regnskabet. Bogføringen lægger en postering i kassekladden og
+              kan ikke fortrydes.
+            </p>
+          }
+          confirmLabel="Bogfør faktura"
+          confirmKind="danger"
+          onConfirm={async () => {
+            await api.postInvoice(slug, posting.documentId);
+            state.reload();
+          }}
+          onClose={() => setPosting(null)}
+        />
+      )}
+
+      {settling && (
+        <ConfirmDialog
+          title="Afstem faktura mod bankbetaling"
+          body={
+            <p>
+              Afstem faktura <strong>{settling.invoiceNo}</strong> mod en
+              indgående bankbetaling med samme reference. Afstemningen lægger en
+              postering og kan ikke fortrydes.
+            </p>
+          }
+          confirmLabel="Afstem faktura"
+          confirmKind="danger"
+          noteLabel="Bankreference"
+          notePlaceholder="Referencen på banktransaktionen"
+          onConfirm={async (reference) => {
+            if (!reference.trim()) {
+              throw {
+                code: "bad_request",
+                message: "Angiv referencen på bankbetalingen.",
+              };
+            }
+            await api.settleInvoice(slug, {
+              invoiceDocumentId: settling.documentId,
+              bankTransactionReference: reference.trim(),
+            });
+            state.reload();
+          }}
+          onClose={() => setSettling(null)}
+        />
+      )}
+
       {inv.archived ? (
         <ArchivedNotice year={inv.selectedYear} />
       ) : inv.invoices.length === 0 ? (
@@ -77,7 +167,7 @@ export function InvoicesView() {
           <p className="muted">
             Der er ikke udstedt salgsfakturaer i regnskabsåret{" "}
             {inv.selectedYear}. Udstedte fakturaer vises her, så snart de er
-            bogført.
+            bogført. Brug <em>Udsted faktura</em> for at lave en ny.
           </p>
         </div>
       ) : (
@@ -124,11 +214,14 @@ export function InvoicesView() {
                   <th className="num">Beløb inkl. moms</th>
                   <th className="num">Udestående</th>
                   <th>Status</th>
+                  <th>Handlinger</th>
                 </tr>
               </thead>
               <tbody>
                 {inv.invoices.map((row) => {
                   const meta = STATUS_META[row.status];
+                  // Settlement only makes sense while a balance is open.
+                  const canSettle = row.openBalance > 0;
                   return (
                     <tr key={row.documentId}>
                       <td className="account-no">{row.invoiceNo}</td>
@@ -152,6 +245,26 @@ export function InvoicesView() {
                             ? ` · ${row.overdueDays} dage`
                             : ""}
                         </span>
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn secondary"
+                            onClick={() => setPosting(row)}
+                          >
+                            Bogfør
+                          </button>
+                          {canSettle && (
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => setSettling(row)}
+                            >
+                              Afstem
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

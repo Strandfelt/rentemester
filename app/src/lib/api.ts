@@ -278,6 +278,129 @@ export const api = {
         confirm: true,
       }),
     }).then((r) => r.document),
+
+  /**
+   * Issues a sales invoice (#213, slice 4). The human enters the customer and
+   * the line items; the server COMPUTES every line total, net, VAT and gross
+   * via the same core path the CLI's `invoice create` uses — the human never
+   * does invoice arithmetic. Issuing is a kladde (no journal entry yet), so no
+   * `confirm` is required.
+   */
+  issueInvoice: (slug: string, input: InvoiceIssueInput) =>
+    request<{ ok: true; invoice: InvoiceIssueSummary }>(
+      `/api/companies/${encodeURIComponent(slug)}/invoices/issue`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          issueDate: input.issueDate,
+          lines: input.lines,
+          ...(input.vatRatePercent !== undefined
+            ? { vatRatePercent: input.vatRatePercent }
+            : {}),
+          ...(input.customerId ? { customerId: input.customerId } : {}),
+          ...(input.invoiceNumber ? { invoiceNumber: input.invoiceNumber } : {}),
+          ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+          ...(input.currency ? { currency: input.currency } : {}),
+          ...(input.seller ? { seller: input.seller } : {}),
+          ...(input.buyer ? { buyer: input.buyer } : {}),
+        }),
+      },
+    ).then((r) => r.invoice),
+
+  /**
+   * Posts an issued invoice to the ledger (#213, slice 4). Write-irreversible
+   * (it appends a journal entry), so the body carries `confirm: true`.
+   */
+  postInvoice: (slug: string, invoiceDocumentId: number) =>
+    request<{
+      ok: true;
+      posting: { entryId: number | null; entryNo: string | null };
+    }>(`/api/companies/${encodeURIComponent(slug)}/invoices/post`, {
+      method: "POST",
+      body: JSON.stringify({ invoiceDocumentId, confirm: true }),
+    }).then((r) => r.posting),
+
+  /**
+   * Settles an issued invoice against a bank payment (#213, slice 4). The
+   * human identifies the bank receipt by its transaction id or reference.
+   * Write-irreversible, so the body carries `confirm: true`.
+   */
+  settleInvoice: (slug: string, input: InvoiceSettleInput) =>
+    request<{ ok: true; settlement: InvoiceSettleSummary }>(
+      `/api/companies/${encodeURIComponent(slug)}/invoices/settle`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          invoiceDocumentId: input.invoiceDocumentId,
+          ...(input.bankTransactionId
+            ? { bankTransactionId: input.bankTransactionId }
+            : {}),
+          ...(input.bankTransactionReference
+            ? { bankTransactionReference: input.bankTransactionReference }
+            : {}),
+          ...(input.paymentDate ? { paymentDate: input.paymentDate } : {}),
+          ...(input.amount !== undefined ? { amount: input.amount } : {}),
+          confirm: true,
+        }),
+      },
+    ).then((r) => r.settlement),
+};
+
+/** A single invoice line as the human enters it — Rentemester computes totals. */
+export type InvoiceLineInput = {
+  description: string;
+  quantity: number;
+  unitPriceExVat: number;
+};
+
+/** An invoice party (seller / buyer) — all fields optional. */
+export type InvoicePartyInput = {
+  name?: string;
+  address?: string;
+  vatOrCvr?: string;
+};
+
+/** Input for `api.issueInvoice`. */
+export type InvoiceIssueInput = {
+  issueDate: string;
+  lines: InvoiceLineInput[];
+  vatRatePercent?: number;
+  customerId?: number;
+  invoiceNumber?: string;
+  dueDate?: string;
+  currency?: string;
+  seller?: InvoicePartyInput;
+  buyer?: InvoicePartyInput;
+};
+
+/** The issue result the server echoes back — every amount Rentemester computed. */
+export type InvoiceIssueSummary = {
+  documentId: number | null;
+  invoiceNumber: string | null;
+  netAmount: number;
+  vatRate: number;
+  vatAmount: number;
+  grossAmount: number;
+  lines: Array<InvoiceLineInput & { lineTotalExVat: number }>;
+};
+
+/** Input for `api.settleInvoice`. */
+export type InvoiceSettleInput = {
+  invoiceDocumentId: number;
+  bankTransactionId?: number;
+  bankTransactionReference?: string;
+  paymentDate?: string;
+  amount?: number;
+};
+
+/** The settlement result the server echoes back. */
+export type InvoiceSettleSummary = {
+  entryId: number | null;
+  paymentId: number | null;
+  principalAmount: number;
+  claimAmount: number;
+  invoiceNumber: string | null;
+  openBalance: number | null;
 };
 
 /** Input for `api.importBank` — the CSV text plus optional account/profile. */

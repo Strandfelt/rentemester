@@ -227,12 +227,24 @@ export async function withCompanyMutation<T extends CoreResult>(
     // (8) Business-result map. A core rejection is the caller's fault, not the
     // server's — surface it as a 400 (or 409 for a conflict-shaped message),
     // never a 500.
+    //
+    // The conflict heuristic distinguishes a genuine state conflict (the
+    // target is missing, or the action already happened) from a plain
+    // bad-input rejection. Two message families count as conflicts:
+    //   - "missing target": `findes ikke` / `does not exist` / `not found`;
+    //   - "already done":   `allerede` (Danish) OR `already` (English).
+    // The invoice core (#213, slice 4) speaks ENGLISH for its idempotency
+    // rejections — `invoice X already has journal entry Y` (double post),
+    // `bank transaction N is already linked …` (double settle). Those are
+    // 409s, not 400s: re-issuing a post/settle is a conflict with existing
+    // ledger state, exactly like resolving an already-resolved exception.
+    // The Danish-only `allerede` test missed them, so `already` is added.
     if (result.ok === false) {
       const message =
         result.errors && result.errors.length > 0
           ? result.errors.join("; ")
           : "handlingen blev afvist";
-      if (/findes ikke|does not exist|not found|allerede/i.test(message)) {
+      if (/findes ikke|does not exist|not found|allerede|already/i.test(message)) {
         throw ApiError.conflict(message);
       }
       throw ApiError.badRequest(message);

@@ -663,6 +663,22 @@ td.num,
 .modal-field-grid .modal-field {
   min-width: 0;
 }
+/* One editable line-item row in the invoice-issue modal (#213, slice 4) —
+   description / quantity / unit price, plus an optional Fjern button. */
+.invoice-line-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: var(--space-sm);
+  align-items: end;
+  margin-bottom: var(--space-sm);
+}
+.invoice-line-row .modal-field {
+  min-width: 0;
+}
+.invoice-line-row .btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
 .modal-actions {
   display: flex;
   justify-content: flex-end;
