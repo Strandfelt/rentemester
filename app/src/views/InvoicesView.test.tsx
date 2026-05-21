@@ -48,11 +48,11 @@ describe("InvoicesView — Fakturaer", () => {
     expect(lastUrl).toContain("year=2025");
   });
 
-  test("an archived year shows the arkiv notice", async () => {
+  test("an archived year shows an honest 'not available' state", async () => {
     mockFetch(route({ archived: true, selectedYear: "2025", invoices: [] }));
     renderView();
     expect(
-      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+      await screen.findByText(/Fakturaer er ikke tilgængelige for 2025/),
     ).toBeInTheDocument();
   });
 });

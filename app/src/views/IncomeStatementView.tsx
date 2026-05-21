@@ -11,6 +11,7 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyIncomeStatement, IncomeStatementLine } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
+import { ArchivedBanner } from "../components/ArchivedBanner";
 import {
   CompanyNav,
   accountPostingsTo,
@@ -59,51 +60,50 @@ export function IncomeStatementView() {
         onYearChange={setYear}
       />
 
-      {s.archived ? (
-        <ArchivedNotice slug={slug} year={s.selectedYear} />
-      ) : (
-        <div className="card statement-card">
-          <table className="data statement-table">
-            <thead>
-              <tr>
-                <th>Konto</th>
-                <th>Navn</th>
-                <th className="num">{s.selectedYear}</th>
-                <th className="num">{priorYear}</th>
-              </tr>
-            </thead>
-            <StatementSection
-              heading="Indtægter"
-              lines={s.income}
-              total={s.totalIncome}
-              priorTotal={s.priorTotalIncome}
-              totalLabel="Indtægter i alt"
-              currency={currency}
-              slug={slug}
-              year={s.selectedYear}
-            />
-            <StatementSection
-              heading="Udgifter"
-              lines={s.expense}
-              total={s.totalExpense}
-              priorTotal={s.priorTotalExpense}
-              totalLabel="Udgifter i alt"
-              currency={currency}
-              slug={slug}
-              year={s.selectedYear}
-            />
-            <tbody>
-              <tr className={`statement-result ${positive ? "positive" : "negative"}`}>
-                <td colSpan={2}>Årets resultat</td>
-                <td className="num">{formatKroner(s.result, currency)}</td>
-                <td className="num">
-                  {formatKroner(s.priorResult, currency)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      {s.archived && (
+        <ArchivedBanner year={s.selectedYear} source={s.archivedSource} />
       )}
+      <div className="card statement-card">
+        <table className="data statement-table">
+          <thead>
+            <tr>
+              <th>Konto</th>
+              <th>Navn</th>
+              <th className="num">{s.selectedYear}</th>
+              <th className="num">{priorYear}</th>
+            </tr>
+          </thead>
+          <StatementSection
+            heading="Indtægter"
+            lines={s.income}
+            total={s.totalIncome}
+            priorTotal={s.priorTotalIncome}
+            totalLabel="Indtægter i alt"
+            currency={currency}
+            slug={slug}
+            year={s.selectedYear}
+          />
+          <StatementSection
+            heading="Udgifter"
+            lines={s.expense}
+            total={s.totalExpense}
+            priorTotal={s.priorTotalExpense}
+            totalLabel="Udgifter i alt"
+            currency={currency}
+            slug={slug}
+            year={s.selectedYear}
+          />
+          <tbody>
+            <tr className={`statement-result ${positive ? "positive" : "negative"}`}>
+              <td colSpan={2}>Årets resultat</td>
+              <td className="num">{formatKroner(s.result, currency)}</td>
+              <td className="num">
+                {formatKroner(s.priorResult, currency)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -163,23 +163,5 @@ function StatementSection({
         <td className="num muted">{formatKroner(priorTotal, currency)}</td>
       </tr>
     </tbody>
-  );
-}
-
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
-  return (
-    <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
-      <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Se den arkiverede
-        saldobalance for {year} i Arkiv.
-      </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
-    </div>
   );
 }

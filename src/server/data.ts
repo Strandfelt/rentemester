@@ -459,6 +459,133 @@ function roundKroner(value: number): number {
   return Math.round(Number(value ?? 0) * 100) / 100;
 }
 
+// --------------------------------------------------------------------------
+// Archived fiscal years (#197) — deriving the rich statement views from the
+// read-only `import_archive_*` tables for a pre-cut-over year.
+//
+// A Dinero export ships a full `SaldoBalance.csv` (every account's closing
+// balance) and `Posteringer.csv` (every posting line) per archived year. That
+// is enough to render the same Resultatopgørelse / Balance / Saldobalance /
+// Posteringer / Overblik the live ledger does — the only difference is the
+// figures come from the archive, never from a posted journal entry.
+//
+// Sign convention: the archived `amount` is debit-signed, exactly like a live
+// trial-balance `balance` (debit − credit). So income reads positive as
+// `−amount`, expenses as `amount`, assets as `amount`, liabilities/equity as
+// `−amount` — the same conversions `core/financial-statements` applies.
+// --------------------------------------------------------------------------
+
+/** The `import_archive_years` header row for a fiscal year, or null. */
+function archiveYearRow(
+  db: Database,
+  year: number,
+): { id: number; sourceSystem: string } | null {
+  const row = db
+    .query(
+      `SELECT id, source_system AS sourceSystem
+         FROM import_archive_years
+        WHERE fiscal_year = ?
+        ORDER BY id DESC`,
+    )
+    .get(year) as { id: number; sourceSystem: string } | undefined;
+  return row ?? null;
+}
+
+/** One archived `SaldoBalance` line joined to the live chart's account type. */
+type ArchiveTypedBalance = {
+  accountNo: string;
+  name: string;
+  /** Debit-signed closing balance, kroner (debit − credit). */
+  amount: number;
+  /** The live `accounts.type`, or null when the account is unknown. */
+  type: string | null;
+  /** The live `accounts.normal_balance`, or null when unknown. */
+  normalBalance: "debit" | "credit" | null;
+};
+
+/**
+ * Every archived `SaldoBalance` line for `archiveYearId`, each joined to the
+ * live chart of accounts so it carries the account `type` and `normalBalance`
+ * needed to classify it into a statement section. Ordered by account number.
+ */
+function archiveTypedBalances(
+  db: Database,
+  archiveYearId: number,
+): ArchiveTypedBalance[] {
+  const rows = db
+    .query(
+      `SELECT b.account_no     AS accountNo,
+              b.account_name   AS name,
+              b.amount         AS amount,
+              a.type           AS type,
+              a.normal_balance AS normalBalance
+         FROM import_archive_balances b
+         LEFT JOIN accounts a ON a.account_no = b.account_no
+        WHERE b.archive_year_id = ?
+        ORDER BY b.account_no ASC`,
+    )
+    .all(archiveYearId) as Array<{
+    accountNo: string;
+    name: string | null;
+    amount: number;
+    type: string | null;
+    normalBalance: "debit" | "credit" | null;
+  }>;
+  return rows.map((r) => ({
+    accountNo: r.accountNo,
+    name: r.name ?? "",
+    amount: roundKroner(r.amount),
+    type: r.type,
+    normalBalance: r.normalBalance,
+  }));
+}
+
+/**
+ * Resultatopgørelse figures for an archived year, classified from the archived
+ * `SaldoBalance` by the live chart's account `type`. Returns empty totals when
+ * the year is not archived. Money is kroner.
+ */
+function archiveIncomeStatement(
+  db: Database,
+  year: number,
+): {
+  income: IncomeStatementLine[];
+  expense: IncomeStatementLine[];
+  totalIncome: number;
+  totalExpense: number;
+  result: number;
+} {
+  const header = archiveYearRow(db, year);
+  if (!header) {
+    return { income: [], expense: [], totalIncome: 0, totalExpense: 0, result: 0 };
+  }
+  const income: IncomeStatementLine[] = [];
+  const expense: IncomeStatementLine[] = [];
+  let totalIncome = 0;
+  let totalExpense = 0;
+  for (const b of archiveTypedBalances(db, header.id)) {
+    if (b.type === "income") {
+      // Income is credit-normal — negate the debit-signed archive balance.
+      const amount = roundKroner(-b.amount);
+      income.push({ accountNo: b.accountNo, name: b.name, amount, priorAmount: 0 });
+      totalIncome += amount;
+    } else if (b.type === "expense") {
+      const amount = roundKroner(b.amount);
+      expense.push({ accountNo: b.accountNo, name: b.name, amount, priorAmount: 0 });
+      totalExpense += amount;
+    }
+  }
+  totalIncome = roundKroner(totalIncome);
+  totalExpense = roundKroner(totalExpense);
+  return {
+    income,
+    expense,
+    totalIncome,
+    totalExpense,
+    result: roundKroner(totalIncome - totalExpense),
+  };
+}
+
 export type VatPosition = {
   periodStart: string;
   periodEnd: string;
@@ -646,6 +773,18 @@ export type OverviewMonth = {
   expense: number;
 };
 
+/** The Overblik VAT block — null for an archived year (no VAT data exists). */
+export type OverviewVat = {
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  outputVat: number;
+  inputVat: number;
+  payable: number;
+  deadline: string;
+  daysRemaining: number;
+};
+
 export type CompanyOverview = ReturnType<typeof buildCompanyOverview>;
 
 /**
@@ -700,44 +839,114 @@ export function buildCompanyOverview(
       fiscalYearLabelStrategy: company.fiscalYearLabelStrategy,
     };
 
-    // An archived-only year has no live-ledger data — surface a clear marker
-    // so the SPA can render the "se Arkiv" state without inventing figures.
+    // An archived-only year has no live ledger — but the #197 archive holds
+    // the full SaldoBalance + Posteringer, enough for a P&L-oriented overview.
+    // The figures are derived from the archive; the live-only sections (bank
+    // reconciliation, exception queue, VAT deadline) are surfaced as N/A
+    // rather than faked — there is no archived data for them.
     if (isArchivedOnly) {
+      const archYear = parseInt(selectedLabel, 10);
+      const header = archiveYearRow(db, archYear);
+      const pl = archiveIncomeStatement(db, archYear);
+
+      // Monthly income/expense buckets — every archived posting line joined to
+      // its account type and bucketed by its `transaction_date` month. Income
+      // accounts are credit-normal (a negative archive amount is income);
+      // expense accounts are debit-normal (a positive amount is an expense).
+      const months: OverviewMonth[] = [];
+      const monthIncome = new Array(12).fill(0) as number[];
+      const monthExpense = new Array(12).fill(0) as number[];
+      const recentEntries: RecentEntry[] = [];
+      let lastPostedDate: string | null = null;
+      if (header) {
+        const postingRows = db
+          .query(
+            `SELECT p.line_no          AS lineNo,
+                    p.account_no       AS accountNo,
+                    p.account_name     AS accountName,
+                    p.transaction_date AS date,
+                    p.voucher          AS voucher,
+                    p.text             AS text,
+                    p.amount           AS amount,
+                    a.type             AS type
+               FROM import_archive_postings p
+               LEFT JOIN accounts a ON a.account_no = p.account_no
+              WHERE p.archive_year_id = ?`,
+          )
+          .all(header.id) as Array<{
+          lineNo: number;
+          accountNo: string;
+          accountName: string | null;
+          date: string | null;
+          voucher: string | null;
+          text: string | null;
+          amount: number;
+          type: string | null;
+        }>;
+        for (const r of postingRows) {
+          if (!r.date) continue;
+          const m = parseInt(r.date.slice(5, 7), 10);
+          if (!(m >= 1 && m <= 12)) continue;
+          const amount = Number(r.amount ?? 0);
+          if (r.type === "income") monthIncome[m - 1]! += -amount;
+          else if (r.type === "expense") monthExpense[m - 1]! += amount;
+        }
+        // The most recent archived postings — newest date first, capped at 8.
+        const dated = postingRows
+          .filter((r) => r.date)
+          .sort((a, b) =>
+            a.date! !== b.date!
+              ? b.date!.localeCompare(a.date!)
+              : b.lineNo - a.lineNo,
+          );
+        lastPostedDate = dated[0]?.date ?? null;
+        for (const r of dated.slice(0, 8)) {
+          recentEntries.push({
+            id: r.lineNo,
+            entryNo: r.voucher ?? "",
+            date: r.date!,
+            text: r.text && r.text.length > 0 ? r.text : (r.accountName ?? ""),
+            amount: roundKroner(Number(r.amount ?? 0)),
+          });
+        }
+      }
+      for (let m = 1; m <= 12; m += 1) {
+        months.push({
+          month: m,
+          label: MONTH_NAMES_DK[m - 1]!,
+          income: roundKroner(monthIncome[m - 1]!),
+          expense: roundKroner(monthExpense[m - 1]!),
+        });
+      }
+
+      const bruttomargin =
+        pl.totalIncome !== 0 ? pl.result / pl.totalIncome : null;
+
       return {
         slug: entry.slug,
         selectedYear: selectedLabel,
         archived: true,
+        archivedSource: header?.sourceSystem ?? null,
         company: companyBlock,
         fiscalYears: years,
         profitAndLoss: {
-          omsaetning: 0,
-          udgifter: 0,
-          resultat: 0,
-          months: [] as OverviewMonth[],
+          omsaetning: pl.totalIncome,
+          udgifter: pl.totalExpense,
+          resultat: pl.result,
+          months,
         },
+        // Live-only sections — no archived data exists, so N/A rather than 0.
         bank: { balance: 0, actualBalance: null, difference: null },
         receivables: { openCount: 0, openTotal: 0 },
-        vat: {
-          periodStart: `${selectedLabel}-01-01`,
-          periodEnd: `${selectedLabel}-06-30`,
-          periodLabel: `1. halvår ${selectedLabel}`,
-          outputVat: 0,
-          inputVat: 0,
-          payable: 0,
-          deadline: vatHalfYearDeadline(parseInt(selectedLabel, 10), 1),
-          daysRemaining: daysBetween(
-            todayIsoDate(),
-            vatHalfYearDeadline(parseInt(selectedLabel, 10), 1),
-          ),
-        },
+        vat: null,
         exceptions: {
           count: 0,
           rows: [] as ExceptionPreview[],
           groups: [] as ExceptionGroup[],
         },
-        recentEntries: [] as RecentEntry[],
-        lastPostedDate: null,
-        keyFigures: { bruttomargin: null, egenkapitalandel: null },
+        recentEntries,
+        lastPostedDate,
+        keyFigures: { bruttomargin, egenkapitalandel: null },
       };
     }
 
@@ -866,10 +1075,25 @@ export function buildCompanyOverview(
     const egenkapitalandel =
       bs.totalAssets !== 0 ? equityTotal / bs.totalAssets : null;
 
+    const vatBlock: OverviewVat = {
+      periodStart: vat.periodStart,
+      periodEnd: vat.periodEnd,
+      periodLabel: `${vatHalf}. halvår ${yearNum}`,
+      outputVat: vat.outputVat,
+      inputVat: vat.inputVat,
+      payable: vat.payable,
+      deadline: vatHalfYearDeadline(yearNum, vatHalf),
+      daysRemaining: daysBetween(
+        todayIsoDate(),
+        vatHalfYearDeadline(yearNum, vatHalf),
+      ),
+    };
+
     return {
       slug: entry.slug,
       selectedYear: selectedLabel,
       archived: false,
+      archivedSource: null as string | null,
       company: companyBlock,
       fiscalYears: years,
       profitAndLoss: {
@@ -884,19 +1108,7 @@ export function buildCompanyOverview(
         difference: bankDifference,
       },
       receivables,
-      vat: {
-        periodStart: vat.periodStart,
-        periodEnd: vat.periodEnd,
-        periodLabel: `${vatHalf}. halvår ${yearNum}`,
-        outputVat: vat.outputVat,
-        inputVat: vat.inputVat,
-        payable: vat.payable,
-        deadline: vatHalfYearDeadline(yearNum, vatHalf),
-        daysRemaining: daysBetween(
-          todayIsoDate(),
-          vatHalfYearDeadline(yearNum, vatHalf),
-        ),
-      },
+      vat: vatBlock as OverviewVat | null,
       exceptions: {
         count: exceptions.count,
         rows: exceptionRows,
@@ -1189,20 +1401,37 @@ export function buildCompanyIncomeStatement(
   try {
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
+      // Archived year — derive the resultatopgørelse from the archived
+      // SaldoBalance (#197). The prior column comes from the prior year's
+      // archive when one exists, so a year-over-year comparison still works.
+      const archYear = parseInt(ctx.selectedLabel, 10);
+      const current = archiveIncomeStatement(ctx.db, archYear);
+      const prior = archiveIncomeStatement(ctx.db, archYear - 1);
+      const priorIncome = new Map(prior.income.map((l) => [l.accountNo, l.amount]));
+      const priorExpense = new Map(
+        prior.expense.map((l) => [l.accountNo, l.amount]),
+      );
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
         archived: true,
+        archivedSource: archiveYearRow(ctx.db, archYear)?.sourceSystem ?? null,
         company: companyBlock,
         fiscalYears: ctx.years,
-        income: [] as IncomeStatementLine[],
-        expense: [] as IncomeStatementLine[],
-        totalIncome: 0,
-        totalExpense: 0,
-        priorTotalIncome: 0,
-        priorTotalExpense: 0,
-        result: 0,
-        priorResult: 0,
+        income: current.income.map((l) => ({
+          ...l,
+          priorAmount: priorIncome.get(l.accountNo) ?? 0,
+        })),
+        expense: current.expense.map((l) => ({
+          ...l,
+          priorAmount: priorExpense.get(l.accountNo) ?? 0,
+        })),
+        totalIncome: current.totalIncome,
+        totalExpense: current.totalExpense,
+        priorTotalIncome: prior.totalIncome,
+        priorTotalExpense: prior.totalExpense,
+        result: current.result,
+        priorResult: prior.result,
       };
     }
 
@@ -1233,6 +1462,7 @@ export function buildCompanyIncomeStatement(
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
       archived: false,
+      archivedSource: null as string | null,
       company: companyBlock,
       fiscalYears: ctx.years,
       income,
@@ -1264,9 +1494,13 @@ export type CompanyBalance = ReturnType<typeof buildCompanyBalance>;
 
 /**
  * Balance — the balance sheet as of the selected fiscal year's end date:
- * assets, liabilities and equity sections with section totals. The un-closed
- * period result is surfaced under equity so the sheet balances (assets =
- * liabilities + equity). Computed by `core/financial-statements`. Money kroner.
+ * assets, liabilities and equity sections with section totals. The fiscal
+ * year's result is folded into the equity section as an "Årets resultat" line,
+ * so `equity.total` is the equity figure an owner reads (equity accounts plus
+ * the result) and the sheet balances as assets = liabilities + equity. That
+ * holds for live years (computed by `core/financial-statements`) and archived
+ * years (#197) alike, and keeps `equity.total` equal to the Flerårsoversigt's
+ * `egenkapital` for the same year. Money is kroner.
  */
 export function buildCompanyBalance(
   workspaceRoot: string,
@@ -1277,21 +1511,77 @@ export function buildCompanyBalance(
   try {
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
-      const empty: BalanceSection = { lines: [], total: 0 };
+      // Archived year — classify the archived SaldoBalance (#197) into the
+      // asset / liability / equity sections. The income/expense net is the
+      // fiscal year's result: like a balance sheet's retained earnings it
+      // belongs to equity, so it is folded into the equity section as an
+      // "Årets resultat" line. That makes `equity.total` the equity figure an
+      // owner reads — equity accounts plus the year's result — and the sheet
+      // balances as assets = liabilities + equity, internally consistent with
+      // the Flerårsoversigt's `egenkapital` for the same year.
+      const archYear = parseInt(ctx.selectedLabel, 10);
+      const header = archiveYearRow(ctx.db, archYear);
+      const assets: BalanceLine[] = [];
+      const liabilities: BalanceLine[] = [];
+      const equity: BalanceLine[] = [];
+      let totalAssets = 0;
+      let totalLiabilities = 0;
+      let equitySection = 0;
+      let periodResult = 0;
+      if (header) {
+        for (const b of archiveTypedBalances(ctx.db, header.id)) {
+          if (
+            b.type === "asset" ||
+            (b.type === "vat" && b.normalBalance === "debit")
+          ) {
+            // Assets are debit-normal — the archive amount reads as-is.
+            assets.push({ accountNo: b.accountNo, name: b.name, amount: b.amount });
+            totalAssets += b.amount;
+          } else if (
+            b.type === "liability" ||
+            (b.type === "vat" && b.normalBalance === "credit")
+          ) {
+            const amount = roundKroner(-b.amount);
+            liabilities.push({ accountNo: b.accountNo, name: b.name, amount });
+            totalLiabilities += amount;
+          } else if (b.type === "equity") {
+            const amount = roundKroner(-b.amount);
+            equity.push({ accountNo: b.accountNo, name: b.name, amount });
+            equitySection += amount;
+          } else if (b.type === "income") {
+            periodResult += -b.amount;
+          } else if (b.type === "expense") {
+            periodResult -= b.amount;
+          }
+        }
+      }
+      totalAssets = roundKroner(totalAssets);
+      totalLiabilities = roundKroner(totalLiabilities);
+      equitySection = roundKroner(equitySection);
+      periodResult = roundKroner(periodResult);
+      // Fold the year's result into equity as a retained-earnings line so the
+      // equity section total carries it — the same way the live Balance view
+      // surfaces the result on the equity side.
+      equity.push({ accountNo: "—", name: "Årets resultat", amount: periodResult });
+      const totalEquity = roundKroner(equitySection + periodResult);
+      const totalLiabilitiesAndEquity = roundKroner(
+        totalLiabilities + totalEquity,
+      );
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
         archived: true,
+        archivedSource: header?.sourceSystem ?? null,
         company: companyBlock,
         fiscalYears: ctx.years,
         asOfDate: `${ctx.selectedLabel}-12-31`,
-        assets: empty,
-        liabilities: empty,
-        equity: empty,
-        periodResult: 0,
-        totalAssets: 0,
-        totalLiabilitiesAndEquity: 0,
-        balanced: true,
+        assets: { lines: assets, total: totalAssets },
+        liabilities: { lines: liabilities, total: totalLiabilities },
+        equity: { lines: equity, total: totalEquity },
+        periodResult,
+        totalAssets,
+        totalLiabilitiesAndEquity,
+        balanced: Math.abs(totalAssets - totalLiabilitiesAndEquity) < 0.005,
       };
     }
 
@@ -1301,10 +1591,24 @@ export function buildCompanyBalance(
     const toLines = (lines: { accountNo: string; name: string; amount: number }[]) =>
       lines.map((l) => ({ accountNo: l.accountNo, name: l.name, amount: l.amount }));
 
+    // Fold the un-closed period result into the equity section as a
+    // retained-earnings line — `equity.total` is then the equity figure an
+    // owner reads (equity accounts plus the year's result) and matches the
+    // Flerårsoversigt's `egenkapital`. The sheet balances as
+    // assets = liabilities + equity.
+    const equityLines = toLines(bs.equity.lines);
+    equityLines.push({
+      accountNo: "—",
+      name: "Årets resultat",
+      amount: bs.periodResult,
+    });
+    const equityTotal = roundKroner(bs.equity.total + bs.periodResult);
+
     return {
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
       archived: false,
+      archivedSource: null as string | null,
       company: companyBlock,
       fiscalYears: ctx.years,
       asOfDate: bs.asOfDate,
@@ -1313,7 +1617,7 @@ export function buildCompanyBalance(
         lines: toLines(bs.liabilities.lines),
         total: bs.liabilities.total,
       },
-      equity: { lines: toLines(bs.equity.lines), total: bs.equity.total },
+      equity: { lines: equityLines, total: equityTotal },
       periodResult: bs.periodResult,
       totalAssets: bs.totalAssets,
       totalLiabilitiesAndEquity: bs.totalLiabilitiesAndEquity,
@@ -1350,18 +1654,47 @@ export function buildCompanyTrialBalance(
   try {
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
+      // Archived year — the archived SaldoBalance (#197) is itself the trial
+      // balance. The export stores only a signed (debit − credit) closing
+      // balance per account, so a positive balance reads as a debit column
+      // figure and a negative one as a credit; the report is balanced when
+      // every account's balance nets to zero.
+      const archYear = parseInt(ctx.selectedLabel, 10);
+      const header = archiveYearRow(ctx.db, archYear);
+      const rows: TrialBalanceRow[] = [];
+      let totalDebit = 0;
+      let totalCredit = 0;
+      if (header) {
+        for (const b of archiveTypedBalances(ctx.db, header.id)) {
+          const debit = b.amount > 0 ? b.amount : 0;
+          const credit = b.amount < 0 ? roundKroner(-b.amount) : 0;
+          totalDebit += debit;
+          totalCredit += credit;
+          rows.push({
+            accountNo: b.accountNo,
+            name: b.name,
+            type: b.type ?? "",
+            debit,
+            credit,
+            balance: b.amount,
+          });
+        }
+      }
+      totalDebit = roundKroner(totalDebit);
+      totalCredit = roundKroner(totalCredit);
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
         archived: true,
+        archivedSource: header?.sourceSystem ?? null,
         company: companyBlock,
         fiscalYears: ctx.years,
         periodStart: `${ctx.selectedLabel}-01-01`,
         periodEnd: `${ctx.selectedLabel}-12-31`,
-        rows: [] as TrialBalanceRow[],
-        totalDebit: 0,
-        totalCredit: 0,
-        balanced: true,
+        rows,
+        totalDebit,
+        totalCredit,
+        balanced: Math.abs(totalDebit - totalCredit) < 0.005,
       };
     }
 
@@ -1380,6 +1713,7 @@ export function buildCompanyTrialBalance(
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
       archived: false,
+      archivedSource: null as string | null,
       company: companyBlock,
       fiscalYears: ctx.years,
       periodStart: tb.periodStart,
@@ -1437,16 +1771,124 @@ export function buildCompanyJournal(
   try {
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
+      // Archived year — group the archived Posteringer (#197) by their voucher
+      // (Bilag) number into journal-entry-shaped rows. The export stores one
+      // signed `amount` per line (the raw Beløb): a positive amount reads as a
+      // debit, a negative one as a credit. Lines with no voucher are grouped
+      // under a synthetic key so nothing is dropped.
+      const archYear = parseInt(ctx.selectedLabel, 10);
+      const header = archiveYearRow(ctx.db, archYear);
+      const accountArg =
+        account !== null && account.trim().length > 0 ? account.trim() : null;
+      let entries: JournalEntry[] = [];
+      let accountFilter: { accountNo: string; name: string } | null = null;
+      if (header) {
+        const postingRows = ctx.db
+          .query(
+            `SELECT line_no       AS lineNo,
+                    account_no    AS accountNo,
+                    account_name  AS accountName,
+                    transaction_date AS date,
+                    voucher       AS voucher,
+                    text          AS text,
+                    amount        AS amount
+               FROM import_archive_postings
+              WHERE archive_year_id = ?
+              ORDER BY line_no ASC`,
+          )
+          .all(header.id) as Array<{
+          lineNo: number;
+          accountNo: string;
+          accountName: string | null;
+          date: string | null;
+          voucher: string | null;
+          text: string | null;
+          amount: number;
+        }>;
+
+        if (accountArg !== null) {
+          const sample = postingRows.find((r) => r.accountNo === accountArg);
+          accountFilter = {
+            accountNo: accountArg,
+            name: sample?.accountName ?? accountArg,
+          };
+        }
+
+        // Group by voucher; an absent voucher gets a stable synthetic key so
+        // those lines still surface (one entry per orphan line).
+        const groups = new Map<
+          string,
+          { voucher: string; date: string; lines: typeof postingRows }
+        >();
+        for (const r of postingRows) {
+          const key = r.voucher && r.voucher.length > 0
+            ? r.voucher
+            : `linje-${r.lineNo}`;
+          const existing = groups.get(key);
+          if (existing) {
+            existing.lines.push(r);
+            if (r.date && (!existing.date || r.date < existing.date)) {
+              existing.date = r.date;
+            }
+          } else {
+            groups.set(key, {
+              voucher: r.voucher && r.voucher.length > 0 ? r.voucher : key,
+              date: r.date ?? `${archYear}-01-01`,
+              lines: [r],
+            });
+          }
+        }
+
+        let all: JournalEntry[] = [...groups.values()].map((g, i) => {
+          const lines: JournalLine[] = g.lines.map((r) => ({
+            accountNo: r.accountNo,
+            accountName: r.accountName ?? "",
+            debit: r.amount > 0 ? roundKroner(r.amount) : 0,
+            credit: r.amount < 0 ? roundKroner(-r.amount) : 0,
+            text: r.text,
+          }));
+          const total = roundKroner(
+            lines.reduce((acc, l) => acc + l.debit, 0),
+          );
+          // The entry text is the first non-empty line text — the Dinero
+          // export repeats the voucher description across its lines.
+          const text =
+            g.lines.find((r) => r.text && r.text.length > 0)?.text ?? "";
+          return {
+            id: i + 1,
+            entryNo: g.voucher,
+            date: g.date,
+            text,
+            total,
+            lines,
+          };
+        });
+
+        // Newest first — the same ordering the live journal uses.
+        all.sort((a, b) =>
+          a.date !== b.date
+            ? b.date.localeCompare(a.date)
+            : b.entryNo.localeCompare(a.entryNo),
+        );
+
+        entries =
+          accountArg === null
+            ? all
+            : all.filter((e) =>
+                e.lines.some((l) => l.accountNo === accountArg),
+              );
+      }
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
         archived: true,
+        archivedSource: header?.sourceSystem ?? null,
         company: companyBlock,
         fiscalYears: ctx.years,
         periodStart: `${ctx.selectedLabel}-01-01`,
         periodEnd: `${ctx.selectedLabel}-12-31`,
-        entries: [] as JournalEntry[],
-        accountFilter: null as { accountNo: string; name: string } | null,
+        entries,
+        accountFilter,
       };
     }
 
@@ -1559,6 +2001,7 @@ export function buildCompanyJournal(
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
       archived: false,
+      archivedSource: null as string | null,
       company: companyBlock,
       fiscalYears: ctx.years,
       periodStart: yearStart,
@@ -2046,22 +2489,39 @@ export type MultiYearRow = {
   udgifter: number;
   /** Result (omsætning − udgifter), kroner. */
   resultat: number;
+  /** Total assets (balancesum) at the year end, kroner. */
+  balancesum: number;
+  /** Equity (egenkapital incl. period result) at the year end, kroner. */
+  egenkapital: number;
+  /**
+   * Bruttomargin — resultat ÷ omsætning, a 0–1 fraction. Null when there is no
+   * omsætning to divide by; no figure is invented.
+   */
+  bruttomargin: number | null;
+  /**
+   * Egenkapitalandel — egenkapital ÷ balancesum, a 0–1 fraction. Null when the
+   * balance sum is zero.
+   */
+  egenkapitalandel: number | null;
 };
 
 export type CompanyMultiYear = ReturnType<typeof buildCompanyMultiYear>;
 
 /**
- * Flerårsoversigt — key figures (omsætning / udgifter / resultat) for every
- * fiscal year available for a company, oldest→newest so a trend can be
- * charted.
+ * Flerårsoversigt — key figures for every fiscal year available for a company,
+ * oldest→newest so a trend can be charted: the P&L (omsætning / udgifter /
+ * resultat), the balance-sheet development (balancesum / egenkapital) and the
+ * two ratios an owner reads off a glance (bruttomargin, egenkapitalandel).
  *
  * The live year(s) are computed from the posted ledger via
- * `core/financial-statements` — exactly as `/income-statement` does. The
- * archived years (#197) are derived from `import_archive_balances`: each
- * archived account's closing balance is classified income vs expense by
- * joining its account number to the live `accounts` table's `type`. Income
- * accounts are credit-normal, so the archive's signed balance is negated to
- * read as a positive omsætning; expense accounts read positive as-is.
+ * `core/financial-statements` — exactly as `/income-statement` and `/balance`
+ * do. The archived years (#197) are derived from `import_archive_balances`:
+ * each archived account's closing balance is classified by joining its account
+ * number to the live `accounts` table's `type`. Income accounts are
+ * credit-normal, so the archive's signed balance is negated to read as a
+ * positive omsætning; expense accounts read positive as-is. Assets are
+ * debit-normal (read as-is); equity is credit-normal (negated) and carries the
+ * un-closed period result so it matches the archive-aware Balance view.
  *
  * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
  */
@@ -2093,26 +2553,50 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
       accountTypeRows.map((r) => [r.accountNo, r.type]),
     );
 
+    // Bruttomargin (resultat ÷ omsætning) and egenkapitalandel (egenkapital ÷
+    // balancesum) — each a 0–1 fraction, or null when its denominator is zero.
+    // The same two ratios the Overblik view surfaces; no figure is invented.
+    const ratios = (
+      resultat: number,
+      omsaetning: number,
+      egenkapital: number,
+      balancesum: number,
+    ) => ({
+      bruttomargin: omsaetning !== 0 ? resultat / omsaetning : null,
+      egenkapitalandel: balancesum !== 0 ? egenkapital / balancesum : null,
+    });
+
     const rows: MultiYearRow[] = [];
     for (const fy of years) {
       if (fy.source === "live") {
         const yearNum = parseInt(fy.label, 10);
-        const pl = buildProfitAndLoss(
-          db,
-          `${yearNum}-01-01`,
-          `${yearNum}-12-31`,
-        );
+        const yearEnd = `${yearNum}-12-31`;
+        const pl = buildProfitAndLoss(db, `${yearNum}-01-01`, yearEnd);
+        // Balance-sheet development — total assets and equity (the equity
+        // section plus the un-closed period result), exactly as the Balance
+        // and Overblik views compute them.
+        const bs = buildBalanceSheet(db, yearEnd);
+        const balancesum = roundKroner(bs.totalAssets);
+        const egenkapital = roundKroner(bs.equity.total + bs.periodResult);
+        const omsaetning = roundKroner(pl.totalIncome);
+        const udgifter = roundKroner(pl.totalExpense);
+        const resultat = roundKroner(pl.result);
         rows.push({
           year: fy.label,
           source: "live",
-          omsaetning: roundKroner(pl.totalIncome),
-          udgifter: roundKroner(pl.totalExpense),
-          resultat: roundKroner(pl.result),
+          omsaetning,
+          udgifter,
+          resultat,
+          balancesum,
+          egenkapital,
+          ...ratios(resultat, omsaetning, egenkapital, balancesum),
         });
         continue;
       }
 
-      // Archived year — classify each SaldoBalance line by account type.
+      // Archived year — classify each SaldoBalance line by account type. The
+      // archive `amount` is debit-signed (debit − credit): income/equity are
+      // credit-normal and read negated, expenses/assets read as-is.
       const archiveId = db
         .query(
           "SELECT id FROM import_archive_years WHERE fiscal_year = ? ORDER BY id DESC",
@@ -2120,6 +2604,8 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
         .get(parseInt(fy.label, 10)) as { id: number } | undefined;
       let omsaetning = 0;
       let udgifter = 0;
+      let balancesum = 0;
+      let equitySection = 0;
       if (archiveId) {
         const balRows = db
           .query(
@@ -2131,20 +2617,28 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
         for (const b of balRows) {
           const type = accountType.get(b.accountNo);
           const amount = Number(b.amount ?? 0);
-          // Income accounts are credit-normal: a closing balance reads
-          // negative in the debit-positive archive sign, so negate it.
           if (type === "income") omsaetning += -amount;
           else if (type === "expense") udgifter += amount;
+          else if (type === "asset") balancesum += amount;
+          else if (type === "equity") equitySection += -amount;
         }
       }
       omsaetning = roundKroner(omsaetning);
       udgifter = roundKroner(udgifter);
+      const resultat = roundKroner(omsaetning - udgifter);
+      balancesum = roundKroner(balancesum);
+      // Equity carries the un-closed period result so it matches the
+      // archive-aware Balance view (assets = liabilities + equity + result).
+      const egenkapital = roundKroner(equitySection + resultat);
       rows.push({
         year: fy.label,
         source: "archive",
         omsaetning,
         udgifter,
-        resultat: roundKroner(omsaetning - udgifter),
+        resultat,
+        balancesum,
+        egenkapital,
+        ...ratios(resultat, omsaetning, egenkapital, balancesum),
       });
     }
 

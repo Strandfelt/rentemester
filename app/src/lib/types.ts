@@ -183,11 +183,30 @@ export type OverviewRecentEntry = {
  * The "Overblik" payload. All money fields are kroner (DKK with decimals) —
  * use `formatKroner`, not `formatCurrency` (which expects minor units).
  */
+/** The Overblik VAT block — null for an archived year (no VAT data exists). */
+export type OverviewVat = {
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  /** 25% of the standard-rated sales base for the period, kroner. */
+  outputVat: number;
+  /** 25% of the standard-rated purchase base for the period, kroner. */
+  inputVat: number;
+  /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+  payable: number;
+  /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
+  deadline: string;
+  /** Signed countdown from today to the deadline; negative once passed. */
+  daysRemaining: number;
+};
+
 export type CompanyOverview = {
   slug: string;
   selectedYear: string;
-  /** True for an archived-only year — the live ledger has nothing for it. */
+  /** True when the figures are derived from the #197 archive, not the ledger. */
   archived: boolean;
+  /** The archive's source system (e.g. "dinero") when archived, else null. */
+  archivedSource: string | null;
   company: {
     name: string;
     cvr: string | null;
@@ -218,21 +237,8 @@ export type CompanyOverview = {
     /** Sum of the open balances, kroner. */
     openTotal: number;
   };
-  vat: {
-    periodStart: string;
-    periodEnd: string;
-    periodLabel: string;
-    /** 25% of the standard-rated sales base for the period, kroner. */
-    outputVat: number;
-    /** 25% of the standard-rated purchase base for the period, kroner. */
-    inputVat: number;
-    /** outputVat − inputVat; positive is payable to SKAT, kroner. */
-    payable: number;
-    /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
-    deadline: string;
-    /** Signed countdown from today to the deadline; negative once passed. */
-    daysRemaining: number;
-  };
+  /** The half-yearly VAT position; null for an archived year. */
+  vat: OverviewVat | null;
   exceptions: {
     count: number;
     rows: OverviewExceptionRow[];
@@ -282,7 +288,10 @@ export type IncomeStatementLine = {
 export type CompanyIncomeStatement = {
   slug: string;
   selectedYear: string;
+  /** True when the figures are derived from the #197 archive. */
   archived: boolean;
+  /** The archive's source system when archived, else null. */
+  archivedSource: string | null;
   company: StatementCompany;
   fiscalYears: FiscalYearEntry[];
   income: IncomeStatementLine[];
@@ -316,14 +325,22 @@ export type BalanceSection = {
 export type CompanyBalance = {
   slug: string;
   selectedYear: string;
+  /** True when the figures are derived from the #197 archive. */
   archived: boolean;
+  /** The archive's source system when archived, else null. */
+  archivedSource: string | null;
   company: StatementCompany;
   fiscalYears: FiscalYearEntry[];
   asOfDate: string;
   assets: BalanceSection;
   liabilities: BalanceSection;
+  /**
+   * Equity including the fiscal year's result: the result is folded in as an
+   * "Årets resultat" line so `equity.total` is the equity figure an owner
+   * reads — and the same number as the Flerårsoversigt's `egenkapital`.
+   */
   equity: BalanceSection;
-  /** The un-closed period result, carried into the equity side. */
+  /** The fiscal year's result, also folded into the equity section. */
   periodResult: number;
   totalAssets: number;
   totalLiabilitiesAndEquity: number;
@@ -349,7 +366,10 @@ export type TrialBalanceRow = {
 export type CompanyTrialBalance = {
   slug: string;
   selectedYear: string;
+  /** True when the rows are the read-only #197 archived SaldoBalance. */
   archived: boolean;
+  /** The archive's source system when archived, else null. */
+  archivedSource: string | null;
   company: StatementCompany;
   fiscalYears: FiscalYearEntry[];
   periodStart: string;
@@ -390,7 +410,10 @@ export type JournalEntry = {
 export type CompanyJournal = {
   slug: string;
   selectedYear: string;
+  /** True when the entries are derived from the #197 archived Posteringer. */
   archived: boolean;
+  /** The archive's source system when archived, else null. */
+  archivedSource: string | null;
   company: StatementCompany;
   fiscalYears: FiscalYearEntry[];
   periodStart: string;
@@ -561,6 +584,14 @@ export type MultiYearRow = {
   udgifter: number;
   /** Result (omsætning − udgifter), kroner. */
   resultat: number;
+  /** Total assets (balancesum) at the year end, kroner. */
+  balancesum: number;
+  /** Equity (egenkapital incl. period result) at the year end, kroner. */
+  egenkapital: number;
+  /** Bruttomargin — resultat ÷ omsætning, a 0–1 fraction; null when no omsætning. */
+  bruttomargin: number | null;
+  /** Egenkapitalandel — egenkapital ÷ balancesum, a 0–1 fraction; null when balancesum is 0. */
+  egenkapitalandel: number | null;
 };
 
 export type CompanyMultiYear = {

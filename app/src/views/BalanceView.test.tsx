@@ -61,4 +61,17 @@ describe("BalanceView — Balance", () => {
       within(total as HTMLElement).getByText(/41\.388,03/),
     ).toBeInTheDocument();
   });
+
+  test("an archived year renders the balance sheet under a read-only banner", async () => {
+    mockFetch(
+      route({ archived: true, archivedSource: "dinero", selectedYear: "2024" }),
+    );
+    renderView();
+    expect(
+      await screen.findByText(/Arkiveret regnskabsår 2024 — skrivebeskyttet/),
+    ).toBeInTheDocument();
+    // The archived balance sheet is still rendered as a real table.
+    expect(screen.getByText("Aktiver")).toBeInTheDocument();
+    expect(screen.getByText("Egenkapital")).toBeInTheDocument();
+  });
 });

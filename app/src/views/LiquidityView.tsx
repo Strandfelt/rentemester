@@ -84,7 +84,7 @@ export function LiquidityView() {
       />
 
       {cf.archived ? (
-        <ArchivedNotice slug={slug} year={cf.selectedYear} />
+        <ArchivedNotice year={cf.selectedYear} />
       ) : !cf.hasTransactions ? (
         <div className="card archived-notice">
           <h3>Ingen pengestrøm</h3>
@@ -200,20 +200,16 @@ export function LiquidityView() {
   );
 }
 
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
+function ArchivedNotice({ year }: { year: string }) {
   return (
     <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
+      <h3>Likviditet er ikke tilgængelig for {year}</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Likviditet opgøres kun for
-        den aktive ledger.
+        {year} er et arkiveret regnskabsår. Likviditet bygger på de importerede
+        banktransaktioner, og der findes ingen kontoudtogsdata for et arkiveret
+        år — pengestrømmen vises derfor ikke. Resultatopgørelse, balance,
+        saldobalance og posteringer for {year} er tilgængelige.
       </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
     </div>
   );
 }

@@ -70,7 +70,7 @@ export function InvoicesView() {
       />
 
       {inv.archived ? (
-        <ArchivedNotice slug={slug} year={inv.selectedYear} />
+        <ArchivedNotice year={inv.selectedYear} />
       ) : inv.invoices.length === 0 ? (
         <div className="card archived-notice">
           <h3>Ingen fakturaer endnu</h3>
@@ -165,20 +165,16 @@ export function InvoicesView() {
   );
 }
 
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
+function ArchivedNotice({ year }: { year: string }) {
   return (
     <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
+      <h3>Fakturaer er ikke tilgængelige for {year}</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Fakturaer for {year} blev
-        ikke udstedt i den aktive ledger.
+        {year} er et arkiveret regnskabsår. Udstedte fakturaer føres kun i den
+        aktive ledger og vises derfor ikke for et arkiveret år.
+        Resultatopgørelse, balance, saldobalance og posteringer for {year} er
+        tilgængelige.
       </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
     </div>
   );
 }

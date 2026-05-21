@@ -76,4 +76,17 @@ describe("IncomeStatementView — Resultatopgørelse", () => {
       "/companies/acme-aps/posteringer?year=2026&account=1000",
     );
   });
+
+  test("an archived year renders the statement under a read-only banner", async () => {
+    mockFetch(
+      route({ archived: true, archivedSource: "dinero", selectedYear: "2024" }),
+    );
+    renderView();
+    expect(
+      await screen.findByText(/Arkiveret regnskabsår 2024 — skrivebeskyttet/),
+    ).toBeInTheDocument();
+    // The archived resultatopgørelse is still rendered as a real table.
+    expect(screen.getByText("Indtægter")).toBeInTheDocument();
+    expect(screen.getByText("Omsætning")).toBeInTheDocument();
+  });
 });

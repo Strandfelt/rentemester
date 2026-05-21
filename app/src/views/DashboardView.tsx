@@ -14,6 +14,7 @@ import { formatKroner, formatPercent } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyOverview, OverviewMonth } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
+import { ArchivedBanner } from "../components/ArchivedBanner";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
 import { PnlChart } from "../components/PnlChart";
 
@@ -57,50 +58,55 @@ export function DashboardView() {
         onYearChange={setYear}
       />
 
-      {o.archived ? (
-        <ArchivedNotice slug={slug} year={o.selectedYear} />
-      ) : (
-        <>
-          <p className="period-head muted">
-            Regnskabsår {o.selectedYear} ·{" "}
-            {o.lastPostedDate
-              ? `Senest bogført pr. ${o.lastPostedDate}`
-              : "Ingen posteringer bogført endnu"}
-          </p>
+      {o.archived && (
+        <ArchivedBanner year={o.selectedYear} source={o.archivedSource} />
+      )}
+      <p className="period-head muted">
+        Regnskabsår {o.selectedYear} ·{" "}
+        {o.lastPostedDate
+          ? `Senest bogført pr. ${o.lastPostedDate}`
+          : "Ingen posteringer bogført endnu"}
+      </p>
 
-          <div className="kpi-row">
-            <KpiCard
-              label="Omsætning"
-              value={formatKroner(o.profitAndLoss.omsaetning, currency)}
-              tone="neutral"
-              to={statementTo(slug, "resultatopgorelse", o.selectedYear)}
-            />
-            <KpiCard
-              label="Udgifter"
-              value={formatKroner(o.profitAndLoss.udgifter, currency)}
-              tone="neutral"
-              to={statementTo(slug, "resultatopgorelse", o.selectedYear)}
-            />
-            <KpiCard
-              label="Resultat"
-              value={formatKroner(o.profitAndLoss.resultat, currency)}
-              sub={`Regnskabsår ${o.selectedYear}`}
-              tone={positive ? "result-positive" : "result-negative"}
-              emphasised
-              to={statementTo(slug, "resultatopgorelse", o.selectedYear)}
-            />
-          </div>
+      <div className="kpi-row">
+        <KpiCard
+          label="Omsætning"
+          value={formatKroner(o.profitAndLoss.omsaetning, currency)}
+          tone="neutral"
+          to={statementTo(slug, "resultatopgorelse", o.selectedYear)}
+        />
+        <KpiCard
+          label="Udgifter"
+          value={formatKroner(o.profitAndLoss.udgifter, currency)}
+          tone="neutral"
+          to={statementTo(slug, "resultatopgorelse", o.selectedYear)}
+        />
+        <KpiCard
+          label="Resultat"
+          value={formatKroner(o.profitAndLoss.resultat, currency)}
+          sub={`Regnskabsår ${o.selectedYear}`}
+          tone={positive ? "result-positive" : "result-negative"}
+          emphasised
+          to={statementTo(slug, "resultatopgorelse", o.selectedYear)}
+        />
+      </div>
 
-          <KeyFigures keyFigures={o.keyFigures} />
+      <KeyFigures keyFigures={o.keyFigures} />
 
-          <div className="section">
-            <h3>Indtægter og udgifter — {o.selectedYear}</h3>
-            <div className="card chart-card">
-              <PnlChart months={o.profitAndLoss.months} />
-            </div>
-          </div>
+      <div className="section">
+        <h3>Indtægter og udgifter — {o.selectedYear}</h3>
+        <div className="card chart-card">
+          <PnlChart months={o.profitAndLoss.months} />
+        </div>
+      </div>
 
-          <div className="status-grid">
+      <div className="status-grid">
+        {o.archived ? (
+          // An archived year has no live bank / VAT / exception data — show an
+          // honest "not available" card rather than faking a zero.
+          <ArchivedUnavailableCard />
+        ) : (
+          <>
             <BankCard
               bank={o.bank}
               currency={currency}
@@ -117,30 +123,30 @@ export function DashboardView() {
               to={statementTo(slug, "fakturaer", o.selectedYear)}
             />
             <ExceptionsCard slug={slug} exceptions={o.exceptions} />
-            <RecentEntriesCard
-              entries={o.recentEntries}
-              currency={currency}
-            />
-          </div>
-        </>
-      )}
+          </>
+        )}
+        <RecentEntriesCard entries={o.recentEntries} currency={currency} />
+      </div>
     </section>
   );
 }
 
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
+/**
+ * The Overblik status card shown for an archived year in place of the live
+ * Bank / Moms / Opgaver cards: those rest on live-ledger data (bank
+ * reconciliation, the VAT position, the exception queue) that simply does not
+ * exist for a pre-cut-over year. An honest "ikke tilgængelig" beats a fake 0.
+ */
+function ArchivedUnavailableCard() {
   return (
-    <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
-      <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv og vises ikke i Overblik.
+    <div className="card status-card">
+      <h3>Bank, moms og opgaver</h3>
+      <p className="muted status-note">
+        Bankafstemning, momsopgørelse og opgavekøen bygger på den aktive
+        ledger og er ikke tilgængelige for et arkiveret regnskabsår.
+        Resultatopgørelse, balance, saldobalance og posteringer vises ud fra
+        arkivet.
       </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
     </div>
   );
 }
@@ -306,6 +312,8 @@ function VatCard({
   currency: string;
   to: string;
 }) {
+  // VAT is a live-ledger figure — never rendered for an archived year.
+  if (vat === null) return null;
   // The half-yearly momsangivelse is easy to forget — surface the statutory
   // filing/payment deadline and a "X dage tilbage" countdown right on the card.
   const days = vat.daysRemaining;

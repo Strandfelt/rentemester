@@ -51,7 +51,7 @@ export function BankView() {
       />
 
       {b.archived ? (
-        <ArchivedNotice slug={slug} year={b.selectedYear} />
+        <ArchivedNotice year={b.selectedYear} />
       ) : (
         <>
           <BankDifferenceBanner bank={b} currency={currency} />
@@ -206,20 +206,16 @@ function BankDifferenceBanner({
   );
 }
 
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
+function ArchivedNotice({ year }: { year: string }) {
   return (
     <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
+      <h3>Bank er ikke tilgængelig for {year}</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Den arkiverede
-        saldobalance for {year} vises i Arkiv.
+        {year} er et arkiveret regnskabsår. Bankafstemning bygger på de
+        importerede kontoudtog, og der findes ingen kontoudtogsdata for et
+        arkiveret år — det vises derfor ikke. Resultatopgørelse, balance,
+        saldobalance og posteringer for {year} er tilgængelige.
       </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
     </div>
   );
 }

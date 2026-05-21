@@ -57,7 +57,7 @@ export function ObligationsView() {
       />
 
       {o.archived ? (
-        <ArchivedNotice slug={slug} year={o.selectedYear} />
+        <ArchivedNotice year={o.selectedYear} />
       ) : o.obligations.length === 0 ? (
         <div className="card archived-notice">
           <h3>Ingen forpligtelser</h3>
@@ -164,20 +164,16 @@ function DeadlineFlag({ row }: { row: ObligationRow }) {
   );
 }
 
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
+function ArchivedNotice({ year }: { year: string }) {
   return (
     <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
+      <h3>Forpligtelser er ikke tilgængelige for {year}</h3>
       <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Forpligtelser opgøres kun
-        for den aktive ledger.
+        {year} er et arkiveret regnskabsår. Forpligtelser — moms, selskabsskat
+        og kreditorgæld med forfaldsdato — opgøres kun for den aktive ledger og
+        vises derfor ikke for et arkiveret år. Resultatopgørelse, balance,
+        saldobalance og posteringer for {year} er tilgængelige.
       </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
     </div>
   );
 }

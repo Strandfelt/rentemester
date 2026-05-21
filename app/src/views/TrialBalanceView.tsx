@@ -11,6 +11,7 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyTrialBalance } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
+import { ArchivedBanner } from "../components/ArchivedBanner";
 import {
   CompanyNav,
   accountPostingsTo,
@@ -57,99 +58,78 @@ export function TrialBalanceView() {
         onYearChange={setYear}
       />
 
-      {t.archived ? (
-        <ArchivedNotice slug={slug} year={t.selectedYear} />
-      ) : (
-        <>
-          <p className="statement-asof muted">
-            {t.periodStart} – {t.periodEnd}
-          </p>
-          <div className="card statement-card table-scroll">
-            <table className="data statement-table">
-              <thead>
-                <tr>
-                  <th>Konto</th>
-                  <th>Navn</th>
-                  <th className="num">Debet</th>
-                  <th className="num">Kredit</th>
-                  <th className="num">Saldo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {t.rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="empty-inline">
-                      Ingen posteringer i året.
-                    </td>
-                  </tr>
-                ) : (
-                  t.rows.map((row) => (
-                    <tr key={row.accountNo} className="account-row">
-                      <td className="account-no">
-                        <Link
-                          className="account-link"
-                          to={accountPostingsTo(
-                            slug,
-                            t.selectedYear,
-                            row.accountNo,
-                          )}
-                        >
-                          {row.accountNo}
-                        </Link>
-                      </td>
-                      <td>{row.name}</td>
-                      <td className="num">
-                        {formatKroner(row.debit, currency)}
-                      </td>
-                      <td className="num">
-                        {formatKroner(row.credit, currency)}
-                      </td>
-                      <td className="num">
-                        {formatKroner(row.balance, currency)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot>
-                <tr className="statement-subtotal">
-                  <td colSpan={2}>I alt</td>
-                  <td className="num">
-                    {formatKroner(t.totalDebit, currency)}
-                  </td>
-                  <td className="num">
-                    {formatKroner(t.totalCredit, currency)}
-                  </td>
-                  <td className="num" />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          <p className={`statement-check ${t.balanced ? "ok" : "alert"}`}>
-            {t.balanced
-              ? "Saldobalancen stemmer — debet = kredit."
-              : "Saldobalancen stemmer ikke. Kontrollér ledgeren."}
-          </p>
-        </>
+      {t.archived && (
+        <ArchivedBanner year={t.selectedYear} source={t.archivedSource} />
       )}
-    </section>
-  );
-}
-
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
-  return (
-    <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
-      <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Den arkiverede
-        saldobalance for {year} vises i Arkiv.
+      <p className="statement-asof muted">
+        {t.periodStart} – {t.periodEnd}
       </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
-    </div>
+      <div className="card statement-card table-scroll">
+        <table className="data statement-table">
+          <thead>
+            <tr>
+              <th>Konto</th>
+              <th>Navn</th>
+              <th className="num">Debet</th>
+              <th className="num">Kredit</th>
+              <th className="num">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {t.rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="empty-inline">
+                  Ingen posteringer i året.
+                </td>
+              </tr>
+            ) : (
+              t.rows.map((row) => (
+                <tr key={row.accountNo} className="account-row">
+                  <td className="account-no">
+                    <Link
+                      className="account-link"
+                      to={accountPostingsTo(
+                        slug,
+                        t.selectedYear,
+                        row.accountNo,
+                      )}
+                    >
+                      {row.accountNo}
+                    </Link>
+                  </td>
+                  <td>{row.name}</td>
+                  <td className="num">
+                    {formatKroner(row.debit, currency)}
+                  </td>
+                  <td className="num">
+                    {formatKroner(row.credit, currency)}
+                  </td>
+                  <td className="num">
+                    {formatKroner(row.balance, currency)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="statement-subtotal">
+              <td colSpan={2}>I alt</td>
+              <td className="num">
+                {formatKroner(t.totalDebit, currency)}
+              </td>
+              <td className="num">
+                {formatKroner(t.totalCredit, currency)}
+              </td>
+              <td className="num" />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className={`statement-check ${t.balanced ? "ok" : "alert"}`}>
+        {t.balanced
+          ? "Saldobalancen stemmer — debet = kredit."
+          : "Saldobalancen stemmer ikke. Kontrollér ledgeren."}
+      </p>
+    </section>
   );
 }
