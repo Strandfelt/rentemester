@@ -5,10 +5,7 @@ import {
 } from "../core/regulatory-coverage";
 import type { CommandDispatch } from "../cli-dispatch";
 
-// `reg coverage` — regulatory coverage, like code coverage but for the cited
-// Danish legislation. It is repo-static: it reads rules/dk/*.yaml and the
-// legal-source corpus, so it needs no --company. With --out it also writes the
-// deterministic Markdown report.
+// `reg coverage` — regulatory coverage; repo-static, needs no --company.
 export function register(dispatch: CommandDispatch): void {
   dispatch.on("reg", "coverage", (ctx) => {
     const coverage = computeRegulatoryCoverage();
@@ -49,9 +46,6 @@ export function register(dispatch: CommandDispatch): void {
       return;
     }
 
-    // Human output: a deterministic summary table. The structured renderer
-    // only surfaces a fixed set of keys, so the per-source breakdown is
-    // printed directly here.
     const ok = result.ok === true;
     const lines: string[] = [];
     lines.push(`${ok ? "✔" : "✘"} reg coverage`);

@@ -71,6 +71,28 @@ describe("extractProvisions structural anchors", () => {
   });
 });
 
+describe("commencement classification", () => {
+  test("the phrase 'træder i kraft' only marks commencement when it anchors the provision", () => {
+    const sourceId = "DK-BOGFORINGSLOVEN-2022-700";
+    const provisions = extractProvisions(readSource(sourceId), sourceId);
+
+    // The corpus contains provisions that mention commencement timing
+    // mid-sentence without being commencement provisions themselves.
+    const midPhrase = provisions.filter(
+      (p) => p.text.toLowerCase().indexOf("træder i kraft") > 30,
+    );
+    expect(midPhrase.length).toBeGreaterThan(0);
+    for (const provision of midPhrase) {
+      expect(provision.kind).not.toBe("commencement");
+    }
+
+    // A genuine commencement provision is still detected.
+    const bilag = "DK-BILAG-OPBEVARING-2023-1383";
+    const bilagProvisions = extractProvisions(readSource(bilag), bilag);
+    expect(findProvision(bilagProvisions, "§ 2, stk. 1")?.kind).toBe("commencement");
+  });
+});
+
 describe("determinism", () => {
   test("extractProvisions is byte-stable across repeated runs", () => {
     const sourceId = "DK-BILAG-OPBEVARING-2023-1383";
@@ -97,6 +119,16 @@ describe("ref parsing and round-trip", () => {
     expect(parseProvisionRef("§ 3a")).toEqual(["3a"]);
     expect(parseProvisionRef("§ 2, stk. 1, litra b")).toEqual(["2", "1", "b"]);
     expect(parseProvisionRef("not a ref")).toBeUndefined();
+  });
+
+  test("parseProvisionRef rejects malformed refs instead of resolving them wrong", () => {
+    // "§ 3 a" must not silently resolve to § 3; a dangling "og 7" must not be
+    // silently dropped — both surface as a loud closure error instead.
+    expect(parseProvisionRef("§ 3 a")).toBeUndefined();
+    expect(parseProvisionRef("§ 58, stk. 1, nr. 6 og 7")).toBeUndefined();
+    expect(parseProvisionRef("§ 3, stk. 2 extra")).toBeUndefined();
+    expect(parseProvisionRef("§ 3, stk.")).toBeUndefined();
+    expect(parseProvisionRef("")).toBeUndefined();
   });
 
   test("findProvision round-trips every extracted provision", () => {

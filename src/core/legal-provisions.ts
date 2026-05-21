@@ -64,15 +64,35 @@ function tokenize(xml: string): Token[] {
         i = end === -1 ? len : end + 2;
         continue;
       }
+      if (xml.startsWith("<![CDATA[", i)) {
+        const end = xml.indexOf("]]>", i + 9);
+        const inner = xml.slice(i + 9, end === -1 ? len : end);
+        if (inner.length > 0) tokens.push({ type: "text", value: inner });
+        i = end === -1 ? len : end + 3;
+        continue;
+      }
       if (xml.startsWith("<!", i)) {
         const end = xml.indexOf(">", i + 2);
         i = end === -1 ? len : end + 1;
         continue;
       }
-      const end = xml.indexOf(">", i);
-      if (end === -1) break;
-      const raw = xml.slice(i + 1, end).trim();
-      i = end + 1;
+      // Scan to the tag's closing '>', skipping any '>' inside quoted attributes.
+      let j = i + 1;
+      let quote = "";
+      while (j < len) {
+        const c = xml[j];
+        if (quote) {
+          if (c === quote) quote = "";
+        } else if (c === '"' || c === "'") {
+          quote = c;
+        } else if (c === ">") {
+          break;
+        }
+        j += 1;
+      }
+      if (j >= len) break;
+      const raw = xml.slice(i + 1, j).trim();
+      i = j + 1;
       if (raw.startsWith("/")) {
         tokens.push({ type: "close", name: raw.slice(1).trim() });
         continue;
@@ -229,8 +249,19 @@ function isAmendmentDocument(root: XmlNode): boolean {
   return false;
 }
 
-function classify(text: string, amendmentContext: boolean): ProvisionKind {
-  if (/træder i kraft/i.test(text)) return "commencement";
+const COMMENCEMENT_PHRASE = "træder i kraft";
+
+// A commencement provision opens with the phrase ("Loven/Bekendtgørelsen træder
+// i kraft …"). Matching the phrase anywhere would misclassify operative
+// provisions that merely reference commencement timing, so the phrase must sit
+// near the start of the provision text.
+function classify(
+  text: string,
+  commencementContext: boolean,
+  amendmentContext: boolean,
+): ProvisionKind {
+  const idx = text.toLowerCase().indexOf(COMMENCEMENT_PHRASE);
+  if (commencementContext || (idx >= 0 && idx <= 30)) return "commencement";
   if (amendmentContext) return "amendment";
   return "operative";
 }
@@ -252,6 +283,7 @@ export function extractProvisions(xmlText: string, sourceId: string): Provision[
     const paragrafIsAmendment = paragraf.name === "AendringCentreretParagraf"
       || findFirst(paragraf, "Aendring") !== undefined
       || findFirst(paragraf, "AendringDefinition") !== undefined;
+    const paragrafIsCommencement = paragraf.name === "IkraftCentreretParagraf";
     const explicitStk = paragraf.children.filter((child) => child.name === "Stk");
     const stkNodes = explicitStk.length > 0 ? explicitStk : [paragraf];
 
@@ -278,7 +310,7 @@ export function extractProvisions(xmlText: string, sourceId: string): Provision[
         sourceId,
         ref: `§ ${localId}, stk. ${stkOrdinal}`,
         path: [localId, stkOrdinal],
-        kind: classify(stkText, amendmentContext),
+        kind: classify(stkText, paragrafIsCommencement, amendmentContext),
         text: stkText,
         textHash: `sha256:${sha256Hex(stkText)}`,
       });
@@ -308,7 +340,7 @@ export function extractProvisions(xmlText: string, sourceId: string): Provision[
           sourceId,
           ref: `§ ${localId}, stk. ${stkOrdinal}, ${label}`,
           path: [localId, stkOrdinal, ordinal],
-          kind: classify(indentText, amendmentContext),
+          kind: classify(indentText, paragrafIsCommencement, amendmentContext),
           text: indentText,
           textHash: `sha256:${sha256Hex(indentText)}`,
         });
@@ -324,18 +356,18 @@ export function extractProvisions(xmlText: string, sourceId: string): Provision[
   return provisions;
 }
 
+// Whole-string match: any trailing or interleaved junk (a stray space in
+// "§ 3 a", a dangling "og 7") fails the match and surfaces as a loud closure
+// error rather than silently resolving to the wrong provision.
+const PROVISION_REF_RE =
+  /^§\s*(\d+[a-zæøå]*)(?:,\s*stk\.\s*(\d+)(?:,\s*(?:nr\.|litra)\s*(\d+|[a-zæøå]+))?)?$/i;
+
 export function parseProvisionRef(ref: string): string[] | undefined {
-  const trimmed = ref.trim();
-  const paragrafMatch = trimmed.match(/§\s*([0-9]+[a-zæøå]*)/i);
-  if (!paragrafMatch) return undefined;
-  const path = [paragrafMatch[1].toLowerCase()];
-  const stkMatch = trimmed.match(/stk\.\s*([0-9]+)/i);
-  if (stkMatch) path.push(stkMatch[1]);
-  const pointMatch = trimmed.match(/(?:nr\.|litra)\s*([0-9]+|[a-zæøå])/i);
-  if (pointMatch) {
-    if (path.length < 2) return undefined;
-    path.push(pointMatch[1].toLowerCase());
-  }
+  const match = ref.trim().match(PROVISION_REF_RE);
+  if (!match) return undefined;
+  const path = [match[1].toLowerCase()];
+  if (match[2] !== undefined) path.push(match[2]);
+  if (match[3] !== undefined) path.push(match[3].toLowerCase());
   return path;
 }
 

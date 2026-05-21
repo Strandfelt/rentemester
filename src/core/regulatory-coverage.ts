@@ -4,24 +4,9 @@ import { fileURLToPath } from "node:url";
 import { findProvision, loadAllProvisions, type Provision } from "./legal-provisions";
 import { readRuleMetadata } from "./rules-metadata";
 
-/**
- * Regulatory coverage — like code coverage, but it measures how much of the
- * cited Danish legislation is traceably implemented and tested in code.
- *
- * A rule in rules/dk/*.yaml may carry a `provisions:` block citing the exact
- * statutory provisions (stk-/nr-level) it implements. This engine cross-checks
- * those citations against the deterministic provision extractor and reports:
- *  - closure errors (a citation that does not resolve, or resolves outside the
- *    rule's declared source),
- *  - drift errors (the cited provision's text hash no longer matches the
- *    extractor — the legislation text changed since the rule was reviewed),
- *  - a coverage metric over operative provisions,
- *  - which rules are uncited and which operative provisions are uncovered,
- *  - a reverse map from provision to the rules/code/tests that touch it.
- *
- * The result is pure and deterministic: same repo state -> byte-identical
- * output. No timestamps, no wall-clock, everything sorted.
- */
+// Regulatory coverage — like code coverage, but it measures how much of the
+// cited Danish legislation is traceably implemented in code. See
+// docs/regulatory-coverage.md. The result is pure and deterministic.
 
 export type ClosureError = {
   ruleId: string;
@@ -82,11 +67,7 @@ function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/**
- * Recursively collects file paths under `dir` that end with `.ts`. Directory
- * reads are sorted so the walk order is stable. Returns paths relative to
- * `rootDir` with forward slashes.
- */
+// Directory reads are sorted so the walk order is stable across filesystems.
 function collectTsFiles(rootDir: string, dir: string): string[] {
   const out: string[] = [];
   let entries: string[];
@@ -114,13 +95,16 @@ function collectTsFiles(rootDir: string, dir: string): string[] {
 
 type ScanIndex = { codeFiles: string[]; testFiles: string[] };
 
-/**
- * Builds, for every rule id, the sorted lists of files under src/ and tests/
- * whose text mentions that rule id. Files are read once.
- */
+// Matches a rule-id-shaped token as a whole word, so DK-FOO-001 is not found
+// inside DK-FOO-0011 or a longer identifier.
+const RULE_ID_TOKEN_RE = /(?<![A-Za-z0-9])DK-[A-Z0-9-]+-\d{3}(?![0-9])/g;
+
+// For every rule id, the sorted lists of files under src/ and tests/ that
+// reference it. Each file is scanned once for all rule-id tokens.
 function buildScanIndex(rootDir: string, ruleIds: string[]): Map<string, ScanIndex> {
   const index = new Map<string, ScanIndex>();
   for (const ruleId of ruleIds) index.set(ruleId, { codeFiles: [], testFiles: [] });
+  const known = new Set(ruleIds);
 
   const srcFiles = collectTsFiles(rootDir, join(rootDir, "src"));
   const testFiles = collectTsFiles(rootDir, join(rootDir, "tests"));
@@ -133,8 +117,13 @@ function buildScanIndex(rootDir: string, ruleIds: string[]): Map<string, ScanInd
       } catch {
         continue;
       }
-      for (const ruleId of ruleIds) {
-        if (text.includes(ruleId)) index.get(ruleId)![target].push(rel);
+      const seen = new Set<string>();
+      for (const match of text.matchAll(RULE_ID_TOKEN_RE)) {
+        const token = match[0];
+        if (known.has(token) && !seen.has(token)) {
+          seen.add(token);
+          index.get(token)![target].push(rel);
+        }
       }
     }
   };
@@ -306,10 +295,8 @@ function fraction(numerator: number, denominator: number): string {
   return `${numerator}/${denominator}`;
 }
 
-/**
- * Renders the deterministic Markdown report. No timestamps — the report is a
- * pure function of repo state so it can be committed and diffed.
- */
+// Deterministic Markdown report — a pure function of repo state, no timestamps,
+// so it can be committed and diffed.
 export function renderRegulatoryCoverageReport(coverage: RegulatoryCoverage): string {
   const lines: string[] = [];
   lines.push("# Regulatory coverage");
@@ -397,6 +384,26 @@ export function renderRegulatoryCoverageReport(coverage: RegulatoryCoverage): st
       for (const ref of source.uncoveredRefs) lines.push(`- \`${ref}\``);
       lines.push("");
     }
+  }
+
+  if (coverage.reverseMap.length > 0) {
+    lines.push("## Traceability (provision → rule → code → tests)");
+    lines.push("");
+    let currentSource = "";
+    for (const record of coverage.reverseMap) {
+      if (record.sourceId !== currentSource) {
+        currentSource = record.sourceId;
+        lines.push(`### ${currentSource}`);
+        lines.push("");
+      }
+      lines.push(`- \`${record.ref}\``);
+      for (const entry of record.rules) {
+        const code = entry.codeFiles.length > 0 ? entry.codeFiles.join(", ") : "—";
+        const tests = entry.testFiles.length > 0 ? entry.testFiles.join(", ") : "—";
+        lines.push(`  - ${entry.ruleId} — code: ${code} — tests: ${tests}`);
+      }
+    }
+    lines.push("");
   }
 
   return lines.join("\n").replace(/\n+$/, "\n");

@@ -1,7 +1,7 @@
 // Tests: src/core/regulatory-coverage.ts, src/core/rules-metadata.ts
 import { describe, expect, test } from "bun:test";
 import { computeRegulatoryCoverage } from "../../src/core/regulatory-coverage";
-import { readRuleMetadata } from "../../src/core/rules-metadata";
+import { parseRuleBundle, readRuleMetadata } from "../../src/core/rules-metadata";
 
 describe("regulatory coverage", () => {
   test("no rule citation has a closure error", () => {
@@ -53,6 +53,18 @@ describe("regulatory coverage", () => {
     expect(coverage.uncitedRules).toEqual(expectedUncited);
   });
 
+  test("the reverse map carries code and test files for every cited rule", () => {
+    const coverage = computeRegulatoryCoverage();
+    expect(coverage.reverseMap.length).toBeGreaterThan(0);
+    let withCode = 0;
+    for (const record of coverage.reverseMap) {
+      for (const entry of record.rules) {
+        if (entry.codeFiles.length > 0) withCode += 1;
+      }
+    }
+    expect(withCode).toBeGreaterThan(0);
+  });
+
   test("the reverse map only references cited provisions and known rules", () => {
     const coverage = computeRegulatoryCoverage();
     const ruleIds = new Set(readRuleMetadata().map((rule) => rule.ruleId));
@@ -68,5 +80,53 @@ describe("regulatory coverage", () => {
         expect(Array.isArray(entry.testFiles)).toBe(true);
       }
     }
+  });
+});
+
+describe("rule citation parser rejects malformed input", () => {
+  const ruleHead = [
+    "rules:",
+    "  - rule_id: DK-TEST-001",
+    "    name: test rule",
+    "    category: test",
+    "    source_id: DK-RENTELOVEN-2014-459",
+  ];
+
+  test("a citation with a ref but no text_hash throws instead of dropping it", () => {
+    const yaml = [
+      ...ruleHead,
+      "    provisions:",
+      '      - ref: "§ 3, stk. 1"',
+      "    severity: hard_stop",
+    ].join("\n");
+    expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/ref and text_hash/);
+  });
+
+  test("a provisions entry that is not `- ref: ...` throws", () => {
+    const yaml = [
+      ...ruleHead,
+      "    provisions:",
+      '      - text_hash: "sha256:abc"',
+      "    severity: hard_stop",
+    ].join("\n");
+    expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/must be/);
+  });
+
+  test("tab indentation throws", () => {
+    const yaml = [...ruleHead, "\tseverity: hard_stop"].join("\n");
+    expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/tab indentation/);
+  });
+
+  test("a well-formed citation parses to a ref/text_hash pair", () => {
+    const yaml = [
+      ...ruleHead,
+      "    provisions:",
+      '      - ref: "§ 3, stk. 1"',
+      '        text_hash: "sha256:abc"',
+      "    severity: hard_stop",
+    ].join("\n");
+    const rules = parseRuleBundle(yaml, "invoices");
+    expect(rules).toHaveLength(1);
+    expect(rules[0].provisions).toEqual([{ ref: "§ 3, stk. 1", textHash: "sha256:abc" }]);
   });
 });

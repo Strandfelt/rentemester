@@ -6,9 +6,10 @@ code — not how many lines run, but how many statutory provisions are claimed.
 
 ## Citation schema
 
-A rule in `rules/dk/*.yaml` may carry an optional `provisions:` block right
-after `source_id:`. Each entry cites one statutory provision at stk-level or
-finer and pins the legislation text it was reviewed against:
+A rule in `rules/dk/*.yaml` may carry an optional `provisions:` block (by
+convention placed right after `source_id:`). Each entry cites one statutory
+provision at stk-level or finer and pins the legislation text it was reviewed
+against:
 
 ```yaml
     source_id: DK-BILAG-OPBEVARING-2023-1383

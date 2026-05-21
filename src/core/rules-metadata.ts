@@ -98,131 +98,134 @@ function indentOf(line: string): number {
   return count;
 }
 
-/**
- * Per-rule structured reader for the regulatory-coverage engine.
- *
- * The repo deliberately hand-parses YAML; this follows that pattern. A rule's
- * fields sit at 4-space indent. The optional `provisions:` block (added by the
- * citation workflow) is a list at 6-space indent whose entries carry `ref` and
- * `text_hash` keys at 8-space indent. Parsing is keyed purely on indentation so
- * it stays deterministic and dependency-free.
- */
-export function readRuleMetadata(): RuleMetadata[] {
+// Per-rule reader for the regulatory-coverage engine. The repo hand-parses
+// YAML; this follows that pattern, keyed purely on indentation. A malformed
+// citation throws rather than being silently dropped — a dropped citation would
+// make coverage look better than it really is.
+export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
   const rules: RuleMetadata[] = [];
-  const files = readdirSync(rulesDir)
-    .filter((file) => file.endsWith(".yaml"))
-    .sort();
+  const lines = text.split(/\r?\n/);
 
-  for (const file of files) {
-    const bundle = file.replace(/\.yaml$/, "");
-    const text = readFileSync(join(rulesDir, file), "utf8");
-    const lines = text.split(/\r?\n/);
+  let current: {
+    ruleId: string;
+    sourceId: string;
+    severity: string;
+    category: string;
+    provisions: RuleProvisionCitation[];
+  } | null = null;
+  let inProvisions = false;
+  let pendingRef: string | null = null;
+  let pendingHash: string | null = null;
 
-    let current: {
-      ruleId: string;
-      sourceId: string;
-      severity: string;
-      category: string;
-      provisions: RuleProvisionCitation[];
-    } | null = null;
-    let inProvisions = false;
-    let pendingRef: string | null = null;
-    let pendingHash: string | null = null;
-
-    const flushCitation = () => {
-      if (current && pendingRef !== null && pendingHash !== null) {
-        current.provisions.push({ ref: pendingRef, textHash: pendingHash });
+  const flushCitation = () => {
+    if (pendingRef !== null || pendingHash !== null) {
+      if (current === null || pendingRef === null || pendingHash === null) {
+        throw new Error(
+          `${bundle}.yaml: malformed provisions entry in rule ${current?.ruleId ?? "?"} — ` +
+            `every entry needs both ref and text_hash (ref=${pendingRef}, text_hash=${pendingHash})`,
+        );
       }
-      pendingRef = null;
-      pendingHash = null;
-    };
+      current.provisions.push({ ref: pendingRef, textHash: pendingHash });
+    }
+    pendingRef = null;
+    pendingHash = null;
+  };
 
-    const flushRule = () => {
+  const flushRule = () => {
+    flushCitation();
+    if (current) {
+      current.provisions.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
+      rules.push({
+        ruleId: current.ruleId,
+        sourceId: current.sourceId,
+        bundle,
+        provisions: current.provisions,
+        severity: current.severity,
+        category: current.category,
+      });
+    }
+    current = null;
+    inProvisions = false;
+  };
+
+  for (const line of lines) {
+    if (line.trim().length === 0) continue;
+    const leading = line.slice(0, line.length - line.trimStart().length);
+    if (leading.includes("\t")) {
+      throw new Error(`${bundle}.yaml: tab indentation is not allowed in rule files`);
+    }
+    const indent = indentOf(line);
+    const ruleStart = line.match(/^\s*-\s*rule_id:\s*(\S+)\s*$/);
+    if (ruleStart) {
+      flushRule();
+      current = {
+        ruleId: ruleStart[1],
+        sourceId: "",
+        severity: "",
+        category: "",
+        provisions: [],
+      };
+      continue;
+    }
+    if (!current) continue;
+
+    // A new 4-space rule-level key closes any open provisions block.
+    if (indent <= 4 && inProvisions && !/^\s*-\s/.test(line)) {
       flushCitation();
-      if (current) {
-        current.provisions.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
-        rules.push({
-          ruleId: current.ruleId,
-          sourceId: current.sourceId,
-          bundle,
-          provisions: current.provisions,
-          severity: current.severity,
-          category: current.category,
-        });
-      }
-      current = null;
       inProvisions = false;
-    };
+    }
 
-    for (const line of lines) {
-      if (line.trim().length === 0) continue;
-      const indent = indentOf(line);
-      const ruleStart = line.match(/^\s*-\s*rule_id:\s*(\S+)\s*$/);
-      if (ruleStart) {
-        flushRule();
-        current = {
-          ruleId: ruleStart[1],
-          sourceId: "",
-          severity: "",
-          category: "",
-          provisions: [],
-        };
-        continue;
-      }
-      if (!current) continue;
-
-      // A new 4-space rule-level key closes any open provisions block.
-      if (indent <= 4 && inProvisions && !/^\s*-\s/.test(line)) {
+    if (inProvisions) {
+      const itemStart = line.match(/^\s{6}-\s*(.*)$/);
+      if (itemStart) {
         flushCitation();
-        inProvisions = false;
-      }
-
-      if (inProvisions) {
-        const itemStart = line.match(/^\s{6}-\s*(.*)$/);
-        if (itemStart) {
-          flushCitation();
-          const inline = itemStart[1].match(/^ref:\s*(.+)$/);
-          if (inline) pendingRef = stripQuotes(inline[1]);
-          continue;
+        const inline = itemStart[1].match(/^ref:\s*(.+)$/);
+        if (!inline) {
+          throw new Error(
+            `${bundle}.yaml: rule ${current.ruleId} provisions entry must be ` +
+              `\`- ref: "..."\` — got: ${line.trim()}`,
+          );
         }
-        if (indent >= 8) {
-          const refMatch = line.match(/^\s*ref:\s*(.+)$/);
-          if (refMatch) {
-            pendingRef = stripQuotes(refMatch[1]);
-            continue;
-          }
-          const hashMatch = line.match(/^\s*text_hash:\s*(.+)$/);
-          if (hashMatch) {
-            pendingHash = stripQuotes(hashMatch[1]);
-            continue;
-          }
-          continue;
-        }
-      }
-
-      const sourceMatch = line.match(/^\s{4}source_id:\s*(\S+)\s*$/);
-      if (sourceMatch) {
-        current.sourceId = sourceMatch[1];
+        pendingRef = stripQuotes(inline[1]);
         continue;
       }
-      const severityMatch = line.match(/^\s{4}severity:\s*(\S+)\s*$/);
-      if (severityMatch) {
-        current.severity = stripQuotes(severityMatch[1]);
-        continue;
-      }
-      const categoryMatch = line.match(/^\s{4}category:\s*(\S+)\s*$/);
-      if (categoryMatch) {
-        current.category = stripQuotes(categoryMatch[1]);
-        continue;
-      }
-      if (/^\s{4}provisions:\s*$/.test(line)) {
-        inProvisions = true;
+      if (indent >= 8) {
+        const hashMatch = line.match(/^\s*text_hash:\s*(.+)$/);
+        if (hashMatch) pendingHash = stripQuotes(hashMatch[1]);
         continue;
       }
     }
-    flushRule();
-  }
 
+    const sourceMatch = line.match(/^\s{4}source_id:\s*(\S+)\s*$/);
+    if (sourceMatch) {
+      current.sourceId = sourceMatch[1];
+      continue;
+    }
+    const severityMatch = line.match(/^\s{4}severity:\s*(\S+)\s*$/);
+    if (severityMatch) {
+      current.severity = stripQuotes(severityMatch[1]);
+      continue;
+    }
+    const categoryMatch = line.match(/^\s{4}category:\s*(\S+)\s*$/);
+    if (categoryMatch) {
+      current.category = stripQuotes(categoryMatch[1]);
+      continue;
+    }
+    if (/^\s{4}provisions:\s*$/.test(line)) {
+      inProvisions = true;
+      continue;
+    }
+  }
+  flushRule();
+  return rules;
+}
+
+export function readRuleMetadata(): RuleMetadata[] {
+  const rules: RuleMetadata[] = [];
+  for (const file of readdirSync(rulesDir).filter((f) => f.endsWith(".yaml")).sort()) {
+    const bundle = file.replace(/\.yaml$/, "");
+    rules.push(...parseRuleBundle(readFileSync(join(rulesDir, file), "utf8"), bundle));
+  }
   rules.sort((a, b) => (a.ruleId < b.ruleId ? -1 : a.ruleId > b.ruleId ? 1 : 0));
   return rules;
 }
