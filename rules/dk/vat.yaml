@@ -1,4 +1,4 @@
-version: dk-vat-v0.0.2
+version: dk-vat-v0.0.3
 sources:
   - DK-MOMSLOVEN-2024-209
   - DK-MOMSBEKENDTGORELSEN-2023-1435
@@ -33,6 +33,11 @@ rules:
     name: Danish VAT deduction requires stated VAT amount
     category: vat_validation
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1, nr. 8"
+        text_hash: "sha256:b3b34287303c4a5f0277a3f0eeb7f5463387c95a96b0d70bed93574c99fe3992"
+      - ref: "§ 58, stk. 1, nr. 9"
+        text_hash: "sha256:090223e9a56ea922e65eb53deb4ebd9a9bc20db57199ce2af4ffa83253da4670"
     severity: hard_stop
     machine_rule:
       condition: invoice.country == 'DK' && vat_claimed == true
@@ -42,6 +47,13 @@ rules:
     name: VAT settlement basis must show output VAT, input VAT, and net payable for a period
     category: vat_reporting
     source_id: DK-MOMSLOVEN-2024-209
+    provisions:
+      - ref: "§ 56, stk. 1"
+        text_hash: "sha256:de852753858a9d11b23cb253c522c6180110b99a30c2da0c59a9aee3acb289bc"
+      - ref: "§ 56, stk. 2"
+        text_hash: "sha256:3c599b384a7301502e03090460dc510362150297267417a2368f7c3c002a79ea"
+      - ref: "§ 56, stk. 3"
+        text_hash: "sha256:d2c7ac1ff0954a0529dac1baf3c8a1e080adeaa8362bf950d19d44650fb32177"
     severity: hard_stop
     machine_rule:
       require:
@@ -56,6 +68,9 @@ rules:
     name: EU service reverse-charge purchases must book both output and deductible input VAT in the period
     category: vat_posting
     source_id: DK-MOMSLOVEN-2024-209
+    provisions:
+      - ref: "§ 46, stk. 1, nr. 3"
+        text_hash: "sha256:6b3c682575a7903360cc80d40e778a9839870f439a5b10f14c52e117d4086428"
     severity: hard_stop
     machine_rule:
       condition: vat_code == 'EU_SERVICE_REVERSE_CHARGE'
@@ -69,6 +84,11 @@ rules:
     name: Representation purchases with limited VAT deduction must only book 25 percent of the VAT as deductible input tax
     category: vat_posting
     source_id: DK-MOMSLOVEN-2024-209
+    provisions:
+      - ref: "§ 42, stk. 1, nr. 5"
+        text_hash: "sha256:60c9ae5260f7ebd4fbe5f4005a0c18a6df0af6a55b683fad9c570e0b636270a7"
+      - ref: "§ 42, stk. 2"
+        text_hash: "sha256:a5decab3fb12767522d79d3c0e633f99994cebbfd435c6b665a87234936ef42f"
     severity: hard_stop
     machine_rule:
       condition: vat_code == 'REPRESENTATION_SPECIAL'
@@ -83,6 +103,9 @@ rules:
     name: Established bad-debt losses on standard-rated sales must reduce output VAT from the deductible 80 percent loss basis
     category: vat_posting
     source_id: DK-MOMSLOVEN-2024-209
+    provisions:
+      - ref: "§ 27, stk. 6"
+        text_hash: "sha256:c51013c24f5e03ec69d42690dceca81830213cc3535b824ba2472e482920275d"
     severity: hard_stop
     machine_rule:
       condition: vat_code == 'DK_BAD_DEBT_25'
@@ -99,6 +122,9 @@ rules:
     name: A filing-ready momsangivelse may only be produced for a closed VAT period and must map data into the standard SKAT rubrikker
     category: vat_reporting
     source_id: DK-MOMSLOVEN-2024-209
+    provisions:
+      - ref: "§ 57, stk. 1"
+        text_hash: "sha256:e9c2dbb9df675096488284156478d073e33b33f70d1fde9c3a0ca3e52fc7cddb"
     severity: hard_stop
     machine_rule:
       condition: vat_period_status in ['closed', 'reported']

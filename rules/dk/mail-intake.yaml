@@ -1,4 +1,4 @@
-version: dk-mail-intake-v0.0.1
+version: dk-mail-intake-v0.0.2
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-BILAG-OPBEVARING-2023-1383
@@ -29,6 +29,9 @@ rules:
     name: Mail messages with no usable attachment or ambiguous metadata must be routed to the exception queue instead of guessing
     category: document_intake
     source_id: DK-BILAG-OPBEVARING-2023-1383
+    provisions:
+      - ref: "§ 1, stk. 1"
+        text_hash: "sha256:49dadebd50b1808ba13994dabd4f95ce514f0d3e4e72044f3ac311979edd8c7a"
     severity: hard_stop
     machine_rule:
       require:

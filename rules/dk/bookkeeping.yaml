@@ -1,4 +1,4 @@
-version: dk-bookkeeping-v0.0.4
+version: dk-bookkeeping-v0.0.5
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
@@ -16,6 +16,11 @@ rules:
     name: Posted journal entries are append-only
     category: ledger_integrity
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 3"
+        text_hash: "sha256:87459b2827cedd7f32dba1aaa78bb13b8afa8f2b6edd152a8ec8ba688461b8f2"
+      - ref: "§ 13, stk. 1"
+        text_hash: "sha256:c2d76476456d6ad519249c8b77061dc2db1d9c0995d4bf47be64066b22893ed0"
     severity: hard_stop
     machine_rule:
       forbid: [update_posted_entry, delete_posted_entry]
@@ -25,6 +30,9 @@ rules:
     name: Corrections must create a single traceable reversal entry
     category: ledger_integrity
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 3"
+        text_hash: "sha256:87459b2827cedd7f32dba1aaa78bb13b8afa8f2b6edd152a8ec8ba688461b8f2"
     severity: hard_stop
     machine_rule:
       require:
@@ -38,6 +46,11 @@ rules:
     name: Bookkeeping entries require evidence where relevant
     category: document_evidence
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
+      - ref: "§ 9, stk. 2"
+        text_hash: "sha256:74176e8a44dc7c34034445ee127cbace3ee8a739c979ab4473b0696e62e17c24"
     severity: hard_stop
     machine_rule:
       require: document_link_for_expense_or_sale
@@ -46,6 +59,11 @@ rules:
     name: Imported bank transactions must preserve transaction date, amount, text, and traceable source batch
     category: transaction_registration
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 7, stk. 1"
+        text_hash: "sha256:1094e0af03f6b6383aee9c5bbc46f629ab94d04b2f949d01621ad54195f1b744"
+      - ref: "§ 9, stk. 2"
+        text_hash: "sha256:74176e8a44dc7c34034445ee127cbace3ee8a739c979ab4473b0696e62e17c24"
     severity: hard_stop
     machine_rule:
       require:
@@ -62,6 +80,11 @@ rules:
     name: Bank reconciliation must show matched and unmatched imported transactions for a period
     category: reconciliation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 11, stk. 1"
+        text_hash: "sha256:8a1a2a31b9b0c4e29a1b74f5433907f26f276c95348950c907dc5e8f758f1eea"
+      - ref: "§ 11, stk. 2"
+        text_hash: "sha256:f1dbf1b26e1f7c42ffe6cc0e2423805597ec76298b176c235e80c6c033cf5027"
     severity: hard_stop
     machine_rule:
       require:
@@ -75,6 +98,9 @@ rules:
     name: Non-DKK transaction imports must record the transaction-day exchange factor and DKK amount
     category: transaction_registration
     source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    provisions:
+      - ref: "§ 3, stk. 1, nr. 5"
+        text_hash: "sha256:4942141d8251a4f870a7c7088a85075ab81f13d16d754ed5bba84157f7524289"
     severity: hard_stop
     machine_rule:
       require:
@@ -88,6 +114,9 @@ rules:
     name: The system must support weekly full backups of booked transactions and supporting documents
     category: backup_compliance
     source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    provisions:
+      - ref: "§ 4, stk. 1"
+        text_hash: "sha256:96235d331f5562c3334b1ae7b4cf25a44ed1593abcdb75808c9c896b4709c7e2"
     severity: hard_stop
     machine_rule:
       require:
@@ -102,6 +131,11 @@ rules:
     name: Bookkeeping data and vouchers must be exportable by period in a structured machine-readable package
     category: authority_access
     source_id: DK-DIGITAL-STANDARD-BOGFORING-2023-97
+    provisions:
+      - ref: "§ 11, stk. 1"
+        text_hash: "sha256:8c2cf1c123a83815fa39664078be94665fd9a42117117589ea4916c6a1a75168"
+      - ref: "§ 11, stk. 4"
+        text_hash: "sha256:153ceb54fd0d35ab2e160b801275b279f7549c708442dea40b97c8fee949340f"
     severity: hard_stop
     machine_rule:
       require:
@@ -116,6 +150,9 @@ rules:
     name: SAF-T export packages must be deterministic and period-bounded
     category: authority_access
     source_id: DK-DIGITAL-STANDARD-BOGFORING-2023-97
+    provisions:
+      - ref: "§ 11, stk. 4"
+        text_hash: "sha256:153ceb54fd0d35ab2e160b801275b279f7549c708442dea40b97c8fee949340f"
     severity: hard_stop
     machine_rule:
       require:
@@ -132,6 +169,9 @@ rules:
     name: Backup material must be restorable into a readable company dataset
     category: restore_compliance
     source_id: DK-DIGITAL-STANDARD-BOGFORING-2023-97
+    provisions:
+      - ref: "§ 10, stk. 1"
+        text_hash: "sha256:0d661a26b4a119434b39fbbc4141dfc4072d2ea213a875074375631b2281b22f"
     severity: hard_stop
     machine_rule:
       require:
@@ -146,6 +186,9 @@ rules:
     name: Journal postings must stay out of closed periods and must not be future-dated
     category: period_control
     source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    provisions:
+      - ref: "§ 3, stk. 3"
+        text_hash: "sha256:f2f6051f39c51e7648eb8286279a659a1b256ada672d6d106a7634a4297815c5"
     severity: hard_stop
     machine_rule:
       require:
@@ -159,6 +202,9 @@ rules:
     name: Supporting material must carry a retention deadline from the end of the fiscal year plus five years
     category: retention_control
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 12, stk. 1"
+        text_hash: "sha256:b60a0cb777f5b3d28d2659a58bc881073b5e3d6913828e279903bd0fff38ae1f"
     severity: hard_stop
     machine_rule:
       require:

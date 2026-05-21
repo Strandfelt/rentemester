@@ -1,4 +1,4 @@
-version: dk-documents-v0.0.2
+version: dk-documents-v0.0.3
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-BILAG-OPBEVARING-2023-1383
@@ -8,6 +8,21 @@ rules:
     name: Purchase and sale supporting documents stored digitally must include the statutory minimum fields
     category: document_validation
     source_id: DK-BILAG-OPBEVARING-2023-1383
+    provisions:
+      - ref: "§ 1, stk. 1"
+        text_hash: "sha256:49dadebd50b1808ba13994dabd4f95ce514f0d3e4e72044f3ac311979edd8c7a"
+      - ref: "§ 1, stk. 1, nr. 1"
+        text_hash: "sha256:8ae1eae58df3fb9327246c8732e9033931e2decdb10059f0efb16a20f06ed45c"
+      - ref: "§ 1, stk. 1, nr. 2"
+        text_hash: "sha256:41429d1b703b8ea0de43bd77fca05663ad2fc8e4c8dc9c1f1ca2728644e48965"
+      - ref: "§ 1, stk. 1, nr. 3"
+        text_hash: "sha256:590f58789ce7e23733482b5f1523f0660839d699d75304e2ebe1fc918c6e4199"
+      - ref: "§ 1, stk. 1, nr. 4"
+        text_hash: "sha256:0b097eec8366cac86dfd3fe15e6db92b0df493551654209ec086c0b6f0bd2dca"
+      - ref: "§ 1, stk. 1, nr. 5"
+        text_hash: "sha256:9f577ca3dc52a7139d5b396172905918173f1a56de079b09703cc4ca18dfae98"
+      - ref: "§ 1, stk. 1, nr. 6"
+        text_hash: "sha256:fbba110a8073e419830f39e88d392e38cf6165116afa5bc20cb5b7830d7003b6"
     severity: hard_stop
     machine_rule:
       require:
@@ -26,6 +41,9 @@ rules:
     name: Cash-register receipts may be stored without the full Danish minimum metadata set, but the original file and currency trail must be preserved
     category: document_validation
     source_id: DK-BILAG-OPBEVARING-2023-1383
+    provisions:
+      - ref: "§ 1, stk. 2"
+        text_hash: "sha256:82ac6c80b370abf15275ca41d1189c3b780e045e2156c959670d399ff74097b0"
     severity: hard_stop
     machine_rule:
       condition: document_type == 'cash_register_receipt'
@@ -39,6 +57,9 @@ rules:
     name: Foreign physical-only supporting documents may be stored without the Danish minimum metadata set, but the original currency trail must be preserved
     category: document_validation
     source_id: DK-BILAG-OPBEVARING-2023-1383
+    provisions:
+      - ref: "§ 1, stk. 3"
+        text_hash: "sha256:b02fee9593b34d5a3da19c1c9adc0abcb1bfdaecc22f6727dc09c76b6677fcdb"
     severity: hard_stop
     machine_rule:
       condition: exemption_code == 'FOREIGN_PHYSICAL_ONLY'
@@ -52,6 +73,11 @@ rules:
     name: Original supporting documents must be preserved without silent overwrite or mutation
     category: document_integrity
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 3"
+        text_hash: "sha256:87459b2827cedd7f32dba1aaa78bb13b8afa8f2b6edd152a8ec8ba688461b8f2"
+      - ref: "§ 13, stk. 1"
+        text_hash: "sha256:c2d76476456d6ad519249c8b77061dc2db1d9c0995d4bf47be64066b22893ed0"
     severity: hard_stop
     machine_rule:
       require:
@@ -63,6 +89,11 @@ rules:
     name: Vendor master data reused on supporting documents must resolve deterministically before ingest
     category: document_integrity
     source_id: DK-BILAG-OPBEVARING-2023-1383
+    provisions:
+      - ref: "§ 1, stk. 1"
+        text_hash: "sha256:49dadebd50b1808ba13994dabd4f95ce514f0d3e4e72044f3ac311979edd8c7a"
+      - ref: "§ 1, stk. 1, nr. 4"
+        text_hash: "sha256:0b097eec8366cac86dfd3fe15e6db92b0df493551654209ec086c0b6f0bd2dca"
     severity: hard_stop
     machine_rule:
       require:
