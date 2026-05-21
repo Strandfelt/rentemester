@@ -4,6 +4,13 @@ import { join } from "node:path";
 import { ensureCompanyDirs } from "./paths";
 import { openDb, migrate } from "./db";
 import { seedAccounts } from "./ledger";
+import { insertAuditLog } from "./actor";
+import {
+  lookupCvrCompany,
+  normalizeCvrNumber,
+  type CvrCompanyInfo,
+  type CvrLookupOptions,
+} from "./cvr";
 import {
   registerWorkspaceCompany,
   slugifyCompanyName,
@@ -20,6 +27,17 @@ export type CompanySettings = {
   cvr: string | null;
   fiscalYearStartMonth: number;
   fiscalYearLabelStrategy: FiscalYearLabelStrategy;
+  /** CVR-register stamdata, last written by `company sync-cvr`. */
+  address: string | null;
+  postalCode: string | null;
+  city: string | null;
+  companyForm: string | null;
+  industryCode: string | null;
+  industryText: string | null;
+  cvrStatus: string | null;
+  auditWaived: boolean | null;
+  /** ISO timestamp the CVR stamdata above was last synced; null when never. */
+  cvrSyncedAt: string | null;
 };
 
 const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
@@ -30,6 +48,15 @@ const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   cvr: null,
   fiscalYearStartMonth: 1,
   fiscalYearLabelStrategy: "end-year",
+  address: null,
+  postalCode: null,
+  city: null,
+  companyForm: null,
+  industryCode: null,
+  industryText: null,
+  cvrStatus: null,
+  auditWaived: null,
+  cvrSyncedAt: null,
 };
 
 export function normalizeCvr(value?: string | null): string | null {
@@ -188,7 +215,9 @@ export function createCompany(
 
 export function getCompanySettings(db: Database): CompanySettings {
   const row = db.query(
-    `SELECT id, name, country, currency, cvr, fiscal_year_start_month, fiscal_year_label_strategy
+    `SELECT id, name, country, currency, cvr, fiscal_year_start_month, fiscal_year_label_strategy,
+            address, postal_code, city, company_form, industry_code, industry_text,
+            cvr_status, audit_waived, cvr_synced_at
        FROM companies
       ORDER BY id ASC
       LIMIT 1`
@@ -200,6 +229,15 @@ export function getCompanySettings(db: Database): CompanySettings {
     cvr: string | null;
     fiscal_year_start_month: number;
     fiscal_year_label_strategy: FiscalYearLabelStrategy;
+    address: string | null;
+    postal_code: string | null;
+    city: string | null;
+    company_form: string | null;
+    industry_code: string | null;
+    industry_text: string | null;
+    cvr_status: string | null;
+    audit_waived: number | null;
+    cvr_synced_at: string | null;
   } | null;
 
   if (!row) return DEFAULT_COMPANY_SETTINGS;
@@ -211,5 +249,125 @@ export function getCompanySettings(db: Database): CompanySettings {
     cvr: normalizeCvr(row.cvr),
     fiscalYearStartMonth: normalizeFiscalYearStartMonth(row.fiscal_year_start_month) ?? 1,
     fiscalYearLabelStrategy: normalizeFiscalYearLabelStrategy(row.fiscal_year_label_strategy) ?? "end-year",
+    address: row.address,
+    postalCode: row.postal_code,
+    city: row.city,
+    companyForm: row.company_form,
+    industryCode: row.industry_code,
+    industryText: row.industry_text,
+    cvrStatus: row.cvr_status,
+    auditWaived: row.audit_waived === null ? null : row.audit_waived === 1,
+    cvrSyncedAt: row.cvr_synced_at,
+  };
+}
+
+export type SyncCompanyFromCvrResult = {
+  ok: boolean;
+  /** The CVR number that was looked up (8 digits, no DK prefix). */
+  cvr?: string;
+  company?: CvrCompanyInfo;
+  /** True when the snapshot came from the local cache, not a fresh fetch. */
+  cached?: boolean;
+  /** Names of the `companies` columns whose value actually changed. */
+  updatedFields?: string[];
+  /**
+   * The fiscal-year start month as configured vs. as registered in CVR. Sync
+   * never rewrites the fiscal year — it is a locked accounting setting — it
+   * only reports a mismatch so the user can correct it deliberately.
+   */
+  fiscalYearStartMonth?: { current: number; cvr: number | null; matches: boolean };
+  errors: string[];
+};
+
+/**
+ * Refreshes the owning company's CVR-register stamdata: looks the company's own
+ * CVR number up and writes name/address/branche/form/status into the
+ * `companies` row. The fiscal-year configuration is never touched — it is
+ * locked after the first journal entry — but a mismatch is reported.
+ */
+export async function syncCompanyFromCvr(
+  db: Database,
+  options: CvrLookupOptions = {},
+): Promise<SyncCompanyFromCvrResult> {
+  const before = getCompanySettings(db);
+  const cvrNumber = normalizeCvrNumber(before.cvr);
+  if (!cvrNumber) {
+    return {
+      ok: false,
+      errors: [
+        "virksomheden har intet gyldigt CVR-nummer registreret — sæt det via 'init --cvr' / 'company add --cvr'",
+      ],
+    };
+  }
+
+  const lookup = await lookupCvrCompany(db, cvrNumber, options);
+  if (!lookup.ok || !lookup.company) {
+    return { ok: false, cvr: cvrNumber, errors: lookup.errors };
+  }
+
+  const info = lookup.company;
+  const syncedAt = options.asOf ?? new Date().toISOString();
+  const auditWaived = info.auditWaived === null ? null : info.auditWaived ? 1 : 0;
+
+  db.query(
+    `UPDATE companies SET
+       name = ?, address = ?, postal_code = ?, city = ?, company_form = ?,
+       industry_code = ?, industry_text = ?, cvr_status = ?, audit_waived = ?,
+       cvr_synced_at = ?
+     WHERE id = (SELECT id FROM companies ORDER BY id ASC LIMIT 1)`,
+  ).run(
+    info.name,
+    info.address,
+    info.postalCode,
+    info.city,
+    info.companyFormShort,
+    info.industryCode,
+    info.industryText,
+    info.status,
+    auditWaived,
+    syncedAt,
+  );
+
+  const after = getCompanySettings(db);
+  const updatedFields: string[] = [];
+  const compare: Array<[string, unknown, unknown]> = [
+    ["name", before.name, after.name],
+    ["address", before.address, after.address],
+    ["postalCode", before.postalCode, after.postalCode],
+    ["city", before.city, after.city],
+    ["companyForm", before.companyForm, after.companyForm],
+    ["industryCode", before.industryCode, after.industryCode],
+    ["industryText", before.industryText, after.industryText],
+    ["cvrStatus", before.cvrStatus, after.cvrStatus],
+    ["auditWaived", before.auditWaived, after.auditWaived],
+  ];
+  for (const [field, prev, next] of compare) {
+    if (prev !== next) updatedFields.push(field);
+  }
+
+  insertAuditLog(db, {
+    eventType: "company_cvr_sync",
+    entityType: "company",
+    entityId: after.id,
+    message:
+      updatedFields.length > 0
+        ? `Synced company stamdata from CVR ${cvrNumber}: ${updatedFields.join(", ")}`
+        : `Synced company stamdata from CVR ${cvrNumber} (no changes)`,
+  });
+
+  return {
+    ok: true,
+    cvr: cvrNumber,
+    company: info,
+    cached: lookup.cached,
+    updatedFields,
+    fiscalYearStartMonth: {
+      current: before.fiscalYearStartMonth,
+      cvr: info.fiscalYearStartMonth,
+      matches:
+        info.fiscalYearStartMonth === null ||
+        info.fiscalYearStartMonth === before.fiscalYearStartMonth,
+    },
+    errors: [],
   };
 }

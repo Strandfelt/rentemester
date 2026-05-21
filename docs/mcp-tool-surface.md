@@ -79,6 +79,7 @@ selv ændres ikke.
 | `bank_suggest_matches` | `bank suggest-matches` | `{ company, bankTransactionId?, max? }` | `{ suggestions: BankMatchSuggestion[] }` | Foreslår deterministiske match mellem uafstemte bank-poster og bilag. |
 | `customer_list` | `customer list` | `{ company, archived? }` | `{ customers: CustomerRecord[] }` | Lister kendte kunder. |
 | `customer_validate_vat` | `customer validate-vat` | `{ company, cvr }` | `{ valid, cachedAt, name?, address? }` | Validerer EU-VAT via VIES og cacher resultatet. |
+| `cvr_lookup` | `customer cvr-lookup` | `{ company, cvr }` | `{ company: CvrCompanyInfo, cached, fetchedAt? }` | Slår en dansk virksomhed op i CVR-registret og cacher snapshottet. Kræver CVR_USERNAME/CVR_PASSWORD. |
 | `documents_list` | `documents list` | `{ company }` | `{ documents: DocumentRow[] }` | Lister gemte bilag. |
 | `exceptions_list` | `exceptions list` | `{ company, status? }` | `{ exceptions: ExceptionRow[] }` | Lister exceptions-køen (open/resolved/all). |
 | `invoice_status` | `invoice status` | `{ company, documentId? | invoiceNumber?, asOf? }` | `{ status, openBalance, paidAmount, ... }` | Viser åben saldo og status på en faktura. |
@@ -111,10 +112,11 @@ uden at kalde kernen.
 | Tool | CLI-ækvivalent | Input | Output | Brief |
 |---|---|---|---|---|
 | `bank_import` | `bank import` | `{ company, csvContent | csvPath, confirm }` | `BankImportResult` | Importerer banktransaktioner. Kan slettes ved at importere en ny CSV (vi har ikke implementeret slet, men import er deterministisk via `sourceFileHash`). |
-| `customer_create` | `customer create` | `{ company, input: CreateCustomerInput, confirm }` | `{ customer: CustomerRecord }` | Opretter append-only kundepost. Kan arkiveres (ikke slettes). |
+| `company_sync_cvr` | `company sync-cvr` | `{ company, confirm }` | `{ company: CvrCompanyInfo, updatedFields[], fiscalYearStartMonth }` | Henter virksomhedens stamdata fra CVR-registret og opdaterer companies-rækken. Regnskabsåret røres aldrig. |
+| `customer_create` | `customer create` | `{ company, input: CreateCustomerInput, fromCvr?, confirm }` | `{ customer: CustomerRecord }` | Opretter append-only kundepost. Kan arkiveres (ikke slettes). Med `fromCvr` udfyldes felter fra CVR-registret. |
 | `documents_ingest` | `documents ingest` | `{ company, filePath, metadata: DocumentMetadata, vendorId?, force?, confirm }` | `IngestDocumentResult` | Indlæser og hash-lagrer et bilag. Kan superseedes af nyt bilag. |
 | `exception_resolve` | `exceptions resolve` | `{ company, id, note?, confirm }` | `{ exception: ExceptionRow }` | Markerer exception som løst. Kan ikke gen-åbnes manuelt. |
-| `vendor_create` | `vendor create` | `{ company, input: CreateVendorInput, confirm }` | `{ vendor: VendorRecord }` | Opretter append-only leverandørpost. |
+| `vendor_create` | `vendor create` | `{ company, input: CreateVendorInput, fromCvr?, confirm }` | `{ vendor: VendorRecord }` | Opretter append-only leverandørpost. Med `fromCvr` udfyldes felter fra CVR-registret. |
 
 ### write-irreversible
 

@@ -13,6 +13,7 @@ import type {
   CompanyJournal,
   CompanyMultiYear,
   CompanyOverview,
+  CompanySettings,
   CompanySummary,
   CompanyTrialBalance,
   CompanyVat,
@@ -496,6 +497,31 @@ export function contacts(
         defaultVatTreatment: "standard",
       },
     ],
+    ...over,
+  };
+}
+
+/** The full company settings row, backing GET /api/companies/:slug/company. */
+export function companySettings(
+  over: Partial<CompanySettings> = {},
+): CompanySettings {
+  return {
+    id: 1,
+    name: "Acme ApS",
+    country: "DK",
+    currency: "DKK",
+    cvr: "DK12345678",
+    fiscalYearStartMonth: 1,
+    fiscalYearLabelStrategy: "end-year",
+    address: null,
+    postalCode: null,
+    city: null,
+    companyForm: null,
+    industryCode: null,
+    industryText: null,
+    cvrStatus: null,
+    auditWaived: null,
+    cvrSyncedAt: null,
     ...over,
   };
 }

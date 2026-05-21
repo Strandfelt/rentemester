@@ -9,6 +9,7 @@ import type {
   BalanceResponse,
   BankResponse,
   CompanyListResponse,
+  CompanySettingsResponse,
   ContactsResponse,
   CreateCompanyInput,
   DashboardResponse,
@@ -21,6 +22,7 @@ import type {
   MultiYearResponse,
   OverviewResponse,
   PortfolioResponse,
+  SyncCvrResponse,
   TrialBalanceResponse,
   UpdateCompanyInput,
   VatResponse,
@@ -186,4 +188,15 @@ export const api = {
       `/api/companies/${encodeURIComponent(slug)}`,
       { method: "PATCH", body: JSON.stringify(input) },
     ).then((r) => r.company),
+
+  companySettings: (slug: string) =>
+    request<CompanySettingsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/company`,
+    ).then((r) => r.company),
+
+  syncCvr: (slug: string) =>
+    request<SyncCvrResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/sync-cvr`,
+      { method: "POST" },
+    ).then((r) => r.sync),
 };

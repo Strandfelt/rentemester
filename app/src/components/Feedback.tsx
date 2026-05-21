@@ -30,7 +30,7 @@ export function Banner({
   kind,
   children,
 }: {
-  kind: "error" | "success";
+  kind: "error" | "success" | "warning";
   children: React.ReactNode;
 }) {
   return (

@@ -3,7 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ManageCompanyView } from "./ManageCompanyView";
 import { renderAt } from "../test/render";
-import { mockFetch } from "../test/fixtures";
+import { mockFetch, companySettings } from "../test/fixtures";
 
 function companiesRoute(archived = false) {
   return {
@@ -19,6 +19,7 @@ function companiesRoute(archived = false) {
         },
       ],
     },
+    "GET /api/companies/acme-aps/company": { company: companySettings() },
   };
 }
 
@@ -71,5 +72,30 @@ describe("ManageCompanyView", () => {
       path: "/companies/:slug/manage",
     });
     expect(await screen.findByRole("alert")).toHaveTextContent(/findes ikke/i);
+  });
+
+  test("syncs CVR stamdata and reports the updated fields", async () => {
+    mockFetch({
+      ...companiesRoute(),
+      "POST /api/companies/acme-aps/sync-cvr": {
+        sync: {
+          ok: true,
+          cvr: "12345678",
+          updatedFields: ["address", "city"],
+          fiscalYearStartMonth: { current: 1, cvr: 1, matches: true },
+          errors: [],
+        },
+      },
+    });
+    renderAt(<ManageCompanyView />, {
+      route: "/companies/acme-aps/manage",
+      path: "/companies/:slug/manage",
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Hent fra CVR/i }),
+    );
+    expect(
+      await screen.findByText(/Opdaterede felter: address, city/i),
+    ).toBeInTheDocument();
   });
 });

@@ -2,14 +2,14 @@
  * Central tools-registrering for Rentemester-MCP-serveren.
  *
  * Tool-surface (jf. docs/mcp-tool-surface.md):
- *  - read (22):           audit, accounts, bank list/suggest/reconcile,
- *                         customer list/validate-vat, vendor list,
+ *  - read (23):           audit, accounts, bank list/suggest/reconcile,
+ *                         customer list/validate-vat, cvr lookup, vendor list,
  *                         documents list, exceptions list,
  *                         invoice status/list/find/overdue/interest/compensation/validate,
  *                         journal list, period list, retention status,
  *                         system backup-status/healthcheck, vat report
- *  - write-reversible (5): bank import, customer create, vendor create,
- *                          documents ingest, exception resolve
+ *  - write-reversible (6): bank import, customer create, vendor create,
+ *                          company sync-cvr, documents ingest, exception resolve
  *  - write-irreversible (~21): invoice issue/post/render/credit-note/
  *                              settle-bank/settle-claim-bank/write-off-bad-debt/
  *                              apply-payment/refund-bank/remind/post-reminder/
@@ -29,6 +29,7 @@ import { registerAccountsTools } from "./tools/accounts";
 import { registerAuditTools } from "./tools/audit";
 import { registerBankTools } from "./tools/bank";
 import { registerCustomerTools } from "./tools/customer";
+import { registerCvrTools } from "./tools/cvr";
 import { registerDocumentTools } from "./tools/documents";
 import { registerExceptionTools } from "./tools/exceptions";
 import { registerExpenseTools } from "./tools/expense";
@@ -67,6 +68,7 @@ export function registerAllTools(server: McpServer): void {
   registerAuditTools(server);
   registerBankTools(server);
   registerCustomerTools(server);
+  registerCvrTools(server);
   registerDocumentTools(server);
   registerExceptionTools(server);
   registerExpenseTools(server);

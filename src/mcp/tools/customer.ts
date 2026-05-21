@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   createCustomer,
   listCustomers,
+  customerInputFromCvr,
   type CreateCustomerInput,
 } from "../../core/master-data";
 import { validateVatAgainstVies } from "../../core/vies";
@@ -57,11 +58,13 @@ export function registerCustomerTools(server: McpServer): void {
     {
       title: "Create customer",
       description:
-        "Opretter en append-only kundepost. write-reversible — kræver confirm:true. Kan arkiveres senere.",
+        "Opretter en append-only kundepost. write-reversible — kræver confirm:true. Kan arkiveres senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
       inputSchema: {
         company: z.string().min(1),
+        // `name` is optional only because `fromCvr` can supply it; a create
+        // with neither a name nor fromCvr is rejected by createCustomer.
         input: z.object({
-          name: z.string().min(1),
+          name: z.string().min(1).optional(),
           address: z.string().optional(),
           vatOrCvr: z.string().optional(),
           email: z.string().optional(),
@@ -70,17 +73,25 @@ export function registerCustomerTools(server: McpServer): void {
           defaultCurrency: z.string().optional(),
           notes: z.string().optional(),
         }),
+        fromCvr: z.string().optional(),
         confirm: z.boolean(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; input: CreateCustomerInput; confirm: boolean }>(
-      server,
-      "customer_create",
-      ({ db, args }) => {
-        const result = createCustomer(db, args.input);
-        return wrapCoreResult(result);
-      },
-    ),
+    withCompanyDbConfirmed<{
+      company: string;
+      input: CreateCustomerInput;
+      fromCvr?: string;
+      confirm: boolean;
+    }>(server, "customer_create", async ({ db, args }) => {
+      let input = args.input;
+      if (args.fromCvr) {
+        const resolved = await customerInputFromCvr(db, args.fromCvr, args.input);
+        if (!resolved.ok) return wrapCoreResult({ ok: false, errors: resolved.errors });
+        input = resolved.input;
+      }
+      const result = createCustomer(db, input);
+      return wrapCoreResult(result);
+    }),
   );
 }

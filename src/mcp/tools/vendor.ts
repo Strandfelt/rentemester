@@ -10,6 +10,7 @@ import { z } from "zod";
 import {
   createVendor,
   listVendors,
+  vendorInputFromCvr,
   type CreateVendorInput,
 } from "../../core/master-data";
 import { wrapCoreResult } from "../envelope";
@@ -38,28 +39,38 @@ export function registerVendorTools(server: McpServer): void {
     {
       title: "Create vendor",
       description:
-        "Opretter en append-only leverandørpost. write-reversible — kræver confirm:true.",
+        "Opretter en append-only leverandørpost. write-reversible — kræver confirm:true. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
       inputSchema: {
         company: z.string().min(1),
+        // `name` is optional only because `fromCvr` can supply it; a create
+        // with neither a name nor fromCvr is rejected by createVendor.
         input: z.object({
-          name: z.string().min(1),
+          name: z.string().min(1).optional(),
           address: z.string().optional(),
           vatOrCvr: z.string().optional(),
           defaultExpenseAccount: z.string().optional(),
           defaultVatTreatment: z.string().optional(),
           notes: z.string().optional(),
         }),
+        fromCvr: z.string().optional(),
         confirm: z.boolean(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    withCompanyDbConfirmed<{ company: string; input: CreateVendorInput; confirm: boolean }>(
-      server,
-      "vendor_create",
-      ({ db, args }) => {
-        const result = createVendor(db, args.input);
-        return wrapCoreResult(result);
-      },
-    ),
+    withCompanyDbConfirmed<{
+      company: string;
+      input: CreateVendorInput;
+      fromCvr?: string;
+      confirm: boolean;
+    }>(server, "vendor_create", async ({ db, args }) => {
+      let input = args.input;
+      if (args.fromCvr) {
+        const resolved = await vendorInputFromCvr(db, args.fromCvr, args.input);
+        if (!resolved.ok) return wrapCoreResult({ ok: false, errors: resolved.errors });
+        input = resolved.input;
+      }
+      const result = createVendor(db, input);
+      return wrapCoreResult(result);
+    }),
   );
 }

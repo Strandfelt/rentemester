@@ -44,6 +44,16 @@ export function migrate(db: Database) {
   if (!hasColumn(db, "companies", "cvr")) db.exec("ALTER TABLE companies ADD COLUMN cvr TEXT;");
   if (!hasColumn(db, "companies", "fiscal_year_start_month")) db.exec("ALTER TABLE companies ADD COLUMN fiscal_year_start_month INTEGER NOT NULL DEFAULT 1 CHECK(fiscal_year_start_month BETWEEN 1 AND 12);");
   if (!hasColumn(db, "companies", "fiscal_year_label_strategy")) db.exec("ALTER TABLE companies ADD COLUMN fiscal_year_label_strategy TEXT NOT NULL DEFAULT 'end-year' CHECK(fiscal_year_label_strategy IN ('end-year', 'start-year', 'span'));");
+  // CVR-register stamdata columns — older ledgers predate `company sync-cvr`.
+  if (!hasColumn(db, "companies", "address")) db.exec("ALTER TABLE companies ADD COLUMN address TEXT;");
+  if (!hasColumn(db, "companies", "postal_code")) db.exec("ALTER TABLE companies ADD COLUMN postal_code TEXT;");
+  if (!hasColumn(db, "companies", "city")) db.exec("ALTER TABLE companies ADD COLUMN city TEXT;");
+  if (!hasColumn(db, "companies", "company_form")) db.exec("ALTER TABLE companies ADD COLUMN company_form TEXT;");
+  if (!hasColumn(db, "companies", "industry_code")) db.exec("ALTER TABLE companies ADD COLUMN industry_code TEXT;");
+  if (!hasColumn(db, "companies", "industry_text")) db.exec("ALTER TABLE companies ADD COLUMN industry_text TEXT;");
+  if (!hasColumn(db, "companies", "cvr_status")) db.exec("ALTER TABLE companies ADD COLUMN cvr_status TEXT;");
+  if (!hasColumn(db, "companies", "audit_waived")) db.exec("ALTER TABLE companies ADD COLUMN audit_waived INTEGER;");
+  if (!hasColumn(db, "companies", "cvr_synced_at")) db.exec("ALTER TABLE companies ADD COLUMN cvr_synced_at TEXT;");
   if (!hasColumn(db, "documents", "retain_until")) db.exec("ALTER TABLE documents ADD COLUMN retain_until TEXT;");
   if (!hasColumn(db, "bank_transactions", "retain_until")) db.exec("ALTER TABLE bank_transactions ADD COLUMN retain_until TEXT;");
   if (!hasColumn(db, "journal_entries", "retain_until")) db.exec("ALTER TABLE journal_entries ADD COLUMN retain_until TEXT;");

@@ -288,6 +288,32 @@ td.num,
   border-color: var(--color-success);
   color: var(--text);
 }
+.banner.warning {
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning);
+  color: var(--text);
+}
+
+.cvr-facts {
+  margin: 0 0 var(--space-md);
+}
+.cvr-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border);
+}
+.cvr-fact:last-child {
+  border-bottom: none;
+}
+.cvr-fact dt,
+.cvr-fact dd {
+  margin: 0;
+}
+.cvr-fact dd {
+  text-align: right;
+}
 
 .state-msg {
   padding: var(--space-2xl) 0;

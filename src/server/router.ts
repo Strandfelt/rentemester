@@ -37,12 +37,14 @@ import {
   buildCompanyJournal,
   buildCompanyMultiYear,
   buildCompanyOverview,
+  buildCompanySettings,
   buildCompanyTrialBalance,
   buildCompanyVat,
   buildPortfolioOverview,
   resolveAsOfDate,
   resolvePathYear,
   resolveYearParam,
+  syncCompanyCvr,
 } from "./data";
 import { serveStatic } from "./static";
 
@@ -246,6 +248,24 @@ function handleCompanyInvoices(
 function handleCompanyContacts(config: ServerConfig, slug: string): Response {
   const data = buildCompanyContacts(config.workspaceRoot, slug);
   return okResponse({ contacts: data });
+}
+
+function handleCompanySettings(config: ServerConfig, slug: string): Response {
+  const data = buildCompanySettings(config.workspaceRoot, slug);
+  return okResponse({ company: data });
+}
+
+/**
+ * Refreshes a company's CVR-register stamdata. The CVR lookup runs server-side
+ * so the CVR credentials never reach the browser. A failed lookup (missing
+ * credentials, unknown CVR) is reported inside `sync.ok`, not as an HTTP error.
+ */
+async function handleCompanySyncCvr(
+  config: ServerConfig,
+  slug: string,
+): Promise<Response> {
+  const data = await syncCompanyCvr(config.workspaceRoot, slug);
+  return okResponse({ sync: data });
 }
 
 async function handleCompanyCreate(
@@ -464,6 +484,20 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(contactsMatch[1]!);
       return handleCompanyContacts(config, slug);
+    }
+
+    const companySettingsMatch = /^\/api\/companies\/([^/]+)\/company$/.exec(path);
+    if (companySettingsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(companySettingsMatch[1]!);
+      return handleCompanySettings(config, slug);
+    }
+
+    const syncCvrMatch = /^\/api\/companies\/([^/]+)\/sync-cvr$/.exec(path);
+    if (syncCvrMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(syncCvrMatch[1]!);
+      return await handleCompanySyncCvr(config, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

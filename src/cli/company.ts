@@ -1,4 +1,5 @@
-import { createCompany, type CreateCompanyResult } from "../core/company";
+import { createCompany, syncCompanyFromCvr, type CreateCompanyResult } from "../core/company";
+import { migrate } from "../core/db";
 import {
   initWorkspace,
   listWorkspaceCompanies,
@@ -6,6 +7,7 @@ import {
   resolveWorkspaceRoot,
   workspaceExists,
 } from "../core/workspace";
+import { openCommandDb } from "../cli-dispatch";
 import type { CommandContext, CommandDispatch } from "../cli-dispatch";
 
 /**
@@ -69,6 +71,15 @@ export function register(dispatch: CommandDispatch): void {
       companyRoot: result.companyRoot,
       ledger: result.dbPath,
     });
+  });
+
+  dispatch.on("company", "sync-cvr", async (ctx) => {
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const result = await syncCompanyFromCvr(db);
+    ctx.emitResult(result as unknown as Record<string, unknown>);
+    db.close();
+    if (!result.ok) process.exit(1);
   });
 
   dispatch.on("company", "list", (ctx) => {

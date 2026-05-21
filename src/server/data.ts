@@ -8,7 +8,12 @@ import { existsSync } from "node:fs";
 import type { Database } from "bun:sqlite";
 import { companyPaths } from "../core/paths";
 import { openDb, migrate } from "../core/db";
-import { getCompanySettings } from "../core/company";
+import {
+  getCompanySettings,
+  syncCompanyFromCvr,
+  type CompanySettings,
+  type SyncCompanyFromCvrResult,
+} from "../core/company";
 import { fiscalYearForDate } from "../core/fiscal-year";
 import { buildInvoiceList, buildOverdueInvoiceList } from "../core/invoice-list";
 import { listCustomers, listVendors } from "../core/master-data";
@@ -858,6 +863,54 @@ function statementCompanyBlock(
     fiscalYearStartMonth: company.fiscalYearStartMonth,
     fiscalYearLabelStrategy: company.fiscalYearLabelStrategy,
   };
+}
+
+/** Resolve a slug to its ledger db path, asserting the company + ledger exist. */
+function requireCompanyDbPath(workspaceRoot: string, slug: string): string {
+  if (!findWorkspaceCompany(workspaceRoot, slug)) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const dbPath = companyPaths(companyRootForSlug(workspaceRoot, slug)).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+  return dbPath;
+}
+
+/**
+ * The full company settings row, including the CVR-register stamdata. Read-only
+ * — backs `GET /api/companies/:slug/company` so the cockpit can show the
+ * synced address/branche/status.
+ */
+export function buildCompanySettings(
+  workspaceRoot: string,
+  slug: string,
+): CompanySettings {
+  const db = openDb(requireCompanyDbPath(workspaceRoot, slug));
+  try {
+    migrate(db);
+    return getCompanySettings(db);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Refresh a company's CVR-register stamdata. Backs
+ * `POST /api/companies/:slug/sync-cvr`. The CVR lookup runs server-side so the
+ * CVR credentials never reach the browser.
+ */
+export async function syncCompanyCvr(
+  workspaceRoot: string,
+  slug: string,
+): Promise<SyncCompanyFromCvrResult> {
+  const db = openDb(requireCompanyDbPath(workspaceRoot, slug));
+  try {
+    migrate(db);
+    return await syncCompanyFromCvr(db);
+  } finally {
+    db.close();
+  }
 }
 
 export type IncomeStatementLine = {

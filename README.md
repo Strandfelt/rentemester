@@ -176,6 +176,7 @@ Rentemester er i en tidlig teknisk prototype. Den nuværende version har allered
 - deterministiske fulde systemsnapshots af ledger, bilag og udstedte fakturaer med backup-manifest og backup-status mod ugentlig lovpligt
 - deterministisk myndigheds- og kuratorpakke pr. periode med maskinlæsbart eksportformat, læsbare bilag og 4-ugers deadline-spor
 - deterministisk lokal eksportpakke til bogholder eller revisor med eksplicit trust boundary: fil-handoff, ikke live adgang
+- opslag i CVR-registret med lokal snapshot-cache: synkronisering af egen virksomheds stamdata (`company sync-cvr`) og auto-udfyldte kunde-/leverandørposter ud fra CVR-nummer (`--from-cvr`) — credentials medfølger ikke, brugeren skaffer sine egne (se `.env.example`)
 
 Det er ikke færdigt, men fundamentet er lagt rigtigt: regler først, dokumentation først, audit først.
 

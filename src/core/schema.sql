@@ -12,6 +12,17 @@ CREATE TABLE IF NOT EXISTS companies (
   cvr TEXT,
   fiscal_year_start_month INTEGER NOT NULL DEFAULT 1 CHECK(fiscal_year_start_month BETWEEN 1 AND 12),
   fiscal_year_label_strategy TEXT NOT NULL DEFAULT 'end-year' CHECK(fiscal_year_label_strategy IN ('end-year', 'start-year', 'span')),
+  -- CVR-register stamdata, snapshotted by `company sync-cvr`. All nullable —
+  -- the company works fully offline; these are only an enrichment.
+  address TEXT,
+  postal_code TEXT,
+  city TEXT,
+  company_form TEXT,
+  industry_code TEXT,
+  industry_text TEXT,
+  cvr_status TEXT,
+  audit_waived INTEGER,
+  cvr_synced_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -44,6 +55,44 @@ CREATE TABLE IF NOT EXISTS vies_validations (
   raw_response TEXT,
   PRIMARY KEY (country_code, vat_number)
 );
+
+-- ===== CVR LOOKUP CACHE (CVR-register) =====
+-- Snapshot cache for the Danish CVR register (distribution.virk.dk). CVR data
+-- is non-deterministic external network data, so it is NEVER read live during
+-- bookkeeping — a lookup writes one snapshot row here, stamped with fetched_at,
+-- and every later read is served from this table. Like vies_validations this is
+-- a deliberately MUTABLE cache (re-lookup overwrites via ON CONFLICT) — it has
+-- no append-only trigger. The CVR number is stored as 8 digits, no DK prefix.
+CREATE TABLE IF NOT EXISTS cvr_lookups (
+  cvr TEXT PRIMARY KEY,
+  name TEXT,
+  address TEXT,
+  postal_code TEXT,
+  city TEXT,
+  municipality_code INTEGER,
+  company_form_code INTEGER,
+  company_form_short TEXT,
+  company_form_long TEXT,
+  status TEXT,
+  industry_code TEXT,
+  industry_text TEXT,
+  email TEXT,
+  phone TEXT,
+  website TEXT,
+  start_date TEXT,
+  fiscal_year_start TEXT,
+  fiscal_year_end TEXT,
+  audit_waived INTEGER,
+  share_capital NUMERIC,
+  share_capital_currency TEXT,
+  employees INTEGER,
+  advertising_protected INTEGER NOT NULL DEFAULT 0,
+  management_json TEXT,
+  raw_response TEXT,
+  fetched_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+-- ===== END CVR LOOKUP CACHE =====
 
 CREATE TABLE IF NOT EXISTS customers (
   id INTEGER PRIMARY KEY,

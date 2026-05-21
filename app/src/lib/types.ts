@@ -607,3 +607,80 @@ export type UpdateCompanyInput = {
   name?: string;
   archived?: boolean;
 };
+
+// --- company settings + CVR sync (GET .../company, POST .../sync-cvr) -------
+
+/** The full companies row, including CVR-register stamdata. */
+export type CompanySettings = {
+  id: number;
+  name: string;
+  country: string;
+  currency: string;
+  cvr: string | null;
+  fiscalYearStartMonth: number;
+  fiscalYearLabelStrategy: string;
+  address: string | null;
+  postalCode: string | null;
+  city: string | null;
+  companyForm: string | null;
+  industryCode: string | null;
+  industryText: string | null;
+  cvrStatus: string | null;
+  auditWaived: boolean | null;
+  /** ISO timestamp the CVR stamdata was last synced; null when never. */
+  cvrSyncedAt: string | null;
+};
+
+export type CompanySettingsResponse = {
+  ok: true;
+  company: CompanySettings;
+};
+
+export type CvrManagementMember = { name: string; role: string };
+
+/** A normalised CVR-register snapshot for one company. */
+export type CvrCompanyInfo = {
+  cvr: string;
+  name: string;
+  address: string | null;
+  postalCode: string | null;
+  city: string | null;
+  municipalityCode: number | null;
+  companyFormCode: number | null;
+  companyFormShort: string | null;
+  companyFormLong: string | null;
+  status: string | null;
+  industryCode: string | null;
+  industryText: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  startDate: string | null;
+  fiscalYearStart: string | null;
+  fiscalYearEnd: string | null;
+  fiscalYearStartMonth: number | null;
+  auditWaived: boolean | null;
+  shareCapital: number | null;
+  shareCapitalCurrency: string | null;
+  employees: number | null;
+  advertisingProtected: boolean;
+  management: CvrManagementMember[];
+};
+
+/** The result of `POST /api/companies/:slug/sync-cvr`. */
+export type SyncCvrResult = {
+  ok: boolean;
+  cvr?: string;
+  company?: CvrCompanyInfo;
+  cached?: boolean;
+  /** Names of the company fields whose value changed. */
+  updatedFields?: string[];
+  /** Configured vs. CVR-registered fiscal-year start month. */
+  fiscalYearStartMonth?: { current: number; cvr: number | null; matches: boolean };
+  errors: string[];
+};
+
+export type SyncCvrResponse = {
+  ok: true;
+  sync: SyncCvrResult;
+};

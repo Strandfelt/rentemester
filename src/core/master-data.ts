@@ -3,6 +3,7 @@ import type { InvoicePayload } from "./invoice";
 import type { DocumentMetadata } from "./documents";
 import { insertAuditLog } from "./actor";
 import { normalizeEanNumber, trimToNull } from "./ean";
+import { lookupCvrCompany, type CvrCompanyInfo, type CvrLookupOptions } from "./cvr";
 
 export type CustomerRecord = {
   id: number;
@@ -225,6 +226,74 @@ function addDays(isoDate: string, days: number) {
   const date = new Date(`${isoDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
+// CVR autofill — prefill an unset master-data field from the CVR register.
+// The lookup runs once at creation time; the resulting snapshot is copied into
+// the (append-only) customer/vendor row and never re-fetched afterwards.
+// ---------------------------------------------------------------------------
+
+/** A one-line postal address built from a CVR snapshot, or undefined. */
+function cvrFullAddress(company: CvrCompanyInfo): string | undefined {
+  const cityLine = [company.postalCode, company.city].filter(Boolean).join(" ");
+  const full = [company.address, cityLine].filter((part) => part && part.length > 0).join(", ");
+  return full.length > 0 ? full : undefined;
+}
+
+export type CvrAutofillResult<T> =
+  | { ok: true; input: T; company: CvrCompanyInfo }
+  | { ok: false; errors: string[] };
+
+/**
+ * Resolve a `createCustomer` input by filling every field the caller left
+ * unset from a CVR-register lookup. Explicit caller values always win.
+ */
+export async function customerInputFromCvr(
+  db: Database,
+  cvrInput: string,
+  base: CreateCustomerInput,
+  options: CvrLookupOptions = {},
+): Promise<CvrAutofillResult<CreateCustomerInput>> {
+  const lookup = await lookupCvrCompany(db, cvrInput, options);
+  if (!lookup.ok || !lookup.company) return { ok: false, errors: lookup.errors };
+  const company = lookup.company;
+  return {
+    ok: true,
+    company,
+    input: {
+      ...base,
+      name: trimToNull(base.name) ?? company.name,
+      address: trimToNull(base.address) ?? cvrFullAddress(company),
+      vatOrCvr: trimToNull(base.vatOrCvr) ?? `DK${company.cvr}`,
+      email: trimToNull(base.email) ?? company.email ?? undefined,
+    },
+  };
+}
+
+/**
+ * Resolve a `createVendor` input by filling every field the caller left unset
+ * from a CVR-register lookup. Explicit caller values always win.
+ */
+export async function vendorInputFromCvr(
+  db: Database,
+  cvrInput: string,
+  base: CreateVendorInput,
+  options: CvrLookupOptions = {},
+): Promise<CvrAutofillResult<CreateVendorInput>> {
+  const lookup = await lookupCvrCompany(db, cvrInput, options);
+  if (!lookup.ok || !lookup.company) return { ok: false, errors: lookup.errors };
+  const company = lookup.company;
+  return {
+    ok: true,
+    company,
+    input: {
+      ...base,
+      name: trimToNull(base.name) ?? company.name,
+      address: trimToNull(base.address) ?? cvrFullAddress(company),
+      vatOrCvr: trimToNull(base.vatOrCvr) ?? `DK${company.cvr}`,
+    },
+  };
 }
 
 export function resolveDocumentMasterData(db: Database, metadata: DocumentMetadata, options: { vendorId?: number | null }) {
