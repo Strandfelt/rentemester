@@ -90,6 +90,13 @@ export function PnlChart({ months }: { months: OverviewMonth[] }) {
       },
       y: {
         beginAtZero: true,
+        // Pin the axis gutter wide enough for a full 6-digit label ("18.000").
+        // Chart.js auto-fits axis width by measuring labels, but that runs
+        // before the web font loads — it under-reserves and clips the leading
+        // digit. A fixed width makes the gutter deterministic.
+        afterFit: (scale) => {
+          scale.width = 76;
+        },
         grid: { color: BORDER },
         ticks: {
           color: INK_MUTED,

@@ -619,10 +619,12 @@ table.data td.num {
   width: 100%;
   height: 320px;
 }
+/* Chart.js (responsive + maintainAspectRatio:false) owns the canvas size from
+   the position:relative fixed-height parent above. Do NOT force canvas
+   width/height here — !important desyncs the drawing buffer from the display
+   size and clips the Y-axis labels / collapses the chart on mobile. */
 .pnl-chart canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
 }
 
 /* ---- status cards ---- */
