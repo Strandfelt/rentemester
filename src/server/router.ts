@@ -19,11 +19,10 @@
 import { createCompany } from "../core/company";
 import {
   findWorkspaceCompany,
-  listWorkspaceCompanies,
   renameWorkspaceCompany,
   setWorkspaceCompanyArchived,
-  workspaceExists,
 } from "../core/workspace";
+import { discoverWorkspaceCompanies } from "./discovery";
 import type { ServerConfig } from "./config";
 import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
@@ -128,9 +127,10 @@ function handlePortfolio(config: ServerConfig, url: URL): Response {
 }
 
 function handleCompanyList(config: ServerConfig): Response {
-  const companies = workspaceExists(config.workspaceRoot)
-    ? listWorkspaceCompanies(config.workspaceRoot)
-    : [];
+  // Discover-and-adopt any present-but-unlisted company directory before
+  // listing (#256): an owner who set a company up via the CLI then opened the
+  // cockpit must see that real company, not "0 virksomheder" + a blank create.
+  const companies = discoverWorkspaceCompanies(config.workspaceRoot);
   return okResponse({
     workspace: config.workspaceRoot,
     count: companies.length,

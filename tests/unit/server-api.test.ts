@@ -7,7 +7,12 @@ import { tmpdir } from "node:os";
 import { handleRequest } from "../../src/server/router";
 import { resolveServerConfig, type ServerConfig } from "../../src/server/config";
 import { createCompany } from "../../src/core/company";
-import { initWorkspace, companyRootForSlug } from "../../src/core/workspace";
+import {
+  initWorkspace,
+  companyRootForSlug,
+  loadWorkspaceManifest,
+  saveWorkspaceManifest,
+} from "../../src/core/workspace";
 import { companyPaths } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { postJournalEntry } from "../../src/core/ledger";
@@ -148,6 +153,50 @@ describe("cockpit API — endpoint contracts", () => {
       expect(res.body.count).toBe(2);
       const slugs = res.body.companies.map((c: any) => c.slug).sort();
       expect(slugs).toEqual(["acme-aps", "beta-ivs"]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("GET /api/companies discovers a populated but unlisted company dir (#256)", async () => {
+    // An owner set the company up via the CLI: its directory + ledger sit in
+    // the workspace but the cockpit manifest never recorded it. Pre-#256 the
+    // cockpit showed "0 virksomheder" and a create-company would mint an empty
+    // ledger over it. The cockpit must instead discover and adopt it.
+    const ws = makeWorkspace("ep-discover", ["Acme ApS"]);
+    try {
+      // Drop the company from the manifest, leaving the directory + ledger.
+      const manifest = loadWorkspaceManifest(ws);
+      saveWorkspaceManifest(ws, { ...manifest, companies: [] });
+      // Before discovery the manifest is empty…
+      expect(loadWorkspaceManifest(ws).companies).toHaveLength(0);
+
+      const res = await get(config({ workspaceRoot: ws }), "/api/companies");
+      expect(res.status).toBe(200);
+      // …yet the cockpit surfaces the real company, not "0 virksomheder".
+      expect(res.body.count).toBe(1);
+      expect(res.body.companies[0].slug).toBe("acme-aps");
+      expect(res.body.companies[0].name).toBe("Acme ApS");
+      // The discovery is persisted: the manifest now records the company.
+      expect(loadWorkspaceManifest(ws).companies.map((c) => c.slug)).toEqual([
+        "acme-aps",
+      ]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("GET /api/portfolio discovers an unlisted company dir (#256)", async () => {
+    // The portfolio is the cockpit's landing page — an owner who set a company
+    // up via the CLI must land on it, not on the empty-workspace onboarding.
+    const ws = makeWorkspace("ep-discover-pf", ["Acme ApS"]);
+    try {
+      const manifest = loadWorkspaceManifest(ws);
+      saveWorkspaceManifest(ws, { ...manifest, companies: [] });
+      const res = await get(config({ workspaceRoot: ws }), "/api/portfolio");
+      expect(res.status).toBe(200);
+      expect(res.body.portfolio.companyCount).toBe(1);
+      expect(res.body.portfolio.companies[0].slug).toBe("acme-aps");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -387,11 +436,13 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       expect(res.body.overview.profitAndLoss.months).toHaveLength(12);
       expect(res.body.overview.profitAndLoss.months[2].income).toBe(1000);
       expect(res.body.overview.profitAndLoss.months[2].expense).toBe(400);
-      // VAT: 25% of the 1000 sales base / the 400 purchase base.
+      // VAT: 25% of the 1000 sales base / the 400 purchase base. The P&L
+      // entry is dated 2026-03-15 (Q1), so the surfaced quarter is Q1 2026 —
+      // quarterly is the only VAT cadence, consistent with the dashboard/CLI.
       expect(res.body.overview.vat.outputVat).toBe(250);
       expect(res.body.overview.vat.inputVat).toBe(100);
       expect(res.body.overview.vat.payable).toBe(150);
-      expect(res.body.overview.vat.periodLabel).toBe("1. halvår 2026");
+      expect(res.body.overview.vat.periodLabel).toBe("Q1 2026");
       // Bank account 2000 nets +1250 (sale) −500 (purchase) = 750.
       expect(res.body.overview.bank.balance).toBe(750);
       expect(res.body.overview.recentEntries.length).toBeGreaterThan(0);
@@ -497,6 +548,33 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       expect(bankGroup.count).toBe(3);
       expect(bankGroup.label).toContain("3 banktransaktioner");
       expect(bankGroup.link).toBe("bank");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("each overview exception row carries its requiredAction guidance (#254)", async () => {
+    const ws = makeWorkspace("ov-exc-action", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      seedException(
+        ws,
+        "acme-aps",
+        "UNMATCHED_BANK_TRANSACTION",
+        "Banktransaktion 12 mangler afstemning",
+        "Find bilaget for indbetalingen og bogfør den som indtægt.",
+      );
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const row = res.body.overview.exceptions.rows[0];
+      expect(row.message).toBe("Banktransaktion 12 mangler afstemning");
+      // The concrete action — the most useful part — is on the wire (#254).
+      expect(row.requiredAction).toBe(
+        "Find bilaget for indbetalingen og bogfør den som indtægt.",
+      );
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -1020,12 +1098,18 @@ function seedException(
   slug: string,
   type: string,
   message: string,
+  requiredAction?: string,
 ) {
   const companyRoot = companyRootForSlug(ws, slug);
   const db = openDb(companyPaths(companyRoot).db);
   try {
     migrate(db);
-    recordException(db, { type, severity: "medium", message });
+    recordException(db, {
+      type,
+      severity: "medium",
+      message,
+      ...(requiredAction ? { requiredAction } : {}),
+    });
   } finally {
     db.close();
   }
@@ -1104,7 +1188,19 @@ describe("cockpit API — VAT (GET .../vat)", () => {
       expect(v.outputVat).toBe(250);
       expect(v.inputVat).toBe(100);
       expect(v.payable).toBe(150);
-      expect(v.periodLabel).toBe("1. halvår 2026");
+      // 2026-03-15 falls in Q1 — quarterly is the only VAT cadence.
+      expect(v.periodLabel).toBe("Q1 2026");
+      // The full SKAT TastSelv rubrics are surfaced so the owner can file
+      // straight from the cockpit — salgsmoms/købsmoms/momstilsvar plus the
+      // foreign-trade rubrics A/B/C, the same numbers `vat momsangivelse` gives.
+      expect(v.rubrikker.salgsmoms).toBe(250);
+      expect(v.rubrikker.kobsmoms).toBe(100);
+      expect(v.rubrikker.momstilsvar).toBe(150);
+      expect(v.rubrikker.momsAfVarekobUdland).toBe(0);
+      expect(v.rubrikker.momsAfYdelseskobUdland).toBe(0);
+      expect(v.rubrikker.rubrikA).toBe(0);
+      expect(v.rubrikker.rubrikB).toBe(0);
+      expect(v.rubrikker.rubrikC).toBe(0);
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -1597,7 +1693,7 @@ describe("cockpit API — obligations (GET .../obligations)", () => {
   test("surfaces VAT with its statutory deadline and liability payables", async () => {
     const ws = makeWorkspace("obl-live", ["Acme ApS"]);
     try {
-      // postPnlEntry → 250 output VAT − 100 input VAT = 150 payable for H1.
+      // postPnlEntry → 250 output VAT − 100 input VAT = 150 payable for Q1.
       postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
       postLiability(ws, "acme-aps", "2026-06-30", "63060", "Skyldig selskabsskat", 2000);
       postLiability(ws, "acme-aps", "2026-06-30", "63000", "Kreditorer", 500);
@@ -1611,8 +1707,8 @@ describe("cockpit API — obligations (GET .../obligations)", () => {
       expect(o.archived).toBe(false);
       const vat = o.obligations.find((r: any) => r.kind === "vat");
       expect(vat.amount).toBe(150);
-      // 1. halvår 2026 is filed/paid by 1 September 2026.
-      expect(vat.dueDate).toBe("2026-09-01");
+      // Q1 2026 (Jan–Mar) is filed/paid by 1 June 2026.
+      expect(vat.dueDate).toBe("2026-06-01");
       const tax = o.obligations.find((r: any) => r.kind === "corporation-tax");
       expect(tax.amount).toBe(2000);
       expect(tax.dueDate).toBe("2027-11-01");
@@ -1803,8 +1899,8 @@ describe("cockpit API — VAT deadline (GET .../vat & .../overview)", () => {
         "/api/companies/acme-aps/vat?year=2026",
       );
       expect(res.status).toBe(200);
-      // 1. halvår 2026 → filed/paid by 1 September 2026.
-      expect(res.body.vat.deadline).toBe("2026-09-01");
+      // Q1 2026 (Jan–Mar) → filed/paid by 1 June 2026.
+      expect(res.body.vat.deadline).toBe("2026-06-01");
       expect(typeof res.body.vat.daysRemaining).toBe("number");
     } finally {
       rmSync(ws, { recursive: true, force: true });
@@ -1820,7 +1916,8 @@ describe("cockpit API — VAT deadline (GET .../vat & .../overview)", () => {
         "/api/companies/acme-aps/overview?year=2026",
       );
       expect(res.status).toBe(200);
-      expect(res.body.overview.vat.deadline).toBe("2026-09-01");
+      // Q1 2026 (Jan–Mar) → filed/paid by 1 June 2026.
+      expect(res.body.overview.vat.deadline).toBe("2026-06-01");
       // No issued invoices → a clean zero receivables block.
       expect(res.body.overview.receivables).toEqual({
         openCount: 0,

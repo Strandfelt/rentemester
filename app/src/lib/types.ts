@@ -193,6 +193,12 @@ export type OverviewExceptionRow = {
   type: string;
   severity: string;
   message: string;
+  /**
+   * The concrete "what the owner must do" guidance for this exception — the
+   * same `requiredAction` the CLI's `exceptions list` shows. Null when the
+   * exception carries no recorded action.
+   */
+  requiredAction: string | null;
 };
 
 /**
@@ -514,6 +520,29 @@ export type BankResponse = {
 
 // --- VAT / Moms (GET .../vat?year=) ---------------------------------------
 
+/**
+ * The standard SKAT TastSelv momsangivelse rubrics for a VAT period — the
+ * numbers an owner types into the momsangivelse. All amounts are kroner.
+ */
+export type VatRubrikker = {
+  /** Salgsmoms — output VAT on domestic sales (net of bad-debt relief). */
+  salgsmoms: number;
+  /** Moms af varekøb i udlandet — VAT on goods purchased abroad. */
+  momsAfVarekobUdland: number;
+  /** Moms af ydelseskøb i udlandet — reverse-charge VAT on foreign services. */
+  momsAfYdelseskobUdland: number;
+  /** Købsmoms — total deductible input VAT. */
+  kobsmoms: number;
+  /** Momstilsvar — salgsmoms + udenlandsk moms − købsmoms; positive = owed. */
+  momstilsvar: number;
+  /** Rubrik A — value of goods/services bought abroad without Danish VAT. */
+  rubrikA: number;
+  /** Rubrik B — value of goods/services sold abroad without Danish VAT. */
+  rubrikB: number;
+  /** Rubrik C — value of other VAT-exempt sales. */
+  rubrikC: number;
+};
+
 export type CompanyVat = {
   slug: string;
   selectedYear: string;
@@ -522,6 +551,7 @@ export type CompanyVat = {
   fiscalYears: FiscalYearEntry[];
   periodStart: string;
   periodEnd: string;
+  /** The quarterly VAT period label, e.g. "Q2 2026". */
   periodLabel: string;
   /** Output VAT (salgsmoms) booked for the period, kroner. */
   outputVat: number;
@@ -533,6 +563,8 @@ export type CompanyVat = {
   deadline: string;
   /** Signed countdown from today to the deadline; negative once passed. */
   daysRemaining: number;
+  /** The full SKAT TastSelv momsangivelse rubrics for the period. */
+  rubrikker: VatRubrikker;
 };
 
 export type VatResponse = {
@@ -736,7 +768,7 @@ export type ObligationKind =
 
 export type ObligationRow = {
   kind: ObligationKind;
-  /** A human Danish label, e.g. "Moms — 1. halvår 2026". */
+  /** A human Danish label, e.g. "Moms — Q2 2026". */
   label: string;
   /** The amount owed, kroner; positive is payable. */
   amount: number;

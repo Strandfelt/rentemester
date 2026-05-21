@@ -193,8 +193,8 @@ describe("portfolio aggregation", () => {
       expect(c.omsaetning).toBe(1000);
       expect(c.resultat).toBe(600);
       expect(c.vat?.payable).toBe(150);
-      // 1. halvår 2026 → statutory deadline 1 September 2026.
-      expect(c.vat?.deadline).toBe("2026-09-01");
+      // 2026-03-15 falls in Q1 → statutory deadline 1 June 2026.
+      expect(c.vat?.deadline).toBe("2026-06-01");
       expect(c.netVatPayable).toBe(150);
     } finally {
       rmSync(ws, { recursive: true, force: true });

@@ -119,9 +119,9 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
     bank: { balance: 41388.03, actualBalance: 23654.75, difference: 17733.28 },
     receivables: { openCount: 0, openTotal: 0 },
     vat: {
-      periodStart: "2026-01-01",
+      periodStart: "2026-04-01",
       periodEnd: "2026-06-30",
-      periodLabel: "1. halvår 2026",
+      periodLabel: "Q2 2026",
       outputVat: 4457,
       inputVat: 1086,
       payable: 3371,
@@ -348,14 +348,24 @@ export function vat(over: Partial<CompanyVat> = {}): CompanyVat {
     archived: false,
     company: STATEMENT_COMPANY,
     fiscalYears: STATEMENT_FISCAL_YEARS,
-    periodStart: "2026-01-01",
+    periodStart: "2026-04-01",
     periodEnd: "2026-06-30",
-    periodLabel: "1. halvår 2026",
+    periodLabel: "Q2 2026",
     outputVat: 4457,
     inputVat: 1086,
     payable: 3371,
     deadline: "2026-09-01",
     daysRemaining: 103,
+    rubrikker: {
+      salgsmoms: 4457,
+      momsAfVarekobUdland: 0,
+      momsAfYdelseskobUdland: 250,
+      kobsmoms: 1086,
+      momstilsvar: 3621,
+      rubrikA: 1000,
+      rubrikB: 0,
+      rubrikC: 0,
+    },
     ...over,
   };
 }
@@ -372,7 +382,7 @@ export function obligations(
     obligations: [
       {
         kind: "vat",
-        label: "Moms — 1. halvår 2026",
+        label: "Moms — Q2 2026",
         amount: 3371,
         dueDate: "2026-09-01",
         daysRemaining: 103,

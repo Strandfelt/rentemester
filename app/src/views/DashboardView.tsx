@@ -325,7 +325,7 @@ function VatCard({
 }) {
   // VAT is a live-ledger figure — never rendered for an archived year.
   if (vat === null) return null;
-  // The half-yearly momsangivelse is easy to forget — surface the statutory
+  // The quarterly momsangivelse is easy to forget — surface the statutory
   // filing/payment deadline and a "X dage tilbage" countdown right on the card.
   const days = vat.daysRemaining;
   const countdown =
@@ -449,28 +449,37 @@ function ExceptionsCard({
               );
             })}
           </ul>
-          {/* The first few individual exceptions, each with a "Løs" action.
+          {/* The first few individual exceptions, each with its concrete
+              requiredAction guidance and a "Markér som gennemgået" action.
               The action is hidden for an archived (read-only) year. */}
           {!archived && exceptions.rows.length > 0 && (
-            <ul className="status-list">
+            <ul className="status-list task-list">
               {exceptions.rows.map((row) => (
                 <li key={row.id} className="task-row">
-                  <span>
-                    <span
-                      className={`flag ${
-                        row.severity === "high" ? "critical" : "warning"
-                      }`}
-                    >
-                      !
-                    </span>{" "}
-                    {row.message}
-                  </span>
+                  <div className="task-row-text">
+                    <span className="task-row-message">
+                      <span
+                        className={`flag ${
+                          row.severity === "high" ? "critical" : "warning"
+                        }`}
+                      >
+                        !
+                      </span>{" "}
+                      {row.message}
+                    </span>
+                    {row.requiredAction && (
+                      <p className="task-row-action">
+                        <strong>Sådan løser du den:</strong>{" "}
+                        {row.requiredAction}
+                      </p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     className="btn secondary"
                     onClick={() => setResolving(row)}
                   >
-                    Løs
+                    Markér som gennemgået
                   </button>
                 </li>
               ))}
@@ -481,17 +490,35 @@ function ExceptionsCard({
 
       {resolving && (
         <ConfirmDialog
-          title="Løs opgave"
+          title="Markér opgave som gennemgået"
           body={
-            <p>
-              Markér opgaven <em>{resolving.message}</em> som løst. Den
-              forbliver i regnskabet, men tæller ikke længere som en åben
-              opgave.
-            </p>
+            <>
+              <p>
+                Dette markerer opgaven <em>{resolving.message}</em> som
+                gennemgået, så den ikke længere står på listen.
+              </p>
+              <p className="dialog-warning">
+                <strong>Bemærk:</strong> dette bogfører ikke noget. Selve
+                posteringen — fx en bankindbetaling, en udgift eller moms —
+                skal stadig bogføres
+                {resolving.requiredAction ? (
+                  <>
+                    {" "}
+                    som beskrevet:{" "}
+                    <em>{resolving.requiredAction}</em>
+                  </>
+                ) : (
+                  " via agenten eller kommandolinjen"
+                )}
+                . Markér først som gennemgået, når den underliggende postering
+                rent faktisk er bogført — ellers viser cockpittet et grønt
+                regnskab, der ikke er grønt.
+              </p>
+            </>
           }
-          confirmLabel="Løs opgave"
-          noteLabel="Note (valgfri)"
-          notePlaceholder="Hvad blev gjort?"
+          confirmLabel="Markér som gennemgået"
+          noteLabel="Note — hvad blev bogført? (valgfri)"
+          notePlaceholder="Fx: bogført som salg via agenten, bilag 2026-0042"
           onConfirm={async (note) => {
             await api.resolveException(slug, resolving.id, note || undefined);
             onResolved();

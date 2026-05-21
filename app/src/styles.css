@@ -685,17 +685,52 @@ td.num,
   gap: var(--space-sm);
 }
 
-/* The per-exception "Løs" row in the Opgaver card. */
+/* The per-exception action row in the Opgaver card — the message, its
+   concrete requiredAction guidance (#254), and the review action. */
 .task-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-sm);
 }
+.task-list .task-row {
+  padding: var(--space-xs) 0;
+}
+.task-list .task-row + .task-row {
+  border-top: 1px solid var(--border);
+}
+.task-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  min-width: 0;
+}
+.task-row-message {
+  display: block;
+}
+/* The "what the owner must do" guidance — pulled straight from the
+   exception's requiredAction so the cockpit no longer hides it (#254). */
+.task-row-action {
+  margin: 0;
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
 .task-row .btn {
   flex: none;
   padding: var(--space-xxs) var(--space-sm);
   font-size: var(--text-size-sm);
+}
+
+/* The honest "this does NOT book anything" warning in the resolve-exception
+   modal (#253) — a cockpit must never imply the books changed when they did
+   not. Visually distinct so the owner cannot miss it. */
+.dialog-warning {
+  margin: var(--space-sm) 0 0;
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
+  color: var(--text);
 }
 
 /* ==========================================================================
@@ -1252,6 +1287,22 @@ table.statement-table td.num.muted {
 }
 .statement-result.negative td.num {
   color: var(--critical);
+}
+
+/* Heading + intro note inside an (unpadded) .statement-card — used by the
+   VAT view's SKAT-rubrikker block. The card itself has padding:0, so these
+   carry their own horizontal inset to line up with the table cells. */
+.statement-subhead {
+  font-family: var(--font-headline);
+  font-size: var(--text-size-md);
+  font-weight: var(--text-weight-semibold);
+  margin: 0;
+  padding: var(--space-sm) var(--space-md) 0;
+}
+.statement-note {
+  font-size: var(--text-size-sm);
+  margin: var(--space-xs) 0 var(--space-xs);
+  padding: 0 var(--space-md);
 }
 
 .statement-check {

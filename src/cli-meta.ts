@@ -92,12 +92,12 @@ export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "serve",
     usage: "serve [--workspace <dir>] [--host <addr>] [--port <n>]",
-    description: "Starter cockpit-backenden: en lokal JSON-API over workspacet (kun læsning + workspace-styring).",
+    description: "Starter cockpit-backenden: en lokal JSON-API over workspacet — overblik, workspace-styring og menneske-styrede bogføringshandlinger (fakturering, bank-CSV-import, bilagsindlæsning).",
     allowedFlags: ["--workspace", "--host", "--port"],
     inputNotes: [
       "Bind-adressen er konfigurations-styret: standard 127.0.0.1 (kun localhost)",
       "Miljøvariabler: RENTEMESTER_APP_HOST, RENTEMESTER_APP_PORT, RENTEMESTER_WORKSPACE",
-      "Ingen bogføringsmutationer — dem ejer agent/CLI-stien",
+      "Cockpittet kan udstede fakturaer, importere bankudtog og indlæse bilag — hver skrivehandling går gennem backup-låsen og actor-attribuering, ligesom agent/CLI-stien",
     ],
   },
   { key: "system healthcheck", usage: "system healthcheck --company <slug|path>", description: "Tjekker at virksomhedsmappen og kernefiler findes.", allowedFlags: ["--company"] },

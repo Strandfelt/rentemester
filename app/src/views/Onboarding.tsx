@@ -1,5 +1,6 @@
 // First-run onboarding. Shown when the workspace has no companies yet — it
-// explains the cockpit's scope and presents the create-company form.
+// explains the cockpit's scope (overview + write actions: invoicing, bank CSV
+// import, document intake) and presents the create-company form.
 
 import { CompanyForm } from "../components/CompanyForm";
 
@@ -22,9 +23,10 @@ export function Onboarding({
 
       <div className="card" style={{ marginBottom: 20 }}>
         <p className="muted" style={{ marginTop: 0 }}>
-          Cockpittet er et kontrolpanel: du opretter og overvåger virksomheder
-          her. Selve bogføringen — fakturaer, udgifter, moms — sker fortsat via
-          agenten og kommandolinjen.
+          Cockpittet er dit kontrolpanel: du opretter og overvåger virksomheder
+          her. Du kan også bogføre direkte i cockpittet — udstede fakturaer,
+          importere bankudtog (CSV) og indlæse bilag. Mere avancerede opgaver
+          klares fortsat via agenten og kommandolinjen.
         </p>
       </div>
 

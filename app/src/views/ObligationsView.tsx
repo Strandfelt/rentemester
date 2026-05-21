@@ -127,7 +127,7 @@ export function ObligationsView() {
           </div>
           <p className="statement-check ok">
             Beløbene er læst direkte fra ledgeren. Frister vises hvor de kan
-            udledes — moms efter halvårsperioden, selskabsskat efter
+            udledes — moms efter kvartalsperioden, selskabsskat efter
             indkomståret; øvrige poster har ingen kendt dato.
           </p>
         </>

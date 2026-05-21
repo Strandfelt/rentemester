@@ -54,7 +54,7 @@ describe("DashboardView — Overblik", () => {
       .closest(".status-card")!;
     expect(within(vat as HTMLElement).getByText(/3\.371,00/)).toBeInTheDocument();
     expect(
-      within(vat as HTMLElement).getByText(/1\. halvår 2026/),
+      within(vat as HTMLElement).getByText(/Q2 2026/),
     ).toBeInTheDocument();
   });
 
@@ -213,6 +213,8 @@ const ONE_EXCEPTION = {
         type: "UNMATCHED_BANK_TRANSACTION",
         severity: "medium",
         message: "Banktransaktion 12 mangler afstemning",
+        requiredAction:
+          "Find bilaget for indbetalingen på 2.500,00 kr. og bogfør den som indtægt.",
       },
     ],
     groups: [
@@ -227,24 +229,54 @@ const ONE_EXCEPTION = {
   },
 };
 
+const REVIEW_BUTTON = "Markér som gennemgået";
+const REVIEW_DIALOG = "Markér opgave som gennemgået";
+
 describe("DashboardView — resolve exception (#213)", () => {
-  test("each open exception row carries a Løs action", async () => {
+  test("each open exception row carries a review action", async () => {
     mockFetch(overviewRoute(ONE_EXCEPTION));
     renderDashboard();
     expect(
       await screen.findByText("Banktransaktion 12 mangler afstemning"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Løs" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: REVIEW_BUTTON }),
+    ).toBeInTheDocument();
   });
 
-  test("clicking Løs opens a confirm modal with a note field", async () => {
+  test("each exception row shows its requiredAction guidance (#254)", async () => {
     mockFetch(overviewRoute(ONE_EXCEPTION));
     renderDashboard();
-    await userEvent.click(await screen.findByRole("button", { name: "Løs" }));
     expect(
-      screen.getByRole("dialog", { name: "Løs opgave" }),
+      await screen.findByText(/Sådan løser du den:/),
     ).toBeInTheDocument();
-    expect(screen.getByText("Note (valgfri)")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Find bilaget for indbetalingen på 2\.500,00 kr\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("the confirm modal makes clear that nothing is booked (#253)", async () => {
+    mockFetch(overviewRoute(ONE_EXCEPTION));
+    renderDashboard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: REVIEW_BUTTON }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: REVIEW_DIALOG }),
+    ).toBeInTheDocument();
+    // The dialog must state, unmistakably, that resolving books nothing.
+    expect(
+      screen.getByText(/dette bogfører ikke noget/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/skal stadig bogføres/),
+    ).toBeInTheDocument();
+    // The note field is present for recording what was actually booked.
+    expect(
+      screen.getByText(/hvad blev bogført/),
+    ).toBeInTheDocument();
   });
 
   test("confirming the modal POSTs the resolve and reloads the overview", async () => {
@@ -255,9 +287,12 @@ describe("DashboardView — resolve exception (#213)", () => {
       },
     });
     renderDashboard();
-    await userEvent.click(await screen.findByRole("button", { name: "Løs" }));
     await userEvent.click(
-      screen.getByRole("button", { name: "Løs opgave" }),
+      await screen.findByRole("button", { name: REVIEW_BUTTON }),
+    );
+    const dialog = screen.getByRole("dialog", { name: REVIEW_DIALOG });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: REVIEW_BUTTON }),
     );
     // The resolve endpoint was called.
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
@@ -269,7 +304,7 @@ describe("DashboardView — resolve exception (#213)", () => {
     // The modal closes after success.
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Løs opgave" }),
+        screen.queryByRole("dialog", { name: REVIEW_DIALOG }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -286,18 +321,23 @@ describe("DashboardView — resolve exception (#213)", () => {
       },
     });
     renderDashboard();
-    await userEvent.click(await screen.findByRole("button", { name: "Løs" }));
-    await userEvent.click(screen.getByRole("button", { name: "Løs opgave" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: REVIEW_BUTTON }),
+    );
+    const lockDialog = screen.getByRole("dialog", { name: REVIEW_DIALOG });
+    await userEvent.click(
+      within(lockDialog).getByRole("button", { name: REVIEW_BUTTON }),
+    );
     expect(
       await screen.findByText("Bogføringen er låst"),
     ).toBeInTheDocument();
     // The modal stays open so the operator can read the lock message.
     expect(
-      screen.getByRole("dialog", { name: "Løs opgave" }),
+      screen.getByRole("dialog", { name: REVIEW_DIALOG }),
     ).toBeInTheDocument();
   });
 
-  test("an archived year offers no Løs action", async () => {
+  test("an archived year offers no review action", async () => {
     mockFetch(
       overviewRoute({
         ...ONE_EXCEPTION,
@@ -309,6 +349,8 @@ describe("DashboardView — resolve exception (#213)", () => {
     );
     renderDashboard();
     await screen.findByText(/Arkiveret regnskabsår 2025/);
-    expect(screen.queryByRole("button", { name: "Løs" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: REVIEW_BUTTON }),
+    ).not.toBeInTheDocument();
   });
 });

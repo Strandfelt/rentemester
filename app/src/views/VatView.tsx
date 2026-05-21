@@ -1,15 +1,17 @@
 // Moms — the per-company VAT return (cockpit-redesign iteration 3).
 //
-// Renders `/api/companies/:slug/vat?year=`: the VAT return for the period —
-// output VAT (salgsmoms), input VAT (købsmoms) and the resulting payable
-// amount, with the period label. All money fields are kroner — `formatKroner`
-// is used throughout.
+// Renders `/api/companies/:slug/vat?year=`: the VAT return for the quarter —
+// output VAT (salgsmoms), input VAT (købsmoms), the resulting payable amount,
+// AND the full SKAT TastSelv momsangivelse rubrics (rubrik A/B/C, foreign
+// goods/services VAT) so the owner can file straight from the cockpit instead
+// of dropping to the terminal (#257). All money fields are kroner —
+// `formatKroner` is used throughout.
 
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
-import type { CompanyVat } from "../lib/types";
+import type { CompanyVat, VatRubrikker } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
 
@@ -92,6 +94,8 @@ export function VatView() {
             <DeadlineCountdown days={v.daysRemaining} />
           </div>
 
+          <RubrikkerCard rubrikker={v.rubrikker} currency={currency} />
+
           <p className="statement-check ok">
             {payablePositive
               ? "Salgsmoms minus købsmoms — beløbet skal afregnes til SKAT."
@@ -104,9 +108,98 @@ export function VatView() {
 }
 
 /**
+ * The full SKAT TastSelv momsangivelse rubrics — the exact numbers an owner
+ * types into the momsangivelse on skat.dk. Surfacing these (#257) means the
+ * cockpit's VAT view is filing-complete: rubrik A/B/C and the foreign
+ * goods/services VAT no longer force a trip to the terminal's
+ * `vat momsangivelse`. The figures are identical to the CLI's.
+ */
+function RubrikkerCard({
+  rubrikker,
+  currency,
+}: {
+  rubrikker: VatRubrikker;
+  currency: string;
+}) {
+  const owedPositive = rubrikker.momstilsvar >= 0;
+  return (
+    <div className="card statement-card">
+      <h3 className="statement-subhead">SKAT-rubrikker (momsangivelse)</h3>
+      <p className="muted statement-note">
+        De felter du udfylder i momsangivelsen på skat.dk (TastSelv Erhverv).
+        Tallene er de samme, som <code>vat momsangivelse</code> i terminalen
+        viser.
+      </p>
+      <table className="data statement-table">
+        <tbody>
+          <tr>
+            <td>Salgsmoms</td>
+            <td className="num">
+              {formatKroner(rubrikker.salgsmoms, currency)}
+            </td>
+          </tr>
+          <tr>
+            <td>Moms af varekøb i udlandet (både EU og lande uden for EU)</td>
+            <td className="num">
+              {formatKroner(rubrikker.momsAfVarekobUdland, currency)}
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Moms af ydelseskøb i udlandet med omvendt betalingspligt
+            </td>
+            <td className="num">
+              {formatKroner(rubrikker.momsAfYdelseskobUdland, currency)}
+            </td>
+          </tr>
+          <tr>
+            <td>Købsmoms</td>
+            <td className="num">
+              {formatKroner(rubrikker.kobsmoms, currency)}
+            </td>
+          </tr>
+          <tr
+            className={`statement-result ${
+              owedPositive ? "positive" : "negative"
+            }`}
+          >
+            <td>{owedPositive ? "Momstilsvar" : "Negativt momstilsvar"}</td>
+            <td className="num">
+              {formatKroner(rubrikker.momstilsvar, currency)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <table className="data statement-table">
+        <tbody>
+          <tr>
+            <td>Rubrik A — varer og ydelser købt i udlandet</td>
+            <td className="num">
+              {formatKroner(rubrikker.rubrikA, currency)}
+            </td>
+          </tr>
+          <tr>
+            <td>Rubrik B — varer og ydelser solgt til udlandet</td>
+            <td className="num">
+              {formatKroner(rubrikker.rubrikB, currency)}
+            </td>
+          </tr>
+          <tr>
+            <td>Rubrik C — øvrige momsfrie salg</td>
+            <td className="num">
+              {formatKroner(rubrikker.rubrikC, currency)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
  * The "X dage tilbage" countdown to the VAT filing deadline. Turns critical
  * once the deadline is near or passed, so an owner sees the urgency at a
- * glance — the half-yearly momsangivelse is easy to forget.
+ * glance — the quarterly momsangivelse is easy to forget.
  */
 function DeadlineCountdown({ days }: { days: number }) {
   if (days < 0) {

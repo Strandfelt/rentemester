@@ -26,7 +26,7 @@ describe("ObligationsView — Forpligtelser", () => {
     expect(
       await screen.findByRole("heading", { name: "Acme ApS" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Moms — 1. halvår 2026")).toBeInTheDocument();
+    expect(screen.getByText("Moms — Q2 2026")).toBeInTheDocument();
     expect(screen.getByText("Skyldig selskabsskat")).toBeInTheDocument();
     expect(
       screen.getByText("Kreditorer (leverandørgæld)"),

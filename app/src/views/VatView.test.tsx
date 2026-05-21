@@ -36,11 +36,40 @@ describe("VatView — Moms", () => {
     ).toBeInTheDocument();
   });
 
-  test("shows the period label", async () => {
+  test("shows the quarterly period label", async () => {
     mockFetch(route());
     renderView();
     expect(
-      await screen.findByText(/1\. halvår 2026/),
+      await screen.findByText(/Q2 2026/),
+    ).toBeInTheDocument();
+  });
+
+  test("shows the full SKAT momsangivelse rubrics", async () => {
+    mockFetch(route());
+    renderView();
+    expect(
+      await screen.findByText(/SKAT-rubrikker/),
+    ).toBeInTheDocument();
+    // The foreign-trade rubrics the static figures lacked are now present.
+    expect(screen.getByText("Salgsmoms")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Rubrik A — varer og ydelser købt i udlandet/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Rubrik B — varer og ydelser solgt til udlandet/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Rubrik C — øvrige momsfrie salg/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Moms af ydelseskøb i udlandet med omvendt betalingspligt/,
+      ),
+    ).toBeInTheDocument();
+    // The momstilsvar row carries the filing figure.
+    const tilsvar = screen.getByText("Momstilsvar").closest("tr")!;
+    expect(
+      within(tilsvar as HTMLElement).getByText(/3\.621,00/),
     ).toBeInTheDocument();
   });
 
