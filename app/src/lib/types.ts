@@ -127,6 +127,89 @@ export type DashboardResponse = {
   dashboard: CompanyDashboard;
 };
 
+// --- fiscal years (GET /api/companies/:slug/fiscal-years) -----------------
+
+export type FiscalYearEntry = {
+  label: string;
+  start: string | null;
+  end: string | null;
+  source: "live" | "archive";
+};
+
+export type FiscalYearsResponse = {
+  ok: true;
+  fiscalYears: { slug: string; years: FiscalYearEntry[] };
+};
+
+// --- overview (GET /api/companies/:slug/overview?year=) -------------------
+
+export type OverviewMonth = {
+  month: number;
+  label: string;
+  income: number;
+  expense: number;
+};
+
+export type OverviewExceptionRow = {
+  id: number;
+  type: string;
+  severity: string;
+  message: string;
+};
+
+export type OverviewRecentEntry = {
+  id: number;
+  entryNo: string;
+  date: string;
+  text: string;
+  amount: number;
+};
+
+/**
+ * The "Overblik" payload. All money fields are kroner (DKK with decimals) —
+ * use `formatKroner`, not `formatCurrency` (which expects minor units).
+ */
+export type CompanyOverview = {
+  slug: string;
+  selectedYear: string;
+  /** True for an archived-only year — the live ledger has nothing for it. */
+  archived: boolean;
+  company: {
+    name: string;
+    cvr: string | null;
+    country: string;
+    currency: string;
+    fiscalYearStartMonth: number | string;
+    fiscalYearLabelStrategy: string;
+  };
+  fiscalYears: FiscalYearEntry[];
+  profitAndLoss: {
+    omsaetning: number;
+    udgifter: number;
+    resultat: number;
+    months: OverviewMonth[];
+  };
+  bank: { balance: number };
+  vat: {
+    periodStart: string;
+    periodEnd: string;
+    periodLabel: string;
+    /** 25% of the standard-rated sales base for the period, kroner. */
+    outputVat: number;
+    /** 25% of the standard-rated purchase base for the period, kroner. */
+    inputVat: number;
+    /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+    payable: number;
+  };
+  exceptions: { count: number; rows: OverviewExceptionRow[] };
+  recentEntries: OverviewRecentEntry[];
+};
+
+export type OverviewResponse = {
+  ok: true;
+  overview: CompanyOverview;
+};
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;

@@ -12,6 +12,19 @@ export function formatCurrency(minorUnits: number, currency = "DKK"): string {
   }).format(major);
 }
 
+/**
+ * Danish-style amount formatting for figures already expressed in kroner
+ * (DKK with decimals) — e.g. the `/overview` P&L, VAT and bank fields. Use
+ * this, not `formatCurrency`, which divides by 100 for minor-unit ledgers.
+ */
+export function formatKroner(kroner: number, currency = "DKK"): string {
+  return new Intl.NumberFormat("da-DK", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(kroner);
+}
+
 /** Today as YYYY-MM-DD (local) — the default `asOf` for the cockpit. */
 export function todayIso(): string {
   const d = new Date();

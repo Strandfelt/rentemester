@@ -8,7 +8,9 @@ import type {
   CompanyListResponse,
   CreateCompanyInput,
   DashboardResponse,
+  FiscalYearsResponse,
   HealthResponse,
+  OverviewResponse,
   PortfolioResponse,
   UpdateCompanyInput,
 } from "./types";
@@ -78,6 +80,18 @@ export const api = {
         asOf ? `?asOf=${encodeURIComponent(asOf)}` : ""
       }`,
     ).then((r) => r.dashboard),
+
+  fiscalYears: (slug: string) =>
+    request<FiscalYearsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/fiscal-years`,
+    ).then((r) => r.fiscalYears.years),
+
+  overview: (slug: string, year?: string) =>
+    request<OverviewResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/overview${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.overview),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

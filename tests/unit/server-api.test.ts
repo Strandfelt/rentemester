@@ -1,7 +1,7 @@
 // Tests: src/server/router.ts, src/server/auth.ts, src/server/errors.ts,
 // src/server/config.ts — endpoint contracts, the auth seam, and safe errors.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRequest } from "../../src/server/router";
@@ -11,6 +11,7 @@ import { initWorkspace, companyRootForSlug } from "../../src/core/workspace";
 import { companyPaths } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { postJournalEntry } from "../../src/core/ledger";
+import { ingestDocument } from "../../src/core/documents";
 
 function tmpRoot(label: string) {
   return mkdtempSync(join(tmpdir(), `rentemester-${label}-`));
@@ -286,6 +287,151 @@ describe("cockpit API — fiscal years (GET /api/companies/:slug/fiscal-years)",
     const ws = makeWorkspace("fy-404", ["Acme ApS"]);
     try {
       const res = await get(config({ workspaceRoot: ws }), "/api/companies/ghost/fiscal-years");
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Posts a profit-and-loss pair into a workspace company's ledger: a sale that
+ * credits income account `1000` (VAT code `DK_SALE_25`) and a purchase that
+ * debits expense account `3000` (VAT code `DK_PURCHASE_25`). Both are 25%-VAT
+ * standard-rated, so the overview's VAT block is exercised. The cash side runs
+ * over bank account `2000`. Income/expense lines require a document, so a
+ * minimal one is ingested first.
+ */
+function postPnlEntry(
+  ws: string,
+  slug: string,
+  transactionDate: string,
+  income: number,
+  expense: number,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const inbox = mkdtempSync(join(tmpdir(), "rentemester-ov-inbox-"));
+    const sourceFile = join(inbox, "doc.txt");
+    writeFileSync(sourceFile, "Bilag\n1 DKK\n");
+    const doc = ingestDocument(db, companyRoot, sourceFile, {
+      source: "email",
+      issueDate: transactionDate,
+      invoiceNo: `OV-${transactionDate}`,
+      deliveryDescription: "Overblik testbilag",
+      amountIncVat: 1,
+      currency: "DKK",
+      sender: { name: "Leverandør ApS", address: "Vej 1", vatOrCvr: "DK11223344" },
+      recipient: { name: "Acme ApS", address: "Vej 2", vatOrCvr: "DK12345678" },
+      vatAmount: 0,
+      paymentDetails: "Bankoverførsel",
+    });
+    if (!doc.ok) throw new Error("doc ingest failed: " + (doc.errors ?? []).join("; "));
+
+    if (income > 0) {
+      const sale = postJournalEntry(db, {
+        transactionDate,
+        text: "Overblik salg",
+        documentId: doc.documentId,
+        lines: [
+          { accountNo: "2000", debitAmount: income * 1.25 },
+          { accountNo: "1000", creditAmount: income, vatCode: "DK_SALE_25" },
+          { accountNo: "1200", creditAmount: income * 0.25 },
+        ],
+      });
+      if (!sale.ok) throw new Error("sale post failed: " + sale.errors.join("; "));
+    }
+    if (expense > 0) {
+      const purchase = postJournalEntry(db, {
+        transactionDate,
+        text: "Overblik køb",
+        documentId: doc.documentId,
+        lines: [
+          { accountNo: "3000", debitAmount: expense, vatCode: "DK_PURCHASE_25" },
+          { accountNo: "4000", debitAmount: expense * 0.25 },
+          { accountNo: "2000", creditAmount: expense * 1.25 },
+        ],
+      });
+      if (!purchase.ok) throw new Error("purchase post failed: " + purchase.errors.join("; "));
+    }
+  } finally {
+    db.close();
+  }
+}
+
+describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
+  test("returns the P&L, bank and VAT blocks for the live year", async () => {
+    const ws = makeWorkspace("ov-live", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.overview.slug).toBe("acme-aps");
+      expect(res.body.overview.selectedYear).toBe("2026");
+      expect(res.body.overview.archived).toBe(false);
+      expect(res.body.overview.profitAndLoss.omsaetning).toBe(1000);
+      expect(res.body.overview.profitAndLoss.udgifter).toBe(400);
+      expect(res.body.overview.profitAndLoss.resultat).toBe(600);
+      expect(res.body.overview.profitAndLoss.months).toHaveLength(12);
+      expect(res.body.overview.profitAndLoss.months[2].income).toBe(1000);
+      expect(res.body.overview.profitAndLoss.months[2].expense).toBe(400);
+      // VAT: 25% of the 1000 sales base / the 400 purchase base.
+      expect(res.body.overview.vat.outputVat).toBe(250);
+      expect(res.body.overview.vat.inputVat).toBe(100);
+      expect(res.body.overview.vat.payable).toBe(150);
+      expect(res.body.overview.vat.periodLabel).toBe("1. halvår 2026");
+      // Bank account 2000 nets +1250 (sale) −500 (purchase) = 750.
+      expect(res.body.overview.bank.balance).toBe(750);
+      expect(res.body.overview.recentEntries.length).toBeGreaterThan(0);
+      expect(res.body.overview.fiscalYears[0].label).toBe("2026");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("defaults to the most recent live year when year is omitted", async () => {
+    const ws = makeWorkspace("ov-default", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-02-01", 500, 100);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.overview.selectedYear).toBe("2026");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("an invalid year query value is a safe 400", async () => {
+    const ws = makeWorkspace("ov-badyear", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=20xx",
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("bad_request");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("overview for an unknown slug is a safe 404", async () => {
+    const ws = makeWorkspace("ov-404", ["Acme ApS"]);
+    try {
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/ghost/overview",
+      );
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("not_found");
     } finally {

@@ -27,8 +27,10 @@ import { ApiError, toErrorResponse } from "./errors";
 import {
   buildCompanyDashboardData,
   buildCompanyFiscalYears,
+  buildCompanyOverview,
   buildPortfolioOverview,
   resolveAsOfDate,
+  resolveYearParam,
 } from "./data";
 import { serveStatic } from "./static";
 
@@ -127,6 +129,16 @@ function handleCompanyDashboard(
 function handleCompanyFiscalYears(config: ServerConfig, slug: string): Response {
   const data = buildCompanyFiscalYears(config.workspaceRoot, slug);
   return okResponse({ fiscalYears: data });
+}
+
+function handleCompanyOverview(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyOverview(config.workspaceRoot, slug, year);
+  return okResponse({ overview: data });
 }
 
 async function handleCompanyCreate(
@@ -257,6 +269,13 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(fiscalYearsMatch[1]!);
       return handleCompanyFiscalYears(config, slug);
+    }
+
+    const overviewMatch = /^\/api\/companies\/([^/]+)\/overview$/.exec(path);
+    if (overviewMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(overviewMatch[1]!);
+      return handleCompanyOverview(config, slug, url);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

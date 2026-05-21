@@ -525,8 +525,175 @@ table.data td.num {
 }
 
 /* ==========================================================================
+   Overblik — KPI cards, P&L chart, status cards, year selector
+   ========================================================================== */
+
+/* ---- fiscal-year selector ---- */
+.year-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.year-selector .ys-label {
+  font-size: var(--text-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+.year-selector select {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-size-md);
+  font-family: var(--font-body);
+}
+.year-selector select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ---- KPI cards (three headline figures) ---- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+}
+.kpi.emphasised {
+  background: var(--color-paper-raised);
+  padding: var(--space-lg);
+}
+.kpi.result-positive {
+  border-top-color: var(--ok);
+}
+.kpi.result-negative {
+  border-top-color: var(--critical);
+}
+.kpi .kpi-label {
+  font-size: var(--text-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+.kpi .kpi-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-2xl);
+  font-weight: var(--text-weight-bold);
+  margin-top: var(--space-xs);
+  line-height: 1.2;
+}
+.kpi.emphasised .kpi-value {
+  font-size: 34px;
+}
+.kpi.result-positive.emphasised .kpi-value {
+  color: var(--ok);
+}
+.kpi.result-negative.emphasised .kpi-value {
+  color: var(--critical);
+}
+.kpi .kpi-sub {
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+  margin-top: var(--space-xxs);
+}
+
+/* ---- P&L chart ---- */
+.chart-card {
+  padding: var(--space-md);
+}
+.pnl-chart {
+  position: relative;
+  height: 320px;
+}
+
+/* ---- status cards ---- */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+.status-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.status-card h3 {
+  margin: 0;
+  font-size: var(--text-size-md);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  font-family: var(--font-body);
+  font-weight: var(--text-weight-semibold);
+}
+.status-figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-xl);
+  font-weight: var(--text-weight-bold);
+}
+.status-figure.status-alert {
+  color: var(--critical);
+}
+.status-note {
+  font-size: var(--text-size-sm);
+  margin: 0;
+}
+.status-list {
+  list-style: none;
+  margin: var(--space-xxs) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--text-size-sm);
+}
+table.data.compact th,
+table.data.compact td {
+  padding: var(--space-xxs) var(--space-xs);
+}
+table.data.compact tr:last-child td {
+  border-bottom: none;
+}
+.entry-date {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.entry-text {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archived-notice {
+  text-align: center;
+  padding: var(--space-2xl) var(--space-lg);
+}
+.archived-notice h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--text-size-lg);
+}
+
+/* ==========================================================================
    Responsive — narrow viewport
    ========================================================================== */
+
+@media (max-width: 880px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 640px) {
   .app-shell {
@@ -538,5 +705,19 @@ table.data td.num {
   }
   .metric-row {
     grid-template-columns: 1fr;
+  }
+  .kpi-row {
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+  }
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+  .pnl-chart {
+    height: 260px;
+  }
+  .page-head .row-actions {
+    width: 100%;
+    flex-wrap: wrap;
   }
 }

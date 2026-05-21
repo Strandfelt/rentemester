@@ -105,26 +105,27 @@ rigtige tal før ledgeren er korrekt — derfor fixes importen først.
 
 - [x] Opret feature-gren `feat/cockpit-redesign`
 - [x] Træk Helheims faktiske tal — bekræftet gap mod ground truth
-- [ ] Fix `reconcileChartOfAccounts`: ved en system-migrering skal kildens
-      kontoplan være autoritativ — opdatér kolliderende konti (type,
-      normal_balance, navn, default_vat_code) til kildens værdier, når kontoen
-      endnu ikke har posteringer. Opdatér #193-tests.
-- [ ] Geninportér Helheim i en frisk virksomhed; verificér ledgeren:
-      Omsætning 17.829,02 · Udgifter 4.594,20 · Resultat 13.234,82
-- [ ] Tilføj Chart.js som dependency i `app/`
-- [ ] Etablér designsystem-tokens i `app/src/styles.css` ud fra `DESIGN.md`
-- [ ] Backend: `/api/companies/:slug/fiscal-years`
-- [ ] Kør appen i dev-mode (vite :5319 + backend :4319)
-- [ ] Screenshot nuværende cockpit som baseline (desktop + mobil)
-- [ ] **Visuel inspektion** — baseline dokumenteret, ledger verificeret korrekt
+- [x] Fix `reconcileChartOfAccounts`: kildens kontoplan er nu autoritativ —
+      kolliderende konti uden posteringer reklassificeres til kildens værdier.
+      #193-tests opdateret.
+- [x] Geninporteret Helheim i frisk virksomhed; ledger verificeret:
+      Omsætning 17.829,02 · Udgifter 4.594,20 · Resultat 13.234,82 ✓
+- [x] Tilføjet Chart.js + react-chartjs-2 i `app/`
+- [x] Etableret designsystem-tokens i `app/src/styles.css`
+- [x] Backend: `/api/companies/:slug/fiscal-years`
+- [x] App kører via preview (backend hoster `app/dist` på :4319)
+- [x] Baseline screenshot taget — nuværende dashboard er en flad felt-liste:
+      mangler resultat/P&L helt, moms viser 0 (forkert), ingen grafer/årsvalg
+- [x] **Visuel inspektion** — baseline dokumenteret, ledger verificeret korrekt
 
 ### Iteration 1 — Overblik (P0)
-- [ ] Backend: `/api/companies/:slug/overview?year=`
-- [ ] Frontend: global regnskabsårs-vælger
-- [ ] Frontend: Overblik-view — KPI-kort (Omsætning / Udgifter / Resultat)
-- [ ] Frontend: P&L-graf måned for måned (Chart.js)
-- [ ] Frontend: statuskort — Bank, Moms, Undtagelser/Opgaver, Seneste posteringer
-- [ ] Responsivt layout (desktop + mobil)
+- [x] Backend: `/api/companies/:slug/overview?year=` — P&L (med måneds-
+      opdeling), bank, moms, undtagelser, seneste posteringer; årsbevidst
+- [x] Frontend: global regnskabsårs-vælger (dropdown, genindlæser ved skift)
+- [x] Frontend: Overblik-view — KPI-kort (Omsætning / Udgifter / Resultat)
+- [x] Frontend: P&L-graf måned for måned (Chart.js)
+- [x] Frontend: statuskort — Bank, Moms, Undtagelser/Opgaver, Seneste posteringer
+- [x] Responsivt layout (desktop + mobil)
 - [ ] **Visuel inspektion** — tal matcher ground truth; flot og overskueligt på begge skærme
 
 ### Iteration 2 — Regnskabsopgørelser (P1)
