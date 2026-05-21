@@ -1,8 +1,9 @@
 // Balance — the per-company balance sheet (cockpit-redesign iteration 2).
 //
 // Renders `/api/companies/:slug/balance?year=`: assets, liabilities and equity
-// sections with section totals, as of the fiscal year's end date. The
-// un-closed period result is shown on the equity side so the sheet balances
+// sections with section totals, as of the fiscal year's end date. The fiscal
+// year's result is folded into the equity section as an "Årets resultat" line
+// so `equity.total` is the equity an owner reads and the sheet balances
 // (assets = liabilities + equity). All money fields are kroner.
 
 import { Link, useParams } from "react-router-dom";
@@ -96,8 +97,6 @@ export function BalanceView() {
             currency={currency}
             slug={slug}
             year={b.selectedYear}
-            extraLabel="Årets resultat"
-            extraAmount={b.periodResult}
           />
           <tbody>
             <tr className="statement-result">
@@ -122,8 +121,6 @@ function BalanceSection({
   currency,
   slug,
   year,
-  extraLabel,
-  extraAmount,
 }: {
   heading: string;
   lines: BalanceLine[];
@@ -132,12 +129,7 @@ function BalanceSection({
   currency: string;
   slug: string;
   year: string;
-  /** An extra line appended after the accounts (e.g. the period result). */
-  extraLabel?: string;
-  extraAmount?: number;
 }) {
-  const hasExtra = extraLabel !== undefined && extraAmount !== undefined;
-  const sectionTotal = hasExtra ? total + (extraAmount ?? 0) : total;
   return (
     <tbody>
       <tr className="statement-section-head">
@@ -153,28 +145,27 @@ function BalanceSection({
         lines.map((line) => (
           <tr key={line.accountNo} className="account-row">
             <td className="account-no">
-              <Link
-                className="account-link"
-                to={accountPostingsTo(slug, year, line.accountNo)}
-              >
-                {line.accountNo}
-              </Link>
+              {/* A synthetic line (e.g. "Årets resultat") has no real
+                  account number — render it plain rather than as a link. */}
+              {line.accountNo === "—" ? (
+                "—"
+              ) : (
+                <Link
+                  className="account-link"
+                  to={accountPostingsTo(slug, year, line.accountNo)}
+                >
+                  {line.accountNo}
+                </Link>
+              )}
             </td>
             <td>{line.name}</td>
             <td className="num">{formatKroner(line.amount, currency)}</td>
           </tr>
         ))
       )}
-      {hasExtra && (
-        <tr>
-          <td className="account-no">—</td>
-          <td>{extraLabel}</td>
-          <td className="num">{formatKroner(extraAmount ?? 0, currency)}</td>
-        </tr>
-      )}
       <tr className="statement-subtotal">
         <td colSpan={2}>{totalLabel}</td>
-        <td className="num">{formatKroner(sectionTotal, currency)}</td>
+        <td className="num">{formatKroner(total, currency)}</td>
       </tr>
     </tbody>
   );

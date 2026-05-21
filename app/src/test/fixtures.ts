@@ -186,8 +186,13 @@ export function balance(over: Partial<CompanyBalance> = {}): CompanyBalance {
       total: 3371,
     },
     equity: {
-      lines: [{ accountNo: "51000", name: "Selskabskapital", amount: 24782.21 }],
-      total: 24782.21,
+      // The period result is folded in as an "Årets resultat" line, so the
+      // section total is the equity accounts (24782.21) plus the result.
+      lines: [
+        { accountNo: "51000", name: "Selskabskapital", amount: 24782.21 },
+        { accountNo: "—", name: "Årets resultat", amount: 13234.82 },
+      ],
+      total: 38017.03,
     },
     periodResult: 13234.82,
     totalAssets: 41388.03,

@@ -1441,9 +1441,13 @@ export type CompanyBalance = ReturnType<typeof buildCompanyBalance>;
 
 /**
  * Balance — the balance sheet as of the selected fiscal year's end date:
- * assets, liabilities and equity sections with section totals. The un-closed
- * period result is surfaced under equity so the sheet balances (assets =
- * liabilities + equity). Computed by `core/financial-statements`. Money kroner.
+ * assets, liabilities and equity sections with section totals. The fiscal
+ * year's result is folded into the equity section as an "Årets resultat" line,
+ * so `equity.total` is the equity figure an owner reads (equity accounts plus
+ * the result) and the sheet balances as assets = liabilities + equity. That
+ * holds for live years (computed by `core/financial-statements`) and archived
+ * years (#197) alike, and keeps `equity.total` equal to the Flerårsoversigt's
+ * `egenkapital` for the same year. Money is kroner.
  */
 export function buildCompanyBalance(
   workspaceRoot: string,
@@ -1456,8 +1460,12 @@ export function buildCompanyBalance(
     if (ctx.isArchivedOnly) {
       // Archived year — classify the archived SaldoBalance (#197) into the
       // asset / liability / equity sections. The income/expense net is the
-      // un-closed period result, surfaced on the equity side so the sheet
-      // balances exactly as the live `buildBalanceSheet` does.
+      // fiscal year's result: like a balance sheet's retained earnings it
+      // belongs to equity, so it is folded into the equity section as an
+      // "Årets resultat" line. That makes `equity.total` the equity figure an
+      // owner reads — equity accounts plus the year's result — and the sheet
+      // balances as assets = liabilities + equity, internally consistent with
+      // the Flerårsoversigt's `egenkapital` for the same year.
       const archYear = parseInt(ctx.selectedLabel, 10);
       const header = archiveYearRow(ctx.db, archYear);
       const assets: BalanceLine[] = [];
@@ -1465,7 +1473,7 @@ export function buildCompanyBalance(
       const equity: BalanceLine[] = [];
       let totalAssets = 0;
       let totalLiabilities = 0;
-      let totalEquity = 0;
+      let equitySection = 0;
       let periodResult = 0;
       if (header) {
         for (const b of archiveTypedBalances(ctx.db, header.id)) {
@@ -1486,7 +1494,7 @@ export function buildCompanyBalance(
           } else if (b.type === "equity") {
             const amount = roundKroner(-b.amount);
             equity.push({ accountNo: b.accountNo, name: b.name, amount });
-            totalEquity += amount;
+            equitySection += amount;
           } else if (b.type === "income") {
             periodResult += -b.amount;
           } else if (b.type === "expense") {
@@ -1496,10 +1504,15 @@ export function buildCompanyBalance(
       }
       totalAssets = roundKroner(totalAssets);
       totalLiabilities = roundKroner(totalLiabilities);
-      totalEquity = roundKroner(totalEquity);
+      equitySection = roundKroner(equitySection);
       periodResult = roundKroner(periodResult);
+      // Fold the year's result into equity as a retained-earnings line so the
+      // equity section total carries it — the same way the live Balance view
+      // surfaces the result on the equity side.
+      equity.push({ accountNo: "—", name: "Årets resultat", amount: periodResult });
+      const totalEquity = roundKroner(equitySection + periodResult);
       const totalLiabilitiesAndEquity = roundKroner(
-        totalLiabilities + totalEquity + periodResult,
+        totalLiabilities + totalEquity,
       );
       return {
         slug: ctx.entry.slug,
@@ -1525,6 +1538,19 @@ export function buildCompanyBalance(
     const toLines = (lines: { accountNo: string; name: string; amount: number }[]) =>
       lines.map((l) => ({ accountNo: l.accountNo, name: l.name, amount: l.amount }));
 
+    // Fold the un-closed period result into the equity section as a
+    // retained-earnings line — `equity.total` is then the equity figure an
+    // owner reads (equity accounts plus the year's result) and matches the
+    // Flerårsoversigt's `egenkapital`. The sheet balances as
+    // assets = liabilities + equity.
+    const equityLines = toLines(bs.equity.lines);
+    equityLines.push({
+      accountNo: "—",
+      name: "Årets resultat",
+      amount: bs.periodResult,
+    });
+    const equityTotal = roundKroner(bs.equity.total + bs.periodResult);
+
     return {
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
@@ -1538,7 +1564,7 @@ export function buildCompanyBalance(
         lines: toLines(bs.liabilities.lines),
         total: bs.liabilities.total,
       },
-      equity: { lines: toLines(bs.equity.lines), total: bs.equity.total },
+      equity: { lines: equityLines, total: equityTotal },
       periodResult: bs.periodResult,
       totalAssets: bs.totalAssets,
       totalLiabilitiesAndEquity: bs.totalLiabilitiesAndEquity,

@@ -334,8 +334,13 @@ export type CompanyBalance = {
   asOfDate: string;
   assets: BalanceSection;
   liabilities: BalanceSection;
+  /**
+   * Equity including the fiscal year's result: the result is folded in as an
+   * "Årets resultat" line so `equity.total` is the equity figure an owner
+   * reads — and the same number as the Flerårsoversigt's `egenkapital`.
+   */
   equity: BalanceSection;
-  /** The un-closed period result, carried into the equity side. */
+  /** The fiscal year's result, also folded into the equity section. */
   periodResult: number;
   totalAssets: number;
   totalLiabilitiesAndEquity: number;

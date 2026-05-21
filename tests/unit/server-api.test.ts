@@ -785,10 +785,51 @@ describe("cockpit API — archive-aware core views (#197)", () => {
       expect(b.archived).toBe(true);
       expect(b.totalAssets).toBe(6000);
       expect(b.liabilities.total).toBe(1000);
-      expect(b.equity.total).toBe(2000);
+      // The 3000 period result is folded into equity as an "Årets resultat"
+      // line, so equity.total is the equity-account sum (2000) plus the result.
       expect(b.periodResult).toBe(3000);
+      const resultLine = b.equity.lines.find(
+        (l: { name: string }) => l.name === "Årets resultat",
+      );
+      expect(resultLine?.amount).toBe(3000);
+      expect(b.equity.total).toBe(5000);
+      // The archived balance sheet balances: assets = liabilities + equity.
       expect(b.totalLiabilitiesAndEquity).toBe(6000);
+      expect(b.liabilities.total + b.equity.total).toBe(b.totalAssets);
       expect(b.balanced).toBe(true);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("archived equity.total matches the Flerårsoversigt's egenkapital", async () => {
+    const ws = makeWorkspace("arc-bal-consistency", ["Acme ApS"]);
+    try {
+      // A distressed year: a negative (overdrawn) bank, an equity deficit and
+      // a loss. The archived SaldoBalance is debit-signed and sums to zero, so
+      // the sheet must still balance and the two views must agree on equity.
+      seedArchiveYear(ws, "acme-aps", 2023, [
+        ["2000", "Bank", -3000],
+        ["4500", "Momsafregning", -500],
+        ["5000", "Egenkapital", 1500],
+        ["1000", "Omsætning", -2000],
+        ["3000", "Software", 4000],
+      ]);
+      const cfg = config({ workspaceRoot: ws });
+      const balRes = await get(cfg, "/api/companies/acme-aps/balance?year=2023");
+      expect(balRes.status).toBe(200);
+      const b = balRes.body.balance;
+      // The balance balances even for a distressed (negative-asset) year.
+      expect(b.balanced).toBe(true);
+      expect(b.liabilities.total + b.equity.total).toBe(b.totalAssets);
+
+      const myRes = await get(cfg, "/api/companies/acme-aps/multi-year");
+      expect(myRes.status).toBe(200);
+      const my2023 = myRes.body.multiYear.years.find(
+        (r: { year: string }) => r.year === "2023",
+      );
+      // The Balance view and the Flerårsoversigt agree on equity.
+      expect(my2023.egenkapital).toBe(b.equity.total);
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
