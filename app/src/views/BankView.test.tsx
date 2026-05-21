@@ -72,7 +72,7 @@ describe("BankView — Bank", () => {
     );
     renderView();
     expect(
-      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+      await screen.findByText(/Bank er ikke tilgængelig for 2025/),
     ).toBeInTheDocument();
   });
 });

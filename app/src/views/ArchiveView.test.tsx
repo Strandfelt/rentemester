@@ -2,65 +2,52 @@ import { describe, expect, test } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { ArchiveView } from "./ArchiveView";
 import { renderAt } from "../test/render";
-import { archive, fiscalYears, mockFetch } from "../test/fixtures";
+import { fiscalYears, mockFetch } from "../test/fixtures";
 
-function route(over: { fy?: any; arc?: any } = {}) {
+function route(over: { fy?: any } = {}) {
   return {
     "GET /api/companies/acme-aps/fiscal-years": {
       fiscalYears: over.fy ?? fiscalYears(),
     },
-    "GET /api/companies/acme-aps/archive/2025": {
-      archive: archive(over.arc ?? {}),
-    },
   };
 }
 
-function renderView(routePath = "/companies/acme-aps/arkiv?year=2025") {
+function renderView(routePath = "/companies/acme-aps/arkiv") {
   return renderAt(<ArchiveView />, {
     route: routePath,
     path: "/companies/:slug/arkiv",
   });
 }
 
-describe("ArchiveView — Arkiv", () => {
-  test("shows the read-only archived-year banner and SaldoBalance", async () => {
+describe("ArchiveView — Om arkivet", () => {
+  test("explains that the archive is the read-only Dinero #197 import", async () => {
     mockFetch(route());
     renderView();
     expect(
-      await screen.findByText(/Arkiveret regnskabsår 2025 — skrivebeskyttet/),
+      await screen.findByText(
+        /Det arkiverede regnskab er skrivebeskyttet/,
+      ),
     ).toBeInTheDocument();
-    // The SaldoBalance table lists every archived account.
-    expect(screen.getByRole("cell", { name: "Omsætning" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("cell", { name: "Vareforbrug" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Dinero-eksport \(#197\)/)).toBeInTheDocument();
   });
 
-  test("the SaldoBalance heading carries the year", async () => {
+  test("lists each archived year with links into the core views", async () => {
     mockFetch(route());
     renderView();
+    const row2025 = (
+      await screen.findByRole("cell", { name: /2025/ })
+    ).closest("tr")!;
     expect(
-      await screen.findByRole("heading", { name: "Saldobalance 2025" }),
-    ).toBeInTheDocument();
-  });
-
-  test("shows the archived posting summary", async () => {
-    mockFetch(route());
-    renderView();
-    const postings = (
-      await screen.findByRole("heading", { name: "Posteringer" })
-    ).closest(".status-card")!;
+      within(row2025 as HTMLElement).getByRole("link", { name: "Saldobalance" }),
+    ).toHaveAttribute("href", "/companies/acme-aps/saldobalance?year=2025");
     expect(
-      within(postings as HTMLElement).getByText("84"),
-    ).toBeInTheDocument();
-  });
-
-  test("picking a live year points the user back to its live views", async () => {
-    mockFetch(route());
-    renderView("/companies/acme-aps/arkiv?year=2026");
-    expect(
-      await screen.findByText(/Regnskabsår 2026 er ikke arkiveret/),
-    ).toBeInTheDocument();
+      within(row2025 as HTMLElement).getByRole("link", {
+        name: "Resultatopgørelse",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/companies/acme-aps/resultatopgorelse?year=2025",
+    );
   });
 
   test("a company with no archive shows the empty state", async () => {
@@ -71,7 +58,7 @@ describe("ArchiveView — Arkiv", () => {
         ]),
       }),
     );
-    renderView("/companies/acme-aps/arkiv");
+    renderView();
     expect(
       await screen.findByText(/Ingen arkiverede regnskabsår/),
     ).toBeInTheDocument();

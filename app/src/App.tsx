@@ -13,7 +13,7 @@
 //   /companies/:slug/bank               Bank (transactions + reconciliation)
 //   /companies/:slug/moms               Moms (VAT return)
 //   /companies/:slug/bilag              Bilag (ingested documents)
-//   /companies/:slug/arkiv              Arkiv (a single archived year)
+//   /companies/:slug/arkiv              Om arkivet (read-only #197 explainer)
 //   /companies/:slug/fleraar            Flerårsoversigt (multi-year comparison)
 //   /companies/:slug/fakturaer          Fakturaer (issued invoices)
 //   /companies/:slug/kontakter          Kontakter (customers + vendors)

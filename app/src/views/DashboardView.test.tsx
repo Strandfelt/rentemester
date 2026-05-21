@@ -135,11 +135,25 @@ describe("DashboardView — Overblik", () => {
     );
   });
 
-  test("an archived year shows the arkiv notice", async () => {
-    mockFetch(overviewRoute({ archived: true, selectedYear: "2025" }));
+  test("an archived year renders the P&L overview under a read-only banner", async () => {
+    mockFetch(
+      overviewRoute({
+        archived: true,
+        archivedSource: "dinero",
+        selectedYear: "2025",
+        vat: null,
+      }),
+    );
     renderDashboard();
     expect(
-      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+      await screen.findByText(/Arkiveret regnskabsår 2025 — skrivebeskyttet/),
+    ).toBeInTheDocument();
+    // The KPI cards still render from the archived figures.
+    expect(screen.getByText("Omsætning")).toBeInTheDocument();
+    expect(screen.getByText("Resultat")).toBeInTheDocument();
+    // Live-only data is honestly marked unavailable rather than faked.
+    expect(
+      screen.getByText(/ikke tilgængelige for et arkiveret regnskabsår/),
     ).toBeInTheDocument();
   });
 

@@ -61,12 +61,16 @@ describe("JournalView — Posteringer", () => {
     expect(lastUrl).toContain("year=2025");
   });
 
-  test("an archived year shows the arkiv notice", async () => {
-    mockFetch(route({ archived: true, selectedYear: "2025", entries: [] }));
+  test("an archived year renders the archived entries under a read-only banner", async () => {
+    mockFetch(
+      route({ archived: true, archivedSource: "dinero", selectedYear: "2025" }),
+    );
     renderView();
     expect(
-      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+      await screen.findByText(/Arkiveret regnskabsår 2025 — skrivebeskyttet/),
     ).toBeInTheDocument();
+    // The archived Posteringer are still rendered as real entry rows.
+    expect(screen.getByText(/posteringer/)).toBeInTheDocument();
   });
 
   test("an ?account= filter fetches the filtered journal and names the account", async () => {

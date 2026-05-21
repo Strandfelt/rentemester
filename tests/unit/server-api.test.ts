@@ -725,6 +725,261 @@ describe("cockpit API — journal (GET .../journal)", () => {
   });
 });
 
+// --------------------------------------------------------------------------
+// Archive-aware core views (#197 — Runde 3, iteration 10)
+//
+// The core statement endpoints derive their figures from `import_archive_*`
+// when the selected year is an archived one — the same chart of accounts
+// classification the live ledger uses, applied to the archived SaldoBalance.
+// --------------------------------------------------------------------------
+
+describe("cockpit API — archive-aware core views (#197)", () => {
+  test("income-statement classifies an archived year's SaldoBalance", async () => {
+    const ws = makeWorkspace("arc-is", ["Acme ApS"]);
+    try {
+      // Archived 2024 — income 1000 closes at −5000 (credit), expense 3000 at
+      // 1200 (debit). Resultat = 5000 − 1200 = 3800.
+      seedArchiveYear(ws, "acme-aps", 2024, [
+        ["1000", "Omsætning", -5000],
+        ["3000", "Software", 1200],
+        ["2000", "Bank", 3800],
+      ]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/income-statement?year=2024",
+      );
+      expect(res.status).toBe(200);
+      const is = res.body.incomeStatement;
+      expect(is.archived).toBe(true);
+      expect(is.archivedSource).toBe("dinero");
+      expect(is.income).toHaveLength(1);
+      expect(is.income[0].amount).toBe(5000);
+      expect(is.expense).toHaveLength(1);
+      expect(is.expense[0].amount).toBe(1200);
+      expect(is.totalIncome).toBe(5000);
+      expect(is.totalExpense).toBe(1200);
+      expect(is.result).toBe(3800);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("balance classifies an archived year into asset/liability/equity", async () => {
+    const ws = makeWorkspace("arc-bal", ["Acme ApS"]);
+    try {
+      // Assets 6000 debit (2000), liability 4500 credit (−1000 archive sign),
+      // equity 5000 credit (−2000), income/expense net to the 3000 result.
+      seedArchiveYear(ws, "acme-aps", 2024, [
+        ["2000", "Bank", 6000],
+        ["4500", "Momsafregning", -1000],
+        ["5000", "Egenkapital", -2000],
+        ["1000", "Omsætning", -5000],
+        ["3000", "Software", 2000],
+      ]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/balance?year=2024",
+      );
+      expect(res.status).toBe(200);
+      const b = res.body.balance;
+      expect(b.archived).toBe(true);
+      expect(b.totalAssets).toBe(6000);
+      expect(b.liabilities.total).toBe(1000);
+      // The 3000 period result is folded into equity as an "Årets resultat"
+      // line, so equity.total is the equity-account sum (2000) plus the result.
+      expect(b.periodResult).toBe(3000);
+      const resultLine = b.equity.lines.find(
+        (l: { name: string }) => l.name === "Årets resultat",
+      );
+      expect(resultLine?.amount).toBe(3000);
+      expect(b.equity.total).toBe(5000);
+      // The archived balance sheet balances: assets = liabilities + equity.
+      expect(b.totalLiabilitiesAndEquity).toBe(6000);
+      expect(b.liabilities.total + b.equity.total).toBe(b.totalAssets);
+      expect(b.balanced).toBe(true);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("archived equity.total matches the Flerårsoversigt's egenkapital", async () => {
+    const ws = makeWorkspace("arc-bal-consistency", ["Acme ApS"]);
+    try {
+      // A distressed year: a negative (overdrawn) bank, an equity deficit and
+      // a loss. The archived SaldoBalance is debit-signed and sums to zero, so
+      // the sheet must still balance and the two views must agree on equity.
+      seedArchiveYear(ws, "acme-aps", 2023, [
+        ["2000", "Bank", -3000],
+        ["4500", "Momsafregning", -500],
+        ["5000", "Egenkapital", 1500],
+        ["1000", "Omsætning", -2000],
+        ["3000", "Software", 4000],
+      ]);
+      const cfg = config({ workspaceRoot: ws });
+      const balRes = await get(cfg, "/api/companies/acme-aps/balance?year=2023");
+      expect(balRes.status).toBe(200);
+      const b = balRes.body.balance;
+      // The balance balances even for a distressed (negative-asset) year.
+      expect(b.balanced).toBe(true);
+      expect(b.liabilities.total + b.equity.total).toBe(b.totalAssets);
+
+      const myRes = await get(cfg, "/api/companies/acme-aps/multi-year");
+      expect(myRes.status).toBe(200);
+      const my2023 = myRes.body.multiYear.years.find(
+        (r: { year: string }) => r.year === "2023",
+      );
+      // The Balance view and the Flerårsoversigt agree on equity.
+      expect(my2023.egenkapital).toBe(b.equity.total);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("trial-balance renders the archived SaldoBalance directly", async () => {
+    const ws = makeWorkspace("arc-tb", ["Acme ApS"]);
+    try {
+      seedArchiveYear(ws, "acme-aps", 2024, [
+        ["1000", "Omsætning", -5000],
+        ["3000", "Software", 1200],
+        ["2000", "Bank", 3800],
+      ]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/trial-balance?year=2024",
+      );
+      expect(res.status).toBe(200);
+      const t = res.body.trialBalance;
+      expect(t.archived).toBe(true);
+      expect(t.rows).toHaveLength(3);
+      const income = t.rows.find((r: any) => r.accountNo === "1000");
+      expect(income.credit).toBe(5000);
+      expect(income.debit).toBe(0);
+      expect(t.totalDebit).toBe(5000);
+      expect(t.totalCredit).toBe(5000);
+      expect(t.balanced).toBe(true);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("journal groups archived postings by voucher", async () => {
+    const ws = makeWorkspace("arc-jrn", ["Acme ApS"]);
+    try {
+      seedArchiveYear(
+        ws,
+        "acme-aps",
+        2024,
+        [["1000", "Omsætning", -5000]],
+        [],
+      );
+      // Two postings share voucher "B-1"; one carries voucher "B-2".
+      const db = openDb(companyPaths(companyRootForSlug(ws, "acme-aps")).db);
+      try {
+        migrate(db);
+        const yearId = (
+          db
+            .query(
+              "SELECT id FROM import_archive_years WHERE fiscal_year = 2024",
+            )
+            .get() as { id: number }
+        ).id;
+        const ins = db.prepare(
+          `INSERT INTO import_archive_postings
+             (archive_year_id, line_no, account_no, account_name,
+              transaction_date, voucher, text, amount)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        ins.run(yearId, 0, "1000", "Omsætning", "2024-03-01", "B-1", "Salg", -5000);
+        ins.run(yearId, 1, "2000", "Bank", "2024-03-01", "B-1", "Salg", 5000);
+        ins.run(yearId, 2, "3000", "Software", "2024-06-01", "B-2", "Køb", 1200);
+      } finally {
+        db.close();
+      }
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/journal?year=2024",
+      );
+      expect(res.status).toBe(200);
+      const j = res.body.journal;
+      expect(j.archived).toBe(true);
+      expect(j.entries).toHaveLength(2);
+      // Newest first — B-2 (June) before B-1 (March).
+      expect(j.entries[0].entryNo).toBe("B-2");
+      const b1 = j.entries.find((e: any) => e.entryNo === "B-1");
+      expect(b1.lines).toHaveLength(2);
+      expect(b1.total).toBe(5000);
+      // The ?account= drill-down filters archived entries too.
+      const filtered = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/journal?year=2024&account=3000",
+      );
+      expect(filtered.body.journal.entries).toHaveLength(1);
+      expect(filtered.body.journal.accountFilter.accountNo).toBe("3000");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("overview derives a P&L overview for an archived year", async () => {
+    const ws = makeWorkspace("arc-ov", ["Acme ApS"]);
+    try {
+      seedArchiveYear(
+        ws,
+        "acme-aps",
+        2024,
+        [
+          ["1000", "Omsætning", -5000],
+          ["3000", "Software", 1200],
+        ],
+        [],
+      );
+      const db = openDb(companyPaths(companyRootForSlug(ws, "acme-aps")).db);
+      try {
+        migrate(db);
+        const yearId = (
+          db
+            .query(
+              "SELECT id FROM import_archive_years WHERE fiscal_year = 2024",
+            )
+            .get() as { id: number }
+        ).id;
+        const ins = db.prepare(
+          `INSERT INTO import_archive_postings
+             (archive_year_id, line_no, account_no, account_name,
+              transaction_date, voucher, text, amount)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        ins.run(yearId, 0, "1000", "Omsætning", "2024-03-10", "B-1", "Salg", -5000);
+        ins.run(yearId, 1, "3000", "Software", "2024-03-10", "B-1", "Køb", 1200);
+      } finally {
+        db.close();
+      }
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2024",
+      );
+      expect(res.status).toBe(200);
+      const o = res.body.overview;
+      expect(o.archived).toBe(true);
+      expect(o.archivedSource).toBe("dinero");
+      expect(o.profitAndLoss.omsaetning).toBe(5000);
+      expect(o.profitAndLoss.udgifter).toBe(1200);
+      expect(o.profitAndLoss.resultat).toBe(3800);
+      expect(o.profitAndLoss.months).toHaveLength(12);
+      // March (index 2) carries the bucketed activity.
+      expect(o.profitAndLoss.months[2].income).toBe(5000);
+      expect(o.profitAndLoss.months[2].expense).toBe(1200);
+      // Live-only sections are honestly N/A, not faked.
+      expect(o.vat).toBeNull();
+      expect(o.bank.actualBalance).toBeNull();
+      expect(o.recentEntries.length).toBeGreaterThan(0);
+      expect(o.lastPostedDate).toBe("2024-03-10");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * Inserts an imported bank transaction directly into a company's ledger.
  * When `balanceAfter` is given the import's running balance is recorded — the
@@ -1065,6 +1320,52 @@ describe("cockpit API — multi-year (GET .../multi-year)", () => {
       expect(y2026.omsaetning).toBe(1000);
       expect(y2026.udgifter).toBe(400);
       expect(y2026.resultat).toBe(600);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("returns balance-sheet figures and key ratios per year", async () => {
+    const ws = makeWorkspace("my-balance", ["Acme ApS"]);
+    try {
+      // Archived 2025 — income −1000, expense 250, asset 2000 at 700, equity
+      // 5000 closing at −150 (credit-signed −150 → +150 egenkapital section).
+      // resultat = 1000 − 250 = 750; egenkapital = 150 + 750 = 900;
+      // balancesum = 700; egenkapitalandel = 900 / 700.
+      seedArchiveYear(ws, "acme-aps", 2025, [
+        ["1000", "Omsætning", -1000],
+        ["3000", "Vareforbrug", 250],
+        ["2000", "Bank", 700],
+        ["5000", "Egenkapital", -150],
+      ]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/multi-year",
+      );
+      expect(res.status).toBe(200);
+      const y2025 = res.body.multiYear.years[0];
+      expect(y2025.balancesum).toBe(700);
+      expect(y2025.egenkapital).toBe(900);
+      expect(y2025.bruttomargin).toBeCloseTo(0.75, 5);
+      expect(y2025.egenkapitalandel).toBeCloseTo(900 / 700, 5);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a ratio with a zero denominator is null, not a fabricated figure", async () => {
+    const ws = makeWorkspace("my-ratio-null", ["Acme ApS"]);
+    try {
+      // No income and no assets — both ratios must be null.
+      seedArchiveYear(ws, "acme-aps", 2025, [["3000", "Vareforbrug", 250]]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/multi-year",
+      );
+      expect(res.status).toBe(200);
+      const y2025 = res.body.multiYear.years[0];
+      expect(y2025.bruttomargin).toBeNull();
+      expect(y2025.egenkapitalandel).toBeNull();
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
