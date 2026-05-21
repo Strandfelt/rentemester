@@ -176,7 +176,18 @@ const DEFAULT_POLICY_YAML =
   "  country: DK\n" +
   "  currency: DKK\n" +
   "  allow_direct_sql_write: false\n" +
-  "  block_if_uncertain: true\n";
+  "  block_if_uncertain: true\n" +
+  "\n" +
+  "# Aktører der må køre muterende kommandoer med et eksplicit --actor-flag.\n" +
+  "# Hver muterende kommando kræver en actor; et eksplicit --actor skal stå her,\n" +
+  "# ellers afvises kaldet. Tilføj din egen bruger/agent i listerne nedenfor.\n" +
+  "actor_allowlist:\n" +
+  "  users:\n" +
+  "    - user:ejer\n" +
+  "  agents:\n" +
+  "    - agent:rentemester-bookkeeper\n" +
+  "  systems:\n" +
+  "    - system:rentemester\n";
 
 /**
  * #221: the company's own payment details captured at `init` (or later via the

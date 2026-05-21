@@ -440,10 +440,10 @@ table.dash-table td.center, table.dash-table th.center { text-align: center; }
   gap: var(--space-xs) var(--space-md);
   font-size: 14px;
 }
-.activity-log .time { font-family: ${monoStack}; color: var(--ink); }
+.activity-log .time { font-family: ${monoStack}; color: var(--ink); white-space: nowrap; }
 .activity-log .actor { color: var(--ink-muted); }
-.activity-log .event { font-family: ${monoStack}; color: var(--ink); }
-.activity-log .message { color: var(--ink); }
+.activity-log .event { color: var(--ink); font-weight: 500; }
+.activity-log .message { color: var(--ink-muted); }
 @media print {
   body { background: white; }
   .page { padding: var(--space-md); max-width: 100%; }
@@ -547,6 +547,69 @@ ${rows}
 ${overflowRow}`;
 }
 
+// The audit log records events under terse machine codes (`journal_reverse`,
+// `document_ingest`, ...). On the human-facing dashboard those read as the
+// system's internals, not an overview of the business — so the "Seneste
+// aktivitet" strip translates each event code to a plain-Danish label. (#233)
+const ACTIVITY_EVENT_DA: Record<string, string> = {
+  asset_depreciation_post: "Afskrivning bogført",
+  asset_immediate_writeoff: "Straksafskrivning bogført",
+  asset_register: "Aktiv registreret",
+  authority_export: "Eksport til myndighed",
+  backup_archive_created: "Backup-arkiv oprettet",
+  backup_destination_added: "Backup-destination tilføjet",
+  backup_destination_removed: "Backup-destination fjernet",
+  backup_lock_configured: "Bogføringslås konfigureret",
+  backup_placed: "Backup placeret eksternt",
+  bank_account_add: "Bankkonto oprettet",
+  bank_import: "Banktransaktioner importeret",
+  company_cvr_sync: "Stamdata hentet fra CVR",
+  credit_note_issue: "Kreditnota udstedt",
+  customer_create: "Kunde oprettet",
+  document_ingest: "Bilag indlæst",
+  gdpr_erasure: "Persondata slettet (GDPR)",
+  import_chart_reconcile: "Kontoplan afstemt ved import",
+  import_company_reconcile: "Virksomhed afstemt ved import",
+  invoice_bad_debt_writeoff: "Tab på debitor bogført",
+  invoice_claim_payment_apply: "Betaling af krav registreret",
+  invoice_compensation_post: "Kompensation bogført",
+  invoice_compensation_register: "Kompensationskrav registreret",
+  invoice_email_send: "Faktura sendt på email",
+  invoice_interest_post: "Morarente bogført",
+  invoice_interest_register: "Morarentekrav registreret",
+  invoice_issue: "Faktura udstedt",
+  invoice_payment_apply: "Fakturabetaling registreret",
+  invoice_refund_apply: "Refundering til kunde bogført",
+  invoice_reminder_post: "Rykker bogført",
+  invoice_reminder_register: "Rykker registreret",
+  invoice_render_pdf: "Faktura-PDF genereret",
+  journal_post: "Finanspostering bogført",
+  journal_reverse: "Finanspostering tilbageført",
+  mileage_entry_create: "Kørselspost registreret",
+  mileage_log_export: "Kørselsregnskab eksporteret",
+  opening_balance_post: "Primobalance bogført",
+  period_close: "Regnskabsperiode lukket",
+  period_report: "Regnskabsperiode markeret indberettet",
+  public_einvoice_oioubl_export: "OIOUBL e-faktura eksporteret",
+  public_einvoice_peppol_submission: "PEPPOL e-faktura afsendt",
+  recurring_invoice_generate: "Gentagende faktura genereret",
+  recurring_invoice_template_create: "Fakturaskabelon oprettet",
+  saft_export: "SAF-T-eksport",
+  system_backup: "Backup oprettet",
+  system_restore: "Backup gendannet",
+  vendor_create: "Leverandør oprettet",
+};
+
+/** Translate an audit event code to a plain-Danish label, never an internal code. (#233) */
+function activityEventLabel(eventType: string): string {
+  const known = ACTIVITY_EVENT_DA[eventType];
+  if (known) return known;
+  // Unknown code: humanise it (replace underscores, capitalise) rather than
+  // showing the raw snake_case identifier.
+  const words = eventType.replace(/_/g, " ").trim();
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : "Aktivitet";
+}
+
 function activityList(rows: AuditLogRow[]): string {
   if (rows.length === 0) {
     return `<div class="empty-state">Ingen aktivitet endnu</div>`;
@@ -554,8 +617,8 @@ function activityList(rows: AuditLogRow[]): string {
   const items = rows.slice(0, 10).map((row) =>
     `  <div class="time">${escapeHtml(formatTimestampShort(row.createdAt))}</div>
   <div class="actor">${escapeHtml(row.actor)}</div>
-  <div class="event">${escapeHtml(row.eventType)}</div>
-  <div class="message">${escapeHtml(truncate(row.message, 60))}</div>`
+  <div class="event">${escapeHtml(activityEventLabel(row.eventType))}</div>
+  <div class="message">${escapeHtml(row.message)}</div>`
   ).join("\n");
   return `<div class="activity-log">
 ${items}
@@ -622,7 +685,7 @@ function metricsSection(input: DashboardInput): string {
   return `<section class="metrics">
 ${metricCard("ÅBNE FAKTURAER", String(input.invoices.count), `${formatDkk(openSum)}`, null)}
 ${metricCard("OVERFORFALDNE", String(input.overdueInvoices.count), input.overdueInvoices.count > 0 ? `ældste ${overdueOldest} d` : "0 dage", input.overdueInvoices.count > 0 ? "accent" : null)}
-${metricCard("ULINKEDE BANK-TX", String(input.unlinkedBank.count), undefined, null)}
+${metricCard("BANKPOSTER UDEN BILAG", String(input.unlinkedBank.count), undefined, null)}
 ${metricCard("ÅBNE EXCEPTIONS", String(input.exceptions.count), undefined, input.exceptions.count > 0 ? "danger" : null)}
 </section>`;
 }

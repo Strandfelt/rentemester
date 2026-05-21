@@ -1,10 +1,11 @@
 // Tests: src/cli/init.ts, src/cli.ts (init CLI)
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openDb, migrate } from "../../src/core/db";
 import { companyPaths } from "../../src/core/paths";
+import { loadActorAllowlist } from "../../src/cli-actor";
 
 describe("init CLI", () => {
   test("stores fiscal-year and CVR company configuration", async () => {
@@ -159,6 +160,34 @@ describe("init CLI", () => {
       expect(result.accountCount).toBeGreaterThan(0);
       expect(result.fiscalYearStartMonth).toBe(1);
       expect(result.vatPeriod).toBe("kvartal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #231: a freshly init'ed company must ship an actor_allowlist so an
+  // explicit --actor works out of the box without hand-editing policy.yaml.
+  test("seeds a usable actor_allowlist in the default policy.yaml", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-init-allowlist-"));
+    const company = join(root, "company");
+    try {
+      const proc = Bun.spawn(["bun", "run", "src/cli.ts", "init", "--company", company], {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+
+      const policy = readFileSync(join(companyPaths(company).config, "policy.yaml"), "utf8");
+      expect(policy).toContain("actor_allowlist:");
+
+      const allowlist = loadActorAllowlist(company);
+      expect(allowlist.has("agent:rentemester-bookkeeper")).toBe(true);
+      expect(allowlist.has("user:ejer")).toBe(true);
+      expect(allowlist.has("system:rentemester")).toBe(true);
+      // An actor that was never seeded is still rejected.
+      expect(allowlist.has("agent:freja")).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

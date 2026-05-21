@@ -108,4 +108,155 @@ describe("CLI help, examples, and human formatting", () => {
     expect(stderr).toContain("issueDate must be present in YYYY-MM-DD format");
     expect(stderr).not.toContain('"errors"');
   });
+
+  // #222: `invoice issue --help` must state vatRate as a fraction, never a
+  // percent — the payload field totals.vatRate is 0.25, not 25.
+  test("invoice issue help states vatRate is a fraction, not a percent", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "issue", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("vatRate er en BRØK");
+    expect(stdout).toContain("0.25");
+    expect(stdout).not.toMatch(/vatRate er en procent/);
+  });
+
+  // #225: command metadata must render Danish characters correctly — no
+  // arsrapport/regnskabsaar/ledelsespategning mojibake.
+  test("report annual help renders Danish characters correctly", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "report", "annual", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("årsrapport");
+    expect(stdout).toContain("regnskabsår");
+    expect(stdout).toContain("ledelsespåtegning");
+    expect(stdout).not.toContain("arsrapport");
+    expect(stdout).not.toContain("regnskabsaar");
+    expect(stdout).not.toContain("ledelsespategning");
+  });
+
+  // #227: `period close` must document the closed/reported contract.
+  test("period close help documents the closed-vs-reported contract", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "period", "close", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Inputnoter:");
+    expect(stdout).toContain("Standard: closed");
+    expect(stdout).toMatch(/reported/);
+    expect(stdout).toMatch(/IKKE reversibel/i);
+  });
+
+  // #231: asset commands must carry inputNotes.
+  test("asset register and asset depreciate help carry inputNotes", async () => {
+    for (const sub of ["register", "depreciate"]) {
+      const proc = Bun.spawn(["bun", "run", "src/cli.ts", "asset", sub, "--help"], {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("Inputnoter:");
+    }
+  });
+
+  // #231: recurring-invoice create and opening-balance post advertise
+  // --example; the registered example files must exist and parse.
+  test("recurring-invoice create --example emits a parseable template", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "recurring-invoice", "create", "--example"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.interval).toBe("monthly");
+    expect(parsed.invoice).toBeDefined();
+  });
+
+  test("opening-balance post --example emits a balanced primobalance", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "opening-balance", "post", "--example"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout);
+    const debit = parsed.lines.reduce((s: number, l: any) => s + (l.debitAmount ?? 0), 0);
+    const credit = parsed.lines.reduce((s: number, l: any) => s + (l.creditAmount ?? 0), 0);
+    expect(debit).toBe(credit);
+  });
+
+  // #231: bank import must document its CSV format.
+  test("bank import help documents the CSV columns and sign convention", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "bank", "import", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("transaction_date");
+    expect(stdout).toMatch(/POSITIVT bel/);
+  });
+
+  // #231: `accounts list` must honour --json / --format json instead of
+  // always printing a console.table.
+  test("accounts list honours --format json", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rentemester-accounts-json-"));
+    const company = join(dir, "company");
+    try {
+      await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+      const proc = Bun.spawn(
+        ["bun", "run", "src/cli.ts", "accounts", "list", "--company", company, "--format", "json"],
+        { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+      );
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(stdout);
+      expect(parsed.ok).toBe(true);
+      expect(Array.isArray(parsed.rows)).toBe(true);
+      expect(parsed.rows.length).toBeGreaterThan(0);
+      expect(parsed.rows[0]).toHaveProperty("account_no");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // #231: the top-level usage must group read/write commands and list --actor.
+  test("global usage groups commands and lists the actor flags", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Læsekommandoer");
+    expect(stdout).toContain("Skrivekommandoer");
+    expect(stdout).toContain("--actor");
+    expect(stdout).toContain("--actor-via");
+  });
 });

@@ -45,7 +45,44 @@ function buildHumanError(commandLabel: string, result: Record<string, unknown>) 
     lines.push("  Advarsler:");
     for (const warning of warnings) lines.push(`    - ${warning}`);
   }
+  appendPeriodCloseGuidance(lines, errors);
   return lines;
+}
+
+/**
+ * `vat momsangivelse` and `report annual` reject an unfinalised period with a
+ * terse "... is not closed ... run 'period close' first". For an owner near a
+ * deadline that is cryptic, so when we recognise that failure we append a
+ * plain-Danish explanation of what closing a period means and the exact
+ * command to run. (#227)
+ */
+function appendPeriodCloseGuidance(lines: string[], errors: string[]): void {
+  const closeError = errors.find(
+    (e) => /is not closed/i.test(e) && /period close/i.test(e),
+  );
+  if (!closeError) return;
+  const range = closeError.match(/(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/);
+  const isFiscalYear = /fiscal|regnskabsår|annual/i.test(closeError);
+  const kind = isFiscalYear ? "fiscal_year" : "vat_quarter";
+  const fromTo = range ? `--from ${range[1]} --to ${range[2]}` : "--from <YYYY-MM-DD> --to <YYYY-MM-DD>";
+  lines.push("");
+  lines.push("  Sådan kommer du videre:");
+  lines.push(
+    "    En momsangivelse/årsrapport kan kun bygges på en LUKKET periode — det sikrer,",
+  );
+  lines.push(
+    "    at tallene ikke ændrer sig efter indberetning. Du lukker perioden med:",
+  );
+  lines.push(`      rentemester period close --company <path> ${fromTo} --kind ${kind}`);
+  lines.push(
+    "    Luk først perioden når alle bilag for perioden er bogført — en lukket periode",
+  );
+  lines.push(
+    "    blokerer ny bogføring med dato i perioden. Brug --status reported i stedet for",
+  );
+  lines.push(
+    "    standard 'closed', hvis du allerede har indberettet til SKAT/Erhvervsstyrelsen.",
+  );
 }
 
 function collectSummaryLines(result: Record<string, unknown>) {
@@ -341,6 +378,24 @@ function renderInvoiceStatus(result: Record<string, unknown>): string {
     const days = asCount(result.overdueDays);
     lines.push(`Fakturaen er forfalden — ${days} dage over forfaldsdato.`);
   }
+
+  // One decisive bottom-line: an invoice may be part-paid, part-credited and
+  // part-refunded at once, and the owner cannot read "still owes anything" off
+  // four separate amounts. claimOpenBalance is the total still outstanding,
+  // including reminder fees / interest / compensation. (#233)
+  const claimOpen =
+    typeof result.claimOpenBalance === "number"
+      ? result.claimOpenBalance
+      : Number(result.claimOpenBalance);
+  const outstanding = Number.isFinite(claimOpen) ? claimOpen : open;
+  if (Number.isFinite(outstanding) && outstanding > 0) {
+    lines.push(`→ Udestående i alt: ${formatKroner(outstanding)} — kunden skylder stadig.`);
+  } else if (Number.isFinite(outstanding) && outstanding < 0) {
+    lines.push(`→ Afsluttet — kunden har ${formatKroner(-outstanding)} til gode.`);
+  } else {
+    lines.push("→ Afsluttet — intet udestående.");
+  }
+
   lines.push("");
   lines.push(`  Fakturabeløb (inkl. moms):     ${formatKroner(result.grossAmount)}`);
   if (asCount(result.creditedAmount) !== 0) {
@@ -506,9 +561,9 @@ function renderProfitAndLoss(result: Record<string, unknown>): string {
   lines.push("");
   const profit = typeof result.result === "number" ? result.result : Number(result.result);
   if (Number.isFinite(profit) && profit > 0) {
-    lines.push(`Periodens resultat: overskud på ${formatKroner(profit)}.`);
+    lines.push(`Periodens resultat: overskud på ${formatKroner(profit)}`);
   } else if (Number.isFinite(profit) && profit < 0) {
-    lines.push(`Periodens resultat: underskud på ${formatKroner(-profit)}.`);
+    lines.push(`Periodens resultat: underskud på ${formatKroner(-profit)}`);
   } else {
     lines.push("Periodens resultat: 0,00 kr.");
   }

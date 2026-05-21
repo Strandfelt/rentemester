@@ -42,9 +42,31 @@ import { emitHumanReport, formatKroner } from "../cli-format";
 
 type Db = ReturnType<typeof openDb>;
 
-function resolveInvoiceDocumentId(db: Db, ctx: CommandContext): number | null {
-  const documentId = Number(ctx.arg("--document-id"));
-  if (Number.isInteger(documentId) && documentId > 0) return documentId;
+// Resolving an invoice from either --document-id or --invoice-number has three
+// distinct outcomes, and #230 is that the CLI used to collapse the last two:
+//   - "found"      : a flag was given and it resolved to an invoice document.
+//   - "no-flag"    : neither --document-id nor --invoice-number was supplied.
+//                    This is a USAGE error (exit 2 — fix the call).
+//   - "not-found"  : a flag WAS supplied but matched no invoice. This is a
+//                    BUSINESS error (exit 1 — the call was well-formed, the
+//                    invoice simply does not exist), so retrying is pointless.
+type InvoiceResolution =
+  | { kind: "found"; documentId: number }
+  | { kind: "no-flag" }
+  | { kind: "not-found"; flag: "--document-id" | "--invoice-number"; value: string };
+
+function resolveInvoiceDocument(db: Db, ctx: CommandContext): InvoiceResolution {
+  const documentIdRaw = ctx.arg("--document-id");
+  if (documentIdRaw !== undefined) {
+    const documentId = Number(documentIdRaw);
+    if (Number.isInteger(documentId) && documentId > 0) {
+      const row = db
+        .query(`SELECT id FROM documents WHERE document_type = 'issued_invoice' AND id = ? LIMIT 1`)
+        .get(documentId) as { id: number } | null;
+      if (row) return { kind: "found", documentId: row.id };
+    }
+    return { kind: "not-found", flag: "--document-id", value: String(documentIdRaw) };
+  }
   const invoiceNumber = ctx.arg("--invoice-number")?.trim();
   if (invoiceNumber) {
     const row = db
@@ -52,9 +74,37 @@ function resolveInvoiceDocumentId(db: Db, ctx: CommandContext): number | null {
         `SELECT id FROM documents WHERE document_type = 'issued_invoice' AND invoice_no = ? LIMIT 1`,
       )
       .get(invoiceNumber) as { id: number } | null;
-    return row?.id ?? null;
+    if (row) return { kind: "found", documentId: row.id };
+    return { kind: "not-found", flag: "--invoice-number", value: invoiceNumber };
   }
-  return null;
+  return { kind: "no-flag" };
+}
+
+/**
+ * Resolve the invoice document id for a command, or emit the right error and
+ * exit. Distinguishes a missing identifying flag (usage error, exit 2) from a
+ * supplied-but-unmatched id/number (business error, exit 1). (#230)
+ */
+function resolveInvoiceDocumentId(db: Db, ctx: CommandContext): number {
+  const resolution = resolveInvoiceDocument(db, ctx);
+  if (resolution.kind === "found") return resolution.documentId;
+  if (resolution.kind === "no-flag") {
+    console.error("Missing required --document-id <n> or --invoice-number <no>");
+    db.close();
+    process.exit(2);
+  }
+  // not-found: the call was well-formed; the invoice simply does not exist.
+  const label =
+    resolution.flag === "--invoice-number"
+      ? `No issued invoice has invoice number ${resolution.value}`
+      : `No issued invoice has document id ${resolution.value}`;
+  ctx.emitResult({
+    ok: false,
+    appliedRules: [],
+    errors: [`${label} — check the value with 'invoice list' or 'invoice find'`],
+  });
+  db.close();
+  process.exit(1);
 }
 
 function findInvoiceDocumentIdByNumber(db: Db, invoiceNumber?: string | null): number | null {
@@ -299,10 +349,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = renderIssuedInvoicePdf(db, ctx.companyRoot(), { invoiceDocumentId: documentId });
     ctx.emitResult(result as Record<string, unknown>);
     db.close();
@@ -317,11 +363,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      db.close();
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = exportPublicEInvoicePreview(db, {
       invoiceDocumentId: documentId,
       outPath: out,
@@ -340,11 +381,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      db.close();
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = exportPublicEInvoiceOioUbl(db, {
       invoiceDocumentId: documentId,
       outPath: out,
@@ -385,11 +421,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      db.close();
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = submitPublicEInvoicePeppol(db, {
       invoiceDocumentId: documentId,
       accessPoint,
@@ -425,10 +456,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = postIssuedInvoiceToLedger(db, { invoiceDocumentId: documentId });
     ctx.emitResult(result as Record<string, unknown>);
     db.close();
@@ -534,15 +561,15 @@ export function register(dispatch: CommandDispatch): void {
     const feeArg = ctx.arg("--fee");
     const feeAmount = feeArg === undefined ? undefined : Number(feeArg);
     const note = ctx.arg("--note");
-    const db = openCommandDb(ctx);
-    migrate(db);
-    const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId || !reminderDate || (feeArg !== undefined && Number.isNaN(feeAmount))) {
+    if (!reminderDate || (feeArg !== undefined && Number.isNaN(feeAmount))) {
       console.error(
-        "Missing required --document-id <n> or --invoice-number <no> or --date <YYYY-MM-DD>; optional --fee <n> must be numeric when present",
+        "Missing required --date <YYYY-MM-DD>; optional --fee <n> must be numeric when present",
       );
       process.exit(2);
     }
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
     const result = registerInvoiceReminder(db, {
       invoiceDocumentId: documentId,
       reminderDate,
@@ -557,18 +584,16 @@ export function register(dispatch: CommandDispatch): void {
     const reminderIdArg = ctx.arg("--reminder-id");
     const reminderId = reminderIdArg === undefined ? undefined : Number(reminderIdArg);
     const transactionDate = ctx.arg("--date");
+    if (
+      reminderIdArg !== undefined &&
+      (!Number.isInteger(reminderId) || (reminderId as number) <= 0)
+    ) {
+      console.error("Optional --reminder-id <n> must be a positive integer when present");
+      process.exit(2);
+    }
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (
-      !documentId ||
-      (reminderIdArg !== undefined && (!Number.isInteger(reminderId) || (reminderId as number) <= 0))
-    ) {
-      console.error(
-        "Missing required --document-id <n> or --invoice-number <no>; optional --reminder-id <n> must be a positive integer when present",
-      );
-      process.exit(2);
-    }
     const result = postInvoiceReminderToLedger(db, {
       invoiceDocumentId: documentId,
       reminderId,
@@ -582,10 +607,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = getInvoiceStatus(db, documentId, ctx.arg("--as-of"));
     emitHumanReport("invoice-status", result as Record<string, unknown>, ctx.outputFormat);
     db.close();
@@ -670,15 +691,13 @@ export function register(dispatch: CommandDispatch): void {
   dispatch.on("invoice", "interest", (ctx) => {
     const asOfDate = ctx.arg("--as-of");
     const referenceRatePercent = Number(ctx.arg("--reference-rate"));
+    if (!asOfDate || Number.isNaN(referenceRatePercent)) {
+      console.error("Missing required --as-of <YYYY-MM-DD> or --reference-rate <pct>");
+      process.exit(2);
+    }
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId || !asOfDate || Number.isNaN(referenceRatePercent)) {
-      console.error(
-        "Missing required --document-id <n> or --invoice-number <no>, --as-of <YYYY-MM-DD>, or --reference-rate <pct>",
-      );
-      process.exit(2);
-    }
     const result = calculateInvoiceLateInterest(db, {
       invoiceDocumentId: documentId,
       asOfDate,
@@ -693,15 +712,13 @@ export function register(dispatch: CommandDispatch): void {
     const rateArg = ctx.arg("--reference-rate");
     const note = ctx.arg("--note");
     const referenceRatePercent = rateArg === undefined ? NaN : Number(rateArg);
+    if (!asOfDate || Number.isNaN(referenceRatePercent)) {
+      console.error("Missing required --as-of <YYYY-MM-DD> or --reference-rate <pct>");
+      process.exit(2);
+    }
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId || !asOfDate || Number.isNaN(referenceRatePercent)) {
-      console.error(
-        "Missing required --document-id <n> or --invoice-number <no>, --as-of <YYYY-MM-DD>, or --reference-rate <pct>",
-      );
-      process.exit(2);
-    }
     const result = registerInvoiceLateInterest(db, {
       invoiceDocumentId: documentId,
       asOfDate,
@@ -716,18 +733,16 @@ export function register(dispatch: CommandDispatch): void {
     const claimIdArg = ctx.arg("--claim-id");
     const claimId = claimIdArg === undefined ? undefined : Number(claimIdArg);
     const transactionDate = ctx.arg("--date");
+    if (
+      claimIdArg !== undefined &&
+      (!Number.isInteger(claimId) || (claimId as number) <= 0)
+    ) {
+      console.error("Optional --claim-id <n> must be a positive integer when present");
+      process.exit(2);
+    }
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (
-      !documentId ||
-      (claimIdArg !== undefined && (!Number.isInteger(claimId) || (claimId as number) <= 0))
-    ) {
-      console.error(
-        "Missing required --document-id <n> or --invoice-number <no>; optional --claim-id <n> must be a positive integer when present",
-      );
-      process.exit(2);
-    }
     const result = postInvoiceLateInterestToLedger(db, {
       invoiceDocumentId: documentId,
       claimId,
@@ -741,19 +756,15 @@ export function register(dispatch: CommandDispatch): void {
     const asOfDate = ctx.arg("--as-of");
     const amountArg = ctx.arg("--amount-dkk");
     const compensationAmountDkk = amountArg === undefined ? undefined : Number(amountArg);
-    const db = openCommandDb(ctx);
-    migrate(db);
-    const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (
-      !documentId ||
-      !asOfDate ||
-      (amountArg !== undefined && Number.isNaN(compensationAmountDkk))
-    ) {
+    if (!asOfDate || (amountArg !== undefined && Number.isNaN(compensationAmountDkk))) {
       console.error(
-        "Missing required --document-id <n> or --invoice-number <no> or --as-of <YYYY-MM-DD>; optional --amount-dkk <n> must be numeric when present",
+        "Missing required --as-of <YYYY-MM-DD>; optional --amount-dkk <n> must be numeric when present",
       );
       process.exit(2);
     }
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
     const result = calculateInvoiceLateCompensation(db, {
       invoiceDocumentId: documentId,
       asOfDate,
@@ -768,19 +779,15 @@ export function register(dispatch: CommandDispatch): void {
     const amountArg = ctx.arg("--amount-dkk");
     const note = ctx.arg("--note");
     const compensationAmountDkk = amountArg === undefined ? undefined : Number(amountArg);
-    const db = openCommandDb(ctx);
-    migrate(db);
-    const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (
-      !documentId ||
-      !asOfDate ||
-      (amountArg !== undefined && Number.isNaN(compensationAmountDkk))
-    ) {
+    if (!asOfDate || (amountArg !== undefined && Number.isNaN(compensationAmountDkk))) {
       console.error(
-        "Missing required --document-id <n> or --invoice-number <no> or --as-of <YYYY-MM-DD>; optional --amount-dkk must be numeric when present",
+        "Missing required --as-of <YYYY-MM-DD>; optional --amount-dkk must be numeric when present",
       );
       process.exit(2);
     }
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
     const result = registerInvoiceLateCompensation(db, {
       invoiceDocumentId: documentId,
       asOfDate,
@@ -796,10 +803,6 @@ export function register(dispatch: CommandDispatch): void {
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
-    if (!documentId) {
-      console.error("Missing required --document-id <n> or --invoice-number <no>");
-      process.exit(2);
-    }
     const result = postInvoiceLateCompensationToLedger(db, {
       invoiceDocumentId: documentId,
       transactionDate: transactionDate ?? undefined,

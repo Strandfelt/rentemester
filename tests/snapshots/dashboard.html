@@ -218,10 +218,10 @@ table.dash-table td.center, table.dash-table th.center { text-align: center; }
   gap: var(--space-xs) var(--space-md);
   font-size: 14px;
 }
-.activity-log .time { font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace; color: var(--ink); }
+.activity-log .time { font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace; color: var(--ink); white-space: nowrap; }
 .activity-log .actor { color: var(--ink-muted); }
-.activity-log .event { font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace; color: var(--ink); }
-.activity-log .message { color: var(--ink); }
+.activity-log .event { color: var(--ink); font-weight: 500; }
+.activity-log .message { color: var(--ink-muted); }
 @media print {
   body { background: white; }
   .page { padding: var(--space-md); max-width: 100%; }
@@ -251,7 +251,7 @@ table.dash-table td.center, table.dash-table th.center { text-align: center; }
 <div class="metric-card">
   <div class="value amount-lg">4</div>
   <div class="secondary muted">&nbsp;</div>
-  <div class="label-sm">ULINKEDE BANK-TX</div>
+  <div class="label-sm">BANKPOSTER UDEN BILAG</div>
 </div>
 <div class="metric-card danger">
   <div class="value amount-lg">2</div>
@@ -308,16 +308,16 @@ table.dash-table td.center, table.dash-table th.center { text-align: center; }
 <section class="section"><h2>Seneste aktivitet</h2><div class="activity-log">
   <div class="time">17-05 02:09</div>
   <div class="actor">system</div>
-  <div class="event">backup.create</div>
+  <div class="event">Backup oprettet</div>
   <div class="message">Backup created</div>
   <div class="time">17-05 01:55</div>
   <div class="actor">cli</div>
-  <div class="event">invoice.post</div>
-  <div class="message">Posted 2026-0002</div>
+  <div class="event">Finanspostering tilbageført</div>
+  <div class="message">Reversed journal entry 2026-J-0014: posting error in VAT account</div>
   <div class="time">16-05 14:21</div>
   <div class="actor">cli</div>
-  <div class="event">invoice.issue</div>
-  <div class="message">Issued 2026-0002</div>
+  <div class="event">Bilag indlæst</div>
+  <div class="message">Ingested supporting document DOC-2026-000004 (a8626d2599f1b3c0)</div>
 </div></section>
 <section class="section">
   <h2>System-status</h2>

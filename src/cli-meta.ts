@@ -1,3 +1,5 @@
+import { MUTATING_COMMANDS } from "./cli-actor";
+
 type CommandSpec = {
   key: string;
   usage: string;
@@ -162,7 +164,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "buyer: { name, address, ... }",
       "lines: [{ description, quantity, unitPriceExVat, lineTotalExVat }]",
       "totals: { netAmount, vatRate, vatAmount, grossAmount }",
-      "Beløbsfelter (unitPriceExVat, lineTotalExVat, netAmount, vatAmount, grossAmount) er i KRONER (decimal) — ikke øre. vatRate er en procent (fx 25)",
+      "Beløbsfelter (unitPriceExVat, lineTotalExVat, netAmount, vatAmount, grossAmount) er i KRONER (decimal) — ikke øre.",
+      "totals.vatRate er en BRØK, ikke en procent: 25% moms skrives som 0.25 (ikke 25). Se examples/full-invoice.dk.json.",
       'currency: "DKK"',
       "dueDate: YYYY-MM-DD",
     ],
@@ -192,7 +195,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     inputNotes: [
       "--line angiver fakturalinjer som \"beskrivelse|antal|stykpris\"; flere linjer adskilles med ; (fx \"Bogføring|2|800;Momsafstemning|1|500\")",
       "Stykpris er EKSKL. moms i KRONER (decimal). Du regner aldrig selv linjetotal, moms eller brutto.",
-      "--vat-rate er momssatsen i procent (standard 25 hvis udeladt)",
+      "--vat-rate er momssatsen i PROCENT (fx 25 for 25%; standard 25 hvis udeladt). Bemærk: dette CLI-flag er en procent — payload-feltet totals.vatRate i 'invoice issue' er derimod en brøk (0.25).",
       "Køber: brug enten --customer-id (henter navn/adresse fra kundekartoteket) eller --buyer-name/--buyer-address direkte",
       "Sælger: --seller-name/--seller-address/--seller-vat — påkrævet hvis ikke allerede sat i payloaden",
       "Udelad --invoice-number for automatisk fortløbende nummerering",
@@ -312,7 +315,22 @@ export const COMMAND_SPECS: CommandSpec[] = [
   // ===== BANK CLUSTER (#186-189) =====
   { key: "bank-account add", usage: "bank-account add --company <path> --name <text> [--slug <slug>] [--bank-name <text>] [--registration-no <regnr>] [--account-no <kontonr>] [--iban <iban>] [--currency <ISO>] [--ledger-account <konto>]", description: "Opretter en bankkonto i virksomhedens ledger.", allowedFlags: ["--company", "--name", "--slug", "--bank-name", "--registration-no", "--account-no", "--iban", "--currency", "--ledger-account"] },
   { key: "bank-account list", usage: "bank-account list --company <path>", description: "Lister registrerede bankkonti.", allowedFlags: ["--company"] },
-  { key: "bank import", usage: "bank import --company <path> --file <transactions.csv> [--account <id|slug>] [--profile danske-bank]", description: "Importerer banktransaktioner fra CSV.", allowedFlags: ["--company", "--file", "--account", "--profile"], examplePath: "examples/bank-transactions.csv" },
+  {
+    key: "bank import",
+    usage: "bank import --company <path> --file <transactions.csv> [--account <id|slug>] [--profile danske-bank]",
+    description: "Importerer banktransaktioner fra CSV.",
+    allowedFlags: ["--company", "--file", "--account", "--profile"],
+    examplePath: "examples/bank-transactions.csv",
+    inputNotes: [
+      "CSV-headeren skal indeholde mindst kolonnerne: transaction_date, text, amount (valgfri: booking_date, currency, reference, amount_dkk).",
+      "Danske header-aliasser accepteres uden --profile: dato/date → transaction_date, tekst/beskrivelse → text, beløb/belob → amount, valuta → currency, ref/bilagsnummer → reference.",
+      "Datoer er YYYY-MM-DD. Delimiter (komma eller semikolon) detekteres automatisk fra headeren.",
+      "amount er i KRONER (decimal): POSITIVT beløb = penge IND på kontoen (indbetaling), NEGATIVT = penge UD (betaling/gebyr).",
+      "--profile <navn> bruges når en banks CSV ikke matcher standardformatet (fx 'danske-bank': semikolon, dd.mm.yyyy-datoer, dansk talformat). Uden --profile antages standardformatet.",
+      "--account <id|slug> knytter posterne til en bankkonto oprettet med 'bank-account add'.",
+      "Import er idempotent: en allerede importeret post (samme dato/tekst/beløb/valuta) springes over.",
+    ],
+  },
   { key: "bank list", usage: "bank list --company <path> [--status all|matched|unmatched] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--text-match <text>] [--amount <n>] [--account <id|slug>]", description: "Lister importerede banktransaktioner med filtre for afstemningsstatus.", allowedFlags: ["--company", "--status", "--from", "--to", "--text-match", "--amount", "--account"] },
   { key: "bank suggest-matches", usage: "bank suggest-matches --company <path> [--bank-transaction-id <n>] [--max <n>]", description: "Foreslår deterministiske match mellem uafstemte banktransaktioner og fakturaer/bilag.", allowedFlags: ["--company", "--bank-transaction-id", "--max"] },
   { key: "reconcile bank", usage: "reconcile bank --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--status all|matched|unmatched] [--text-match <text>] [--amount <n>] [--account <id|slug>]", description: "Viser afstemte og uafstemte banktransaktioner med filtre.", allowedFlags: ["--company", "--from", "--to", "--status", "--text-match", "--amount", "--account"] },
@@ -359,7 +377,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "Ved currency != DKK kræves amountForeign, amountDkk og fxRateToDkk (beløb i KRONER)",
     ],
   },
-  { key: "period close", usage: "period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]", description: "Lukker eller markerer en regnskabsperiode.", allowedFlags: ["--company", "--from", "--to", "--kind", "--status", "--reference"] },
+  {
+    key: "period close",
+    usage: "period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]",
+    description: "Lukker eller markerer en regnskabsperiode. En lukket periode blokerer ny bogføring med transaktionsdato i perioden — og er en forudsætning for 'vat momsangivelse' og 'report annual'.",
+    allowedFlags: ["--company", "--from", "--to", "--kind", "--status", "--reference"],
+    inputNotes: [
+      "--from / --to afgrænser perioden (begge YYYY-MM-DD, inklusive). Perioder af samme --kind må ikke overlappe.",
+      "--kind: vat_quarter (momsperiode — kræves af 'vat momsangivelse'), fiscal_year (regnskabsår — kræves af 'report annual'), custom. Standard: vat_quarter.",
+      "--status: 'closed' = perioden er afsluttet og bogføringen låst; 'reported' = derudover indberettet til myndigheden (SKAT/Erhvervsstyrelsen). Standard: closed.",
+      "Begge statusser låser bogføringen lige hårdt — forskellen er kun om indberetning er sket. Vælg 'reported' når du allerede har indsendt; ellers 'closed'.",
+      "--reference: valgfri fri tekst der gemmes på perioden (fx kvittering/journalnummer fra indberetningen).",
+      "IKKE reversibel via CLI: der findes ingen 'period reopen'. Luk først når alle bilag for perioden er bogført — en for tidlig lukning kan kun rettes ved at redigere ledger-databasen direkte.",
+    ],
+  },
   { key: "retention status", usage: "retention status --company <path> [--as-of <YYYY-MM-DD>]", description: "Viser opbevaringsfrister og udløbet materiale.", allowedFlags: ["--company", "--as-of"] },
   {
     key: "journal post",
@@ -398,6 +429,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
     usage: "recurring-invoice create --company <path> --input <file.json>",
     description: "Opretter en gentagende fakturaskabelon (interval, kunde, linjer, moms, leveringsperiode).",
     allowedFlags: ["--company", "--input"],
+    examplePath: "examples/recurring-invoice.create.json",
+    exampleHint: "rentemester recurring-invoice create --example > skabelon.json",
     inputNotes: [
       "name: tekst",
       'interval: "monthly" | "quarterly" | "yearly"',
@@ -474,12 +507,26 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "asset register --company <path> --name <text> --category <text> --acquisition-date <YYYY-MM-DD> --cost <n> --useful-life-months <n> --document-id <n> [--asset-account <konto>] [--depreciation-account <konto>] [--accumulated-account <konto>] [--note <text>]",
     description: "Registrerer et aktiv til afskrivning over tid med en lineær afskrivningsplan.",
     allowedFlags: ["--company", "--name", "--category", "--acquisition-date", "--cost", "--useful-life-months", "--document-id", "--asset-account", "--depreciation-account", "--accumulated-account", "--note"],
+    inputNotes: [
+      "--cost: anskaffelsessummen i KRONER (decimal, fx 12000.00) — ikke øre. Skal være positiv.",
+      "--category: fri tekst (fx \"IT-udstyr\", \"Inventar\", \"Maskiner\") — ikke en fast liste. Bruges kun til gruppering i aktivregistret.",
+      "--useful-life-months: brugstiden i hele måneder (positivt heltal). Costen fordeles lineært over så mange afskrivningsperioder.",
+      "--acquisition-date: anskaffelsesdato YYYY-MM-DD.",
+      "--document-id: heltal — bilags-id der dokumenterer anskaffelsen (påkrævet bevis).",
+      "Kontoflag er valgfri og defaulter: --asset-account 5800, --accumulated-account 5810, --depreciation-account 5820. Angiv kun et flag for at afvige fra standardkontoplanen.",
+    ],
   },
   {
     key: "asset depreciate",
     usage: "asset depreciate --company <path> --asset-id <n> --period <n> --date <YYYY-MM-DD>",
     description: "Bogfører en periodes afskrivning for et aktiv (debet afskrivninger, kredit akkumulerede afskrivninger).",
     allowedFlags: ["--company", "--asset-id", "--period", "--date"],
+    inputNotes: [
+      "--asset-id: heltal — id på et aktiv registreret med 'asset register'.",
+      "--period <n>: afskrivningsperiodens INDEKS i aktivets plan, IKKE en kalendermåned. 1 = første periode, op til --useful-life-months. Hver periode kan kun bogføres én gang.",
+      "--date: bogføringsdato YYYY-MM-DD for denne periodes afskrivning.",
+      "Beløbet beregnes af den lineære plan (cost / useful-life-months) — du angiver det aldrig selv.",
+    ],
   },
   {
     key: "asset write-off",
@@ -515,6 +562,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
     usage: "opening-balance post --company <path> --input <file.json>",
     description: "Bogfører virksomhedens primobalance som én balanceret, audited åbningspostering pr. en skæringsdato. Idempotent: præcis én primobalance pr. virksomhed.",
     allowedFlags: ["--company", "--input"],
+    examplePath: "examples/opening-balance.post.json",
+    exampleHint: "rentemester opening-balance post --example > primobalance.json",
     inputNotes: [
       "cutOverDate: YYYY-MM-DD (skæringsdato)",
       "lines: [{ accountNo, debitAmount | creditAmount, text? }]",
@@ -528,12 +577,12 @@ export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "invoice send",
     usage: "invoice send --company <path> (--document-id <n> | --invoice-number <no>) [--kind invoice|reminder] [--to <email>]",
-    description: "Sender en udstedt faktura eller en betalingspaamindelse til kundens email via SMTP med PDF'en vedhaeftet, og logger afsendelsen append-only. SMTP-config laeses fra config/smtp.json; credentials gemmes aldrig i bogføringstilstanden. Idempotent: en identisk afsendelse genudsendes ikke.",
+    description: "Sender en udstedt faktura eller en betalingspåmindelse til kundens email via SMTP med PDF'en vedhæftet, og logger afsendelsen append-only. SMTP-config læses fra config/smtp.json; credentials gemmes aldrig i bogføringstilstanden. Idempotent: en identisk afsendelse genudsendes ikke.",
     allowedFlags: ["--company", "--document-id", "--invoice-number", "--kind", "--to"],
     inputNotes: [
-      "SMTP-config (host, port, fromAddress, fromName, dryRun) laeses fra config/smtp.json",
-      "--to overstyrer modtageren; ellers slaaes kundens email op fra kundekartoteket",
-      "--kind reminder kraever at fakturaen er udstedt; standard er invoice",
+      "SMTP-config (host, port, fromAddress, fromName, dryRun) læses fra config/smtp.json",
+      "--to overstyrer modtageren; ellers slås kundens email op fra kundekartoteket",
+      "--kind reminder kræver at fakturaen er udstedt; standard er invoice",
     ],
   },
   // ===== END EMAIL DELIVERY (#180) =====
@@ -564,10 +613,10 @@ export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "report annual",
     usage: "report annual --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--ixbrl-out <file.xhtml>]",
-    description: "Samler en arsrapport for regnskabsklasse B (resultatopgørelse, balance, noteskelet og ledelsespategning) for et lukket regnskabsaar og kan skrive en deterministisk iXBRL-fil. Rentemester forbereder; ejer/revisor gennemgar og indberetter.",
+    description: "Samler en årsrapport for regnskabsklasse B (resultatopgørelse, balance, noteskelet og ledelsespåtegning) for et lukket regnskabsår og kan skrive en deterministisk iXBRL-fil. Rentemester forbereder; ejer/revisor gennemgår og indberetter.",
     allowedFlags: ["--company", "--from", "--to", "--ixbrl-out"],
     inputNotes: [
-      "--from / --to afgrænser regnskabsaaret (skal være helt dækket af en lukket/indberettet periode)",
+      "--from / --to afgrænser regnskabsåret (skal være helt dækket af en lukket/indberettet periode)",
       "Kræver registreret CVR og balancerede bøger",
       "--ixbrl-out skriver en deterministisk iXBRL (inline-XBRL) XHTML-fil mod et afgrænset micro/small-taksonomi-udsnit",
     ],
@@ -673,10 +722,49 @@ export function getCommandSpec(cmd?: string, sub?: string) {
 }
 
 export function renderGlobalUsage() {
-  const lines = ["Rentemester v0.0.1", "", "Commands:"];
-  for (const spec of COMMAND_SPECS) lines.push(`  ${spec.usage}`);
-  lines.push("", "Global flags:", "  --help", "  --example", "  --format json|human", "  --json");
+  const lines = [
+    "Rentemester v0.0.1 — agent-først dansk bogholderi",
+    "",
+    "Brug:  rentemester <kommando> [underkommando] [flags]",
+    "       rentemester <kommando> --help     # detaljeret hjælp + inputnoter for én kommando",
+    "",
+    "Læsekommandoer (read-only — kræver ingen actor):",
+  ];
+  // The actor policy's MUTATING_COMMANDS set is the single source of truth for
+  // which commands mutate bookkeeping state; deriving the help grouping from it
+  // keeps the two from drifting apart. (#231)
+  for (const spec of COMMAND_SPECS) {
+    if (MUTATING_COMMANDS.has(spec.key)) continue;
+    lines.push(`  ${spec.key.padEnd(34)} ${firstSentence(spec.description)}`);
+  }
+  lines.push("", "Skrivekommandoer (muterer bogføringen — kræver en actor, se nedenfor):");
+  for (const spec of COMMAND_SPECS) {
+    if (!MUTATING_COMMANDS.has(spec.key)) continue;
+    lines.push(`  ${spec.key.padEnd(34)} ${firstSentence(spec.description)}`);
+  }
+  lines.push(
+    "",
+    "Globale flags:",
+    "  --help                 Viser hjælp for kommandoen (eller denne oversigt).",
+    "  --example              Skriver et eksempel-input til stdout (kun kommandoer med eksempel).",
+    "  --format json|human    Vælger outputformat (standard: human i terminal, json ellers).",
+    "  --json                 Genvej for --format json.",
+    "  --actor <id>           Den ansvarlige aktør for en muterende kommando. Format:",
+    "                         user:<navn> | agent:<navn> | system:<navn>. Skal stå i",
+    "                         config/policy.yaml (actor_allowlist). Uden actor afvises",
+    "                         enhver skrivekommando med 'actor required for mutations'.",
+    "  --actor-via <kanal>    Valgfri: hvordan handlingen blev udløst (fx cli, cockpit, mcp).",
+    "",
+    "Exit-koder: 0 = ok · 2 = parse-/brugsfejl (ret kaldet) · 1 = forretningsafvisning (læs errors[]).",
+  );
   return lines.join("\n");
+}
+
+/** First sentence of a Danish description, for the compact command index. */
+function firstSentence(text: string): string {
+  const idx = text.indexOf(". ");
+  const first = idx >= 0 ? text.slice(0, idx + 1) : text;
+  return first.length > 90 ? first.slice(0, 89) + "…" : first;
 }
 
 export function renderCommandHelp(spec: CommandSpec) {

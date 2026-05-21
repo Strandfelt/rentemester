@@ -117,3 +117,53 @@ describe("invoice status human output (#211)", () => {
     expect(parsed.overdueDays).toBe(5);
   });
 });
+
+describe("profit-loss human output (#225)", () => {
+  test("the period-result line ends with a single period, not 'kr..'", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-pl-human-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts documents ingest --company ${company} --file examples/vendor-invoice.txt --metadata examples/vendor-invoice.metadata.json`.quiet();
+    await Bun.$`bun run src/cli.ts journal post --company ${company} --input examples/journal-entry.expense.json`.quiet();
+
+    const human = await runCli([
+      "report", "profit-loss", "--company", company,
+      "--from", "2026-05-01", "--to", "2026-05-31",
+      "--format", "human",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain("Periodens resultat:");
+    // The double-period bug: "... kr.." must never appear.
+    expect(human.stdout).not.toContain("kr..");
+    // The result line is "... <amount> kr." with exactly one trailing period.
+    expect(human.stdout).toMatch(/Periodens resultat: (overskud|underskud) på [\d.]+,\d{2} kr\.(\n|$)/);
+  });
+});
+
+describe("momsangivelse prerequisite guidance (#227)", () => {
+  test("an un-closed VAT period failure guides the owner to 'period close'", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-momsangivelse-guide-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+
+    const human = await runCli([
+      "vat", "momsangivelse", "--company", company,
+      "--from", "2026-04-01", "--to", "2026-06-30",
+      "--format", "human",
+    ]);
+
+    rmSync(root, { recursive: true, force: true });
+
+    // A momsangivelse on an open period fails as a business error.
+    expect(human.exitCode).toBe(1);
+    // The terse core message is still there, plus actionable guidance.
+    expect(human.stderr).toContain("Sådan kommer du videre:");
+    expect(human.stderr).toContain("rentemester period close");
+    expect(human.stderr).toContain("--kind vat_quarter");
+  });
+});
