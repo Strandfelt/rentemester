@@ -2,13 +2,17 @@
 
 Rentemester eksponerer sin CLI som en MCP-server, så agenter (Claude
 Desktop, Cursor, Claude Code, Codex m.fl.) kan kalde
-bogføringskommandoer direkte. Scaffold'en (#77) starter med to tools:
+bogføringskommandoer direkte. Serveren eksponerer hele tool-surface'en —
+**81 tools** — fordelt på domænerne `invoice_*`, `bank_*`, `journal_*`,
+`vat_*`, `system_backup_*`, `asset_*`, `mileage_*`, `recurring_invoice_*`
+m.fl. Den autoritative liste med klassifikation og inputs står i
+[`docs/mcp-tool-surface.md`](mcp-tool-surface.md); kør `tools/list` mod en
+kørende server for den faktiske, aktuelle liste.
 
-- `audit_verify` (read) — verificerer hash-chain og bogføringsintegritet
-- `journal_post` (write-irreversible) — bogfører manuel finanspostering
-
-Resten af tool-surface'en (jf. `docs/mcp-tool-surface.md`) udrulles i
-#78 og senere.
+`initialize`-svaret indeholder også en kort `instructions`-streng der
+orienterer agenten om rækkefølge og confirm/destructive-konventioner. Den
+fulde kontrakt for den løse tool-surface står i
+[`docs/mcp-agent-contract.md`](mcp-agent-contract.md).
 
 ## Installer Rentemester globalt
 
@@ -26,7 +30,7 @@ Verificér at MCP-binaryen kan findes:
 
 ```bash
 which rentemester-mcp
-rentemester-mcp --help    # (scaffold'en accepterer alle args men kører
+rentemester-mcp --help    # (serveren accepterer alle args men kører
                            # stdio-server uanset)
 ```
 

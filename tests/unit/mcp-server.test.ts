@@ -95,6 +95,7 @@ class StdioMcpClient {
 
 let companyRoot: string;
 let client: StdioMcpClient;
+let initResult: any;
 
 beforeAll(async () => {
   companyRoot = mkdtempSync(join(tmpdir(), "mcp-test-company-"));
@@ -112,6 +113,7 @@ beforeAll(async () => {
   });
   expect(initResponse.error).toBeUndefined();
   expect(initResponse.result?.serverInfo?.name).toBe("rentemester-mcp");
+  initResult = initResponse.result;
   await client.notify("notifications/initialized");
 });
 
@@ -123,6 +125,20 @@ afterAll(async () => {
 });
 
 describe("MCP server scaffold", () => {
+  test("initialize returns a non-empty instructions string orienting the agent", () => {
+    // #203 — the server must hand the agent an orienting prose block,
+    // not `instructions: null`.
+    const instructions = initResult?.instructions;
+    expect(typeof instructions).toBe("string");
+    expect(instructions.length).toBeGreaterThan(200);
+    // It must mention the load-bearing conventions an agent needs.
+    expect(instructions).toContain("confirm");
+    expect(instructions).toContain("company");
+    expect(instructions).toContain("confirmText");
+    // ...and point at the full contract.
+    expect(instructions).toContain("docs/mcp-agent-contract.md");
+  });
+
   test("lists audit_verify and journal_post via tools/list", async () => {
     const response = await client.send("tools/list");
     expect(response.error).toBeUndefined();

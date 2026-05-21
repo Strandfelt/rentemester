@@ -60,6 +60,57 @@ describe("docs/mcp-tool-surface.md", () => {
     expect(content).toContain("`write-irreversible`");
     expect(content).toContain("`destructive`");
   });
+
+  test("documents the real tool total of 81 — not a stale count", () => {
+    // #217 — the doc previously said "Total: 50" while the server exposed
+    // 81 tools. Guard against the count drifting out of sync again.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).toMatch(/\*\*?Total\*\*?\s*[:|]\s*\*\*?81\*\*?/);
+    expect(content).not.toContain("Total**: 50");
+  });
+
+  test("does not describe period_list as a CLI command to be built", () => {
+    // #217 — `period list` was never built as a CLI command; period_list
+    // is an MCP-only tool. The doc must not claim a CLI command exists.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).not.toMatch(/Kræver ny CLI-kommando/);
+    // The CLI/MCP mapping gap must be documented explicitly instead.
+    expect(content).toContain("CLI/MCP-mapping");
+    expect(content).toMatch(/period_list[^\n]*ingen CLI-kommando/);
+  });
+
+  test("points the agent at the standalone-surface contract doc", () => {
+    // #203 — the tool-surface doc must reference the agent contract.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).toContain("mcp-agent-contract.md");
+  });
+});
+
+describe("docs/mcp-agent-contract.md", () => {
+  const CONTRACT_PATH = join(process.cwd(), "docs/mcp-agent-contract.md");
+
+  test("file exists", () => {
+    expect(existsSync(CONTRACT_PATH)).toBe(true);
+  });
+
+  test("covers the standalone tool surface conventions", () => {
+    // #203 — a contract for the loose MCP tool surface (not the agent run
+    // loop): ordering, confirm/destructive conventions, preconditions.
+    const content = readFileSync(CONTRACT_PATH, "utf8");
+    for (const topic of [
+      "confirm",
+      "confirmText",
+      "destructive",
+      "read before you write",
+      "Preconditions",
+      "idempotencyKey",
+      "append-only",
+    ]) {
+      expect(content, `missing topic: ${topic}`).toContain(topic);
+    }
+    // It must distinguish itself from the agent run loop contract.
+    expect(content).toContain("runtime-agent-contract.md");
+  });
 });
 
 /**

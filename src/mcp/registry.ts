@@ -1,27 +1,24 @@
 /**
  * Central tools-registrering for Rentemester-MCP-serveren.
  *
- * Tool-surface (jf. docs/mcp-tool-surface.md):
- *  - read (23):           audit, accounts, bank list/suggest/reconcile,
- *                         customer list/validate-vat, cvr lookup, vendor list,
- *                         documents list, exceptions list,
- *                         invoice status/list/find/overdue/interest/compensation/validate,
- *                         journal list, period list, retention status,
- *                         system backup-status/healthcheck, vat report
- *  - write-reversible (6): bank import, customer create, vendor create,
- *                          company sync-cvr, documents ingest, exception resolve
- *  - write-irreversible (~21): invoice issue/post/render/credit-note/
- *                              settle-bank/settle-claim-bank/write-off-bad-debt/
- *                              apply-payment/refund-bank/remind/post-reminder/
- *                              claim-interest/post-interest/claim-compensation/
- *                              post-compensation; journal post/reverse;
- *                              expense book; vat post-eu-service/post-representation;
- *                              period close; system backup/export-authority
- *  - destructive (1):     system restore-backup
+ * `registerAllTools` registrerer hele tool-surface'en — 81 tools fordelt
+ * på de domæne-funktioner der kaldes herunder. Den autoritative liste
+ * (klassifikation, inputs, CLI-mapping) står i docs/mcp-tool-surface.md;
+ * driv en kørende server med `tools/list` for den faktiske, aktuelle liste.
+ *
+ * Sikkerhedsklasser:
+ *  - read              — bivirkningsfrie; må kaldes frit og parallelt.
+ *  - write-reversible  — opretter state der kan tilbageføres; kræver
+ *                        `confirm: true`.
+ *  - write-irreversible — bogfører i den append-only hash-kæde; kræver
+ *                         `confirm: true`. Rettes kun via en modpostering.
+ *  - destructive       — `system_restore_backup`; kræver derudover
+ *                        `confirmText`.
  *
  * Hver `register*Tools(server)`-funktion lever i `src/mcp/tools/<area>.ts`
- * og tilføjer kun sit eget domæne. Det gør tool-surface'en tæt på 1:1 med
- * `src/cli-meta.ts` og holder hver fil overskuelig.
+ * og tilføjer kun sit eget domæne. Det holder hver fil overskuelig og
+ * tool-surface'en tæt på 1:1 med `src/cli-meta.ts` (kendte afvigelser er
+ * dokumenteret i docs/mcp-tool-surface.md).
  */
 
 import { existsSync } from "node:fs";
