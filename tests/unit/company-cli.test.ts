@@ -97,4 +97,32 @@ describe("company CLI", () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+
+  // #262: company add's idempotency behaviour must be documented in --help —
+  // a repeated name/slug is rejected, never overwritten.
+  test("company add help documents the non-idempotent / no-overwrite behaviour", async () => {
+    const res = await run(["company", "add", "--help"]);
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain("Inputnoter:");
+    expect(res.stdout).toMatch(/IKKE idempotent/);
+    expect(res.stdout).toContain("a company already exists at");
+  });
+
+  test("company add rejects a repeated name without overwriting", async () => {
+    const ws = tmpRoot("company-cli-dup");
+    try {
+      const first = await run(["company", "add", "--name", "Acme ApS"], {
+        RENTEMESTER_WORKSPACE: ws,
+      });
+      expect(first.exitCode).toBe(0);
+      const repeat = await run(["company", "add", "--name", "Acme ApS"], {
+        RENTEMESTER_WORKSPACE: ws,
+      });
+      // The repeat is rejected; the original company is untouched.
+      expect(repeat.exitCode).not.toBe(0);
+      expect(`${repeat.stdout}${repeat.stderr}`).toContain("a company already exists at");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
 });

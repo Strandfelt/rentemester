@@ -7,6 +7,14 @@ type CommandSpec = {
   allowedFlags: string[];
   examplePath?: string;
   exampleHint?: string;
+  /**
+   * One-line clarification of what `--example` actually prints, shown under
+   * the "Eksempel" block in `--help`. Use it when the example file is NOT a
+   * complete call's input but a *fragment* — e.g. a `--metadata` payload that
+   * still has to be combined with `--company`/`--file` flags. Without this an
+   * agent may pipe the example straight in as if it were the whole input.
+   */
+  exampleNote?: string;
   inputNotes?: string[];
 };
 
@@ -59,6 +67,10 @@ export const COMMAND_SPECS: CommandSpec[] = [
     usage: "company add [--workspace <dir>] --name <text> [--slug <slug>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
     description: "Opretter en ny virksomhed i workspacet (opretter workspacet ved første kørsel). Virksomhedens identitet og betalingsoplysninger registreres her én gang og flyder automatisk med på hver udstedt faktura og dens PDF.",
     allowedFlags: ["--workspace", "--name", "--slug", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--bank-name", "--bank-reg", "--bank-account", "--iban", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    inputNotes: [
+      "IKKE idempotent: et gentaget kald med samme --name/--slug overskriver ALDRIG en eksisterende virksomhed. Findes der allerede en virksomhed på <workspace>/<slug>/, afvises kaldet med 'a company already exists at <sti>'; et slug der allerede står i workspace-manifestet afvises ligeledes.",
+      "Slug'et udledes fra --name når --slug udelades. For at oprette endnu en virksomhed med samme navn skal et nyt, unikt --slug angives eksplicit.",
+    ],
   },
   {
     key: "company list",
@@ -340,7 +352,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "invoice compensation", usage: "invoice compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>]", description: "Beregner kompensationskrav for sen betaling.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--as-of", "--amount-dkk"] },
   { key: "invoice claim-compensation", usage: "invoice claim-compensation --company <path> (--document-id <n> | --invoice-number <no>) --as-of <YYYY-MM-DD> [--amount-dkk <n>] [--note <text>]", description: "Registrerer kompensationskrav.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--as-of", "--amount-dkk", "--note"] },
   { key: "invoice post-compensation", usage: "invoice post-compensation --company <path> (--document-id <n> | --invoice-number <no>) [--date <YYYY-MM-DD>]", description: "Bogfører registreret kompensation.", allowedFlags: ["--company", "--document-id", "--invoice-number", "--date"] },
-  { key: "documents ingest", usage: "documents ingest --company <path> --file <path> --metadata <file.json> [--vendor-id <n>] [--force]", description: "Indlæser og validerer et bilag med metadata.", allowedFlags: ["--company", "--file", "--metadata", "--vendor-id", "--force"], examplePath: "examples/vendor-invoice.metadata.json" },
+  { key: "documents ingest", usage: "documents ingest --company <path> --file <path> --metadata <file.json> [--vendor-id <n>] [--force]", description: "Indlæser og validerer et bilag med metadata.", allowedFlags: ["--company", "--file", "--metadata", "--vendor-id", "--force"], examplePath: "examples/vendor-invoice.metadata.json", exampleNote: "Eksemplet er KUN --metadata-payloaden, ikke et komplet kald: gem det til en fil og send den med --metadata sammen med --company og --file." },
   { key: "documents list", usage: "documents list --company <path>", description: "Lister gemte bilag.", allowedFlags: ["--company"] },
   // ===== BANK CLUSTER (#186-189) =====
   { key: "bank-account add", usage: "bank-account add --company <path> --name <text> [--slug <slug>] [--bank-name <text>] [--registration-no <regnr>] [--account-no <kontonr>] [--iban <iban>] [--currency <ISO>] [--ledger-account <konto>]", description: "Opretter en bankkonto i virksomhedens ledger.", allowedFlags: ["--company", "--name", "--slug", "--bank-name", "--registration-no", "--account-no", "--iban", "--currency", "--ledger-account"] },
@@ -515,6 +527,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     description: "Indlæser bilag fra en lokal .eml-fil eller maildrop-mappe (første deterministiske intake-slice; ikke IMAP/hosted mailbox).",
     allowedFlags: ["--company", "--source", "--metadata", "--force"],
     examplePath: "examples/bilagsmail.metadata.json",
+    exampleNote: "Eksemplet er KUN den valgfrie --metadata-payload, ikke et komplet kald: gem det til en fil og send den med --metadata sammen med --company og --source.",
   },
   // ===== IMAP INTAKE (#181) =====
   {
@@ -528,6 +541,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "--imap-username", "--imap-mailbox", "--since-uid", "--force",
     ],
     examplePath: "examples/bilagsmail.metadata.json",
+    exampleNote: "Eksemplet er KUN den valgfrie --metadata-payload, ikke et komplet kald: gem det til en fil og send den med --metadata sammen med --company og IMAP-flagsene.",
     inputNotes: [
       "IMAP-credentials læses fra --imap-* flags eller RENTEMESTER_IMAP_* miljøvariabler",
       "RENTEMESTER_IMAP_PASSWORD er kun miljøvariabel — aldrig et CLI-flag eller i ledger",
@@ -610,12 +624,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
     usage: "vat momsangivelse --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
     description: "Bygger en indberetningsklar momsangivelse (SKAT-rubrikker + momstilsvar) for en lukket momsperiode. Kræver en lukket/indberettet vat_quarter-periode.",
     allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "FORUDSÆTNING: --from..--to skal præcist matche en LUKKET (closed) eller INDBERETTET (reported) vat_quarter-periode. Er der ingen sådan periode, afvises kaldet med exit 1 og errors[]: \"VAT period <from>..<to> is not closed: a momsangivelse requires a closed or reported vat_quarter accounting period covering exactly this period — run 'period close' first\".",
+      "RETTELSE: luk perioden først med 'rentemester period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --kind vat_quarter' (kræver en actor), og kør derefter momsangivelsen igen med nøjagtigt samme datoer.",
+    ],
   },
   {
     key: "vat filing",
     usage: "vat filing --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
     description: "Alias for 'vat momsangivelse': indberetningsklar momsangivelse for en lukket momsperiode.",
     allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "FORUDSÆTNING: --from..--to skal præcist matche en LUKKET (closed) eller INDBERETTET (reported) vat_quarter-periode. Er der ingen sådan periode, afvises kaldet med exit 1 og errors[]: \"VAT period <from>..<to> is not closed: a momsangivelse requires a closed or reported vat_quarter accounting period covering exactly this period — run 'period close' first\".",
+      "RETTELSE: luk perioden først med 'rentemester period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --kind vat_quarter' (kræver en actor), og kør derefter momsangivelsen igen med nøjagtigt samme datoer.",
+    ],
   },
   // ===== END VAT FILING (#178) =====
   // ===== OPENING BALANCE (#179) =====
@@ -848,6 +870,7 @@ export function renderCommandHelp(spec: CommandSpec) {
   }
   if (spec.examplePath) {
     lines.push("", "Eksempel:", `  ${spec.exampleHint ?? `rentemester ${spec.key} --example`}`, `  # Kilde: ${spec.examplePath}`);
+    if (spec.exampleNote) lines.push(`  # ${spec.exampleNote}`);
   }
   lines.push("", "Tilladte flags:");
   for (const flag of [...spec.allowedFlags, ...flagsForSpec(spec)]) lines.push(`  ${flag}`);

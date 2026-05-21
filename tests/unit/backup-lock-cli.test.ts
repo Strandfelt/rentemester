@@ -30,15 +30,21 @@ describe("backup lock CLI guard", () => {
 
       await Bun.$`bun run src/cli.ts system backup-lock --company ${company} --enforce true --grace-days 0`.quiet();
 
-      // A bookkeeping mutation is refused with the lock message.
+      // A bookkeeping mutation is refused with the lock message. The lock is
+      // a *business rejection* (the call was well-formed; a precondition — a
+      // fresh backup — is missing), so per docs/cli-contract.md it must exit
+      // 1 with an { ok:false, errors:[...] } envelope on stdout — NOT exit 2
+      // (which the contract reserves for "fix the call"). (#258)
       const blocked = Bun.spawn(
-        ["bun", "run", "src/cli.ts", "journal", "post", "--company", company, "--input", "examples/journal-entry.expense.json"],
+        ["bun", "run", "src/cli.ts", "journal", "post", "--company", company, "--input", "examples/journal-entry.expense.json", "--json"],
         { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
       );
-      const blockedErr = await new Response(blocked.stderr).text();
+      const blockedOut = await new Response(blocked.stdout).text();
       const blockedExit = await blocked.exited;
-      expect(blockedExit).not.toBe(0);
-      expect(blockedErr).toContain("Bogføring er låst");
+      expect(blockedExit).toBe(1);
+      const blockedResult = JSON.parse(blockedOut) as { ok: boolean; errors: string[] };
+      expect(blockedResult.ok).toBe(false);
+      expect(blockedResult.errors.join("\n")).toContain("Bogføring er låst");
 
       // `system backup` is exempt — backing up is the only way out of the lock.
       const backup = Bun.spawn(

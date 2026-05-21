@@ -132,9 +132,9 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 | `bank_list` | `{ rows: [...], count }` |
 | `invoice_list` | `{ invoices: [...], count }` |
 | `exceptions_list` | `{ exceptions: [...], count }` |
-| `period_list` | `{ periods: [...], count }` |
+| `period_list` | `{ periods: [{ id, periodStart, periodEnd, kind, status, reference, createdAt }], count }` — `kind` er `"vat_quarter" \| "fiscal_year" \| "custom"`; `status` er `"open" \| "closed" \| "reported"`; `reference` kan være `null`. |
 | `audit_verify` | `{ entries: <number>, ok }` (kerne-resultatets `errors` ligger på konvoluttens niveau) |
-| `invoice_status` | `{ documentId, invoiceNo, grossAmount, paidAmount, openBalance, status, dueDate, daysOverdue }` |
+| `invoice_status` | `{ invoiceDocumentId, invoiceNumber, grossAmount, creditedAmount, paidAmount, openBalance, claimOpenBalance, asOfDate, dueDate, effectiveDueDate, isOverdue, overdueDays, status, payments[], creditNotes[], refunds[], claimPayments[], badDebtWriteOffs[], reminders[], compensationClaims[], interestClaims[], totalReminderFees, totalCompensationClaims, totalInterestClaims, totalClaimPayments, totalBadDebtWrittenOff }` — feltet hedder `invoiceDocumentId` (ikke `documentId`), `invoiceNumber` (ikke `invoiceNo`) og `overdueDays` (ikke `daysOverdue`). `status` er `"open" \| "paid" \| "credited" \| "refunded" \| "overpaid" \| "written_off"`. Den fulde typedefinition er `InvoiceStatusResult` i `src/core/invoice-payments.ts`. |
 
 `write`-tools returnerer id'er + hashes på den nyligt oprettede entitet:
 
@@ -219,10 +219,25 @@ samme arkiv-artefakt som `import archive` skriver.
 > (`readOnlyHint: true`) og kræver derfor *ikke* `confirm: true`: den eneste
 > side-effekt er en gennemsigtig opslags-cache med TTL — der skrives hverken
 > i finanskæden eller i stamdata, og et gentaget opslag inden for TTL
-> genbruger blot cachen (`idempotentHint: true`). Den tilsvarende
-> CLI-kommando `customer validate-vat` gør nøjagtigt det samme; CLI og MCP
-> er altså konsistente — begge er et cache-opdaterende opslag, ikke en
-> bogførings-/stamdata-mutation.
+> genbruger blot cachen (`idempotentHint: true`).
+>
+> **Bemærk en bevidst CLI/MCP-divergens i governance-klasse.** Den ramme
+> handling er den samme (et cache-opdaterende VIES-opslag), men de to
+> overflader klassificerer den forskelligt:
+>
+> - **MCP-tool'et `customer_validate_vat`** er `read` — det er *ikke*
+>   `confirm`-gatet og kræver ingen actor.
+> - **CLI-kommandoen `customer validate-vat`** står derimod i
+>   `MUTATING_COMMANDS` (`src/cli-actor.ts`): den er actor-gatet og afvises
+>   uden en kendt actor med `actor required for mutations`.
+>
+> Det er altså *ikke* korrekt at kalde de to "konsistente" — de sidder i
+> materielt forskellige governance-klasser (read vs. actor-gatet mutation).
+> Divergensen er accepteret: CLI'en behandler enhver cache-skrivende handling
+> som muterende for at få actor-attribution på opslaget, mens MCP-laget
+> vægter at et opslag skal kunne kaldes frit. Vil man harmonisere, skal
+> enten CLI-kommandoen ud af `MUTATING_COMMANDS`, eller MCP-tool'et
+> omklassificeres til en `confirm`-gatet write.
 
 ## Write-tools
 
@@ -259,7 +274,7 @@ modpostering.
 | `asset_depreciate` | `asset depreciate` | `{ company, assetId, period, date, confirm }` | Bogfører en periodes afskrivning. |
 | `asset_register` | `asset register` | `{ company, name, category, acquisitionDate, cost, usefulLifeMonths, documentId, assetAccount, depreciationAccount, accumulatedAccount, note?, confirm }` | Registrerer et aktiv med lineær afskrivningsplan. |
 | `asset_write_off` | `asset write-off` | `{ company, name, category, acquisitionDate, cost, documentId, expenseAccount, date, thresholdRuleSource, confirmImmediateWriteOff, paymentAccount?, note?, confirm }` | Bogfører straksafskrivning af et mindre aktiv. |
-| `company_add` | `company add` | `{ workspace?, name, slug?, cvr?, fiscalYearStartMonth?, fiscalYearLabelStrategy? }` | Opretter en ny virksomhed under `<workspace>/<slug>/` og initialiserer ledgeren. Udelades `workspace`, bruges miljøvariablen `RENTEMESTER_WORKSPACE` på MCP-serverens host; er den heller ikke sat, afvises kaldet med `no workspace given: pass 'workspace' or set RENTEMESTER_WORKSPACE`. |
+| `company_add` | `company add` | `{ workspace?, name, slug?, cvr?, fiscalYearStartMonth?, fiscalYearLabelStrategy?, confirm }` | Opretter en ny virksomhed under `<workspace>/<slug>/` og initialiserer ledgeren. Som ethvert write-tool kræver det `confirm: true` — uden flaget returneres `{ ok:false, errors:["confirm: true required for write tool company_add"] }` uden at noget oprettes. Udelades `workspace`, bruges miljøvariablen `RENTEMESTER_WORKSPACE` på MCP-serverens host; er den heller ikke sat, afvises kaldet med `no workspace given: pass 'workspace' or set RENTEMESTER_WORKSPACE`. **Ikke idempotent (`idempotentHint: false`):** et gentaget kald med samme `name`/`slug` *afvises* — det overskriver ALDRIG en eksisterende virksomhed. Findes der allerede en ledger på `<workspace>/<slug>/` fejler kaldet med `a company already exists at <sti>`, og et slug der allerede står i workspace-manifestet afvises ligeledes med en `ok:false`-envelope. For at oprette endnu en virksomhed med samme navn skal et nyt, unikt `slug` angives eksplicit. |
 | `expense_book` | `expense book` | `{ company, documentId, bankTransactionId, expenseAccount, vatTreatment?, paymentAccount?, date?, text?, confirm }` | Bogfører leverandørudgift fra bilag + bankpost. |
 | `invoice_apply_payment` | `invoice apply-payment` | `{ company, payload: InvoicePaymentPayload, confirm }` | Registrerer fakturabetaling fra payload. |
 | `invoice_claim_compensation` | `invoice claim-compensation` | `{ company, documentId? \| invoiceNumber?, asOf, amountDkk?, note?, confirm }` | Registrerer kompensationskrav. |
@@ -328,11 +343,19 @@ afvigelser pr. denne revision:
 - **`portfolio_overview`** dækker delvist det CLI'en eksponerer som
   `dashboard`, men er et workspace-tool (`workspace`-parameter, ikke
   `company`).
+- **`period reopen` er CLI-only.** En for tidligt lukket regnskabsperiode kan
+  kun genåbnes via CLI-kommandoen `period reopen` (en kontrolleret, fuldt
+  revisionssporet handling, #247) — der findes *ingen* `period_reopen`
+  MCP-tool. MCP-surface'en eksponerer `period_list` (read) og `period_close`
+  (write-irreversible), men ikke en genåbning. En agent der over MCP rammer
+  en lukket-periode-afvisning kan altså ikke selv genåbne perioden; den må
+  henvise mennesket til `rentemester period reopen`.
 - **CLI-only-kommandoer uden MCP-tool.** Flere CLI-kommandoer eksponeres
   ikke som tools, fx `init`, `serve`, `report *`, `vat momsangivelse`/
-  `vat filing`, `gdpr export`/`gdpr erase`, `opening-balance post`,
-  `bank-account add`/`list`, `import run`/`systems`/`contacts`,
-  `agent run`, `reg coverage`/`reg citations` og diverse
+  `vat filing`, `period reopen`, `gdpr export`/`gdpr erase`,
+  `opening-balance post`, `bank-account add`/`list`,
+  `import run`/`systems`/`contacts`, `agent run`,
+  `reg coverage`/`reg citations` og diverse
   `system export-*`/`verify-*`-kommandoer. Disse driver lokale workflows
   eller hører til den indbyggede `agent run`-loop og er bevidst holdt uden
   for den løse agent-surface.
@@ -378,19 +401,24 @@ Input:
 }
 ```
 
-Output:
+Output (forkortet — kun de centrale felter; de fulde `payments[]`/`*Claims[]`/
+`total*`-felter er udeladt her, se `InvoiceStatusResult`):
 ```json
 {
   "ok": true,
   "data": {
-    "documentId": 87,
-    "invoiceNo": "2026-00042",
+    "invoiceDocumentId": 87,
+    "invoiceNumber": "2026-00042",
     "grossAmount": 12500.00,
+    "creditedAmount": 0,
     "paidAmount": 5000.00,
     "openBalance": 7500.00,
-    "status": "partial",
+    "asOfDate": "2026-05-18",
     "dueDate": "2026-04-30",
-    "daysOverdue": 18
+    "effectiveDueDate": "2026-04-30",
+    "isOverdue": true,
+    "overdueDays": 18,
+    "status": "open"
   }
 }
 ```
@@ -498,19 +526,25 @@ Forkert `confirmText` på destructive-tool:
 ## Actor-attribution
 
 MCP-serveren sætter actor-konteksten per kald (ikke globalt — den
-serialiseres ind i kerne-funktionens `resolveActor()`-input via
-`createdBy`/`createdByProgram`).
+serialiseres ind i kerne-funktionens input via `createdBy`/`createdByProgram`,
+fordi proces-env-vars er race-prone når flere requests behandles parallelt).
+Implementeringen er `deriveMcpActor()` i `src/mcp/actor.ts` — den nedenstående
+tabel skal matche den.
 
-Mapping fra MCP-client-info til actor-streng:
+Mapping fra MCP-handshake/miljø til `McpActor`-felterne:
 
 | Felt | Kilde | Eksempel |
 |---|---|---|
-| `createdBy` | MCP-client-id + bruger-context | `agent:claude-code` |
-| `createdByProgram` | MCP-client `name/version` | `claude-code/0.4.1` |
-| `auditActor` | Beregnet `"<createdBy> via <createdByProgram>"` | `agent:claude-code via claude-code/0.4.1` |
+| `createdBy` | MCP-klientens `Implementation` fra initialize-handshake: `agent:<name>/<version>`. Mangler klient-navnet, bruges `agent:<RENTEMESTER_MCP_AGENT>`; er den heller ikke sat, `agent:unknown-mcp-client`. | `agent:claude-code/0.4.1` |
+| `createdByProgram` | `mcp:<RENTEMESTER_MCP_USER>` hvis env-varen er sat (typisk login-email); ellers fallback-strengen `rentemester-mcp`. | `mcp:mikkel@56n.dk` |
+| `auditActor` | Beregnet `"<createdBy> via <createdByProgram>"`. | `agent:claude-code/0.4.1 via mcp:mikkel@56n.dk` |
 
-Hvis MCP-klienten sender en `userContext`, opgraderes `createdBy` til
-`agent:<client>:<userId>` — fx `agent:claude-code:mikkel@56n.dk`.
+Bemærk: klient-versionen er en del af `createdBy` (`agent:<name>/<version>`),
+ikke et separat felt. Brugeren stammer fra `RENTEMESTER_MCP_USER`-miljøvariablen
+på serverens host og ender i `createdByProgram` — der findes ingen
+`userContext`-parameter på selve tool-kaldet. Mangler `RENTEMESTER_MCP_USER`,
+er `createdByProgram` blot `rentemester-mcp`. `mcp-install.md` beskriver det
+samme.
 
 Hver write-tool tilskriver derudover automatisk:
 - `audit_log.event_type` = tool-navn (`journal_post`, `invoice_issue`, …)

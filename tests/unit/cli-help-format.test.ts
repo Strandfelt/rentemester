@@ -266,6 +266,57 @@ describe("CLI help, examples, and human formatting", () => {
     }
   });
 
+  // #262: when --example prints only a --metadata payload (not a complete
+  // call), the help must say so — an agent must not pipe the example in as
+  // if it were the whole input.
+  test("documents ingest help flags that --example is only the metadata payload", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "documents", "ingest", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Eksempel:");
+    expect(stdout).toContain("--metadata-payloaden");
+    expect(stdout).toMatch(/ikke et komplet kald/i);
+  });
+
+  test("mail-intake ingest and imap-intake poll help flag the metadata-only example", async () => {
+    for (const [cmd, sub] of [["mail-intake", "ingest"], ["imap-intake", "poll"]]) {
+      const proc = Bun.spawn(["bun", "run", "src/cli.ts", cmd, sub, "--help"], {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/ikke et komplet kald/i);
+    }
+  });
+
+  // #262: vat momsangivelse / vat filing require a closed vat_quarter period;
+  // the help must name the error form and the period close --kind vat_quarter
+  // recovery path.
+  test("vat momsangivelse help documents the closed-period precondition and fix", async () => {
+    for (const sub of ["momsangivelse", "filing"]) {
+      const proc = Bun.spawn(["bun", "run", "src/cli.ts", "vat", sub, "--help"], {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("Inputnoter:");
+      expect(stdout).toMatch(/is not closed/);
+      expect(stdout).toContain("period close");
+      expect(stdout).toContain("--kind vat_quarter");
+    }
+  });
+
   // #231: the top-level usage must group read/write commands and list --actor.
   test("global usage groups commands and lists the actor flags", async () => {
     const proc = Bun.spawn(["bun", "run", "src/cli.ts", "--help"], {

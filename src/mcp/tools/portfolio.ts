@@ -6,9 +6,14 @@
  * endpoint explosion. Cross-company *actions* (e.g. "back up all") are the agent
  * looping an existing single-company tool with a different `company` slug.
  *
- *  - `company_add` (write-reversible) — workspace-level tool wrapping the core
- *    `createCompany`: creates a company volume under `<workspace>/<slug>/` and
- *    registers it in the workspace manifest.
+ *  - `company_add` (write-irreversible) — workspace-level write tool wrapping
+ *    the core `createCompany`: creates a company volume under
+ *    `<workspace>/<slug>/` and registers it in the workspace manifest. Like
+ *    every other write tool it is gated by `confirm: true` (#252) — an agent
+ *    cannot create a company by accident. It is classified `write-irreversible`
+ *    (consistently with `docs/mcp-tool-surface.md`): creating a company volume
+ *    is not undoable by a counter-posting, the same reasoning that places the
+ *    `system_backup_*` configuration tools in that class.
  *  - `portfolio_overview` (read) — one read tool that *juxtaposes* per-company
  *    status across the workspace. Each company is a separate legal entity, so
  *    figures are listed side by side, never consolidated/summed.
@@ -35,7 +40,7 @@ import {
   resolveWorkspaceRoot,
 } from "../../core/workspace";
 import { envelopeShape, envelopeToCallResult, errorEnvelope, successEnvelope } from "../envelope";
-import { redactPaths } from "../tool-runtime";
+import { confirmField, redactPaths } from "../tool-runtime";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -208,6 +213,7 @@ export function registerPortfolioTools(server: McpServer): void {
               "'end-year' = the year it ends in; 'start-year' = the year it starts in; " +
               "'span' = both years (e.g. '2025/2026').",
           ),
+        confirm: confirmField,
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -219,7 +225,18 @@ export function registerPortfolioTools(server: McpServer): void {
       cvr?: string;
       fiscalYearStartMonth?: number;
       fiscalYearLabelStrategy?: "end-year" | "start-year" | "span";
+      confirm?: boolean;
     }) => {
+      // `company_add` is a write tool — it creates a company directory and
+      // initialises a ledger. Like every other write tool it refuses to run
+      // unless `confirm: true` is set, so an agent cannot create a company by
+      // accident. The check happens before the workspace is even resolved.
+      // (#252)
+      if (args.confirm !== true) {
+        return envelopeToCallResult(
+          errorEnvelope("confirm: true required for write tool company_add"),
+        );
+      }
       const ws = resolvePortfolioWorkspace(args.workspace);
       if (!ws.ok) {
         return envelopeToCallResult(errorEnvelope(redactPaths(ws.error)));

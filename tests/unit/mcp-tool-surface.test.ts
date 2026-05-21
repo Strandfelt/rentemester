@@ -136,6 +136,61 @@ describe("docs/mcp-tool-surface.md", () => {
     expect(content).toContain("slug");
     expect(content).toContain("RENTEMESTER_WORKSPACE");
   });
+
+  test("#260 — invoice_status data shape matches the running tool", () => {
+    // The doc once described documentId/invoiceNo/daysOverdue; the real tool
+    // (getInvoiceStatus -> InvoiceStatusResult) returns invoiceDocumentId/
+    // invoiceNumber/overdueDays. An agent reading the stale names gets undefined.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).toContain("invoiceDocumentId");
+    expect(content).toContain("invoiceNumber");
+    expect(content).toContain("overdueDays");
+    // The stale field names must be gone from the invoice_status example.
+    const exampleStart = content.indexOf('"name": "invoice_status"');
+    expect(exampleStart).toBeGreaterThan(-1);
+    const example = content.slice(exampleStart, exampleStart + 700);
+    expect(example).not.toContain('"documentId"');
+    expect(example).not.toContain('"invoiceNo"');
+    expect(example).not.toContain('"daysOverdue"');
+  });
+
+  test("#260 — Actor-attribution section matches src/mcp/actor.ts", () => {
+    // deriveMcpActor: createdBy = agent:<name>/<version>; createdByProgram =
+    // mcp:<RENTEMESTER_MCP_USER> | rentemester-mcp. The doc must not still
+    // claim createdByProgram is the client name/version, nor invent a
+    // userContext parameter on the tool call.
+    const content = readFileSync(DOC_PATH, "utf8");
+    const idx = content.indexOf("## Actor-attribution");
+    expect(idx).toBeGreaterThan(-1);
+    const section = content.slice(idx, idx + 1600);
+    expect(section).toContain("RENTEMESTER_MCP_USER");
+    expect(section).toContain("rentemester-mcp");
+    expect(section).toContain("agent:<name>/<version>");
+    // The stale claims must be gone.
+    expect(section).not.toMatch(/createdByProgram.*MCP-client `name\/version`/);
+    expect(section).not.toMatch(/userContext.*opgraderes/);
+  });
+
+  test("#260 — period reopen is listed as a CLI-only command", () => {
+    // period reopen (the only way to reopen a closed period) is CLI-only —
+    // it must appear in the CLI-only commands list, not be silently absent.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).toContain("period reopen");
+    const idx = content.indexOf("CLI-only-kommandoer");
+    expect(idx).toBeGreaterThan(-1);
+    expect(content.slice(idx, idx + 600)).toContain("period reopen");
+  });
+
+  test("#260 — customer validate-vat CLI/MCP divergence is not called consistent", () => {
+    // CLI customer validate-vat is an actor-gated mutation; the MCP
+    // customer_validate_vat tool is a read. The doc must not call them
+    // "consistent" — they sit in different governance classes.
+    const content = readFileSync(DOC_PATH, "utf8");
+    expect(content).not.toMatch(/CLI og MCP\s+er altså konsistente/);
+    // The divergence must be named explicitly.
+    expect(content).toContain("MUTATING_COMMANDS");
+    expect(content.toLowerCase()).toContain("divergens");
+  });
 });
 
 describe("docs/mcp-agent-contract.md", () => {
@@ -198,6 +253,13 @@ describe("docs/mcp-agent-contract.md", () => {
     expect(section).toContain("slug");
     expect(section).toContain("RENTEMESTER_WORKSPACE");
     expect(section).toContain("resolveCompanyArg");
+  });
+
+  test("#260 — names period reopen as the CLI-only closed-period recovery path", () => {
+    // The closed-period precondition row must name the actual recovery
+    // command and state there is no MCP tool for it.
+    const content = readFileSync(CONTRACT_PATH, "utf8");
+    expect(content).toContain("period reopen");
   });
 });
 

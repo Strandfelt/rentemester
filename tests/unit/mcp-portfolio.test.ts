@@ -71,6 +71,7 @@ describe("portfolio MCP tools (#172)", () => {
         workspace: ws,
         name: "Acme ApS",
         cvr: "DK12345678",
+        confirm: true,
       });
       expect(env.ok).toBe(true);
       expect(env.data?.slug).toBe("acme-aps");
@@ -92,6 +93,7 @@ describe("portfolio MCP tools (#172)", () => {
         workspace: ws,
         name: "Beta Holding IVS",
         slug: "beta",
+        confirm: true,
       });
       expect(env.ok).toBe(true);
       expect(env.data?.slug).toBe("beta");
@@ -105,9 +107,59 @@ describe("portfolio MCP tools (#172)", () => {
     try {
       createCompany(ws, { name: "Acme ApS" });
       const h = harness(registerPortfolioTools);
-      const env = await h.call("company_add", { workspace: ws, name: "Acme ApS" });
+      const env = await h.call("company_add", { workspace: ws, name: "Acme ApS", confirm: true });
       expect(env.ok).toBe(false);
       expect(env.errors.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  // #252 — company_add is a write tool: like every other write tool it
+  // refuses to run unless confirm:true is passed, so an agent cannot create
+  // a company by accident.
+  test("company_add without confirm is refused and creates nothing", async () => {
+    const ws = tmpWorkspace("add-noconfirm");
+    try {
+      const h = harness(registerPortfolioTools);
+      // confirm omitted entirely.
+      const omitted = await h.call("company_add", { workspace: ws, name: "Acme ApS" });
+      expect(omitted.ok).toBe(false);
+      expect(omitted.errors).toContain("confirm: true required for write tool company_add");
+      // confirm explicitly false.
+      const falseConfirm = await h.call("company_add", {
+        workspace: ws,
+        name: "Acme ApS",
+        confirm: false,
+      });
+      expect(falseConfirm.ok).toBe(false);
+      expect(falseConfirm.errors).toContain("confirm: true required for write tool company_add");
+      // No company volume and no manifest entry were created.
+      expect(existsSync(companyPaths(join(ws, "acme-aps")).db)).toBe(false);
+      // The confirm check fires before the workspace is even resolved, so a
+      // missing workspace must not mask the confirm rejection.
+      const noWorkspace = await h.call("company_add", { name: "Acme ApS" });
+      expect(noWorkspace.ok).toBe(false);
+      expect(noWorkspace.errors).toContain("confirm: true required for write tool company_add");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  // #262 — company_add is not idempotent: a repeated name/slug is rejected,
+  // never overwritten.
+  test("company_add rejects a repeated name (no overwrite)", async () => {
+    const ws = tmpWorkspace("add-repeat-name");
+    try {
+      const h = harness(registerPortfolioTools);
+      const first = await h.call("company_add", { workspace: ws, name: "Acme ApS", confirm: true });
+      expect(first.ok).toBe(true);
+      const repeat = await h.call("company_add", { workspace: ws, name: "Acme ApS", confirm: true });
+      expect(repeat.ok).toBe(false);
+      expect(repeat.errors.length).toBeGreaterThan(0);
+      // The original company is untouched.
+      const companies = listWorkspaceCompanies(ws);
+      expect(companies.filter((c) => c.slug === "acme-aps").length).toBe(1);
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

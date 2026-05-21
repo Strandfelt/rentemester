@@ -294,21 +294,35 @@ if (!cmd || cmd === "help") {
     // bookkeeping mutations are refused. `system …` commands are exempt by
     // design — backing up and restoring must always stay possible, since
     // that is the only way out of the lock.
+    //
+    // A lock rejection is a *business rejection*, not a usage error: the
+    // call was well-formed, but a precondition (a fresh backup) is missing.
+    // Per `docs/cli-contract.md` that is exit 1 (`ok:false` envelope), not
+    // exit 2 — so we emit the same `{ ok:false, errors:[...] }` result an
+    // agent gets from a ledger rejection and let `emitResult` set exit 1.
+    // (#258)
     if (mutationRoot && !commandKey.startsWith("system ") && existsSync(companyPaths(mutationRoot).db)) {
       const lockDb = openDb(companyPaths(mutationRoot).db);
+      let lockReason: string | null = null;
       try {
         migrate(lockDb);
         const lock = evaluateBackupLock(lockDb, mutationRoot);
-        if (lock.locked) {
-          fatal(
-            `Bogføring er låst (${commandKey}): ${lock.reason}. ` +
+        if (lock.locked) lockReason = lock.reason;
+      } finally {
+        lockDb.close();
+      }
+      if (lockReason !== null) {
+        ctx.emitResult({
+          ok: false,
+          errors: [
+            `Bogføring er låst (${commandKey}): ${lockReason}. ` +
               "Kør 'rentemester system backup' for at låse op. Placér derefter backup-arkivet " +
               "på en EU/EØS-destination med 'rentemester system backup-place' for at opfylde " +
               "BEK 205/2024 § 4. Se status med 'rentemester system backup-governance'.",
-          );
-        }
-      } finally {
-        lockDb.close();
+          ],
+          backupLock: { locked: true, command: commandKey },
+        });
+        process.exit(process.exitCode ?? 1);
       }
     }
   }

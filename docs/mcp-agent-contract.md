@@ -165,7 +165,7 @@ Common precondition failures and the fix:
 | `confirm: true required for write tool …` | Write attempted without `confirm`. | Re-call with `confirm: true`. |
 | `confirmText must match …` | `system_restore_backup` confirmText wrong. | Supply `RESTORE <targetCompany>` exactly. |
 | balance / "går ikke i nul" | Journal entry debit ≠ credit. | Correct the lines so they balance. |
-| period lock / "periode … lukket" | Posting into a closed period. | Post in an open period, or reopen via the proper flow. |
+| period lock / "periode … lukket" | Posting into a closed period. | Post in an open period. Reopening a closed period is **CLI-only** — there is no MCP tool for it; surface it to the human to run `rentemester period reopen` (a controlled, audit-logged action; a `reported` period cannot be reopened). |
 | VIES / VAT validation missing | EU customer not VAT-validated. | Run `customer_validate_vat` first. |
 | `… låst …` (backup lock) | The opt-in bookkeeping lock is active. | Run `system_backup` with `archive:true`, then place it; see below. |
 
