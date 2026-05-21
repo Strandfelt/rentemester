@@ -280,10 +280,18 @@ er accepteret; ingen kunstig udfyldning.
 - [x] Views uden arkiv-data for gamle år (Bank/Moms/Forpligtelser/Likviditet/
       Bilag/Fakturaer/Kontakter) viser en ærlig "ikke tilgængelig for
       arkiverede år"-tilstand — ingen kunstig udfyldning
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — 2024: Resultatopgørelse/Overblik viser arkiv-data
+      (resultat −3.437,22), Posteringer 375 bilag, banner; Bank 2024 ærlig
+      "ikke tilgængelig"-tilstand; placeholder-blindvejen væk
 
 ### Iteration 11 — Krydsår-overblik & oprydning
-- [ ] Udvid Flerårsoversigt: balance-/egenkapital-udvikling + nøgletal pr. år
-- [ ] Ryd op i Arkiv/vælger-UX — vælgeren virker overalt; Arkiv-fanens rolle
-      reduceres/forklares
+- [x] Udvid Flerårsoversigt: `/multi-year` leverer nu balancesum, egenkapital
+      og nøgletal (bruttomargin, egenkapitalandel) pr. år — live via
+      `buildBalanceSheet`, arkiv-år klassificeret fra `import_archive_balances`.
+      Frontend viser P&L-, balance- og nøgletalssektioner med tabel + to
+      trendgrafer (P&L + balance), "(år til dato)" bevaret
+- [x] Ryd op i Arkiv/vælger-UX — vælgeren virker overalt; Arkiv-fanen er nu en
+      kortfattet "Om arkivet"-forklaring (hvilke år, Dinero-import #197,
+      skrivebeskyttet) med links ind i de arkiv-bevidste kerne-views i stedet
+      for den redundante rå saldobalance
 - [ ] **Visuel inspektion**

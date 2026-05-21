@@ -2410,22 +2410,39 @@ export type MultiYearRow = {
   udgifter: number;
   /** Result (omsætning − udgifter), kroner. */
   resultat: number;
+  /** Total assets (balancesum) at the year end, kroner. */
+  balancesum: number;
+  /** Equity (egenkapital incl. period result) at the year end, kroner. */
+  egenkapital: number;
+  /**
+   * Bruttomargin — resultat ÷ omsætning, a 0–1 fraction. Null when there is no
+   * omsætning to divide by; no figure is invented.
+   */
+  bruttomargin: number | null;
+  /**
+   * Egenkapitalandel — egenkapital ÷ balancesum, a 0–1 fraction. Null when the
+   * balance sum is zero.
+   */
+  egenkapitalandel: number | null;
 };
 
 export type CompanyMultiYear = ReturnType<typeof buildCompanyMultiYear>;
 
 /**
- * Flerårsoversigt — key figures (omsætning / udgifter / resultat) for every
- * fiscal year available for a company, oldest→newest so a trend can be
- * charted.
+ * Flerårsoversigt — key figures for every fiscal year available for a company,
+ * oldest→newest so a trend can be charted: the P&L (omsætning / udgifter /
+ * resultat), the balance-sheet development (balancesum / egenkapital) and the
+ * two ratios an owner reads off a glance (bruttomargin, egenkapitalandel).
  *
  * The live year(s) are computed from the posted ledger via
- * `core/financial-statements` — exactly as `/income-statement` does. The
- * archived years (#197) are derived from `import_archive_balances`: each
- * archived account's closing balance is classified income vs expense by
- * joining its account number to the live `accounts` table's `type`. Income
- * accounts are credit-normal, so the archive's signed balance is negated to
- * read as a positive omsætning; expense accounts read positive as-is.
+ * `core/financial-statements` — exactly as `/income-statement` and `/balance`
+ * do. The archived years (#197) are derived from `import_archive_balances`:
+ * each archived account's closing balance is classified by joining its account
+ * number to the live `accounts` table's `type`. Income accounts are
+ * credit-normal, so the archive's signed balance is negated to read as a
+ * positive omsætning; expense accounts read positive as-is. Assets are
+ * debit-normal (read as-is); equity is credit-normal (negated) and carries the
+ * un-closed period result so it matches the archive-aware Balance view.
  *
  * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
  */
@@ -2457,26 +2474,50 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
       accountTypeRows.map((r) => [r.accountNo, r.type]),
     );
 
+    // Bruttomargin (resultat ÷ omsætning) and egenkapitalandel (egenkapital ÷
+    // balancesum) — each a 0–1 fraction, or null when its denominator is zero.
+    // The same two ratios the Overblik view surfaces; no figure is invented.
+    const ratios = (
+      resultat: number,
+      omsaetning: number,
+      egenkapital: number,
+      balancesum: number,
+    ) => ({
+      bruttomargin: omsaetning !== 0 ? resultat / omsaetning : null,
+      egenkapitalandel: balancesum !== 0 ? egenkapital / balancesum : null,
+    });
+
     const rows: MultiYearRow[] = [];
     for (const fy of years) {
       if (fy.source === "live") {
         const yearNum = parseInt(fy.label, 10);
-        const pl = buildProfitAndLoss(
-          db,
-          `${yearNum}-01-01`,
-          `${yearNum}-12-31`,
-        );
+        const yearEnd = `${yearNum}-12-31`;
+        const pl = buildProfitAndLoss(db, `${yearNum}-01-01`, yearEnd);
+        // Balance-sheet development — total assets and equity (the equity
+        // section plus the un-closed period result), exactly as the Balance
+        // and Overblik views compute them.
+        const bs = buildBalanceSheet(db, yearEnd);
+        const balancesum = roundKroner(bs.totalAssets);
+        const egenkapital = roundKroner(bs.equity.total + bs.periodResult);
+        const omsaetning = roundKroner(pl.totalIncome);
+        const udgifter = roundKroner(pl.totalExpense);
+        const resultat = roundKroner(pl.result);
         rows.push({
           year: fy.label,
           source: "live",
-          omsaetning: roundKroner(pl.totalIncome),
-          udgifter: roundKroner(pl.totalExpense),
-          resultat: roundKroner(pl.result),
+          omsaetning,
+          udgifter,
+          resultat,
+          balancesum,
+          egenkapital,
+          ...ratios(resultat, omsaetning, egenkapital, balancesum),
         });
         continue;
       }
 
-      // Archived year — classify each SaldoBalance line by account type.
+      // Archived year — classify each SaldoBalance line by account type. The
+      // archive `amount` is debit-signed (debit − credit): income/equity are
+      // credit-normal and read negated, expenses/assets read as-is.
       const archiveId = db
         .query(
           "SELECT id FROM import_archive_years WHERE fiscal_year = ? ORDER BY id DESC",
@@ -2484,6 +2525,8 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
         .get(parseInt(fy.label, 10)) as { id: number } | undefined;
       let omsaetning = 0;
       let udgifter = 0;
+      let balancesum = 0;
+      let equitySection = 0;
       if (archiveId) {
         const balRows = db
           .query(
@@ -2495,20 +2538,28 @@ export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
         for (const b of balRows) {
           const type = accountType.get(b.accountNo);
           const amount = Number(b.amount ?? 0);
-          // Income accounts are credit-normal: a closing balance reads
-          // negative in the debit-positive archive sign, so negate it.
           if (type === "income") omsaetning += -amount;
           else if (type === "expense") udgifter += amount;
+          else if (type === "asset") balancesum += amount;
+          else if (type === "equity") equitySection += -amount;
         }
       }
       omsaetning = roundKroner(omsaetning);
       udgifter = roundKroner(udgifter);
+      const resultat = roundKroner(omsaetning - udgifter);
+      balancesum = roundKroner(balancesum);
+      // Equity carries the un-closed period result so it matches the
+      // archive-aware Balance view (assets = liabilities + equity + result).
+      const egenkapital = roundKroner(equitySection + resultat);
       rows.push({
         year: fy.label,
         source: "archive",
         omsaetning,
         udgifter,
-        resultat: roundKroner(omsaetning - udgifter),
+        resultat,
+        balancesum,
+        egenkapital,
+        ...ratios(resultat, omsaetning, egenkapital, balancesum),
       });
     }
 

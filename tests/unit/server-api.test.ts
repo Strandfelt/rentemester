@@ -1284,6 +1284,52 @@ describe("cockpit API — multi-year (GET .../multi-year)", () => {
     }
   });
 
+  test("returns balance-sheet figures and key ratios per year", async () => {
+    const ws = makeWorkspace("my-balance", ["Acme ApS"]);
+    try {
+      // Archived 2025 — income −1000, expense 250, asset 2000 at 700, equity
+      // 5000 closing at −150 (credit-signed −150 → +150 egenkapital section).
+      // resultat = 1000 − 250 = 750; egenkapital = 150 + 750 = 900;
+      // balancesum = 700; egenkapitalandel = 900 / 700.
+      seedArchiveYear(ws, "acme-aps", 2025, [
+        ["1000", "Omsætning", -1000],
+        ["3000", "Vareforbrug", 250],
+        ["2000", "Bank", 700],
+        ["5000", "Egenkapital", -150],
+      ]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/multi-year",
+      );
+      expect(res.status).toBe(200);
+      const y2025 = res.body.multiYear.years[0];
+      expect(y2025.balancesum).toBe(700);
+      expect(y2025.egenkapital).toBe(900);
+      expect(y2025.bruttomargin).toBeCloseTo(0.75, 5);
+      expect(y2025.egenkapitalandel).toBeCloseTo(900 / 700, 5);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a ratio with a zero denominator is null, not a fabricated figure", async () => {
+    const ws = makeWorkspace("my-ratio-null", ["Acme ApS"]);
+    try {
+      // No income and no assets — both ratios must be null.
+      seedArchiveYear(ws, "acme-aps", 2025, [["3000", "Vareforbrug", 250]]);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/multi-year",
+      );
+      expect(res.status).toBe(200);
+      const y2025 = res.body.multiYear.years[0];
+      expect(y2025.bruttomargin).toBeNull();
+      expect(y2025.egenkapitalandel).toBeNull();
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   test("an empty ledger yields no years", async () => {
     const ws = makeWorkspace("my-empty", ["Acme ApS"]);
     try {

@@ -579,6 +579,14 @@ export type MultiYearRow = {
   udgifter: number;
   /** Result (omsætning − udgifter), kroner. */
   resultat: number;
+  /** Total assets (balancesum) at the year end, kroner. */
+  balancesum: number;
+  /** Equity (egenkapital incl. period result) at the year end, kroner. */
+  egenkapital: number;
+  /** Bruttomargin — resultat ÷ omsætning, a 0–1 fraction; null when no omsætning. */
+  bruttomargin: number | null;
+  /** Egenkapitalandel — egenkapital ÷ balancesum, a 0–1 fraction; null when balancesum is 0. */
+  egenkapitalandel: number | null;
 };
 
 export type CompanyMultiYear = {
