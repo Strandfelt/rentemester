@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
-import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
+import { postJournalEntry, seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 import { resolveSource } from "../../src/core/import/source";
 import { dineroParser } from "../../src/core/import/dinero";
 import { reconcileChartOfAccounts, reconcileCompanyMasterData } from "../../src/core/import/reconcile";
@@ -134,19 +134,70 @@ describe("Dinero reconciliation into the live ledger", () => {
     }
   });
 
-  test("leaves an existing account intact and reports the difference", () => {
+  test("reclassifies a postings-free colliding account to the source definition", () => {
     const { root, db } = freshCompany("rentemester-dinero-existing-");
     try {
       const source = dineroParser.parseSource!(resolveSource(FIXTURE)).source!;
-      const before = db
-        .query("SELECT name FROM accounts WHERE account_no = ?")
-        .get("1000") as { name: string };
-      reconcileChartOfAccounts(db, source, { createdBy: "user:tester" });
+      // Mimic the real Helheim bug: an account number the Rentemester seed
+      // classified one way collides with a Dinero account classified another.
+      // Seeded account 3000 is 'Software og SaaS' (expense/debit); the Dinero
+      // fixture's 3000 is 'Vareforbrug'. Mis-seed it as an asset so the import
+      // has to correct it (the same shape as Dinero 2000 colliding with Bank).
+      db.prepare(
+        "UPDATE accounts SET type = 'asset', normal_balance = 'debit', name = 'Old seed name' WHERE account_no = '3000'",
+      ).run();
+      const source3000 = source.chartOfAccounts.find((a) => a.accountNo === "3000")!;
+      expect(source3000.normalizedType).toBe("expense");
+
+      const result = reconcileChartOfAccounts(db, source, { createdBy: "user:tester" });
+      // A freshly seeded company has no journal lines, so the source chart is
+      // authoritative — 3000 is reclassified, not merely reported.
+      expect(result.updated).toContain("3000");
+      expect(result.conflicts).toEqual([]);
+
+      const after = db
+        .query("SELECT name, type, normal_balance FROM accounts WHERE account_no = ?")
+        .get("3000") as { name: string; type: string; normal_balance: string };
+      expect(after.type).toBe("expense");
+      expect(after.normal_balance).toBe("debit");
+      expect(after.name).toBe(source3000.name);
+      expect(result.differences.some((d) => d.includes("account 3000"))).toBe(true);
+      expect(verifyAuditChain(db).ok).toBe(true);
+    } finally {
+      db.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does NOT reclassify an existing account that already has journal lines", () => {
+    const { root, db } = freshCompany("rentemester-dinero-conflict-");
+    try {
+      const source = dineroParser.parseSource!(resolveSource(FIXTURE)).source!;
+      // Seeded account 3000 ('Software og SaaS', expense/debit) differs from
+      // the fixture's 3000 ('Vareforbrug') — but this time it already carries
+      // a posting, so it must NOT be reclassified.
+      const posted = postJournalEntry(db, {
+        transactionDate: "2026-01-15",
+        text: "Seed activity on account 3000",
+        importedHistorical: true,
+        createdByProgram: "rentemester-import-postings",
+        lines: [
+          { accountNo: "3000", debitAmount: 100 },
+          { accountNo: "2000", creditAmount: 100 },
+        ],
+      });
+      expect(posted.ok).toBe(true);
+
+      const result = reconcileChartOfAccounts(db, source, { createdBy: "user:tester" });
+      // 3000 has postings -> it is a conflict, never reclassified.
+      expect(result.updated).not.toContain("3000");
+      expect(result.conflicts.some((c) => c.includes("account 3000"))).toBe(true);
+
       const after = db
         .query("SELECT name FROM accounts WHERE account_no = ?")
-        .get("1000") as { name: string };
-      // The seeded account name is NOT overwritten by the Dinero name.
-      expect(after.name).toBe(before.name);
+        .get("3000") as { name: string };
+      expect(after.name).toBe("Software og SaaS");
+      expect(verifyAuditChain(db).ok).toBe(true);
     } finally {
       db.close();
       rmSync(root, { recursive: true, force: true });

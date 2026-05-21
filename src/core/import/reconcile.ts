@@ -5,10 +5,13 @@
 // LANDS that source into the live company ledger:
 //
 //  - `reconcileChartOfAccounts` walks `source.chartOfAccounts` and, for each
-//    account, INSERTs it into the `accounts` table if it is missing. An
-//    existing account is left INTACT — its name / type / VAT code are never
-//    overwritten — but any difference against the source is reported. This is
-//    the prerequisite that lets #194 post a Dinero opening balance, because
+//    account, INSERTs it into the `accounts` table if it is missing. When a
+//    system migration brings over a foreign chart of accounts the SOURCE is
+//    authoritative: an existing account that carries NO journal lines yet is
+//    safely RECLASSIFIED to the source's type / normal_balance / name /
+//    default_vat_code. An existing account that already HAS journal lines must
+//    not be reclassified — it is reported as a conflict instead. This is the
+//    prerequisite that lets #194 post a Dinero opening balance, because
 //    `postOpeningBalance` re-validates every line against the live `accounts`.
 //
 //  - `reconcileCompanyMasterData` populates the `companies` row (id = 1) from
@@ -34,9 +37,12 @@ type ReconcileOptions = ResolveActorInput;
 
 /**
  * Reconciles `source.chartOfAccounts` into the live `accounts` table: creates
- * accounts that do not yet exist, leaves existing accounts untouched, and
- * reports every difference and unmapped VAT code. Returns a deterministic
- * summary; the operation is wrapped in a single transaction and audited.
+ * accounts that do not yet exist, RECLASSIFIES an existing postings-free
+ * account to the source definition (the source chart is authoritative for a
+ * system migration), reports an existing account that already has journal
+ * lines as a conflict, and surfaces every unmapped VAT code. Returns a
+ * deterministic summary; the operation is wrapped in a single transaction and
+ * audited.
  */
 export function reconcileChartOfAccounts(
   db: Database,
@@ -46,13 +52,21 @@ export function reconcileChartOfAccounts(
   const chart = Array.isArray(source?.chartOfAccounts) ? source.chartOfAccounts : [];
   const created: string[] = [];
   const existing: string[] = [];
+  const updated: string[] = [];
   const differences: string[] = [];
+  const conflicts: string[] = [];
 
   const findAccount = db.prepare(
-    "SELECT name, type, normal_balance, default_vat_code FROM accounts WHERE account_no = ?",
+    "SELECT id, name, type, normal_balance, default_vat_code FROM accounts WHERE account_no = ?",
   );
   const insertAccount = db.prepare(
     "INSERT INTO accounts (account_no, name, type, normal_balance, default_vat_code) VALUES (?, ?, ?, ?, ?)",
+  );
+  const countJournalLines = db.prepare(
+    "SELECT COUNT(*) AS n FROM journal_lines WHERE account_id = ?",
+  );
+  const updateAccount = db.prepare(
+    "UPDATE accounts SET name = ?, type = ?, normal_balance = ?, default_vat_code = ? WHERE id = ?",
   );
 
   db.transaction(() => {
@@ -60,28 +74,57 @@ export function reconcileChartOfAccounts(
       const accountNo = typeof account?.accountNo === "string" ? account.accountNo.trim() : "";
       if (!accountNo) continue;
       const live = findAccount.get(accountNo) as
-        | { name: string; type: string; normal_balance: string; default_vat_code: string | null }
+        | {
+            id: number;
+            name: string;
+            type: string;
+            normal_balance: string;
+            default_vat_code: string | null;
+          }
         | null;
 
       if (live) {
         existing.push(accountNo);
-        // Existing accounts are authoritative: report mismatches, change nothing.
-        if (account.name && account.name.trim() !== live.name) {
-          differences.push(
-            `account ${accountNo}: name differs (live '${live.name}' vs source '${account.name.trim()}') — kept live`,
+        // Detect what differs from the source.
+        const sourceName = account.name?.trim() || live.name;
+        const sourceType = account.normalizedType ?? live.type;
+        const sourceNormalBalance = account.normalBalance ?? live.normal_balance;
+        const sourceVat =
+          account.defaultVatCode !== undefined
+            ? account.defaultVatCode ?? null
+            : live.default_vat_code ?? null;
+        const mismatch: string[] = [];
+        if (sourceName !== live.name) {
+          mismatch.push(`name ('${live.name}' -> '${sourceName}')`);
+        }
+        if (sourceType !== live.type) {
+          mismatch.push(`type ('${live.type}' -> '${sourceType}')`);
+        }
+        if (sourceNormalBalance !== live.normal_balance) {
+          mismatch.push(`normal_balance ('${live.normal_balance}' -> '${sourceNormalBalance}')`);
+        }
+        if (sourceVat !== (live.default_vat_code ?? null)) {
+          mismatch.push(
+            `default_vat_code ('${live.default_vat_code ?? ""}' -> '${sourceVat ?? ""}')`,
           );
         }
-        if (account.normalizedType && account.normalizedType !== live.type) {
-          differences.push(
-            `account ${accountNo}: type differs (live '${live.type}' vs source '${account.normalizedType}') — kept live`,
+        if (mismatch.length === 0) continue;
+
+        // The source chart is authoritative for a system migration — but only
+        // an account with NO journal lines can be safely reclassified.
+        const lineCount = (countJournalLines.get(live.id) as { n: number }).n;
+        if (lineCount > 0) {
+          conflicts.push(
+            `account ${accountNo}: source differs (${mismatch.join(", ")}) but the ` +
+              `account already has ${lineCount} journal line(s) — kept live, not reclassified`,
           );
+          continue;
         }
-        const sourceVat = account.defaultVatCode ?? null;
-        if (sourceVat && sourceVat !== (live.default_vat_code ?? null)) {
-          differences.push(
-            `account ${accountNo}: default_vat_code differs (live '${live.default_vat_code ?? ""}' vs source '${sourceVat}') — kept live`,
-          );
-        }
+        updateAccount.run(sourceName, sourceType, sourceNormalBalance, sourceVat, live.id);
+        updated.push(accountNo);
+        differences.push(
+          `account ${accountNo}: reclassified to source — ${mismatch.join(", ")}`,
+        );
         continue;
       }
 
@@ -109,7 +152,7 @@ export function reconcileChartOfAccounts(
       message:
         `Reconciled chart of accounts from '${source.sourceSystem}': ` +
         `${created.length} created, ${existing.length} already present, ` +
-        `${differences.length} difference(s)`,
+        `${updated.length} reclassified, ${conflicts.length} conflict(s)`,
       createdBy: options.createdBy,
       createdByProgram: options.createdByProgram,
     });
@@ -119,7 +162,7 @@ export function reconcileChartOfAccounts(
     ? [...source.unmappedVatCodes]
     : [];
 
-  return { created, existing, differences, unmappedVatCodes };
+  return { created, existing, updated, differences, conflicts, unmappedVatCodes };
 }
 
 /**

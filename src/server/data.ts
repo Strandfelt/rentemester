@@ -5,13 +5,22 @@
 // logic is duplicated and nothing here mutates a ledger.
 
 import { existsSync } from "node:fs";
+import type { Database } from "bun:sqlite";
 import { companyPaths } from "../core/paths";
 import { openDb, migrate } from "../core/db";
 import { getCompanySettings } from "../core/company";
+import { fiscalYearForDate } from "../core/fiscal-year";
 import { buildInvoiceList, buildOverdueInvoiceList } from "../core/invoice-list";
+import { listCustomers, listVendors } from "../core/master-data";
 import { listBankTransactions } from "../core/reconciliation";
 import { listExceptions } from "../core/exceptions";
 import { buildVatReport } from "../core/vat";
+import {
+  buildBalanceSheet,
+  buildProfitAndLoss,
+  buildTrialBalance,
+} from "../core/financial-statements";
+import { listBankAccounts } from "../core/bank";
 import { getBackupComplianceStatus } from "../core/system-backups";
 import { listRecentAuditLog } from "../core/audit-log";
 import { verifyAuditChain } from "../core/ledger";
@@ -287,6 +296,1672 @@ export function buildCompanyDashboardData(
         firstError: audit.errors[0] ?? null,
       },
       recentActivity,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company fiscal years
+// --------------------------------------------------------------------------
+
+/** One fiscal year available for a company. */
+export type FiscalYearEntry = {
+  /** Stable, sortable label for the year, e.g. "2026" or "2025-26". */
+  label: string;
+  /** Fiscal-year start date (YYYY-MM-DD); null for an archived year. */
+  start: string | null;
+  /** Fiscal-year end date (YYYY-MM-DD); null for an archived year. */
+  end: string | null;
+  /** Where the year's data lives: the live hash-chained ledger or the archive. */
+  source: "live" | "archive";
+};
+
+export type CompanyFiscalYears = {
+  slug: string;
+  /** Fiscal years, descending by label — newest first. */
+  years: FiscalYearEntry[];
+};
+
+/**
+ * The fiscal years available for a company: the live ledger's year(s) — every
+ * distinct fiscal year touched by a posted `journal_entries` row — plus any
+ * read-only archived years from the `import_archive_years` table (#197).
+ *
+ * Years are deduplicated by label (a live year wins over an archived one of
+ * the same label) and returned newest-first. Throws `ApiError.notFound` when
+ * the slug is not registered or the ledger is missing on disk.
+ */
+export function buildCompanyFiscalYears(
+  workspaceRoot: string,
+  slug: string,
+): CompanyFiscalYears {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+    const byLabel = new Map<string, FiscalYearEntry>();
+
+    // Live ledger: one fiscal year per distinct transaction_date, collapsed.
+    const dateRows = db
+      .query(
+        "SELECT DISTINCT transaction_date AS d FROM journal_entries WHERE status = 'posted'",
+      )
+      .all() as Array<{ d: string }>;
+    for (const row of dateRows) {
+      if (!ISO_DATE_RE.test(row.d)) continue;
+      const fy = fiscalYearForDate(
+        row.d,
+        company.fiscalYearStartMonth,
+        company.fiscalYearLabelStrategy,
+      );
+      byLabel.set(fy.identifierLabel, {
+        label: fy.identifierLabel,
+        start: fy.start,
+        end: fy.end,
+        source: "live",
+      });
+    }
+
+    // Archived years (#197) — read-only reference data, outside the ledger.
+    const archiveRows = db
+      .query(
+        "SELECT DISTINCT fiscal_year AS y FROM import_archive_years ORDER BY fiscal_year",
+      )
+      .all() as Array<{ y: number }>;
+    for (const row of archiveRows) {
+      const label = String(row.y);
+      // A live year of the same label is authoritative — never shadow it.
+      if (byLabel.has(label)) continue;
+      byLabel.set(label, { label, start: null, end: null, source: "archive" });
+    }
+
+    const years = [...byLabel.values()].sort((a, b) =>
+      b.label.localeCompare(a.label),
+    );
+    return { slug: entry.slug, years };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company overview (the "Overblik" dashboard, year-aware)
+// --------------------------------------------------------------------------
+
+const YEAR_RE = /^\d{4}$/;
+
+/**
+ * Validates an optional `?year=` query value. Returns null when absent so the
+ * caller can default to the company's most recent live fiscal year.
+ */
+export function resolveYearParam(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.length === 0) return null;
+  if (!YEAR_RE.test(raw)) {
+    throw ApiError.badRequest("year must be a four-digit calendar year");
+  }
+  return parseInt(raw, 10);
+}
+
+/**
+ * Validates a required four-digit `:year` taken from the URL path (e.g. the
+ * archive endpoint `/archive/:year`). Unlike `resolveYearParam` the year is
+ * mandatory here, so an absent or malformed value is a 400.
+ */
+export function resolvePathYear(raw: string): number {
+  if (!YEAR_RE.test(raw)) {
+    throw ApiError.badRequest("year must be a four-digit calendar year");
+  }
+  return parseInt(raw, 10);
+}
+
+/** The two ISO dates [start, end] for a half of the calendar year `year`. */
+function halfYearPeriod(year: number, half: 1 | 2): { start: string; end: string } {
+  return half === 1
+    ? { start: `${year}-01-01`, end: `${year}-06-30` }
+    : { start: `${year}-07-01`, end: `${year}-12-31` };
+}
+
+/** Rounds a kroner amount to whole øre, killing float drift. */
+function roundKroner(value: number): number {
+  return Math.round(Number(value ?? 0) * 100) / 100;
+}
+
+export type VatPosition = {
+  periodStart: string;
+  periodEnd: string;
+  /** Output VAT (salgsmoms) booked for the period, kroner. */
+  outputVat: number;
+  /** Input VAT (købsmoms) booked for the period, kroner. */
+  inputVat: number;
+  /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+  payable: number;
+};
+
+/**
+ * The VAT position for a period, computed from the VAT *amounts booked on the
+ * VAT accounts themselves* — the truthful obligation regardless of how the
+ * chart of accounts numbers them.
+ *
+ * A VAT account is any account that is `type = 'vat'` (the native-Rentemester
+ * chart: `1200` Salgsmoms, `4000` Købsmoms) OR sits in the standard Danish VAT
+ * block `64000`–`64099` (a Dinero-imported chart, where the VAT accounts are
+ * typed `liability`). The `64100` settlement account is excluded — it only
+ * moves money between the VAT accounts and the bank and is not itself an
+ * obligation.
+ *
+ * Output VAT is the credit-signed movement of output-side VAT accounts; input
+ * VAT the credit-signed movement of input-side ones. An account is input-side
+ * when it is debit-normal (the native-Rentemester `4000` Købsmoms) or carries
+ * a standard Danish input-VAT account number (`64060` Købsmoms; `64080`/
+ * `64085`/`64090` afgift-reclaim). The net payable is output − input —
+ * arithmetically the credit-signed net of every VAT account, so it is correct
+ * regardless of how cleanly the input/output split lands. Money is kroner.
+ */
+const INPUT_VAT_ACCOUNT_NOS = new Set(["64060", "64080", "64085", "64090"]);
+
+function vatPositionForPeriod(
+  db: Database,
+  periodStart: string,
+  periodEnd: string,
+): VatPosition {
+  const rows = db
+    .query(
+      `SELECT a.account_no     AS accountNo,
+              a.normal_balance AS normalBalance,
+              jl.debit_amount  AS debit,
+              jl.credit_amount AS credit
+         FROM journal_entries je
+         JOIN journal_lines jl ON jl.journal_entry_id = je.id
+         JOIN accounts a       ON a.id = jl.account_id
+        WHERE je.status = 'posted'
+          AND je.transaction_date >= ? AND je.transaction_date <= ?
+          AND (a.type = 'vat'
+               OR (a.account_no >= '64000' AND a.account_no < '64100'))`,
+    )
+    .all(periodStart, periodEnd) as Array<{
+    accountNo: string;
+    normalBalance: "debit" | "credit";
+    debit: number;
+    credit: number;
+  }>;
+
+  let outputVat = 0;
+  let inputVat = 0;
+  for (const row of rows) {
+    const debit = Number(row.debit ?? 0);
+    const credit = Number(row.credit ?? 0);
+    const isInput =
+      row.normalBalance === "debit" || INPUT_VAT_ACCOUNT_NOS.has(row.accountNo);
+    if (isInput) {
+      inputVat += debit - credit;
+    } else {
+      outputVat += credit - debit;
+    }
+  }
+
+  outputVat = roundKroner(outputVat);
+  inputVat = roundKroner(inputVat);
+  return {
+    periodStart,
+    periodEnd,
+    outputVat,
+    inputVat,
+    payable: roundKroner(outputVat - inputVat),
+  };
+}
+
+/**
+ * Booked balance of the bank / cash asset accounts at `asOfDate`, kroner.
+ *
+ * Bank accounts are identified by the `bank_accounts.ledger_account_no` link
+ * when any bank account is registered; otherwise it falls back to every
+ * `asset`-type account whose name reads as a bank or cash account. This keeps
+ * the figure independent of any one chart's account numbering.
+ */
+function bankBalanceAsOf(db: Database, asOfDate: string): number {
+  const linked = listBankAccounts(db)
+    .accounts.map((a) => a.ledgerAccountNo)
+    .filter((no): no is string => typeof no === "string" && no.length > 0);
+
+  let accountNos: string[];
+  if (linked.length > 0) {
+    accountNos = [...new Set(linked)];
+  } else {
+    accountNos = (
+      db
+        .query(
+          `SELECT account_no FROM accounts
+            WHERE type = 'asset'
+              AND (lower(name) LIKE '%bank%' OR lower(name) LIKE '%kasse%'
+                   OR lower(name) LIKE '%giro%')`,
+        )
+        .all() as Array<{ account_no: string }>
+    ).map((r) => r.account_no);
+  }
+  if (accountNos.length === 0) return 0;
+
+  const placeholders = accountNos.map(() => "?").join(", ");
+  const row = db
+    .query(
+      `SELECT COALESCE(SUM(jl.debit_amount - jl.credit_amount), 0) AS bal
+         FROM journal_entries je
+         JOIN journal_lines jl ON jl.journal_entry_id = je.id
+         JOIN accounts a       ON a.id = jl.account_id
+        WHERE je.status = 'posted'
+          AND je.transaction_date <= ?
+          AND a.account_no IN (${placeholders})`,
+    )
+    .get(asOfDate, ...accountNos) as { bal: number };
+  return roundKroner(row.bal);
+}
+
+const MONTH_NAMES_DK = [
+  "jan", "feb", "mar", "apr", "maj", "jun",
+  "jul", "aug", "sep", "okt", "nov", "dec",
+];
+
+export type OverviewMonth = {
+  /** 1–12. */
+  month: number;
+  label: string;
+  income: number;
+  expense: number;
+};
+
+export type CompanyOverview = ReturnType<typeof buildCompanyOverview>;
+
+/**
+ * Per-company "Overblik" — the year-aware company dashboard the cockpit SPA's
+ * P0 view renders. Every figure is computed from posted ledger postings: the
+ * P&L from `core/financial-statements`, the VAT position from the booked VAT
+ * accounts, the bank balance from the cash asset accounts. Money is kroner.
+ *
+ * `year` selects the calendar fiscal year; when omitted the company's most
+ * recent live year is used. An archived-only year returns `archived: true`
+ * with empty figures — the live ledger has nothing for it (#197 archive data
+ * is surfaced in a later iteration).
+ *
+ * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
+ */
+export function buildCompanyOverview(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const fiscalYears = buildCompanyFiscalYears(workspaceRoot, slug);
+  const years = fiscalYears.years;
+  // Default to the most recent live year, falling back to the newest year.
+  const liveYears = years.filter((y) => y.source === "live");
+  const defaultYear =
+    liveYears[0]?.label ?? years[0]?.label ?? String(new Date().getUTCFullYear());
+  const selectedLabel = year !== null ? String(year) : defaultYear;
+  const selected = years.find((y) => y.label === selectedLabel);
+  const isArchivedOnly = selected ? selected.source === "archive" : false;
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    const companyBlock = {
+      name: company.name,
+      cvr: company.cvr,
+      country: company.country,
+      currency: company.currency,
+      fiscalYearStartMonth: company.fiscalYearStartMonth,
+      fiscalYearLabelStrategy: company.fiscalYearLabelStrategy,
+    };
+
+    // An archived-only year has no live-ledger data — surface a clear marker
+    // so the SPA can render the "se Arkiv" state without inventing figures.
+    if (isArchivedOnly) {
+      return {
+        slug: entry.slug,
+        selectedYear: selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: years,
+        profitAndLoss: {
+          omsaetning: 0,
+          udgifter: 0,
+          resultat: 0,
+          months: [] as OverviewMonth[],
+        },
+        bank: { balance: 0 },
+        vat: {
+          periodStart: `${selectedLabel}-01-01`,
+          periodEnd: `${selectedLabel}-06-30`,
+          periodLabel: `1. halvår ${selectedLabel}`,
+          outputVat: 0,
+          inputVat: 0,
+          payable: 0,
+        },
+        exceptions: { count: 0, rows: [] as ExceptionPreview[] },
+        recentEntries: [] as RecentEntry[],
+      };
+    }
+
+    const yearNum = parseInt(selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    // P&L for the full year, reusing the core financial statement.
+    const pl = buildProfitAndLoss(db, yearStart, yearEnd);
+
+    // Monthly breakdown — one income/expense pair per calendar month.
+    const months: OverviewMonth[] = [];
+    for (let m = 1; m <= 12; m += 1) {
+      const mm = String(m).padStart(2, "0");
+      const last = new Date(Date.UTC(yearNum, m, 0)).getUTCDate();
+      const mPl = buildProfitAndLoss(
+        db,
+        `${yearNum}-${mm}-01`,
+        `${yearNum}-${mm}-${String(last).padStart(2, "0")}`,
+      );
+      months.push({
+        month: m,
+        label: MONTH_NAMES_DK[m - 1]!,
+        income: mPl.totalIncome,
+        expense: mPl.totalExpense,
+      });
+    }
+
+    // VAT position: each half-year settles separately. Surface the first half
+    // by default, switching to the second only when the first is empty and
+    // the second carries activity.
+    const p1 = halfYearPeriod(yearNum, 1);
+    const p2 = halfYearPeriod(yearNum, 2);
+    const h1 = vatPositionForPeriod(db, p1.start, p1.end);
+    const h2 = vatPositionForPeriod(db, p2.start, p2.end);
+    const useSecondHalf = h1.payable === 0 && h2.payable !== 0;
+    const vat = useSecondHalf ? h2 : h1;
+    const vatHalf: 1 | 2 = useSecondHalf ? 2 : 1;
+
+    // The exception queue.
+    const exceptions = listExceptions(db, { status: "open" });
+    const exceptionRows: ExceptionPreview[] = exceptions.rows
+      .slice(0, 6)
+      .map((row: any) => ({
+        id: row.id,
+        type: row.type,
+        severity: row.severity,
+        message: row.message,
+      }));
+
+    // The most recent posted journal entries within the selected year.
+    const entryRows = db
+      .query(
+        `SELECT je.id          AS id,
+                je.entry_no    AS entryNo,
+                je.transaction_date AS date,
+                je.text        AS text,
+                (SELECT COALESCE(SUM(debit_amount), 0)
+                   FROM journal_lines WHERE journal_entry_id = je.id) AS amount
+           FROM journal_entries je
+          WHERE je.status = 'posted'
+            AND je.transaction_date >= ? AND je.transaction_date <= ?
+          ORDER BY je.transaction_date DESC, je.id DESC
+          LIMIT 8`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      id: number;
+      entryNo: string;
+      date: string;
+      text: string;
+      amount: number;
+    }>;
+    const recentEntries: RecentEntry[] = entryRows.map((r) => ({
+      id: r.id,
+      entryNo: r.entryNo,
+      date: r.date,
+      text: r.text,
+      amount: Math.round(Number(r.amount ?? 0) * 100) / 100,
+    }));
+
+    return {
+      slug: entry.slug,
+      selectedYear: selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: years,
+      profitAndLoss: {
+        omsaetning: pl.totalIncome,
+        udgifter: pl.totalExpense,
+        resultat: pl.result,
+        months,
+      },
+      bank: { balance: bankBalanceAsOf(db, yearEnd) },
+      vat: {
+        periodStart: vat.periodStart,
+        periodEnd: vat.periodEnd,
+        periodLabel: `${vatHalf}. halvår ${yearNum}`,
+        outputVat: vat.outputVat,
+        inputVat: vat.inputVat,
+        payable: vat.payable,
+      },
+      exceptions: { count: exceptions.count, rows: exceptionRows },
+      recentEntries,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+type ExceptionPreview = {
+  id: number;
+  type: string;
+  severity: string;
+  message: string;
+};
+
+type RecentEntry = {
+  id: number;
+  entryNo: string;
+  date: string;
+  text: string;
+  amount: number;
+};
+
+// --------------------------------------------------------------------------
+// Per-company financial statements (year-aware) — cockpit-redesign it. 2
+// --------------------------------------------------------------------------
+
+/**
+ * Resolves the company, opens its ledger and picks the selected fiscal year —
+ * the shared preamble for the statement builders below. The selected year
+ * follows `buildCompanyOverview`: an explicit `?year=` wins, else the most
+ * recent live year, else the newest available year.
+ *
+ * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
+ */
+function resolveStatementContext(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+): {
+  entry: WorkspaceCompanyEntry;
+  db: Database;
+  company: ReturnType<typeof getCompanySettings>;
+  years: FiscalYearEntry[];
+  selectedLabel: string;
+  isArchivedOnly: boolean;
+} {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const years = buildCompanyFiscalYears(workspaceRoot, slug).years;
+  const liveYears = years.filter((y) => y.source === "live");
+  const defaultYear =
+    liveYears[0]?.label ?? years[0]?.label ?? String(new Date().getUTCFullYear());
+  const selectedLabel = year !== null ? String(year) : defaultYear;
+  const selected = years.find((y) => y.label === selectedLabel);
+  const isArchivedOnly = selected ? selected.source === "archive" : false;
+
+  const db = openDb(dbPath);
+  migrate(db);
+  return {
+    entry,
+    db,
+    company: getCompanySettings(db),
+    years,
+    selectedLabel,
+    isArchivedOnly,
+  };
+}
+
+export type StatementCompanyBlock = {
+  name: string;
+  cvr: string | null;
+  country: string;
+  currency: string;
+  fiscalYearStartMonth: number | string;
+  fiscalYearLabelStrategy: string;
+};
+
+function statementCompanyBlock(
+  company: ReturnType<typeof getCompanySettings>,
+): StatementCompanyBlock {
+  return {
+    name: company.name,
+    cvr: company.cvr,
+    country: company.country,
+    currency: company.currency,
+    fiscalYearStartMonth: company.fiscalYearStartMonth,
+    fiscalYearLabelStrategy: company.fiscalYearLabelStrategy,
+  };
+}
+
+export type IncomeStatementLine = {
+  accountNo: string;
+  name: string;
+  amount: number;
+  /** The same account's amount in the prior calendar year, kroner. */
+  priorAmount: number;
+};
+
+export type CompanyIncomeStatement = ReturnType<typeof buildCompanyIncomeStatement>;
+
+/**
+ * Resultatopgørelse — the income statement for the selected calendar fiscal
+ * year: income accounts and expense accounts, each with its own amount and the
+ * prior year's amount for comparison, plus the totals and the result. Every
+ * figure is computed by `core/financial-statements`. Money is kroner.
+ */
+export function buildCompanyIncomeStatement(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        income: [] as IncomeStatementLine[],
+        expense: [] as IncomeStatementLine[],
+        totalIncome: 0,
+        totalExpense: 0,
+        priorTotalIncome: 0,
+        priorTotalExpense: 0,
+        result: 0,
+        priorResult: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const current = buildProfitAndLoss(ctx.db, `${yearNum}-01-01`, `${yearNum}-12-31`);
+    const prior = buildProfitAndLoss(
+      ctx.db,
+      `${yearNum - 1}-01-01`,
+      `${yearNum - 1}-12-31`,
+    );
+    const priorIncome = new Map(prior.income.map((l) => [l.accountNo, l.amount]));
+    const priorExpense = new Map(prior.expense.map((l) => [l.accountNo, l.amount]));
+
+    const income: IncomeStatementLine[] = current.income.map((l) => ({
+      accountNo: l.accountNo,
+      name: l.name,
+      amount: l.amount,
+      priorAmount: priorIncome.get(l.accountNo) ?? 0,
+    }));
+    const expense: IncomeStatementLine[] = current.expense.map((l) => ({
+      accountNo: l.accountNo,
+      name: l.name,
+      amount: l.amount,
+      priorAmount: priorExpense.get(l.accountNo) ?? 0,
+    }));
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      income,
+      expense,
+      totalIncome: current.totalIncome,
+      totalExpense: current.totalExpense,
+      priorTotalIncome: prior.totalIncome,
+      priorTotalExpense: prior.totalExpense,
+      result: current.result,
+      priorResult: prior.result,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+export type BalanceLine = {
+  accountNo: string;
+  name: string;
+  amount: number;
+};
+
+export type BalanceSection = {
+  lines: BalanceLine[];
+  total: number;
+};
+
+export type CompanyBalance = ReturnType<typeof buildCompanyBalance>;
+
+/**
+ * Balance — the balance sheet as of the selected fiscal year's end date:
+ * assets, liabilities and equity sections with section totals. The un-closed
+ * period result is surfaced under equity so the sheet balances (assets =
+ * liabilities + equity). Computed by `core/financial-statements`. Money kroner.
+ */
+export function buildCompanyBalance(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      const empty: BalanceSection = { lines: [], total: 0 };
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        asOfDate: `${ctx.selectedLabel}-12-31`,
+        assets: empty,
+        liabilities: empty,
+        equity: empty,
+        periodResult: 0,
+        totalAssets: 0,
+        totalLiabilitiesAndEquity: 0,
+        balanced: true,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const asOfDate = `${yearNum}-12-31`;
+    const bs = buildBalanceSheet(ctx.db, asOfDate);
+    const toLines = (lines: { accountNo: string; name: string; amount: number }[]) =>
+      lines.map((l) => ({ accountNo: l.accountNo, name: l.name, amount: l.amount }));
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      asOfDate: bs.asOfDate,
+      assets: { lines: toLines(bs.assets.lines), total: bs.assets.total },
+      liabilities: {
+        lines: toLines(bs.liabilities.lines),
+        total: bs.liabilities.total,
+      },
+      equity: { lines: toLines(bs.equity.lines), total: bs.equity.total },
+      periodResult: bs.periodResult,
+      totalAssets: bs.totalAssets,
+      totalLiabilitiesAndEquity: bs.totalLiabilitiesAndEquity,
+      balanced: bs.balanced,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+export type TrialBalanceRow = {
+  accountNo: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+export type CompanyTrialBalance = ReturnType<typeof buildCompanyTrialBalance>;
+
+/**
+ * Saldobalance — the trial balance for the selected calendar fiscal year:
+ * every account that moved, with its summed debit total, credit total and the
+ * signed net balance. The report is balanced when total debit equals total
+ * credit. Computed by `core/financial-statements`. Money is kroner.
+ */
+export function buildCompanyTrialBalance(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        rows: [] as TrialBalanceRow[],
+        totalDebit: 0,
+        totalCredit: 0,
+        balanced: true,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const tb = buildTrialBalance(ctx.db, `${yearNum}-01-01`, `${yearNum}-12-31`);
+    const rows: TrialBalanceRow[] = tb.accounts.map((a) => ({
+      accountNo: a.accountNo,
+      name: a.name,
+      type: a.type,
+      debit: a.debit,
+      credit: a.credit,
+      balance: a.balance,
+    }));
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: tb.periodStart,
+      periodEnd: tb.periodEnd,
+      rows,
+      totalDebit: tb.totalDebit,
+      totalCredit: tb.totalCredit,
+      balanced: tb.balanced,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company journal (Posteringer, year-aware) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type JournalLine = {
+  accountNo: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  text: string | null;
+};
+
+export type JournalEntry = {
+  id: number;
+  entryNo: string;
+  date: string;
+  text: string;
+  /** Sum of the debit side — the entry total, kroner. */
+  total: number;
+  lines: JournalLine[];
+};
+
+export type CompanyJournal = ReturnType<typeof buildCompanyJournal>;
+
+/**
+ * Posteringer — every posted journal entry for the selected calendar fiscal
+ * year, newest first, each carrying its debit/credit lines so the UI can drill
+ * into an entry. The entry `total` is the summed debit side. Money is kroner.
+ */
+export function buildCompanyJournal(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        entries: [] as JournalEntry[],
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    const entryRows = ctx.db
+      .query(
+        `SELECT je.id          AS id,
+                je.entry_no    AS entryNo,
+                je.transaction_date AS date,
+                je.text        AS text
+           FROM journal_entries je
+          WHERE je.status = 'posted'
+            AND je.transaction_date >= ? AND je.transaction_date <= ?
+          ORDER BY je.transaction_date DESC, je.id DESC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      id: number;
+      entryNo: string;
+      date: string;
+      text: string;
+    }>;
+
+    const lineRows = ctx.db
+      .query(
+        `SELECT jl.journal_entry_id AS entryId,
+                a.account_no        AS accountNo,
+                a.name              AS accountName,
+                jl.debit_amount     AS debit,
+                jl.credit_amount    AS credit,
+                jl.text             AS text
+           FROM journal_lines jl
+           JOIN journal_entries je ON je.id = jl.journal_entry_id
+           JOIN accounts a         ON a.id = jl.account_id
+          WHERE je.status = 'posted'
+            AND je.transaction_date >= ? AND je.transaction_date <= ?
+          ORDER BY jl.id ASC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      entryId: number;
+      accountNo: string;
+      accountName: string;
+      debit: number;
+      credit: number;
+      text: string | null;
+    }>;
+
+    const linesByEntry = new Map<number, JournalLine[]>();
+    for (const row of lineRows) {
+      const list = linesByEntry.get(row.entryId) ?? [];
+      list.push({
+        accountNo: row.accountNo,
+        accountName: row.accountName,
+        debit: roundKroner(row.debit),
+        credit: roundKroner(row.credit),
+        text: row.text,
+      });
+      linesByEntry.set(row.entryId, list);
+    }
+
+    const entries: JournalEntry[] = entryRows.map((e) => {
+      const lines = linesByEntry.get(e.id) ?? [];
+      const total = roundKroner(
+        lines.reduce((acc, l) => acc + l.debit, 0),
+      );
+      return {
+        id: e.id,
+        entryNo: e.entryNo,
+        date: e.date,
+        text: e.text,
+        total,
+        lines,
+      };
+    });
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      entries,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company bank transactions (Bank, year-aware) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type BankTransactionRow = {
+  id: number;
+  date: string;
+  text: string;
+  amount: number;
+  /** Running balance from the import, kroner; null when the export omits it. */
+  runningBalance: number | null;
+  /** "matched" when a posted journal entry references this row, else "unmatched". */
+  reconciliationStatus: "matched" | "unmatched";
+  /** The matched journal entry's number, when reconciled. */
+  journalEntryNo: string | null;
+};
+
+export type CompanyBank = ReturnType<typeof buildCompanyBank>;
+
+/**
+ * Bank — the imported `bank_transactions` rows for the selected calendar
+ * fiscal year, each with its reconciliation status (matched vs unmatched to a
+ * posted journal entry), plus the registered bank account and its booked
+ * ledger balance at the year end. Money is kroner.
+ */
+export function buildCompanyBank(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    const accounts = listBankAccounts(ctx.db).accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      bankName: a.bankName,
+      accountNo: a.accountNo,
+      ledgerAccountNo: a.ledgerAccountNo,
+    }));
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        accounts,
+        bookedBalance: 0,
+        transactions: [] as BankTransactionRow[],
+        matchedCount: 0,
+        unmatchedCount: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    // Bank rows for the year, oldest-first so the running balance reads
+    // naturally down the table. The LEFT JOIN to a posted journal entry on
+    // `source_bank_transaction_id` is the reconciliation status — the same
+    // join `core/reconciliation.listBankTransactions` uses.
+    const rows = ctx.db
+      .query(
+        `SELECT bt.id            AS id,
+                bt.transaction_date AS date,
+                bt.text          AS text,
+                bt.amount        AS amount,
+                bt.balance_after AS runningBalance,
+                je.entry_no      AS journalEntryNo
+           FROM bank_transactions bt
+           LEFT JOIN journal_entries je
+             ON je.source_bank_transaction_id = bt.id
+            AND je.status = 'posted'
+          WHERE bt.transaction_date >= ? AND bt.transaction_date <= ?
+          ORDER BY bt.transaction_date ASC, bt.id ASC`,
+      )
+      .all(yearStart, yearEnd) as Array<{
+      id: number;
+      date: string;
+      text: string;
+      amount: number;
+      runningBalance: number | null;
+      journalEntryNo: string | null;
+    }>;
+    const transactions: BankTransactionRow[] = rows.map((r) => ({
+      id: r.id,
+      date: r.date,
+      text: r.text,
+      amount: roundKroner(r.amount),
+      runningBalance:
+        r.runningBalance === null || r.runningBalance === undefined
+          ? null
+          : roundKroner(r.runningBalance),
+      reconciliationStatus: r.journalEntryNo ? "matched" : "unmatched",
+      journalEntryNo: r.journalEntryNo,
+    }));
+    const matchedCount = transactions.filter(
+      (t) => t.reconciliationStatus === "matched",
+    ).length;
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      accounts,
+      bookedBalance: bankBalanceAsOf(ctx.db, yearEnd),
+      transactions,
+      matchedCount,
+      unmatchedCount: transactions.length - matchedCount,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company VAT return (Moms, year-aware) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type CompanyVat = ReturnType<typeof buildCompanyVat>;
+
+/**
+ * Moms — the VAT return for the selected calendar fiscal year. Each half-year
+ * settles separately; the first half is surfaced by default, switching to the
+ * second only when the first is empty and the second carries activity — the
+ * same selection `buildCompanyOverview` uses. The figures come from the booked
+ * VAT accounts via `vatPositionForPeriod`. Money is kroner.
+ */
+export function buildCompanyVat(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-06-30`,
+        periodLabel: `1. halvår ${ctx.selectedLabel}`,
+        outputVat: 0,
+        inputVat: 0,
+        payable: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const p1 = halfYearPeriod(yearNum, 1);
+    const p2 = halfYearPeriod(yearNum, 2);
+    const h1 = vatPositionForPeriod(ctx.db, p1.start, p1.end);
+    const h2 = vatPositionForPeriod(ctx.db, p2.start, p2.end);
+    const useSecondHalf = h1.payable === 0 && h2.payable !== 0;
+    const vat = useSecondHalf ? h2 : h1;
+    const half: 1 | 2 = useSecondHalf ? 2 : 1;
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: vat.periodStart,
+      periodEnd: vat.periodEnd,
+      periodLabel: `${half}. halvår ${yearNum}`,
+      outputVat: vat.outputVat,
+      inputVat: vat.inputVat,
+      payable: vat.payable,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company documents (Bilag) — cockpit-redesign it. 3
+// --------------------------------------------------------------------------
+
+export type DocumentRow = {
+  id: number;
+  documentNo: string | null;
+  source: string;
+  filename: string | null;
+  documentType: string;
+  supplierName: string | null;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  amountIncVat: number | null;
+  currency: string;
+  status: string;
+  /** The voucher reference the document was matched on, when linked. */
+  voucherRef: string | null;
+  /** The linked journal entry's number, when one exists. */
+  journalEntryNo: string | null;
+  /** The linked journal entry's id, for drill-through. */
+  journalEntryId: number | null;
+};
+
+export type CompanyDocuments = ReturnType<typeof buildCompanyDocuments>;
+
+/**
+ * Bilag — the ingested documents/receipts in the company's `documents` table,
+ * each carrying the voucher and posted journal entry it is linked to through
+ * `import_document_links` (#196) where one exists. Newest upload first.
+ */
+export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+    const rows = db
+      .query(
+        `SELECT d.id              AS id,
+                d.document_no     AS documentNo,
+                d.source          AS source,
+                d.original_filename AS filename,
+                d.document_type   AS documentType,
+                d.supplier_name   AS supplierName,
+                d.invoice_no      AS invoiceNo,
+                d.invoice_date    AS invoiceDate,
+                d.amount_inc_vat  AS amountIncVat,
+                d.currency        AS currency,
+                d.status          AS status,
+                idl.voucher_ref   AS voucherRef,
+                je.id             AS journalEntryId,
+                je.entry_no       AS journalEntryNo
+           FROM documents d
+           LEFT JOIN import_document_links idl ON idl.document_id = d.id
+           LEFT JOIN journal_entries je        ON je.id = idl.journal_entry_id
+          ORDER BY d.upload_datetime DESC, d.id DESC`,
+      )
+      .all() as Array<{
+      id: number;
+      documentNo: string | null;
+      source: string;
+      filename: string | null;
+      documentType: string;
+      supplierName: string | null;
+      invoiceNo: string | null;
+      invoiceDate: string | null;
+      amountIncVat: number | null;
+      currency: string;
+      status: string;
+      voucherRef: string | null;
+      journalEntryId: number | null;
+      journalEntryNo: string | null;
+    }>;
+
+    const documents: DocumentRow[] = rows.map((r) => ({
+      id: r.id,
+      documentNo: r.documentNo,
+      source: r.source,
+      filename: r.filename,
+      documentType: r.documentType,
+      supplierName: r.supplierName,
+      invoiceNo: r.invoiceNo,
+      invoiceDate: r.invoiceDate,
+      amountIncVat:
+        r.amountIncVat === null || r.amountIncVat === undefined
+          ? null
+          : roundKroner(r.amountIncVat),
+      currency: r.currency,
+      status: r.status,
+      voucherRef: r.voucherRef,
+      journalEntryNo: r.journalEntryNo,
+      journalEntryId: r.journalEntryId,
+    }));
+    const linkedCount = documents.filter(
+      (d) => d.journalEntryNo !== null,
+    ).length;
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      documents,
+      linkedCount,
+      unlinkedCount: documents.length - linkedCount,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company archive (Arkiv — a single archived year) — cockpit-redesign it. 4
+// --------------------------------------------------------------------------
+
+/** One archived `SaldoBalance.csv` line — an account's closing balance. */
+export type ArchiveBalanceRow = {
+  accountNo: string;
+  name: string;
+  /** Closing balance, kroner, exactly as the Dinero export stored it. */
+  amount: number;
+};
+
+export type CompanyArchiveYear = ReturnType<typeof buildCompanyArchiveYear>;
+
+/**
+ * Arkiv — one archived fiscal year's read-only reference data (#197). Returns
+ * that year's full `SaldoBalance` (every account: number, name, closing
+ * amount) from `import_archive_balances`, plus a summary of its archived
+ * `Posteringer` (the line count and total). Nothing here touches the live
+ * ledger — the archive is append-only Dinero export rows, never posted.
+ *
+ * Throws `ApiError.notFound` when the slug is not registered, the ledger is
+ * missing, or the company has no archived data for `year`.
+ */
+export function buildCompanyArchiveYear(
+  workspaceRoot: string,
+  slug: string,
+  year: number,
+) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    const yearRow = db
+      .query(
+        `SELECT id, source_system AS sourceSystem,
+                posting_count AS postingCount,
+                balance_count AS balanceCount,
+                imported_at   AS importedAt
+           FROM import_archive_years
+          WHERE fiscal_year = ?
+          ORDER BY id DESC`,
+      )
+      .get(year) as
+      | {
+          id: number;
+          sourceSystem: string;
+          postingCount: number;
+          balanceCount: number;
+          importedAt: string;
+        }
+      | undefined;
+    if (!yearRow) {
+      throw ApiError.notFound(
+        `company '${slug}' has no archived data for ${year}`,
+      );
+    }
+
+    const balanceRows = db
+      .query(
+        `SELECT account_no AS accountNo, account_name AS name, amount AS amount
+           FROM import_archive_balances
+          WHERE archive_year_id = ?
+          ORDER BY account_no ASC`,
+      )
+      .all(yearRow.id) as Array<{
+      accountNo: string;
+      name: string | null;
+      amount: number;
+    }>;
+    const saldoBalance: ArchiveBalanceRow[] = balanceRows.map((r) => ({
+      accountNo: r.accountNo,
+      name: r.name ?? "",
+      amount: roundKroner(r.amount),
+    }));
+
+    // A summary of the archived postings — count + total amount. The signed
+    // archive `amount` sums to ~0 over a balanced year, so the total here is
+    // the gross posting volume (sum of absolute amounts) for an at-a-glance
+    // sense of activity.
+    const postingSummary = db
+      .query(
+        `SELECT COUNT(*) AS count,
+                COALESCE(SUM(ABS(amount)), 0) AS grossTotal
+           FROM import_archive_postings
+          WHERE archive_year_id = ?`,
+      )
+      .get(yearRow.id) as { count: number; grossTotal: number };
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      year: String(year),
+      sourceSystem: yearRow.sourceSystem,
+      importedAt: yearRow.importedAt,
+      saldoBalance,
+      postings: {
+        count: postingSummary.count,
+        grossTotal: roundKroner(postingSummary.grossTotal),
+      },
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company multi-year key figures (Flerårsoversigt) — cockpit-redesign it. 4
+// --------------------------------------------------------------------------
+
+/** Key figures for one fiscal year in the multi-year comparison. */
+export type MultiYearRow = {
+  /** The fiscal-year label, e.g. "2025". */
+  year: string;
+  /** Where the figures come from: the live ledger or the #197 archive. */
+  source: "live" | "archive";
+  /** Income / omsætning for the year, kroner. */
+  omsaetning: number;
+  /** Expenses / udgifter for the year, kroner. */
+  udgifter: number;
+  /** Result (omsætning − udgifter), kroner. */
+  resultat: number;
+};
+
+export type CompanyMultiYear = ReturnType<typeof buildCompanyMultiYear>;
+
+/**
+ * Flerårsoversigt — key figures (omsætning / udgifter / resultat) for every
+ * fiscal year available for a company, oldest→newest so a trend can be
+ * charted.
+ *
+ * The live year(s) are computed from the posted ledger via
+ * `core/financial-statements` — exactly as `/income-statement` does. The
+ * archived years (#197) are derived from `import_archive_balances`: each
+ * archived account's closing balance is classified income vs expense by
+ * joining its account number to the live `accounts` table's `type`. Income
+ * accounts are credit-normal, so the archive's signed balance is negated to
+ * read as a positive omsætning; expense accounts read positive as-is.
+ *
+ * Throws `ApiError.notFound` when the slug is not registered or has no ledger.
+ */
+export function buildCompanyMultiYear(workspaceRoot: string, slug: string) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const years = buildCompanyFiscalYears(workspaceRoot, slug).years;
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    // Account number → type, for classifying archived balances. The archive
+    // stores raw account numbers; the live chart of accounts is the only
+    // source of an account's income/expense classification.
+    const accountTypeRows = db
+      .query("SELECT account_no AS accountNo, type AS type FROM accounts")
+      .all() as Array<{ accountNo: string; type: string }>;
+    const accountType = new Map(
+      accountTypeRows.map((r) => [r.accountNo, r.type]),
+    );
+
+    const rows: MultiYearRow[] = [];
+    for (const fy of years) {
+      if (fy.source === "live") {
+        const yearNum = parseInt(fy.label, 10);
+        const pl = buildProfitAndLoss(
+          db,
+          `${yearNum}-01-01`,
+          `${yearNum}-12-31`,
+        );
+        rows.push({
+          year: fy.label,
+          source: "live",
+          omsaetning: roundKroner(pl.totalIncome),
+          udgifter: roundKroner(pl.totalExpense),
+          resultat: roundKroner(pl.result),
+        });
+        continue;
+      }
+
+      // Archived year — classify each SaldoBalance line by account type.
+      const archiveId = db
+        .query(
+          "SELECT id FROM import_archive_years WHERE fiscal_year = ? ORDER BY id DESC",
+        )
+        .get(parseInt(fy.label, 10)) as { id: number } | undefined;
+      let omsaetning = 0;
+      let udgifter = 0;
+      if (archiveId) {
+        const balRows = db
+          .query(
+            `SELECT account_no AS accountNo, amount AS amount
+               FROM import_archive_balances
+              WHERE archive_year_id = ?`,
+          )
+          .all(archiveId.id) as Array<{ accountNo: string; amount: number }>;
+        for (const b of balRows) {
+          const type = accountType.get(b.accountNo);
+          const amount = Number(b.amount ?? 0);
+          // Income accounts are credit-normal: a closing balance reads
+          // negative in the debit-positive archive sign, so negate it.
+          if (type === "income") omsaetning += -amount;
+          else if (type === "expense") udgifter += amount;
+        }
+      }
+      omsaetning = roundKroner(omsaetning);
+      udgifter = roundKroner(udgifter);
+      rows.push({
+        year: fy.label,
+        source: "archive",
+        omsaetning,
+        udgifter,
+        resultat: roundKroner(omsaetning - udgifter),
+      });
+    }
+
+    // Oldest→newest so the SPA can chart a trend left-to-right.
+    rows.sort((a, b) => a.year.localeCompare(b.year));
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      years: rows,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company issued invoices (Fakturaer, year-aware) — cockpit-redesign it. 5
+// --------------------------------------------------------------------------
+
+/** One issued invoice — the fields the Fakturaer view renders. */
+export type CompanyInvoiceRow = {
+  documentId: number;
+  invoiceNo: string;
+  invoiceDate: string | null;
+  customerName: string | null;
+  /** Gross amount inc. VAT, kroner. */
+  grossAmount: number;
+  /** Still-outstanding balance on the invoice, kroner. */
+  openBalance: number;
+  currency: string;
+  /** Settlement state, plus "overdue" for an open invoice past its due date. */
+  status: "open" | "paid" | "credited" | "refunded" | "overpaid" | "written_off" | "overdue";
+  effectiveDueDate: string | null;
+  overdueDays: number;
+};
+
+export type CompanyInvoices = ReturnType<typeof buildCompanyInvoices>;
+
+/**
+ * Fakturaer — the company's issued (sales) invoices for the selected calendar
+ * fiscal year. Each row carries its settlement status; an open invoice past
+ * its due date is surfaced as "overdue". Every figure comes from
+ * `core/invoice-list` (which derives status via `core/invoice-payments`) — no
+ * business logic is duplicated. A company with no issued invoices returns an
+ * empty list, which is a correct, expected state.
+ */
+export function buildCompanyInvoices(
+  workspaceRoot: string,
+  slug: string,
+  year: number | null,
+) {
+  const ctx = resolveStatementContext(workspaceRoot, slug, year);
+  try {
+    const companyBlock = statementCompanyBlock(ctx.company);
+    if (ctx.isArchivedOnly) {
+      return {
+        slug: ctx.entry.slug,
+        selectedYear: ctx.selectedLabel,
+        archived: true,
+        company: companyBlock,
+        fiscalYears: ctx.years,
+        periodStart: `${ctx.selectedLabel}-01-01`,
+        periodEnd: `${ctx.selectedLabel}-12-31`,
+        invoices: [] as CompanyInvoiceRow[],
+        totalGross: 0,
+        totalOpen: 0,
+        overdueCount: 0,
+      };
+    }
+
+    const yearNum = parseInt(ctx.selectedLabel, 10);
+    const yearStart = `${yearNum}-01-01`;
+    const yearEnd = `${yearNum}-12-31`;
+
+    const list = buildInvoiceList(ctx.db, { from: yearStart, to: yearEnd });
+    const invoices: CompanyInvoiceRow[] = list.rows.map((r) => ({
+      documentId: r.documentId,
+      invoiceNo: r.invoiceNumber,
+      invoiceDate: r.invoiceDate,
+      customerName: r.customerName,
+      grossAmount: roundKroner(r.grossAmount),
+      openBalance: roundKroner(r.openBalance),
+      currency: r.currency,
+      status: r.isOverdue ? "overdue" : r.status,
+      effectiveDueDate: r.effectiveDueDate,
+      overdueDays: r.overdueDays,
+    }));
+    // Newest invoice first — the most recent activity is what the user wants.
+    invoices.sort((a, b) => {
+      const dateA = a.invoiceDate ?? "";
+      const dateB = b.invoiceDate ?? "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return b.invoiceNo.localeCompare(a.invoiceNo);
+    });
+
+    const totalGross = roundKroner(
+      invoices.reduce((acc, r) => acc + r.grossAmount, 0),
+    );
+    const totalOpen = roundKroner(
+      invoices.reduce((acc, r) => acc + r.openBalance, 0),
+    );
+    const overdueCount = invoices.filter((r) => r.status === "overdue").length;
+
+    return {
+      slug: ctx.entry.slug,
+      selectedYear: ctx.selectedLabel,
+      archived: false,
+      company: companyBlock,
+      fiscalYears: ctx.years,
+      periodStart: yearStart,
+      periodEnd: yearEnd,
+      invoices,
+      totalGross,
+      totalOpen,
+      overdueCount,
+    };
+  } finally {
+    ctx.db.close();
+  }
+}
+
+// --------------------------------------------------------------------------
+// Per-company contacts (Kontakter — customers + vendors) — cockpit-redesign it. 5
+// --------------------------------------------------------------------------
+
+/** One customer in the master data. */
+export type ContactCustomerRow = {
+  id: number;
+  name: string;
+  vatOrCvr: string | null;
+  email: string | null;
+  paymentTermsDays: number;
+  defaultCurrency: string;
+};
+
+/** One vendor (supplier) in the master data. */
+export type ContactVendorRow = {
+  id: number;
+  name: string;
+  vatOrCvr: string | null;
+  defaultExpenseAccount: string | null;
+  defaultVatTreatment: string | null;
+};
+
+export type CompanyContacts = ReturnType<typeof buildCompanyContacts>;
+
+/**
+ * Kontakter — the company's customers and vendors (master data). This is
+ * reference data, not year-scoped; the company sub-nav still carries the
+ * selected `?year=` so it follows the user across views, so the fiscal years
+ * for the selector are fetched alongside. Both lists come straight from
+ * `core/master-data`. A company with no contacts returns empty lists — a
+ * correct, expected state.
+ */
+export function buildCompanyContacts(workspaceRoot: string, slug: string) {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const years = buildCompanyFiscalYears(workspaceRoot, slug).years;
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const company = getCompanySettings(db);
+
+    const customers: ContactCustomerRow[] = listCustomers(db).rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      vatOrCvr: c.vatOrCvr,
+      email: c.email,
+      paymentTermsDays: c.paymentTermsDays,
+      defaultCurrency: c.defaultCurrency,
+    }));
+    const vendors: ContactVendorRow[] = listVendors(db).rows.map((v) => ({
+      id: v.id,
+      name: v.name,
+      vatOrCvr: v.vatOrCvr,
+      defaultExpenseAccount: v.defaultExpenseAccount,
+      defaultVatTreatment: v.defaultVatTreatment,
+    }));
+
+    return {
+      slug: entry.slug,
+      company: statementCompanyBlock(company),
+      fiscalYears: years,
+      customers,
+      vendors,
     };
   } finally {
     db.close();

@@ -5,12 +5,25 @@
 // only ever deal with data or a single error type.
 
 import type {
+  ArchiveResponse,
+  BalanceResponse,
+  BankResponse,
   CompanyListResponse,
+  ContactsResponse,
   CreateCompanyInput,
   DashboardResponse,
+  DocumentsResponse,
+  FiscalYearsResponse,
   HealthResponse,
+  IncomeStatementResponse,
+  InvoicesResponse,
+  JournalResponse,
+  MultiYearResponse,
+  OverviewResponse,
   PortfolioResponse,
+  TrialBalanceResponse,
   UpdateCompanyInput,
+  VatResponse,
 } from "./types";
 
 /** A failed API call — carries the backend error code for precise handling. */
@@ -78,6 +91,89 @@ export const api = {
         asOf ? `?asOf=${encodeURIComponent(asOf)}` : ""
       }`,
     ).then((r) => r.dashboard),
+
+  fiscalYears: (slug: string) =>
+    request<FiscalYearsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/fiscal-years`,
+    ).then((r) => r.fiscalYears.years),
+
+  overview: (slug: string, year?: string) =>
+    request<OverviewResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/overview${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.overview),
+
+  incomeStatement: (slug: string, year?: string) =>
+    request<IncomeStatementResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/income-statement${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.incomeStatement),
+
+  balance: (slug: string, year?: string) =>
+    request<BalanceResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/balance${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.balance),
+
+  trialBalance: (slug: string, year?: string) =>
+    request<TrialBalanceResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/trial-balance${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.trialBalance),
+
+  journal: (slug: string, year?: string) =>
+    request<JournalResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/journal${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.journal),
+
+  bank: (slug: string, year?: string) =>
+    request<BankResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/bank${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.bank),
+
+  vat: (slug: string, year?: string) =>
+    request<VatResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/vat${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.vat),
+
+  documents: (slug: string) =>
+    request<DocumentsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/documents`,
+    ).then((r) => r.documents),
+
+  archive: (slug: string, year: string) =>
+    request<ArchiveResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/archive/${encodeURIComponent(
+        year,
+      )}`,
+    ).then((r) => r.archive),
+
+  multiYear: (slug: string) =>
+    request<MultiYearResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/multi-year`,
+    ).then((r) => r.multiYear),
+
+  invoices: (slug: string, year?: string) =>
+    request<InvoicesResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/invoices${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.invoices),
+
+  contacts: (slug: string) =>
+    request<ContactsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/contacts`,
+    ).then((r) => r.contacts),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

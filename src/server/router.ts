@@ -25,9 +25,24 @@ import type { ServerConfig } from "./config";
 import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
 import {
+  buildCompanyArchiveYear,
+  buildCompanyBalance,
+  buildCompanyBank,
+  buildCompanyContacts,
   buildCompanyDashboardData,
+  buildCompanyDocuments,
+  buildCompanyFiscalYears,
+  buildCompanyIncomeStatement,
+  buildCompanyInvoices,
+  buildCompanyJournal,
+  buildCompanyMultiYear,
+  buildCompanyOverview,
+  buildCompanyTrialBalance,
+  buildCompanyVat,
   buildPortfolioOverview,
   resolveAsOfDate,
+  resolvePathYear,
+  resolveYearParam,
 } from "./data";
 import { serveStatic } from "./static";
 
@@ -121,6 +136,116 @@ function handleCompanyDashboard(
   const asOf = resolveAsOfDate(url.searchParams.get("asOf"));
   const data = buildCompanyDashboardData(config.workspaceRoot, slug, asOf);
   return okResponse({ dashboard: data });
+}
+
+function handleCompanyFiscalYears(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyFiscalYears(config.workspaceRoot, slug);
+  return okResponse({ fiscalYears: data });
+}
+
+function handleCompanyOverview(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyOverview(config.workspaceRoot, slug, year);
+  return okResponse({ overview: data });
+}
+
+function handleCompanyIncomeStatement(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyIncomeStatement(config.workspaceRoot, slug, year);
+  return okResponse({ incomeStatement: data });
+}
+
+function handleCompanyBalance(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyBalance(config.workspaceRoot, slug, year);
+  return okResponse({ balance: data });
+}
+
+function handleCompanyTrialBalance(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyTrialBalance(config.workspaceRoot, slug, year);
+  return okResponse({ trialBalance: data });
+}
+
+function handleCompanyJournal(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyJournal(config.workspaceRoot, slug, year);
+  return okResponse({ journal: data });
+}
+
+function handleCompanyBank(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyBank(config.workspaceRoot, slug, year);
+  return okResponse({ bank: data });
+}
+
+function handleCompanyVat(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyVat(config.workspaceRoot, slug, year);
+  return okResponse({ vat: data });
+}
+
+function handleCompanyDocuments(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyDocuments(config.workspaceRoot, slug);
+  return okResponse({ documents: data });
+}
+
+function handleCompanyArchiveYear(
+  config: ServerConfig,
+  slug: string,
+  yearRaw: string,
+): Response {
+  const year = resolvePathYear(yearRaw);
+  const data = buildCompanyArchiveYear(config.workspaceRoot, slug, year);
+  return okResponse({ archive: data });
+}
+
+function handleCompanyMultiYear(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyMultiYear(config.workspaceRoot, slug);
+  return okResponse({ multiYear: data });
+}
+
+function handleCompanyInvoices(
+  config: ServerConfig,
+  slug: string,
+  url: URL,
+): Response {
+  const year = resolveYearParam(url.searchParams.get("year"));
+  const data = buildCompanyInvoices(config.workspaceRoot, slug, year);
+  return okResponse({ invoices: data });
+}
+
+function handleCompanyContacts(config: ServerConfig, slug: string): Response {
+  const data = buildCompanyContacts(config.workspaceRoot, slug);
+  return okResponse({ contacts: data });
 }
 
 async function handleCompanyCreate(
@@ -244,6 +369,101 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(dashboardMatch[1]!);
       return handleCompanyDashboard(config, slug, url);
+    }
+
+    const fiscalYearsMatch = /^\/api\/companies\/([^/]+)\/fiscal-years$/.exec(path);
+    if (fiscalYearsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(fiscalYearsMatch[1]!);
+      return handleCompanyFiscalYears(config, slug);
+    }
+
+    const overviewMatch = /^\/api\/companies\/([^/]+)\/overview$/.exec(path);
+    if (overviewMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(overviewMatch[1]!);
+      return handleCompanyOverview(config, slug, url);
+    }
+
+    const incomeStatementMatch =
+      /^\/api\/companies\/([^/]+)\/income-statement$/.exec(path);
+    if (incomeStatementMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(incomeStatementMatch[1]!);
+      return handleCompanyIncomeStatement(config, slug, url);
+    }
+
+    const balanceMatch = /^\/api\/companies\/([^/]+)\/balance$/.exec(path);
+    if (balanceMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(balanceMatch[1]!);
+      return handleCompanyBalance(config, slug, url);
+    }
+
+    const trialBalanceMatch =
+      /^\/api\/companies\/([^/]+)\/trial-balance$/.exec(path);
+    if (trialBalanceMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(trialBalanceMatch[1]!);
+      return handleCompanyTrialBalance(config, slug, url);
+    }
+
+    const journalMatch = /^\/api\/companies\/([^/]+)\/journal$/.exec(path);
+    if (journalMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(journalMatch[1]!);
+      return handleCompanyJournal(config, slug, url);
+    }
+
+    const bankMatch = /^\/api\/companies\/([^/]+)\/bank$/.exec(path);
+    if (bankMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(bankMatch[1]!);
+      return handleCompanyBank(config, slug, url);
+    }
+
+    const vatMatch = /^\/api\/companies\/([^/]+)\/vat$/.exec(path);
+    if (vatMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(vatMatch[1]!);
+      return handleCompanyVat(config, slug, url);
+    }
+
+    const documentsMatch = /^\/api\/companies\/([^/]+)\/documents$/.exec(path);
+    if (documentsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(documentsMatch[1]!);
+      return handleCompanyDocuments(config, slug);
+    }
+
+    const archiveMatch =
+      /^\/api\/companies\/([^/]+)\/archive\/([^/]+)$/.exec(path);
+    if (archiveMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(archiveMatch[1]!);
+      const year = decodeURIComponent(archiveMatch[2]!);
+      return handleCompanyArchiveYear(config, slug, year);
+    }
+
+    const multiYearMatch = /^\/api\/companies\/([^/]+)\/multi-year$/.exec(path);
+    if (multiYearMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(multiYearMatch[1]!);
+      return handleCompanyMultiYear(config, slug);
+    }
+
+    const invoicesMatch = /^\/api\/companies\/([^/]+)\/invoices$/.exec(path);
+    if (invoicesMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(invoicesMatch[1]!);
+      return handleCompanyInvoices(config, slug, url);
+    }
+
+    const contactsMatch = /^\/api\/companies\/([^/]+)\/contacts$/.exec(path);
+    if (contactsMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(contactsMatch[1]!);
+      return handleCompanyContacts(config, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);
