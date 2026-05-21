@@ -62,3 +62,28 @@ Praktisk for en agent:
 
 Resultatet skrives altid til stdout (JSON med `--format json`/`--json`).
 Parse-/brugsfejl (`exit 2`) skrives til stderr.
+
+## 3. Output-felter ved succes
+
+Den enkelte kommandos `--help` dækker exit-koder og — ved fejl — `errors[]`,
+men *ikke* hvilke felter `--json`-succes-outputtet indeholder. Den kontrakt
+står ikke i `--help`.
+
+Reglen er: **et `--json`-succes-output fra CLI'en spejler `data`-shapen for
+den tilsvarende MCP-tool.** Hver CLI-kommando svarer (typisk 1:1) til en
+MCP-tool — `journal post` ⇄ `journal_post`, `invoice issue` ⇄ `invoice_issue`,
+`audit verify` ⇄ `audit_verify` osv. — og de to overflader returnerer den
+samme strukturerede `{ ok, errors, ... }`-form med de samme felter under
+resultatet.
+
+Den autoritative, per-tool feltliste står derfor i
+[`docs/mcp-tool-surface.md`](mcp-tool-surface.md) under afsnittet
+"`data`-felter pr. tool" (samt i kildens `*Result`-typer i `src/core/*.ts`).
+Slå CLI-kommandoens MCP-pendant op dér for at se de præcise felter — fx giver
+`audit verify` / `audit_verify` `{ entries }` med integritets-verdikten i
+`ok`/`errors[]`, og `journal post` / `journal_post` giver
+`{ entryId, entryNo, entryHash }`.
+
+Bemærk de få CLI-only-kommandoer uden MCP-pendant (fx `invoice create`,
+`invoice export-public`); de er listet under "CLI/MCP-mapping" i samme
+dokument.

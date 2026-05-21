@@ -86,8 +86,11 @@ export function registerPeriodTools(server: McpServer): void {
           .describe(
             "The status to mark the period with (default 'closed'). " +
               "'closed' = the period is locked: no further bookkeeping writes are accepted into it. " +
+              "A 'closed' period can still be reopened via the CLI-only `rentemester period reopen`. " +
               "'reported' = the period is closed AND has been reported to the authority (e.g. the VAT " +
-              "return filed); a reported timestamp is recorded in addition to the lock.",
+              "return filed); a reported timestamp is recorded in addition to the lock. " +
+              "WARNING: selecting 'reported' is IRREVERSIBLE — a reported period can NEVER be " +
+              "reopened, not even via `period reopen`. Only use 'reported' once the filing is final.",
           ),
         reference: z
           .string()

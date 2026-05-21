@@ -21,12 +21,21 @@ import {
   type PollImapOptions,
 } from "../../core/imap-intake";
 import type { MailIntakeMetadataInput } from "../../core/mail-intake";
+import { documentMetadataFields } from "./documents";
 import { envelopeShape, errorEnvelope, successEnvelope } from "../envelope";
 import { withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
+/**
+ * The bilagsmail intake metadata schema (#274).
+ *
+ * It is the SAME named `DocumentMetadata` fields as `documents_ingest.metadata`
+ * but WITHOUT `source` — the intake pipeline sets `source` itself. Built from
+ * the shared `documentMetadataFields` so the two schemas cannot drift apart.
+ * `.passthrough()` keeps any forward-compatible extra keys accepted.
+ */
 const metadataSchema = z
-  .object({})
-  .catchall(z.unknown())
+  .object(documentMetadataFields)
+  .passthrough()
   .describe("DocumentMetadata-payload (uden 'source') der anvendes på vedhæftningerne — se examples/bilagsmail.metadata.json");
 
 export function registerImapIntakeTools(server: McpServer): void {

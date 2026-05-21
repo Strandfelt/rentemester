@@ -524,6 +524,172 @@ describe("#243 — previously-undescribed MCP tool fields now carry describe() t
   });
 });
 
+describe("#274 — intake tools expose the full DocumentMetadata schema", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  function metadataSchemaOf(name: string) {
+    const tool = tools.find((t) => t.name === name);
+    expect(tool, `tool ${name} not found`).toBeDefined();
+    return tool.inputSchema?.properties?.metadata as any;
+  }
+
+  // The named DocumentMetadata properties an external agent must be able to see.
+  const EXPECTED_METADATA_PROPS = [
+    "documentType",
+    "issueDate",
+    "invoiceNo",
+    "deliveryDescription",
+    "amountIncVat",
+    "currency",
+    "sender",
+    "recipient",
+    "vatAmount",
+    "paymentDetails",
+    "exemptionCode",
+  ];
+
+  for (const toolName of ["imap_intake_poll", "mail_intake_ingest"]) {
+    test(`${toolName}.metadata is the unfolded DocumentMetadata, not an opaque object`, () => {
+      const metadata = metadataSchemaOf(toolName);
+      expect(metadata?.type, `${toolName}.metadata.type`).toBe("object");
+      const props = metadata?.properties ?? {};
+      // The old bare `type: object` catchall has zero named properties.
+      expect(
+        Object.keys(props).length,
+        `${toolName}.metadata named properties`,
+      ).toBeGreaterThanOrEqual(EXPECTED_METADATA_PROPS.length);
+      for (const prop of EXPECTED_METADATA_PROPS) {
+        expect(props[prop], `${toolName}.metadata.${prop}`).toBeDefined();
+        expect(
+          typeof props[prop]?.description,
+          `${toolName}.metadata.${prop} description`,
+        ).toBe("string");
+      }
+    });
+  }
+
+  test("the intake metadata schema matches documents_ingest.metadata", () => {
+    // Reused definition: imap_intake_poll / mail_intake_ingest must carry the
+    // SAME named properties as documents_ingest so they cannot drift apart.
+    const ingestProps = Object.keys(
+      metadataSchemaOf("documents_ingest")?.properties ?? {},
+    ).sort();
+    for (const toolName of ["imap_intake_poll", "mail_intake_ingest"]) {
+      const props = Object.keys(metadataSchemaOf(toolName)?.properties ?? {}).sort();
+      // The intake variants omit `source` (it is set by the pipeline), so they
+      // must equal documents_ingest's properties minus `source`.
+      const expected = ingestProps.filter((p) => p !== "source");
+      expect(props, `${toolName}.metadata properties`).toEqual(expected);
+    }
+  });
+});
+
+describe("#275 — system_backup_destination_add documents kind + attestations", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  function schemaOf(name: string) {
+    const tool = tools.find((t) => t.name === name);
+    expect(tool, `tool ${name} not found`).toBeDefined();
+    return tool.inputSchema as any;
+  }
+
+  test("kind is an enum exposing the five valid destination kinds", () => {
+    const kind = schemaOf("system_backup_destination_add").properties?.kind;
+    expect(Array.isArray(kind?.enum), "kind must be an enum").toBe(true);
+    for (const value of ["local-folder", "dropbox", "google-drive", "ssh", "other"]) {
+      expect(kind?.enum, `kind enum missing ${value}`).toContain(value);
+    }
+    expect(typeof kind?.description).toBe("string");
+  });
+
+  test("every attestation field carries a description", () => {
+    const props = schemaOf("system_backup_destination_add").properties ?? {};
+    for (const field of [
+      "inEeaOrEu",
+      "nonRelatedParty",
+      "itSecurityMeetsStandards",
+      "regionCountry",
+      "attestedBy",
+    ]) {
+      expect(typeof props[field]?.description, `${field} description`).toBe("string");
+      expect((props[field]?.description ?? "").length, `${field} description length`).toBeGreaterThan(
+        10,
+      );
+    }
+  });
+
+  test("inEeaOrEu and attestedBy descriptions carry the human-attestation warning", () => {
+    const props = schemaOf("system_backup_destination_add").properties ?? {};
+    const inEea: string = (props.inEeaOrEu?.description ?? "").toLowerCase();
+    expect(inEea).toContain("attest");
+    // The legal anchor must be present.
+    expect(inEea).toContain("205/2024");
+    const attestedBy: string = (props.attestedBy?.description ?? "").toLowerCase();
+    // It must be clear a human attests — Rentemester cannot know it itself.
+    expect(attestedBy).toContain("human");
+  });
+});
+
+describe("#276 — period_close warns that reported is irreversible", () => {
+  test("period_close.status states reported cannot be reopened", async () => {
+    const response = await client.send("tools/list");
+    const tool = (response.result?.tools ?? []).find(
+      (t: any) => t.name === "period_close",
+    );
+    expect(tool, "period_close not found").toBeDefined();
+    const desc: string = (
+      tool.inputSchema?.properties?.status?.description ?? ""
+    ).toLowerCase();
+    // The irreversibility of `reported` must be spelled out for the agent.
+    expect(desc).toContain("irreversible");
+    expect(desc).toContain("reopen");
+  });
+});
+
+describe("#277 — older tools' flat scalar fields carry field descriptions", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  function schemaOf(name: string) {
+    const tool = tools.find((t) => t.name === name);
+    expect(tool, `tool ${name} not found`).toBeDefined();
+    return tool.inputSchema as any;
+  }
+
+  test("system_export_authority — all six fields carry descriptions", () => {
+    const props = schemaOf("system_export_authority").properties ?? {};
+    for (const field of ["company", "from", "to", "out", "requestedAt", "requester"]) {
+      expect(typeof props[field]?.description, `${field} description`).toBe("string");
+      expect((props[field]?.description ?? "").length, `${field} description`).toBeGreaterThan(
+        5,
+      );
+    }
+    // `out` is an output path — the description must say so.
+    expect((props.out?.description ?? "").toLowerCase()).toContain("output");
+  });
+
+  test("system_restore_backup.confirmText states the exact RESTORE formula", () => {
+    const props = schemaOf("system_restore_backup").properties ?? {};
+    const desc: string = props.confirmText?.description ?? "";
+    expect(typeof desc).toBe("string");
+    expect(desc).toContain("RESTORE <targetCompany>");
+  });
+});
+
 describe("#200 — typed schemas reject structurally invalid payloads", () => {
   test("invoice_issue rejects a payload missing the required invoiceType", async () => {
     // With the typed schema the SDK rejects this before the handler. The point

@@ -19,12 +19,17 @@ const documentPartySchema = z.object({
   vatOrCvr: z.string().optional().describe("Party VAT or CVR number, e.g. 'DK12345678'."),
 });
 
-const documentMetadataSchema = z
-  .object({
-    source: z
-      .string()
-      .describe("How the document arrived, e.g. 'email', 'photo-upload', 'mobile-scan'. Required."),
-    documentType: z
+/**
+ * The named `DocumentMetadata` fields shared by `documents_ingest` and the
+ * bilagsmail intake tools (`imap_intake_poll`, `mail_intake_ingest`).
+ *
+ * Exported as a bare shape (not a `z.object`) so the intake tools — which do
+ * NOT take `source` (the pipeline sets it) — can build their own object from
+ * the SAME field definitions, guaranteeing the two schemas cannot drift
+ * apart (#274).
+ */
+export const documentMetadataFields = {
+  documentType: z
       .enum(["purchase_sale", "cash_register_receipt"])
       .optional()
       .describe("Document type (default 'purchase_sale')."),
@@ -57,6 +62,18 @@ const documentMetadataSchema = z
       .nullable()
       .optional()
       .describe("Set to 'FOREIGN_PHYSICAL_ONLY' for a foreign physical-only receipt; otherwise omit."),
+} as const;
+
+/**
+ * The `documents_ingest` metadata schema: the shared `DocumentMetadata`
+ * fields PLUS the required `source` field (how the document arrived).
+ */
+const documentMetadataSchema = z
+  .object({
+    source: z
+      .string()
+      .describe("How the document arrived, e.g. 'email', 'photo-upload', 'mobile-scan'. Required."),
+    ...documentMetadataFields,
   })
   .describe(
     "Document (bilag) metadata. amountIncVat and vatAmount are in kroner " +

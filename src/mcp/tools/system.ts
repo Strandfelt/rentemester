@@ -193,17 +193,63 @@ export function registerSystemTools(server: McpServer): void {
         "på en server i EU/EØS, jf. BEK 205/2024 § 4, stk. 2. write.",
       inputSchema: {
         company: z.string().min(1),
-        label: z.string().min(1),
-        kind: z.string().min(1),
-        location: z.string().min(1),
-        inEeaOrEu: z.boolean(),
-        attestedBy: z.string().min(1),
-        regionCountry: z.string().optional(),
-        regionNote: z.string().optional(),
-        nonRelatedParty: z.boolean().optional(),
-        itSecurityMeetsStandards: z.boolean().optional(),
-        itSecurityNote: z.string().optional(),
-        at: z.string().optional(),
+        label: z.string().min(1).describe("Human-readable name for this destination, e.g. 'Revisor Dropbox'."),
+        kind: z
+          .enum(["local-folder", "dropbox", "google-drive", "ssh", "other"])
+          .describe(
+            "Destination kind: 'local-folder' = a folder on this machine; " +
+              "'dropbox' / 'google-drive' = a synced desktop folder of that cloud service; " +
+              "'ssh' = a remote host reached over SSH; 'other' = anything else.",
+          ),
+        location: z
+          .string()
+          .min(1)
+          .describe("Path or URI of the destination, e.g. a local folder path or an ssh:// URI."),
+        inEeaOrEu: z
+          .boolean()
+          .describe(
+            "ATTESTATION (BEK 205/2024 § 4, stk. 2): true ⇒ you attest, as a human, " +
+              "that this destination's server is located inside the EU/EEA. Rentemester " +
+              "cannot determine this itself — you are legally attesting it.",
+          ),
+        attestedBy: z
+          .string()
+          .min(1)
+          .describe(
+            "Identity of the human making these attestations (e.g. an email). " +
+              "A human — not Rentemester — must attest where this backup is stored.",
+          ),
+        regionCountry: z
+          .string()
+          .optional()
+          .describe("Optional ISO country code where the destination's server is located, e.g. 'DK'."),
+        regionNote: z
+          .string()
+          .optional()
+          .describe("Optional free-text note backing the EU/EEA region attestation."),
+        nonRelatedParty: z
+          .boolean()
+          .optional()
+          .describe(
+            "ATTESTATION: true (default) ⇒ you attest the destination is held by a " +
+              "non-related third party (not the company itself or a related party). " +
+              "Set false if the destination is a related party.",
+          ),
+        itSecurityMeetsStandards: z
+          .boolean()
+          .optional()
+          .describe(
+            "ATTESTATION: true ⇒ you attest, as a human, that the destination meets " +
+              "recognised IT-security standards. Rentemester cannot verify this itself.",
+          ),
+        itSecurityNote: z
+          .string()
+          .optional()
+          .describe("Optional free-text note backing the IT-security attestation."),
+        at: z
+          .string()
+          .optional()
+          .describe("Optional ISO-8601 timestamp for when the destination was added (default: now)."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -212,7 +258,7 @@ export function registerSystemTools(server: McpServer): void {
     withCompanyDbConfirmed<{
       company: string;
       label: string;
-      kind: string;
+      kind: "local-folder" | "dropbox" | "google-drive" | "ssh" | "other";
       location: string;
       inEeaOrEu: boolean;
       attestedBy: string;
@@ -388,12 +434,33 @@ export function registerSystemTools(server: McpServer): void {
       title: "Export authority package",
       description: "Eksporterer materiale til myndighedsudlevering. write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
-        from: z.string().min(1),
-        to: z.string().min(1),
-        out: z.string().min(1),
-        requestedAt: z.string().optional(),
-        requester: z.string().optional(),
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+        from: z
+          .string()
+          .min(1)
+          .describe("Start of the export period (inclusive), in YYYY-MM-DD format."),
+        to: z
+          .string()
+          .min(1)
+          .describe("End of the export period (inclusive), in YYYY-MM-DD format. Must not be before `from`."),
+        out: z
+          .string()
+          .min(1)
+          .describe(
+            "Output directory path ON THE MCP SERVER'S FILESYSTEM where the authority " +
+              "export package is written. Created if it does not exist.",
+          ),
+        requestedAt: z
+          .string()
+          .optional()
+          .describe("Optional ISO-8601 timestamp for when the authority requested the material (default: now)."),
+        requester: z
+          .string()
+          .optional()
+          .describe("Optional name of the requesting authority/person, recorded in the export manifest."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -428,11 +495,36 @@ export function registerSystemTools(server: McpServer): void {
         "confirmText='RESTORE <targetCompany>'. Sletter ikke nogen filer på source, " +
         "men kan overskrive filer i targetCompany.",
       inputSchema: {
-        backupDir: z.string().min(1),
-        targetCompany: z.string().min(1),
-        verifyKey: z.string().optional(),
+        backupDir: z
+          .string()
+          .min(1)
+          .describe(
+            "Path to the backup directory (or .tar archive) to restore from. " +
+              "ON THE MCP SERVER'S FILESYSTEM. Never modified by the restore.",
+          ),
+        targetCompany: z
+          .string()
+          .min(1)
+          .describe(
+            "Path to the company directory the backup is restored INTO. " +
+              "Existing files here may be overwritten.",
+          ),
+        verifyKey: z
+          .string()
+          .optional()
+          .describe(
+            "Optional path to an ed25519 public key used to verify the backup " +
+              "signature. Typically required when backupDir is a .tar archive.",
+          ),
         confirm: confirmField,
-        confirmText: z.string().min(1),
+        confirmText: z
+          .string()
+          .min(1)
+          .describe(
+            "Destructive-confirmation text. Must be EXACTLY 'RESTORE <targetCompany>' " +
+              "— i.e. the literal word RESTORE, a space, then the targetCompany value " +
+              "passed above, verbatim. Any mismatch rejects the call.",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
