@@ -232,11 +232,17 @@ export type OverviewVat = {
   periodStart: string;
   periodEnd: string;
   periodLabel: string;
-  /** 25% of the standard-rated sales base for the period, kroner. */
+  /**
+   * Genuine output VAT on sales for the period, kroner — gross, before any
+   * bad-debt relief. The bad-debt adjustment is surfaced separately so a
+   * write-off never drags the salgsmoms headline negative (#271).
+   */
   outputVat: number;
+  /** Bad-debt (debitortab) output-VAT adjustment, ≤ 0; 0 when none, kroner. */
+  outputVatAdjustment: number;
   /** 25% of the standard-rated purchase base for the period, kroner. */
   inputVat: number;
-  /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+  /** outputVat + outputVatAdjustment − inputVat; positive is payable, kroner. */
   payable: number;
   /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
   deadline: string;
@@ -553,11 +559,18 @@ export type CompanyVat = {
   periodEnd: string;
   /** The quarterly VAT period label, e.g. "Q2 2026". */
   periodLabel: string;
-  /** Output VAT (salgsmoms) booked for the period, kroner. */
+  /**
+   * Genuine output VAT on sales (salgsmoms) for the period, kroner — gross,
+   * before any bad-debt relief. A bad-debt write-off books a debit on the
+   * output-VAT account; surfacing the relief separately keeps this headline
+   * from going negative (#271).
+   */
   outputVat: number;
+  /** Bad-debt (debitortab) output-VAT adjustment, ≤ 0; 0 when none, kroner. */
+  outputVatAdjustment: number;
   /** Input VAT (købsmoms) booked for the period, kroner. */
   inputVat: number;
-  /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+  /** outputVat + outputVatAdjustment − inputVat; positive is payable, kroner. */
   payable: number;
   /** The statutory VAT filing/payment deadline, YYYY-MM-DD. */
   deadline: string;

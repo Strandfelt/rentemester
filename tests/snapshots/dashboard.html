@@ -271,17 +271,19 @@ table.dash-table td.center, table.dash-table th.center { text-align: center; }
 <section class="section"><h2>Åbne exceptions</h2><div class="section">
   <div class="status-row">
     <div>
-      <div class="label">vat.missing-evidence</div>
-      <div class="detail">Missing evidence for VAT deduction</div>
+      <div class="label">Indkommen mail uden vedhæftet bilag</div>
+      <div class="detail">Mail fra leverandoer@eksempel.dk modtaget 2026-05-14 indeholdt ingen vedhæftede filer, så der kunne ikke indlæses et bilag.</div>
+      <div class="detail"><strong>Sådan løser du den:</strong> Bed afsenderen sende bilaget igen som vedhæftet PDF, eller indlæs bilaget manuelt.</div>
     </div>
-    <div><span class="pill danger">high</span></div>
+    <div><span class="pill danger">Høj</span></div>
   </div>
   <div class="status-row">
     <div>
-      <div class="label">bank.unmatched</div>
-      <div class="detail">Bank tx without matching invoice</div>
+      <div class="label">Banktransaktion mangler afstemning</div>
+      <div class="detail">Banktransaktionen &quot;MobilePay overførsel&quot; den 2026-05-12 på 1.205,00 kr. er endnu ikke bogført. Der er ikke fundet et bilag (kvittering eller faktura), der passer til beløbet.</div>
+      <div class="detail"><strong>Sådan løser du den:</strong> Find kvitteringen eller fakturaen for denne betaling og læg den i bogføringen. Uden et bilag kan udgiften ikke bogføres og momsen ikke fratrækkes.</div>
     </div>
-    <div><span class="pill warning">medium</span></div>
+    <div><span class="pill warning">Mellem</span></div>
   </div>
 </div>
 </section>

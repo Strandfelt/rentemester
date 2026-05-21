@@ -652,32 +652,85 @@ export function vatQuarterDeadline(year: number, quarter: 1 | 2 | 3 | 4): string
   return `${deadlineYear}-${String(deadlineMonth).padStart(2, "0")}-01`;
 }
 
+/** The 1–4 calendar quarter that the YYYY-MM-DD date `iso` falls in. */
+function quarterOfDate(iso: string): 1 | 2 | 3 | 4 {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const month = m ? parseInt(m[2]!, 10) : 1;
+  return (Math.floor((Math.min(Math.max(month, 1), 12) - 1) / 3) + 1) as
+    | 1
+    | 2
+    | 3
+    | 4;
+}
+
+/** Whether a VAT position carries any booked activity at all. */
+function vatQuarterHasActivity(pos: VatPosition): boolean {
+  return (
+    pos.payable !== 0 ||
+    pos.outputVat !== 0 ||
+    pos.outputVatAdjustment !== 0 ||
+    pos.inputVat !== 0
+  );
+}
+
 /**
- * Picks the VAT quarter the cockpit surfaces by default for a calendar year:
- * the *latest* quarter that carries a non-zero VAT position, so an owner sees
- * the period that still needs filing. When no quarter has any activity, Q1 is
- * used as a stable, empty default. Returns the quarter number plus its VAT
- * position so callers do not recompute it.
+ * Picks the VAT quarter the cockpit surfaces by default for a calendar year.
+ *
+ * The owner must see the quarter that is *currently due* — the one whose
+ * momsangivelse they have to file now — not whichever quarter happens to be
+ * latest. So when the requested `year` is the current calendar year, the
+ * quarter containing today's date is preferred whenever it carries activity;
+ * this is the period the static dashboard and the CLI `vat momsangivelse`
+ * (which keys off the `vat_quarter` accounting period) surface too, so the
+ * three never disagree.
+ *
+ * A bad-debt write-off booked in a *later, otherwise empty* quarter must not
+ * pull the selection forward into a future, near-empty period (#272). Only if
+ * no quarter at or before the current one carries activity does the selection
+ * fall back to the latest quarter that does — and to Q1 when the whole year is
+ * empty, as a stable default. For a past year the latest active quarter is
+ * still the right choice (nothing is "currently" due in a closed year).
+ *
+ * Returns the quarter number plus its VAT position so callers do not recompute.
  */
 function selectVatQuarter(
   db: Database,
   year: number,
 ): { quarter: 1 | 2 | 3 | 4; position: VatPosition } {
-  let selected: 1 | 2 | 3 | 4 = 1;
-  let selectedPos = vatPositionForPeriod(
-    db,
-    quarterPeriod(year, 1).start,
-    quarterPeriod(year, 1).end,
-  );
-  for (const q of [2, 3, 4] as const) {
-    const period = quarterPeriod(year, q);
-    const pos = vatPositionForPeriod(db, period.start, period.end);
-    if (pos.payable !== 0 || pos.outputVat !== 0 || pos.inputVat !== 0) {
-      selected = q;
-      selectedPos = pos;
+  const positions: Record<1 | 2 | 3 | 4, VatPosition> = {
+    1: vatPositionForPeriod(db, quarterPeriod(year, 1).start, quarterPeriod(year, 1).end),
+    2: vatPositionForPeriod(db, quarterPeriod(year, 2).start, quarterPeriod(year, 2).end),
+    3: vatPositionForPeriod(db, quarterPeriod(year, 3).start, quarterPeriod(year, 3).end),
+    4: vatPositionForPeriod(db, quarterPeriod(year, 4).start, quarterPeriod(year, 4).end),
+  };
+
+  const today = todayIsoDate();
+  const currentYear = parseInt(today.slice(0, 4), 10);
+
+  // The latest quarter at or before `cap` that carries activity, or null.
+  const latestActiveUpTo = (cap: 1 | 2 | 3 | 4): 1 | 2 | 3 | 4 | null => {
+    for (const q of [4, 3, 2, 1] as const) {
+      if (q <= cap && vatQuarterHasActivity(positions[q])) return q;
     }
+    return null;
+  };
+
+  let selected: 1 | 2 | 3 | 4;
+  if (year === currentYear) {
+    // The current year: surface the quarter that is due now. Prefer the
+    // quarter today falls in; if it (and every earlier quarter) is empty,
+    // fall back to the latest active quarter so a fully-loaded later quarter
+    // is still shown rather than an empty current one.
+    const currentQuarter = quarterOfDate(today);
+    selected =
+      latestActiveUpTo(currentQuarter) ?? latestActiveUpTo(4) ?? currentQuarter;
+  } else {
+    // A past (or future) year: the latest quarter with activity, or Q1 when
+    // the whole year is empty.
+    selected = latestActiveUpTo(4) ?? 1;
   }
-  return { quarter: selected, position: selectedPos };
+
+  return { quarter: selected, position: positions[selected] };
 }
 
 /** Rounds a kroner amount to whole øre, killing float drift. */
@@ -815,11 +868,26 @@ function archiveIncomeStatement(
 export type VatPosition = {
   periodStart: string;
   periodEnd: string;
-  /** Output VAT (salgsmoms) booked for the period, kroner. */
+  /**
+   * Output VAT (salgsmoms) for the period — the genuine VAT on sales, kroner.
+   *
+   * This is the *gross* figure: it does NOT have the bad-debt (debitortab)
+   * output-VAT relief netted into it. A bad-debt write-off books a debit on
+   * the output-VAT account, so a chart-of-accounts-level sum would let a large
+   * write-off turn salgsmoms negative — a nonsensical headline for an owner
+   * (#271). The relief is surfaced separately as `outputVatAdjustment`.
+   */
   outputVat: number;
+  /**
+   * The bad-debt (debitortab) output-VAT adjustment for the period, kroner —
+   * a value ≤ 0, the negative of the VAT relief claimed on written-off
+   * receivables. Zero when no write-off falls in the period. Kept on its own
+   * clearly-labelled line so it never silently drags salgsmoms negative.
+   */
+  outputVatAdjustment: number;
   /** Input VAT (købsmoms) booked for the period, kroner. */
   inputVat: number;
-  /** outputVat − inputVat; positive is payable to SKAT, kroner. */
+  /** outputVat + outputVatAdjustment − inputVat; positive is payable, kroner. */
   payable: number;
 };
 
@@ -871,7 +939,7 @@ function vatPositionForPeriod(
     credit: number;
   }>;
 
-  let outputVat = 0;
+  let bookedOutputVat = 0;
   let inputVat = 0;
   for (const row of rows) {
     const debit = Number(row.debit ?? 0);
@@ -881,18 +949,34 @@ function vatPositionForPeriod(
     if (isInput) {
       inputVat += debit - credit;
     } else {
-      outputVat += credit - debit;
+      bookedOutputVat += credit - debit;
     }
   }
 
-  outputVat = roundKroner(outputVat);
+  bookedOutputVat = roundKroner(bookedOutputVat);
   inputVat = roundKroner(inputVat);
+
+  // A bad-debt write-off (debitortab) books a debit on the output-VAT account
+  // to claim back the VAT on a receivable that will never be paid. The booked
+  // output-VAT total above therefore already has that relief netted in — a
+  // large write-off can drive it negative. Split the relief back out so the
+  // headline salgsmoms shows the genuine VAT on sales and the adjustment sits
+  // on its own clearly-labelled line (#271). `buildVatReport` keys the relief
+  // off the `DK_BAD_DEBT_25` vat-code base, the same source the CLI uses.
+  const report = buildVatReport(db, periodStart, periodEnd);
+  const outputVatAdjustment = roundKroner(
+    -percentOfDkk(report.badDebtReliefBase25, 25),
+  );
+  // Genuine salgsmoms = booked output VAT with the relief added back in.
+  const outputVat = roundKroner(bookedOutputVat - outputVatAdjustment);
+
   return {
     periodStart,
     periodEnd,
     outputVat,
+    outputVatAdjustment,
     inputVat,
-    payable: roundKroner(outputVat - inputVat),
+    payable: roundKroner(outputVat + outputVatAdjustment - inputVat),
   };
 }
 
@@ -1084,7 +1168,10 @@ export type OverviewVat = {
   periodStart: string;
   periodEnd: string;
   periodLabel: string;
+  /** Genuine output VAT on sales — gross, before any bad-debt relief. */
   outputVat: number;
+  /** Bad-debt (debitortab) output-VAT adjustment, ≤ 0; 0 when none. */
+  outputVatAdjustment: number;
   inputVat: number;
   payable: number;
   deadline: string;
@@ -1388,6 +1475,7 @@ export function buildCompanyOverview(
       periodEnd: vat.periodEnd,
       periodLabel: `Q${vatQuarter} ${yearNum}`,
       outputVat: vat.outputVat,
+      outputVatAdjustment: vat.outputVatAdjustment,
       inputVat: vat.inputVat,
       payable: vat.payable,
       deadline: vatDeadline,
@@ -2490,6 +2578,7 @@ export function buildCompanyVat(
         periodEnd: archPeriod.end,
         periodLabel: `Q1 ${ctx.selectedLabel}`,
         outputVat: 0,
+        outputVatAdjustment: 0,
         inputVat: 0,
         payable: 0,
         deadline: vatQuarterDeadline(archYear, 1),
@@ -2527,6 +2616,7 @@ export function buildCompanyVat(
       periodEnd: vat.periodEnd,
       periodLabel: `Q${quarter} ${yearNum}`,
       outputVat: vat.outputVat,
+      outputVatAdjustment: vat.outputVatAdjustment,
       inputVat: vat.inputVat,
       payable: vat.payable,
       deadline,
