@@ -7,16 +7,36 @@
 // tokens (DESIGN.md palette) so the chart stays consistent with the SPA.
 
 import {
+  BarController,
+  BarElement,
+  CategoryScale,
   Chart as ChartJS,
+  Legend,
+  LinearScale,
+  LineController,
   LineElement,
   PointElement,
+  Tooltip,
   type ChartData,
   type ChartOptions,
 } from "chart.js";
 import { Chart } from "react-chartjs-2";
 import type { CashflowMonth } from "../lib/types";
 
-ChartJS.register(LineElement, PointElement);
+// The generic <Chart> component does not auto-register controllers, so this
+// mixed bar+line chart registers everything it needs itself — self-contained,
+// not relying on another component's registration side effects.
+ChartJS.register(
+  BarController,
+  LineController,
+  BarElement,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+);
 
 // DESIGN.md palette — kept in sync with app/src/styles.css tokens.
 const INK_MUTED = "#4c4740";

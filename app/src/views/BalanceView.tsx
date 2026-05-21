@@ -11,7 +11,11 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { BalanceLine, CompanyBalance } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
-import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import {
+  CompanyNav,
+  accountPostingsTo,
+  useCompanyYear,
+} from "../components/CompanyNav";
 
 export function BalanceView() {
   const { slug = "" } = useParams();
@@ -72,6 +76,8 @@ export function BalanceView() {
                 total={b.assets.total}
                 totalLabel="Aktiver i alt"
                 currency={currency}
+                slug={slug}
+                year={b.selectedYear}
               />
               <BalanceSection
                 heading="Passiver"
@@ -79,6 +85,8 @@ export function BalanceView() {
                 total={b.liabilities.total}
                 totalLabel="Gæld i alt"
                 currency={currency}
+                slug={slug}
+                year={b.selectedYear}
               />
               <BalanceSection
                 heading="Egenkapital"
@@ -86,6 +94,8 @@ export function BalanceView() {
                 total={b.equity.total}
                 totalLabel="Egenkapital i alt"
                 currency={currency}
+                slug={slug}
+                year={b.selectedYear}
                 extraLabel="Årets resultat"
                 extraAmount={b.periodResult}
               />
@@ -112,6 +122,8 @@ function BalanceSection({
   total,
   totalLabel,
   currency,
+  slug,
+  year,
   extraLabel,
   extraAmount,
 }: {
@@ -120,6 +132,8 @@ function BalanceSection({
   total: number;
   totalLabel: string;
   currency: string;
+  slug: string;
+  year: string;
   /** An extra line appended after the accounts (e.g. the period result). */
   extraLabel?: string;
   extraAmount?: number;
@@ -139,8 +153,15 @@ function BalanceSection({
         </tr>
       ) : (
         lines.map((line) => (
-          <tr key={line.accountNo}>
-            <td className="account-no">{line.accountNo}</td>
+          <tr key={line.accountNo} className="account-row">
+            <td className="account-no">
+              <Link
+                className="account-link"
+                to={accountPostingsTo(slug, year, line.accountNo)}
+              >
+                {line.accountNo}
+              </Link>
+            </td>
             <td>{line.name}</td>
             <td className="num">{formatKroner(line.amount, currency)}</td>
           </tr>

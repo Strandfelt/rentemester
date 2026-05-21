@@ -43,6 +43,49 @@ describe("DocumentsView — Bilag", () => {
     expect(await screen.findByText(/B-2026-0002/)).toBeInTheDocument();
   });
 
+  test("shows the linked entry's text and amount so the row is informative", async () => {
+    mockFetch(route());
+    renderView();
+    // The voucher's posting text — what the receipt is for.
+    expect(
+      await screen.findByText("Køb af kontorartikler"),
+    ).toBeInTheDocument();
+  });
+
+  test("falls back to the linked entry's total when the document amount is blank", async () => {
+    mockFetch(
+      route({
+        documents: [
+          {
+            id: 5,
+            documentNo: "DOC-2026-000005",
+            source: "dinero-import",
+            filename: "bilag.pdf",
+            documentType: "purchase_sale",
+            supplierName: null,
+            invoiceNo: null,
+            invoiceDate: null,
+            amountIncVat: null,
+            currency: "DKK",
+            status: "ingested",
+            voucherRef: "5",
+            journalEntryNo: "B-2026-0005",
+            journalEntryId: 5,
+            journalEntryText: "Kontorartikler hos Lev ApS",
+            journalEntryTotal: 412.5,
+          },
+        ],
+        linkedCount: 1,
+        unlinkedCount: 0,
+      }),
+    );
+    renderView();
+    expect(
+      await screen.findByText("Kontorartikler hos Lev ApS"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/412,50/)).toBeInTheDocument();
+  });
+
   test("shows an unbooked marker when no journal entry is linked", async () => {
     mockFetch(
       route({
@@ -62,6 +105,8 @@ describe("DocumentsView — Bilag", () => {
             voucherRef: null,
             journalEntryNo: null,
             journalEntryId: null,
+            journalEntryText: null,
+            journalEntryTotal: null,
           },
         ],
         linkedCount: 0,

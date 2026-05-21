@@ -225,19 +225,28 @@ Samme loop-protokol: underagent bygger → visuel inspektion → næste.
 - [x] Moms-view + Overblik: indberetnings-/betalingsfrist + dage tilbage
 - [x] Overblik: debitor-kort ("hvem skylder mig", åbne tilgodehavender) —
       for Helheim 0, vist som ren nul-tilstand
-- [ ] **Visuel inspektion**
+- [x] **Visuel inspektion** — Forpligtelser 21.672,94 i alt (moms tælles én
+      gang efter fix), moms-frist 103 dage, debitor-kort 0 kr.
 
 ### Iteration 8 — Likviditet / pengestrøm
-- [ ] Backend: pengestrøms-endpoint — penge ind/ud + faktisk bank-udvikling
-- [ ] Frontend: Likviditet-view med graf
-- [ ] **Visuel inspektion**
+- [x] Backend: pengestrøms-endpoint — penge ind/ud + faktisk bank-udvikling
+      (`GET .../cashflow?year=`)
+- [x] Frontend: Likviditet-view — primo/ind/ud/ultimo-kort, kombineret graf
+      (søjler + banksaldo-linje), 12-måneders tabel
+- [x] **Visuel inspektion** — primo 30.116,01 + ind 22.286,27 − ud 28.747,53
+      = ultimo 23.654,75; verificeret (krævede fix: registrér LineController)
 
 ### Iteration 9 — Drill-down, nøgletal & klarhed
-- [ ] Drill-down: klik nøgletal → opgørelse; klik konto → kontoens posteringer
-- [ ] "Senest bogført pr. <dato>" tydeligt på Overblik
-- [ ] Flerårsoversigt: indeværende år mærket "(år til dato)"
-- [ ] Bilag-view: vis koblet posterings tekst + beløb
-- [ ] Seneste posteringer (Overblik): vis læsbar posteringstekst — afkortes
-      i dag til "I..."
-- [ ] Nøgletal (bruttomargin, egenkapitalandel) på Overblik
-- [ ] **Visuel inspektion**
+- [x] Drill-down: Overblik-KPI/statuskort linker til opgørelserne; konto-rækker
+      i Saldobalance/Resultatopgørelse/Balance linker til Posteringer med
+      `?account=<kontonr>`-filter (navngiver kontoen, kan ryddes igen)
+- [x] "Senest bogført pr. <dato>" tydeligt på Overblik — transaktionsdato for
+      seneste bogførte postering (tilføjet til `/overview`-payload)
+- [x] Flerårsoversigt: indeværende (live) år mærket "(år til dato)" i både
+      tabel og graf
+- [x] Bilag-view: viser koblet posterings tekst + beløb (falder tilbage til
+      posteringens total når dokumentbeløbet mangler)
+- [x] Seneste posteringer (Overblik): læsbar posteringstekst — relayout fra
+      afkortet tabel til ombrydende liste (desktop + mobil)
+- [x] Nøgletal (bruttomargin, egenkapitalandel) på Overblik
+- [x] **Visuel inspektion**

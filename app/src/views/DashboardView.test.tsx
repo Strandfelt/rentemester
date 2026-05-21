@@ -142,4 +142,46 @@ describe("DashboardView — Overblik", () => {
       await screen.findByText(/Regnskabsår 2025 er arkiveret/),
     ).toBeInTheDocument();
   });
+
+  test("shows the 'Senest bogført pr.' date near the period header", async () => {
+    mockFetch(overviewRoute({ lastPostedDate: "2026-04-30" }));
+    renderDashboard();
+    expect(
+      await screen.findByText(/Senest bogført pr\. 2026-04-30/),
+    ).toBeInTheDocument();
+  });
+
+  test("renders the bruttomargin and egenkapitalandel nøgletal", async () => {
+    mockFetch(
+      overviewRoute({
+        keyFigures: { bruttomargin: 0.7423, egenkapitalandel: 0.9186 },
+      }),
+    );
+    renderDashboard();
+    expect(await screen.findByText("Bruttomargin")).toBeInTheDocument();
+    expect(screen.getByText("Egenkapitalandel")).toBeInTheDocument();
+    const margin = screen.getByText("Bruttomargin").closest(".key-figure")!;
+    expect(
+      within(margin as HTMLElement).getByText(/74,2\s*%/),
+    ).toBeInTheDocument();
+  });
+
+  test("the KPI cards drill into the Resultatopgørelse, carrying the year", async () => {
+    mockFetch(overviewRoute());
+    renderDashboard();
+    const omsaetning = (await screen.findByText("Omsætning")).closest("a")!;
+    expect(omsaetning).toHaveAttribute(
+      "href",
+      "/companies/acme-aps/resultatopgorelse?year=2026",
+    );
+  });
+
+  test("the Bank card drills into the Bank view", async () => {
+    mockFetch(overviewRoute());
+    renderDashboard();
+    const bankCard = (
+      await screen.findByRole("heading", { name: "Bank" })
+    ).closest("a")!;
+    expect(bankCard).toHaveAttribute("href", "/companies/acme-aps/bank?year=2026");
+  });
 });

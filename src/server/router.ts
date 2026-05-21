@@ -191,7 +191,8 @@ function handleCompanyJournal(
   url: URL,
 ): Response {
   const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyJournal(config.workspaceRoot, slug, year);
+  const account = url.searchParams.get("account");
+  const data = buildCompanyJournal(config.workspaceRoot, slug, year, account);
   return okResponse({ journal: data });
 }
 

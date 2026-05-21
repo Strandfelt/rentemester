@@ -34,6 +34,24 @@ export function useCompanyYear(): {
   return { year, setYear };
 }
 
+/**
+ * The route for a single account's postings — the Posteringer view filtered
+ * to one account via `?account=`. The fiscal year is carried through so the
+ * drill-down lands on the same year the statement was showing. Used by the
+ * statement views (Resultatopgørelse · Balance · Saldobalance) to make every
+ * account row a drill-down link.
+ */
+export function accountPostingsTo(
+  slug: string,
+  year: string,
+  accountNo: string,
+): string {
+  const params = new URLSearchParams();
+  if (year) params.set("year", year);
+  params.set("account", accountNo);
+  return `/companies/${slug}/posteringer?${params.toString()}`;
+}
+
 type NavTab = { to: string; label: string };
 
 /**

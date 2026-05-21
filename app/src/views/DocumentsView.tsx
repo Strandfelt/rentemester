@@ -112,16 +112,25 @@ export function DocumentsView() {
                   <td>{doc.invoiceNo ?? "—"}</td>
                   <td className="entry-date">{doc.invoiceDate ?? "—"}</td>
                   <td className="num">
-                    {doc.amountIncVat === null
-                      ? "—"
-                      : formatKroner(doc.amountIncVat, doc.currency)}
+                    {doc.amountIncVat !== null
+                      ? formatKroner(doc.amountIncVat, doc.currency)
+                      : doc.journalEntryTotal !== null
+                        ? formatKroner(doc.journalEntryTotal, doc.currency)
+                        : "—"}
                   </td>
                   <td>
                     {doc.journalEntryNo ? (
-                      <span className="flag ok">
-                        {doc.journalEntryNo}
-                        {doc.voucherRef ? ` · bilag ${doc.voucherRef}` : ""}
-                      </span>
+                      <div className="doc-posting">
+                        <span className="flag ok">
+                          {doc.journalEntryNo}
+                          {doc.voucherRef ? ` · bilag ${doc.voucherRef}` : ""}
+                        </span>
+                        {doc.journalEntryText ? (
+                          <span className="doc-posting-text muted">
+                            {doc.journalEntryText}
+                          </span>
+                        ) : null}
+                      </div>
                     ) : (
                       <span className="flag warning">Ikke bogført</span>
                     )}

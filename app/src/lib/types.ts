@@ -239,6 +239,15 @@ export type CompanyOverview = {
     groups: OverviewExceptionGroup[];
   };
   recentEntries: OverviewRecentEntry[];
+  /** Transaction date of the most recent posted entry; null when none. */
+  lastPostedDate: string | null;
+  /** Key ratios as fractions (0–1); each null when its denominator is zero. */
+  keyFigures: {
+    /** Resultat ÷ omsætning. */
+    bruttomargin: number | null;
+    /** Egenkapital ÷ balancesum. */
+    egenkapitalandel: number | null;
+  };
 };
 
 export type OverviewResponse = {
@@ -387,6 +396,8 @@ export type CompanyJournal = {
   periodStart: string;
   periodEnd: string;
   entries: JournalEntry[];
+  /** The account the entries are filtered to, when `?account=` is set. */
+  accountFilter: { accountNo: string; name: string } | null;
 };
 
 export type JournalResponse = {
@@ -485,6 +496,10 @@ export type DocumentRow = {
   voucherRef: string | null;
   journalEntryNo: string | null;
   journalEntryId: number | null;
+  /** The linked journal entry's posting text — what the voucher is for. */
+  journalEntryText: string | null;
+  /** The linked journal entry's total (summed debit side), kroner. */
+  journalEntryTotal: number | null;
 };
 
 export type CompanyDocuments = {

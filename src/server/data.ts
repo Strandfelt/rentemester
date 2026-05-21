@@ -731,6 +731,8 @@ export function buildCompanyOverview(
           groups: [] as ExceptionGroup[],
         },
         recentEntries: [] as RecentEntry[],
+        lastPostedDate: null,
+        keyFigures: { bruttomargin: null, egenkapitalandel: null },
       };
     }
 
@@ -843,6 +845,22 @@ export function buildCompanyOverview(
       ),
     };
 
+    // The transaction date of the most recent posted journal entry in the
+    // year — surfaced as "Senest bogført pr. <dato>" so the owner sees at a
+    // glance how current the figures are. Null when nothing is posted yet.
+    const lastPostedDate = recentEntries.length > 0 ? recentEntries[0]!.date : null;
+
+    // Nøgletal: the two ratios an owner reads off a glance — bruttomargin
+    // (resultat ÷ omsætning) and egenkapitalandel (egenkapital ÷ balancesum).
+    // Both are fractions (0–1); the SPA renders them as percentages. Each is
+    // null when its denominator is zero — no figure is invented.
+    const bs = buildBalanceSheet(db, yearEnd);
+    const equityTotal = roundKroner(bs.equity.total + bs.periodResult);
+    const bruttomargin =
+      pl.totalIncome !== 0 ? pl.result / pl.totalIncome : null;
+    const egenkapitalandel =
+      bs.totalAssets !== 0 ? equityTotal / bs.totalAssets : null;
+
     return {
       slug: entry.slug,
       selectedYear: selectedLabel,
@@ -880,6 +898,8 @@ export function buildCompanyOverview(
         groups: exceptionGroups,
       },
       recentEntries,
+      lastPostedDate,
+      keyFigures: { bruttomargin, egenkapitalandel },
     };
   } finally {
     db.close();
@@ -1349,11 +1369,16 @@ export type CompanyJournal = ReturnType<typeof buildCompanyJournal>;
  * Posteringer — every posted journal entry for the selected calendar fiscal
  * year, newest first, each carrying its debit/credit lines so the UI can drill
  * into an entry. The entry `total` is the summed debit side. Money is kroner.
+ *
+ * When `account` is given, only entries with at least one line on that account
+ * are returned, and `accountFilter` names the account — this powers the
+ * "klik konto → kontoens posteringer" drill-down from the statement views.
  */
 export function buildCompanyJournal(
   workspaceRoot: string,
   slug: string,
   year: number | null,
+  account: string | null = null,
 ) {
   const ctx = resolveStatementContext(workspaceRoot, slug, year);
   try {
@@ -1368,12 +1393,39 @@ export function buildCompanyJournal(
         periodStart: `${ctx.selectedLabel}-01-01`,
         periodEnd: `${ctx.selectedLabel}-12-31`,
         entries: [] as JournalEntry[],
+        accountFilter: null as { accountNo: string; name: string } | null,
       };
     }
 
     const yearNum = parseInt(ctx.selectedLabel, 10);
     const yearStart = `${yearNum}-01-01`;
     const yearEnd = `${yearNum}-12-31`;
+
+    // Optional account drill-down: resolve the account's name (so the view can
+    // title the filter) and the set of entry ids that touch it.
+    let accountFilter: { accountNo: string; name: string } | null = null;
+    let accountEntryIds: Set<number> | null = null;
+    if (account !== null && account.trim().length > 0) {
+      const accountNo = account.trim();
+      const acc = ctx.db
+        .query("SELECT account_no AS accountNo, name AS name FROM accounts WHERE account_no = ?")
+        .get(accountNo) as { accountNo: string; name: string } | undefined;
+      accountFilter = acc
+        ? { accountNo: acc.accountNo, name: acc.name }
+        : { accountNo, name: accountNo };
+      const idRows = ctx.db
+        .query(
+          `SELECT DISTINCT jl.journal_entry_id AS id
+             FROM journal_lines jl
+             JOIN journal_entries je ON je.id = jl.journal_entry_id
+             JOIN accounts a         ON a.id = jl.account_id
+            WHERE je.status = 'posted'
+              AND je.transaction_date >= ? AND je.transaction_date <= ?
+              AND a.account_no = ?`,
+        )
+        .all(yearStart, yearEnd, accountNo) as Array<{ id: number }>;
+      accountEntryIds = new Set(idRows.map((r) => r.id));
+    }
 
     const entryRows = ctx.db
       .query(
@@ -1430,7 +1482,12 @@ export function buildCompanyJournal(
       linesByEntry.set(row.entryId, list);
     }
 
-    const entries: JournalEntry[] = entryRows.map((e) => {
+    const filteredRows =
+      accountEntryIds === null
+        ? entryRows
+        : entryRows.filter((e) => accountEntryIds!.has(e.id));
+
+    const entries: JournalEntry[] = filteredRows.map((e) => {
       const lines = linesByEntry.get(e.id) ?? [];
       const total = roundKroner(
         lines.reduce((acc, l) => acc + l.debit, 0),
@@ -1454,6 +1511,7 @@ export function buildCompanyJournal(
       periodStart: yearStart,
       periodEnd: yearEnd,
       entries,
+      accountFilter,
     };
   } finally {
     ctx.db.close();
@@ -1690,6 +1748,10 @@ export type DocumentRow = {
   journalEntryNo: string | null;
   /** The linked journal entry's id, for drill-through. */
   journalEntryId: number | null;
+  /** The linked journal entry's posting text — what the voucher is for. */
+  journalEntryText: string | null;
+  /** The linked journal entry's total (summed debit side), kroner. */
+  journalEntryTotal: number | null;
 };
 
 export type CompanyDocuments = ReturnType<typeof buildCompanyDocuments>;
@@ -1729,7 +1791,11 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
                 d.status          AS status,
                 idl.voucher_ref   AS voucherRef,
                 je.id             AS journalEntryId,
-                je.entry_no       AS journalEntryNo
+                je.entry_no       AS journalEntryNo,
+                je.text           AS journalEntryText,
+                (SELECT COALESCE(SUM(debit_amount), 0)
+                   FROM journal_lines
+                  WHERE journal_entry_id = je.id) AS journalEntryTotal
            FROM documents d
            LEFT JOIN import_document_links idl ON idl.document_id = d.id
            LEFT JOIN journal_entries je        ON je.id = idl.journal_entry_id
@@ -1750,6 +1816,8 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       voucherRef: string | null;
       journalEntryId: number | null;
       journalEntryNo: string | null;
+      journalEntryText: string | null;
+      journalEntryTotal: number | null;
     }>;
 
     const documents: DocumentRow[] = rows.map((r) => ({
@@ -1770,6 +1838,11 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       voucherRef: r.voucherRef,
       journalEntryNo: r.journalEntryNo,
       journalEntryId: r.journalEntryId,
+      journalEntryText: r.journalEntryText,
+      journalEntryTotal:
+        r.journalEntryId === null || r.journalEntryTotal === null
+          ? null
+          : roundKroner(r.journalEntryTotal),
     }));
     const linkedCount = documents.filter(
       (d) => d.journalEntryNo !== null,

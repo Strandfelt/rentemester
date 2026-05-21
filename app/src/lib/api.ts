@@ -127,12 +127,17 @@ export const api = {
       }`,
     ).then((r) => r.trialBalance),
 
-  journal: (slug: string, year?: string) =>
-    request<JournalResponse>(
+  journal: (slug: string, year?: string, account?: string) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", year);
+    if (account) params.set("account", account);
+    const query = params.toString();
+    return request<JournalResponse>(
       `/api/companies/${encodeURIComponent(slug)}/journal${
-        year ? `?year=${encodeURIComponent(year)}` : ""
+        query ? `?${query}` : ""
       }`,
-    ).then((r) => r.journal),
+    ).then((r) => r.journal);
+  },
 
   bank: (slug: string, year?: string) =>
     request<BankResponse>(

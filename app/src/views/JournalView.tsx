@@ -6,7 +6,7 @@
 // are kroner — `formatKroner` is used throughout.
 
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
@@ -17,9 +17,18 @@ import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
 export function JournalView() {
   const { slug = "" } = useParams();
   const { year, setYear } = useCompanyYear();
+  // An optional account drill-down: `?account=<accountNo>` filters the journal
+  // to the entries that touch that account (set by the statement views).
+  const [params, setParams] = useSearchParams();
+  const account = params.get("account") ?? undefined;
+  const clearAccount = () => {
+    const next = new URLSearchParams(params);
+    next.delete("account");
+    setParams(next, { replace: true });
+  };
   const state = useAsync<CompanyJournal>(
-    () => api.journal(slug, year),
-    [slug, year],
+    () => api.journal(slug, year, account),
+    [slug, year, account],
   );
 
   if (state.loading && !state.data)
@@ -58,13 +67,33 @@ export function JournalView() {
         <ArchivedNotice slug={slug} year={j.selectedYear} />
       ) : (
         <>
+          {j.accountFilter && (
+            <div className="account-filter">
+              <p className="muted">
+                Posteringer på konto{" "}
+                <span className="account-no">
+                  {j.accountFilter.accountNo}
+                </span>{" "}
+                {j.accountFilter.name}
+              </p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={clearAccount}
+              >
+                Vis alle posteringer
+              </button>
+            </div>
+          )}
           <p className="statement-asof muted">
             {j.periodStart} – {j.periodEnd} · {j.entries.length} posteringer
           </p>
           {j.entries.length === 0 ? (
             <div className="card statement-card">
               <p className="empty-inline" style={{ padding: "var(--space-md)" }}>
-                Ingen posteringer i året.
+                {j.accountFilter
+                  ? "Ingen posteringer på kontoen i året."
+                  : "Ingen posteringer i året."}
               </p>
             </div>
           ) : (

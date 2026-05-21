@@ -121,6 +121,8 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
     },
     exceptions: { count: 0, rows: [], groups: [] },
     recentEntries: [],
+    lastPostedDate: "2026-02-27",
+    keyFigures: { bruttomargin: 0.7423, egenkapitalandel: 0.9186 },
     ...over,
   };
 }
@@ -269,6 +271,7 @@ export function journal(over: Partial<CompanyJournal> = {}): CompanyJournal {
         ],
       },
     ],
+    accountFilter: null,
     ...over,
   };
 }
@@ -438,6 +441,8 @@ export function documents(
         voucherRef: "1",
         journalEntryNo: "B-2026-0002",
         journalEntryId: 2,
+        journalEntryText: "Køb af kontorartikler",
+        journalEntryTotal: 1250,
       },
     ],
     linkedCount: 1,

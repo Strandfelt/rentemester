@@ -396,6 +396,14 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       expect(res.body.overview.bank.balance).toBe(750);
       expect(res.body.overview.recentEntries.length).toBeGreaterThan(0);
       expect(res.body.overview.fiscalYears[0].label).toBe("2026");
+      // "Senest bogført" — the most recent posted transaction date.
+      expect(res.body.overview.lastPostedDate).toBe("2026-03-15");
+      // Nøgletal: bruttomargin = resultat ÷ omsætning = 600/1000 = 0.6.
+      expect(res.body.overview.keyFigures.bruttomargin).toBeCloseTo(0.6, 6);
+      // Egenkapitalandel is a fraction (0–1) when the balance has assets.
+      expect(
+        typeof res.body.overview.keyFigures.egenkapitalandel,
+      ).toBe("number");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
@@ -669,6 +677,39 @@ describe("cockpit API — journal (GET .../journal)", () => {
     }
   });
 
+  test("an ?account= filter limits the journal to that account's entries", async () => {
+    const ws = makeWorkspace("jrn-acct", ["Acme ApS"]);
+    try {
+      // A sale (touches 1000/1200/2000) and a purchase (3000/4000/2000).
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      const cfg = config({ workspaceRoot: ws });
+
+      // Account 1000 only appears on the sale — exactly one entry.
+      const sale = await get(
+        cfg,
+        "/api/companies/acme-aps/journal?year=2026&account=1000",
+      );
+      expect(sale.status).toBe(200);
+      expect(sale.body.journal.accountFilter.accountNo).toBe("1000");
+      expect(sale.body.journal.entries.length).toBe(1);
+      expect(sale.body.journal.entries[0].text).toBe("Overblik salg");
+
+      // Account 2000 (bank) is on both — two entries.
+      const bank = await get(
+        cfg,
+        "/api/companies/acme-aps/journal?year=2026&account=2000",
+      );
+      expect(bank.body.journal.entries.length).toBe(2);
+
+      // Without the filter, accountFilter is null and all entries are shown.
+      const all = await get(cfg, "/api/companies/acme-aps/journal?year=2026");
+      expect(all.body.journal.accountFilter).toBeNull();
+      expect(all.body.journal.entries.length).toBe(2);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   test("journal for an unknown slug is a safe 404", async () => {
     const ws = makeWorkspace("jrn-404", ["Acme ApS"]);
     try {
@@ -847,6 +888,10 @@ describe("cockpit API — documents (GET .../documents)", () => {
       expect(d.documents[0]).toHaveProperty("journalEntryNo");
       expect(d).toHaveProperty("linkedCount");
       expect(d).toHaveProperty("unlinkedCount");
+      // Each row carries the linked journal entry's text + total fields, so
+      // the Bilag view can show what the receipt is for (null when unlinked).
+      expect(d.documents[0]).toHaveProperty("journalEntryText");
+      expect(d.documents[0]).toHaveProperty("journalEntryTotal");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

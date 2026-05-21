@@ -54,6 +54,24 @@ describe("MultiYearView — Flerårsoversigt", () => {
     expect(container.querySelector(".pnl-chart canvas")).toBeTruthy();
   });
 
+  test("marks the live/current year as '(år til dato)'", async () => {
+    mockFetch(route());
+    renderView();
+    const row2026 = (
+      await screen.findByRole("cell", { name: /2026/ })
+    ).closest("tr")!;
+    expect(
+      within(row2026 as HTMLElement).getByText("(år til dato)"),
+    ).toBeInTheDocument();
+    // The full archived years carry no such marker.
+    const row2025 = (
+      await screen.findByRole("cell", { name: /2025/ })
+    ).closest("tr")!;
+    expect(
+      within(row2025 as HTMLElement).queryByText("(år til dato)"),
+    ).not.toBeInTheDocument();
+  });
+
   test("an empty company shows the no-years state", async () => {
     mockFetch(route({ years: [] }));
     renderView();
