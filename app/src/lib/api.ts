@@ -8,6 +8,7 @@ import type {
   ArchiveResponse,
   BalanceResponse,
   BankResponse,
+  CashflowResponse,
   CompanyListResponse,
   ContactsResponse,
   CreateCompanyInput,
@@ -182,6 +183,13 @@ export const api = {
         year ? `?year=${encodeURIComponent(year)}` : ""
       }`,
     ).then((r) => r.obligations),
+
+  cashflow: (slug: string, year?: string) =>
+    request<CashflowResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/cashflow${
+        year ? `?year=${encodeURIComponent(year)}` : ""
+      }`,
+    ).then((r) => r.cashflow),
 
   createCompany: (input: CreateCompanyInput) =>
     request<{ ok: true; company: { slug: string; name: string } }>(

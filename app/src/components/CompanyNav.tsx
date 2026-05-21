@@ -8,7 +8,7 @@
 //     reload, and every in-app link below preserves it automatically.
 //
 //   * `CompanyNav` — the sub-navigation bar plus the fiscal-year selector,
-//     rendered at the top of each company view. The thirteen views are
+//     rendered at the top of each company view. The fourteen views are
 //     arranged in four labelled groups (Regnskab · Bogføring · Salg ·
 //     Historik) so the bar stays scannable and wraps tidily on a phone.
 
@@ -37,7 +37,7 @@ export function useCompanyYear(): {
 type NavTab = { to: string; label: string };
 
 /**
- * The thirteen company views, arranged into four labelled groups. The grouping
+ * The fourteen company views, arranged into four labelled groups. The grouping
  * keeps the bar scannable — and gives narrow viewports a deliberate wrap
  * boundary rather than an arbitrary one.
  */
@@ -50,6 +50,7 @@ const TAB_GROUPS: { name: string; tabs: NavTab[] }[] = [
       { to: "balance", label: "Balance" },
       { to: "saldobalance", label: "Saldobalance" },
       { to: "forpligtelser", label: "Forpligtelser" },
+      { to: "likviditet", label: "Likviditet" },
     ],
   },
   {

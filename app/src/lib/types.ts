@@ -681,6 +681,54 @@ export type ObligationsResponse = {
   obligations: CompanyObligations;
 };
 
+// --- cash flow / Likviditet (GET .../cashflow?year=) ----------------------
+
+export type CashflowMonth = {
+  /** 1–12. */
+  month: number;
+  label: string;
+  /** Money in: sum of positive bank-transaction amounts, kroner. */
+  indbetalinger: number;
+  /** Money out: sum of negative amounts as a positive figure, kroner. */
+  udbetalinger: number;
+  /** indbetalinger − udbetalinger, kroner. */
+  netto: number;
+};
+
+export type CashflowBalancePoint = {
+  date: string;
+  /** The imported running balance at this point, kroner. */
+  balance: number;
+};
+
+export type CompanyCashflow = {
+  slug: string;
+  selectedYear: string;
+  archived: boolean;
+  company: StatementCompany;
+  fiscalYears: FiscalYearEntry[];
+  periodStart: string;
+  periodEnd: string;
+  /** False when the company has no bank transactions in the year. */
+  hasTransactions: boolean;
+  months: CashflowMonth[];
+  /** The real bank-balance trajectory, oldest-first. */
+  balanceSeries: CashflowBalancePoint[];
+  /** Actual balance the day before the year starts, kroner; null when unknown. */
+  openingBalance: number | null;
+  /** Actual balance at the year end, kroner; null when unknown. */
+  closingBalance: number | null;
+  /** Total money in across the year, kroner. */
+  totalIn: number;
+  /** Total money out across the year, kroner. */
+  totalOut: number;
+};
+
+export type CashflowResponse = {
+  ok: true;
+  cashflow: CompanyCashflow;
+};
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;

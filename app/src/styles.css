@@ -961,12 +961,25 @@ table.statement-table td.num.muted {
    ========================================================================== */
 
 .bank-summary,
-.invoices-summary {
+.invoices-summary,
+.cashflow-summary {
   margin-bottom: var(--space-lg);
 }
 /* Bank summary carries three cards (faktisk · bogført · afstemning). */
 .bank-summary {
   grid-template-columns: repeat(3, 1fr);
+}
+/* Cash-flow summary strip: primo · ind · ud · ultimo. */
+.cashflow-summary {
+  grid-template-columns: repeat(4, 1fr);
+}
+/* The ind/ud figures borrow the chart's green/red so the summary strip and
+   the graph below it read as one. */
+.status-figure.status-in {
+  color: var(--color-success);
+}
+.status-figure.status-out {
+  color: var(--color-accent);
 }
 
 /* The booked-vs-actual gap banner — the headline of the Bank view. */

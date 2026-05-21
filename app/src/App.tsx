@@ -8,6 +8,7 @@
 //   /companies/:slug/balance            Balance (balance sheet)
 //   /companies/:slug/saldobalance       Saldobalance (trial balance)
 //   /companies/:slug/forpligtelser      Forpligtelser (obligations / payables)
+//   /companies/:slug/likviditet         Likviditet (cash flow / pengestrøm)
 //   /companies/:slug/posteringer        Posteringer (journal + drill-down)
 //   /companies/:slug/bank               Bank (transactions + reconciliation)
 //   /companies/:slug/moms               Moms (VAT return)
@@ -29,6 +30,7 @@ import { IncomeStatementView } from "./views/IncomeStatementView";
 import { BalanceView } from "./views/BalanceView";
 import { TrialBalanceView } from "./views/TrialBalanceView";
 import { ObligationsView } from "./views/ObligationsView";
+import { LiquidityView } from "./views/LiquidityView";
 import { JournalView } from "./views/JournalView";
 import { BankView } from "./views/BankView";
 import { VatView } from "./views/VatView";
@@ -71,6 +73,10 @@ export function App() {
           <Route
             path="/companies/:slug/forpligtelser"
             element={<ObligationsView />}
+          />
+          <Route
+            path="/companies/:slug/likviditet"
+            element={<LiquidityView />}
           />
           <Route
             path="/companies/:slug/posteringer"
