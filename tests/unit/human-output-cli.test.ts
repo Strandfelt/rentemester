@@ -532,6 +532,81 @@ describe("accounts list human output (#246)", () => {
   });
 });
 
+describe("invoice create human output (#266, #268)", () => {
+  async function createInvoice(format: "human" | "json") {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-create-out-"));
+    const company = join(root, "company");
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    const out = await runCli([
+      "invoice", "create", "--company", company,
+      "--issue-date", "2026-05-21",
+      "--line", "Bogføring og momsafstemning|2|800;Rådgivning|1|500",
+      "--vat-rate", "25",
+      "--buyer-name", "Kunde A/S",
+      "--buyer-address", "Købervej 9, 8000 Aarhus C",
+      "--seller-name", "Rentemester ApS",
+      "--seller-address", "Testvej 1, 2100 København Ø",
+      "--seller-vat", "DK12345678",
+      "--format", format,
+    ]);
+    rmSync(root, { recursive: true, force: true });
+    return out;
+  }
+
+  async function createInvoiceHuman() {
+    // Each `invoice create` consumes an invoice number, so the human and JSON
+    // runs must use SEPARATE fresh companies to both get 2026-0001.
+    const [human, jsonRun] = await Promise.all([
+      createInvoice("human"),
+      createInvoice("json"),
+    ]);
+    return { human, jsonRun };
+  }
+
+  test("#268 — renders a short Danish heading, Danish labels and the figures", async () => {
+    const { human, jsonRun } = await createInvoiceHuman();
+
+    expect(human.exitCode).toBe(0);
+    expect(human.stderr).toBe("");
+    // A short Danish heading — NOT the long command description.
+    expect(human.stdout).toContain("Faktura 2026-0001 er udstedt");
+    expect(human.stdout).not.toContain(
+      "Udsteder en kundefaktura uden at du selv skriver JSON",
+    );
+    // Danish field labels — never the English humanized keys.
+    expect(human.stdout).not.toContain("Invoice Number");
+    expect(human.stdout).not.toContain("Document Id");
+    expect(human.stdout).toContain("Fakturanummer:");
+    // The figures that matter: net, VAT, gross.
+    expect(human.stdout).toContain("Nettobeløb (ekskl. moms):");
+    expect(human.stdout).toContain("Momsbeløb:");
+    expect(human.stdout).toContain("Fakturabeløb (inkl. moms):");
+    expect(human.stdout).toContain("2.100,00 kr.");
+    expect(human.stdout).toContain("525,00 kr.");
+    expect(human.stdout).toContain("2.625,00 kr.");
+    // No raw JSON structure leaks through.
+    expect(human.stdout).not.toContain("{");
+    expect(human.stdout).not.toContain("grossAmount");
+
+    // The json path stays byte-stable.
+    const parsed = JSON.parse(jsonRun.stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.invoiceNumber).toBe("2026-0001");
+    expect(parsed.computed.netAmount).toBe(2100);
+    expect(parsed.computed.vatAmount).toBe(525);
+    expect(parsed.computed.grossAmount).toBe(2625);
+  });
+
+  test("#266 — states the invoice is NOT yet posted and that `invoice post` is required", async () => {
+    const { human } = await createInvoiceHuman();
+
+    expect(human.exitCode).toBe(0);
+    // The gap must be impossible to miss: issued but not booked.
+    expect(human.stdout).toContain("IKKE bogført");
+    expect(human.stdout).toContain("invoice post 2026-0001");
+  });
+});
+
 describe("momsangivelse prerequisite guidance (#227)", () => {
   test("an un-closed VAT period failure guides the owner to 'period close'", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-momsangivelse-guide-"));
