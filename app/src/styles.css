@@ -1407,7 +1407,7 @@ table.statement-table td.num.muted {
     grid-template-columns: 1fr;
   }
   .rollup-strip {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: var(--space-sm);
     margin-bottom: var(--space-lg);
   }
