@@ -10,6 +10,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "content:coverage": "bun run scripts/check-graph-content-coverage.ts",
+    "site:check": "bun run scripts/check-site-map.ts",
     "og": "bun run scripts/generate-og.ts"
   },
   "dependencies": {
