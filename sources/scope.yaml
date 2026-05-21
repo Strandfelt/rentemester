@@ -1,0 +1,55 @@
+version: dk-scope-v0.0.1
+# REVIEW: first-draft in-scope ranges. The project owner makes the final
+# scope call — these ranges are a starting point, not authoritative.
+#
+# `reg coverage` measures in-scope cited / in-scope operative provisions.
+# A source is either `in_scope: all` (the whole document is relevant) or a
+# list of §-ranges. A range is a single paragraf ("§ 46") or an inclusive
+# range ("§ 37-§ 42"); paragraf identifiers may carry a letter suffix ("9b").
+#
+# Rationale per source is noted inline. The small bekendtgørelser whose entire
+# subject is bookkeeping/invoicing/voucher-storage are `in_scope: all`; the
+# large laws declare ranges around the cited paragraffer, widened to the
+# surrounding subject chapter.
+sources:
+  # Voucher-storage order — its whole subject is what Rentemester stores.
+  DK-BILAG-OPBEVARING-2023-1383:
+    in_scope: all
+  # Amendment of the voucher-storage order — same subject.
+  DK-BILAG-OPBEVARING-AMEND-2025-302:
+    in_scope: all
+  # Bogføringsloven — §§ 1-18 cover scope, definitions, the bookkeeping and
+  # digital-system requirements, retention and voucher storage. §§ 19+ are
+  # system-vendor obligations, supervision and sanctions — out of scope.
+  DK-BOGFORINGSLOVEN-2022-700:
+    in_scope:
+      - "§ 1-§ 18"
+  # Digital bookkeeping for non-registered systems — whole subject is in scope.
+  DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205:
+    in_scope: all
+  # Digital standard bookkeeping systems — whole subject is in scope.
+  DK-DIGITAL-STANDARD-BOGFORING-2023-97:
+    in_scope: all
+  # Momsbekendtgørelsen — §§ 58-72 are the invoicing/documentation chapter
+  # (faktura content, simplified invoices, voucher storage, dispensation).
+  DK-MOMSBEKENDTGORELSEN-2023-1435:
+    in_scope:
+      - "§ 58-§ 72"
+  # Momsloven — the parts Rentemester implements: tax point (§ 23), VAT basis
+  # (§ 27), input-VAT deduction (§§ 37-42), reverse-charge liability (§ 46),
+  # registration and periodic reporting (§§ 47-57).
+  DK-MOMSLOVEN-2024-209:
+    in_scope:
+      - "§ 23"
+      - "§ 27"
+      - "§ 37-§ 42"
+      - "§ 46"
+      - "§ 47-§ 57"
+  # Renteloven — §§ 1-9b cover interest, late-payment compensation and reminder
+  # fees on overdue invoices. §§ 10-11 are transitional/territorial.
+  DK-RENTELOVEN-2014-459:
+    in_scope:
+      - "§ 1-§ 9b"
+  # Late-payment compensation amendment — small order, whole subject in scope.
+  DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105:
+    in_scope: all

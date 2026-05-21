@@ -75,6 +75,8 @@ export type RuleMetadata = {
   ruleId: string;
   sourceId: string;
   bundle: string;
+  name: string;
+  explanation: string;
   provisions: RuleProvisionCitation[];
   severity: string;
   category: string;
@@ -98,6 +100,25 @@ function indentOf(line: string): number {
   return count;
 }
 
+// A `>`-style folded block scalar opens a continuation block. A `|`-style
+// literal block scalar would need newline-preserving joins the review reader
+// does not implement, so it is rejected loudly rather than silently folded.
+function opensBlockScalar(
+  indicator: string,
+  field: string,
+  bundle: string,
+  ruleId: string,
+): boolean {
+  if (/^>[+-]?$/.test(indicator)) return true;
+  if (/^\|[+-]?$/.test(indicator)) {
+    throw new Error(
+      `${bundle}.yaml: rule ${ruleId} — literal block scalars (\`|\`) are not ` +
+        `supported for ${field}; use \`>-\``,
+    );
+  }
+  return false;
+}
+
 // Per-rule reader for the regulatory-coverage engine. The repo hand-parses
 // YAML; this follows that pattern, keyed purely on indentation. A malformed
 // citation throws rather than being silently dropped — a dropped citation would
@@ -109,13 +130,34 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
   let current: {
     ruleId: string;
     sourceId: string;
+    name: string;
+    explanation: string;
     severity: string;
     category: string;
     provisions: RuleProvisionCitation[];
   } | null = null;
   let inProvisions = false;
+  let inMachineRule = false;
   let pendingRef: string | null = null;
   let pendingHash: string | null = null;
+  // A YAML folded/literal block scalar in progress (`name: >-` etc.). Its
+  // continuation lines are indented deeper than the key.
+  let pendingBlock: { field: "name" | "explanation"; keyIndent: number; lines: string[] }
+    | null = null;
+
+  const flushBlock = () => {
+    if (!pendingBlock || !current) {
+      pendingBlock = null;
+      return;
+    }
+    // Folded (`>`) scalars join on single spaces. Literal (`|`) blocks are
+    // rejected upstream; blank lines inside a folded block are not preserved —
+    // fine for the single-paragraph review text the rule files use.
+    const joined = pendingBlock.lines.map((l) => l.trim()).join(" ").trim();
+    if (pendingBlock.field === "name") current.name = joined;
+    else current.explanation = joined;
+    pendingBlock = null;
+  };
 
   const flushCitation = () => {
     if (pendingRef !== null || pendingHash !== null) {
@@ -132,6 +174,7 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
   };
 
   const flushRule = () => {
+    flushBlock();
     flushCitation();
     if (current) {
       current.provisions.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
@@ -139,6 +182,8 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
         ruleId: current.ruleId,
         sourceId: current.sourceId,
         bundle,
+        name: current.name,
+        explanation: current.explanation,
         provisions: current.provisions,
         severity: current.severity,
         category: current.category,
@@ -146,6 +191,7 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
     }
     current = null;
     inProvisions = false;
+    inMachineRule = false;
   };
 
   for (const line of lines) {
@@ -155,12 +201,34 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
       throw new Error(`${bundle}.yaml: tab indentation is not allowed in rule files`);
     }
     const indent = indentOf(line);
+
+    // While a block scalar is open, lines indented deeper than its key are
+    // continuation text; the first line at or above the key indent ends it.
+    if (pendingBlock) {
+      if (indent > pendingBlock.keyIndent) {
+        pendingBlock.lines.push(line);
+        continue;
+      }
+      flushBlock();
+    }
+
+    if (/^\s*#/.test(line)) continue;
+
+    // The machine_rule subtree is not needed for coverage; skip its deeper-
+    // indented lines until the next rule-level (<=4-space) key.
+    if (inMachineRule) {
+      if (indent >= 6) continue;
+      inMachineRule = false;
+    }
+
     const ruleStart = line.match(/^\s*-\s*rule_id:\s*(\S+)\s*$/);
     if (ruleStart) {
       flushRule();
       current = {
         ruleId: ruleStart[1],
         sourceId: "",
+        name: "",
+        explanation: "",
         severity: "",
         category: "",
         provisions: [],
@@ -213,6 +281,24 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
       current.sourceId = sourceMatch[1];
       continue;
     }
+    const nameMatch = line.match(/^\s{4}name:\s*(.*?)\s*$/);
+    if (nameMatch) {
+      if (opensBlockScalar(nameMatch[1], "name", bundle, current.ruleId)) {
+        pendingBlock = { field: "name", keyIndent: indent, lines: [] };
+      } else {
+        current.name = stripQuotes(nameMatch[1]);
+      }
+      continue;
+    }
+    const explanationMatch = line.match(/^\s{4}explanation:\s*(.*?)\s*$/);
+    if (explanationMatch) {
+      if (opensBlockScalar(explanationMatch[1], "explanation", bundle, current.ruleId)) {
+        pendingBlock = { field: "explanation", keyIndent: indent, lines: [] };
+      } else {
+        current.explanation = stripQuotes(explanationMatch[1]);
+      }
+      continue;
+    }
     const severityMatch = line.match(/^\s{4}severity:\s*(\S+)\s*$/);
     if (severityMatch) {
       current.severity = stripQuotes(severityMatch[1]);
@@ -226,6 +312,19 @@ export function parseRuleBundle(text: string, bundle: string): RuleMetadata[] {
     if (/^\s{4}provisions:\s*$/.test(line)) {
       inProvisions = true;
       continue;
+    }
+    if (/^\s{4}machine_rule:\s*$/.test(line)) {
+      inMachineRule = true;
+      continue;
+    }
+    // A deeper-indented line consumed by nothing above is most likely a
+    // multi-line plain scalar; that is unsupported, so fail loud rather than
+    // silently dropping the text.
+    if (indent >= 6) {
+      throw new Error(
+        `${bundle}.yaml: rule ${current.ruleId} has an unexpected indented line ` +
+          `(multi-line plain scalars are not supported — use \`>-\`): ${line.trim()}`,
+      );
     }
   }
   flushRule();

@@ -24,9 +24,16 @@ describe("reg coverage CLI", () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.closureErrors).toBe(0);
     expect(parsed.driftErrors).toBe(0);
+    expect(parsed.scopeErrors).toBe(0);
     expect(typeof parsed.operativeProvisions).toBe("number");
     expect(parsed.operativeProvisions).toBeGreaterThan(0);
     expect(parsed.citedProvisions).toBeLessThanOrEqual(parsed.operativeProvisions);
+    // The headline metric narrows the denominator to in-scope provisions.
+    expect(parsed.inScopeOperativeProvisions).toBeGreaterThan(0);
+    expect(parsed.inScopeOperativeProvisions).toBeLessThan(parsed.operativeProvisions);
+    expect(parsed.inScopeCitedProvisions).toBeLessThanOrEqual(
+      parsed.inScopeOperativeProvisions,
+    );
     expect(Array.isArray(parsed.perSource)).toBe(true);
   });
 
@@ -37,9 +44,11 @@ describe("reg coverage CLI", () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain("reg coverage");
-    expect(stdout).toContain("Operative provisions cited:");
+    expect(stdout).toContain("In-scope provisions cited:");
+    expect(stdout).toContain("Corpus-wide (incl. out of scope):");
     expect(stdout).toContain("Closure errors: 0");
-    expect(stdout).toContain("Per source:");
+    expect(stdout).toContain("Scope errors: 0");
+    expect(stdout).toContain("Per source");
   });
 
   test("--out writes the deterministic Markdown report", async () => {

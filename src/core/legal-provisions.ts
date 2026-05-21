@@ -224,6 +224,13 @@ function comparePathSegment(a: string, b: string): number {
   return 0;
 }
 
+// Numeric-aware comparison of two paragraf identifiers ("3", "3a", "9b", "138a")
+// so that "3a" sorts after "3" and before "4". Exposed for range membership
+// checks in the regulatory-coverage scope engine.
+export function compareParagrafIds(a: string, b: string): number {
+  return comparePathSegment(a.toLowerCase(), b.toLowerCase());
+}
+
 function comparePaths(a: string[], b: string[]): number {
   const max = Math.max(a.length, b.length);
   for (let i = 0; i < max; i += 1) {
