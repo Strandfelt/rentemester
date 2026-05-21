@@ -12,6 +12,7 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyJournal, JournalEntry } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
+import { ArchivedBanner } from "../components/ArchivedBanner";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
 
 export function JournalView() {
@@ -63,47 +64,42 @@ export function JournalView() {
         onYearChange={setYear}
       />
 
-      {j.archived ? (
-        <ArchivedNotice slug={slug} year={j.selectedYear} />
-      ) : (
-        <>
-          {j.accountFilter && (
-            <div className="account-filter">
-              <p className="muted">
-                Posteringer på konto{" "}
-                <span className="account-no">
-                  {j.accountFilter.accountNo}
-                </span>{" "}
-                {j.accountFilter.name}
-              </p>
-              <button
-                type="button"
-                className="btn secondary"
-                onClick={clearAccount}
-              >
-                Vis alle posteringer
-              </button>
-            </div>
-          )}
-          <p className="statement-asof muted">
-            {j.periodStart} – {j.periodEnd} · {j.entries.length} posteringer
+      {j.archived && (
+        <ArchivedBanner year={j.selectedYear} source={j.archivedSource} />
+      )}
+      {j.accountFilter && (
+        <div className="account-filter">
+          <p className="muted">
+            Posteringer på konto{" "}
+            <span className="account-no">{j.accountFilter.accountNo}</span>{" "}
+            {j.accountFilter.name}
           </p>
-          {j.entries.length === 0 ? (
-            <div className="card statement-card">
-              <p className="empty-inline" style={{ padding: "var(--space-md)" }}>
-                {j.accountFilter
-                  ? "Ingen posteringer på kontoen i året."
-                  : "Ingen posteringer i året."}
-              </p>
-            </div>
-          ) : (
-            <ul className="entry-list">
-              {j.entries.map((entry) => (
-                <EntryRow key={entry.id} entry={entry} currency={currency} />
-              ))}
-            </ul>
-          )}
-        </>
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={clearAccount}
+          >
+            Vis alle posteringer
+          </button>
+        </div>
+      )}
+      <p className="statement-asof muted">
+        {j.periodStart} – {j.periodEnd} · {j.entries.length} posteringer
+      </p>
+      {j.entries.length === 0 ? (
+        <div className="card statement-card">
+          <p className="empty-inline" style={{ padding: "var(--space-md)" }}>
+            {j.accountFilter
+              ? "Ingen posteringer på kontoen i året."
+              : "Ingen posteringer i året."}
+          </p>
+        </div>
+      ) : (
+        <ul className="entry-list">
+          {j.entries.map((entry) => (
+            <EntryRow key={entry.id} entry={entry} currency={currency} />
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -169,23 +165,5 @@ function EntryRow({
         </div>
       )}
     </li>
-  );
-}
-
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
-  return (
-    <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
-      <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. De arkiverede posteringer
-        for {year} ses i Arkiv.
-      </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
-    </div>
   );
 }

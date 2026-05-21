@@ -74,11 +74,11 @@ describe("LiquidityView — Likviditet", () => {
     ).toBeInTheDocument();
   });
 
-  test("an archived year shows the arkiv notice", async () => {
+  test("an archived year shows an honest 'not available' state", async () => {
     mockFetch(route({ archived: true, selectedYear: "2025" }));
     renderView();
     expect(
-      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+      await screen.findByText(/Likviditet er ikke tilgængelig for 2025/),
     ).toBeInTheDocument();
   });
 });

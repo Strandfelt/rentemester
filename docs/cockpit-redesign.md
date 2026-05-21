@@ -273,11 +273,11 @@ allerede — #197 arkiverede fuld saldobalance + alle posteringer pr. tidligere
 er accepteret; ingen kunstig udfyldning.
 
 ### Iteration 10 — Arkiv-bevidste kerne-views
-- [ ] Backend: income-statement, balance, trial-balance, journal, overview
+- [x] Backend: income-statement, balance, trial-balance, journal, overview
       regner fra `import_archive_*` når det valgte år er arkiveret
-- [ ] Frontend: Resultatopgørelse, Balance, Saldobalance, Posteringer, Overblik
+- [x] Frontend: Resultatopgørelse, Balance, Saldobalance, Posteringer, Overblik
       renderer arkiv-data (skrivebeskyttet-banner) i stedet for placeholderen
-- [ ] Views uden arkiv-data for gamle år (Bank/Moms/Forpligtelser/Likviditet/
+- [x] Views uden arkiv-data for gamle år (Bank/Moms/Forpligtelser/Likviditet/
       Bilag/Fakturaer/Kontakter) viser en ærlig "ikke tilgængelig for
       arkiverede år"-tilstand — ingen kunstig udfyldning
 - [ ] **Visuel inspektion**

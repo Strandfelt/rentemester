@@ -49,11 +49,16 @@ describe("TrialBalanceView — Saldobalance", () => {
     expect(screen.getByText(/Saldobalancen stemmer/)).toBeInTheDocument();
   });
 
-  test("an archived year shows the arkiv notice", async () => {
-    mockFetch(route({ archived: true, selectedYear: "2025" }));
+  test("an archived year renders the archived rows under a read-only banner", async () => {
+    mockFetch(
+      route({ archived: true, archivedSource: "dinero", selectedYear: "2025" }),
+    );
     renderView();
     expect(
-      await screen.findByText(/Regnskabsår 2025 er arkiveret/),
+      await screen.findByText(/Arkiveret regnskabsår 2025 — skrivebeskyttet/),
     ).toBeInTheDocument();
+    // The archived SaldoBalance is still rendered as a real table.
+    expect(screen.getByText("Omsætning")).toBeInTheDocument();
+    expect(screen.getByText("Debet")).toBeInTheDocument();
   });
 });

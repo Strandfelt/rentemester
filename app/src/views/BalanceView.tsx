@@ -11,6 +11,7 @@ import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { BalanceLine, CompanyBalance } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
+import { ArchivedBanner } from "../components/ArchivedBanner";
 import {
   CompanyNav,
   accountPostingsTo,
@@ -56,62 +57,59 @@ export function BalanceView() {
         onYearChange={setYear}
       />
 
-      {b.archived ? (
-        <ArchivedNotice slug={slug} year={b.selectedYear} />
-      ) : (
-        <>
-          <p className="statement-asof muted">Pr. {b.asOfDate}</p>
-          <div className="card statement-card">
-            <table className="data statement-table">
-              <thead>
-                <tr>
-                  <th>Konto</th>
-                  <th>Navn</th>
-                  <th className="num">Beløb</th>
-                </tr>
-              </thead>
-              <BalanceSection
-                heading="Aktiver"
-                lines={b.assets.lines}
-                total={b.assets.total}
-                totalLabel="Aktiver i alt"
-                currency={currency}
-                slug={slug}
-                year={b.selectedYear}
-              />
-              <BalanceSection
-                heading="Passiver"
-                lines={b.liabilities.lines}
-                total={b.liabilities.total}
-                totalLabel="Gæld i alt"
-                currency={currency}
-                slug={slug}
-                year={b.selectedYear}
-              />
-              <BalanceSection
-                heading="Egenkapital"
-                lines={b.equity.lines}
-                total={b.equity.total}
-                totalLabel="Egenkapital i alt"
-                currency={currency}
-                slug={slug}
-                year={b.selectedYear}
-                extraLabel="Årets resultat"
-                extraAmount={b.periodResult}
-              />
-              <tbody>
-                <tr className="statement-result">
-                  <td colSpan={2}>Passiver og egenkapital i alt</td>
-                  <td className="num">
-                    {formatKroner(b.totalLiabilitiesAndEquity, currency)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <BalanceCheck balanced={b.balanced} />
-        </>
+      {b.archived && (
+        <ArchivedBanner year={b.selectedYear} source={b.archivedSource} />
       )}
+      <p className="statement-asof muted">Pr. {b.asOfDate}</p>
+      <div className="card statement-card">
+        <table className="data statement-table">
+          <thead>
+            <tr>
+              <th>Konto</th>
+              <th>Navn</th>
+              <th className="num">Beløb</th>
+            </tr>
+          </thead>
+          <BalanceSection
+            heading="Aktiver"
+            lines={b.assets.lines}
+            total={b.assets.total}
+            totalLabel="Aktiver i alt"
+            currency={currency}
+            slug={slug}
+            year={b.selectedYear}
+          />
+          <BalanceSection
+            heading="Passiver"
+            lines={b.liabilities.lines}
+            total={b.liabilities.total}
+            totalLabel="Gæld i alt"
+            currency={currency}
+            slug={slug}
+            year={b.selectedYear}
+          />
+          <BalanceSection
+            heading="Egenkapital"
+            lines={b.equity.lines}
+            total={b.equity.total}
+            totalLabel="Egenkapital i alt"
+            currency={currency}
+            slug={slug}
+            year={b.selectedYear}
+            extraLabel="Årets resultat"
+            extraAmount={b.periodResult}
+          />
+          <tbody>
+            <tr className="statement-result">
+              <td colSpan={2}>Passiver og egenkapital i alt</td>
+              <td className="num">
+                {formatKroner(b.totalLiabilitiesAndEquity, currency)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <BalanceCheck balanced={b.balanced} />
     </section>
   );
 }
@@ -189,23 +187,5 @@ function BalanceCheck({ balanced }: { balanced: boolean }) {
         ? "Balancen stemmer — aktiver = passiver + egenkapital."
         : "Balancen stemmer ikke. Kontrollér ledgeren."}
     </p>
-  );
-}
-
-function ArchivedNotice({ slug, year }: { slug: string; year: string }) {
-  return (
-    <div className="card archived-notice">
-      <h3>Regnskabsår {year} er arkiveret</h3>
-      <p className="muted">
-        Dette år ligger i det skrivebeskyttede arkiv. Den arkiverede
-        saldobalance for {year} vises i Arkiv.
-      </p>
-      <Link
-        className="btn secondary"
-        to={`/companies/${slug}/arkiv?year=${year}`}
-      >
-        Åbn {year} i Arkiv
-      </Link>
-    </div>
   );
 }
