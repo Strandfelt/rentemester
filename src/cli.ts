@@ -76,6 +76,9 @@ import { register as registerImport } from "./cli/import";
 // ===== RUNTIME AGENT (#183) =====
 import { register as registerAgent } from "./cli/agent";
 // ===== END RUNTIME AGENT (#183) =====
+// ===== REGULATORY COVERAGE =====
+import { register as registerReg } from "./cli/reg";
+// ===== END REGULATORY COVERAGE =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -253,6 +256,9 @@ for (const registerFn of [
   // ===== RUNTIME AGENT (#183) =====
   registerAgent,
   // ===== END RUNTIME AGENT (#183) =====
+  // ===== REGULATORY COVERAGE =====
+  registerReg,
+  // ===== END REGULATORY COVERAGE =====
 ]) {
   registerFn(dispatch);
 }

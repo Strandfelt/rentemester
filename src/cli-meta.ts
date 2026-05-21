@@ -427,6 +427,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   // ===== END RUNTIME AGENT (#183) =====
+  // ===== REGULATORY COVERAGE =====
+  {
+    key: "reg coverage",
+    usage: "reg coverage [--out <file.md>] [--format json|human]",
+    description:
+      "Måler regulatorisk dækning: hvor stor en del af de citerede danske lovbestemmelser der er sporbart implementeret i regler/kode. Repo-statisk — kræver ingen --company. Fejler hvis en regel citerer en bestemmelse der ikke kan slås op (closure) eller hvis lovteksten har ændret sig siden citatet (drift).",
+    allowedFlags: ["--out"],
+    inputNotes: [
+      "Læser rules/dk/*.yaml og kildekorpuset i sources/downloaded/ — ingen virksomhedsdata",
+      "--out skriver den deterministiske Markdown-rapport (REGULATORY_COVERAGE.md-format)",
+      "Dækning = operative bestemmelser citeret af mindst én regel / alle operative bestemmelser",
+    ],
+  },
+  // ===== END REGULATORY COVERAGE =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));
