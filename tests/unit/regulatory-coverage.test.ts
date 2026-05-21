@@ -208,6 +208,42 @@ describe("rule citation parser rejects malformed input", () => {
       "First line of the explanation continues onto a second line.",
     );
   });
+
+  test("a literal block scalar throws rather than folding newlines away", () => {
+    const yaml = [
+      ...ruleHead,
+      "    severity: hard_stop",
+      "    explanation: |",
+      "      line one",
+      "      line two",
+    ].join("\n");
+    expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/literal block scalars/);
+  });
+
+  test("a multi-line plain scalar throws instead of dropping continuation lines", () => {
+    const yaml = [
+      ...ruleHead,
+      "    severity: hard_stop",
+      "    explanation: first line of the explanation",
+      "      a dropped continuation line",
+    ].join("\n");
+    expect(() => parseRuleBundle(yaml, "invoices")).toThrow(/unexpected indented line/);
+  });
+
+  test("the machine_rule subtree is skipped, not mistaken for stray lines", () => {
+    const yaml = [
+      ...ruleHead,
+      "    severity: hard_stop",
+      "    machine_rule:",
+      "      require:",
+      "        - some_condition",
+      "        - another_condition",
+      "    explanation: after the machine rule",
+    ].join("\n");
+    const rules = parseRuleBundle(yaml, "invoices");
+    expect(rules).toHaveLength(1);
+    expect(rules[0].explanation).toBe("after the machine rule");
+  });
 });
 
 describe("scope manifest parser rejects malformed input", () => {

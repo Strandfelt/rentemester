@@ -8,7 +8,7 @@ import {
   parseProvisionRef,
   type Provision,
 } from "./legal-provisions";
-import { readRuleMetadata } from "./rules-metadata";
+import { readRuleMetadata, type RuleMetadata } from "./rules-metadata";
 
 // Regulatory coverage — like code coverage, but it measures how much of the
 // cited Danish legislation is traceably implemented in code. See
@@ -135,6 +135,9 @@ export function parseScopeManifest(text: string): ScopeManifest {
 
   const flushSource = () => {
     if (currentSource === null) return;
+    if (sources.has(currentSource)) {
+      throw new Error(`scope.yaml: source ${currentSource} is declared more than once`);
+    }
     if (currentKind === "all") {
       sources.set(currentSource, { kind: "all" });
     } else if (currentKind === "ranges") {
@@ -229,30 +232,34 @@ export function parseScopeManifest(text: string): ScopeManifest {
         );
       }
       const value = unquote(itemMatch[1]);
-      const parts = value.split("-").map((part) => part.trim());
+      // Split only on a hyphen that introduces the second `§` endpoint, so a
+      // hyphen inside an identifier token cannot mis-split the range.
+      const parts = value.split(/\s*-\s*(?=§)/).map((part) => part.trim());
+      let range: ScopeRange;
       if (parts.length === 1) {
         const id = parseScopeParagraf(parts[0]);
         if (!id) {
           throw new Error(`scope.yaml: source ${currentSource} bad range token: ${value}`);
         }
-        currentRanges!.push({ low: id, high: id });
-        continue;
-      }
-      if (parts.length === 2) {
+        range = { low: id, high: id };
+      } else if (parts.length === 2) {
         const low = parseScopeParagraf(parts[0]);
         const high = parseScopeParagraf(parts[1]);
         if (!low || !high) {
           throw new Error(`scope.yaml: source ${currentSource} bad range: ${value}`);
         }
         if (compareParagrafIds(low, high) > 0) {
-          throw new Error(
-            `scope.yaml: source ${currentSource} range is inverted: ${value}`,
-          );
+          throw new Error(`scope.yaml: source ${currentSource} range is inverted: ${value}`);
         }
-        currentRanges!.push({ low, high });
-        continue;
+        range = { low, high };
+      } else {
+        throw new Error(`scope.yaml: source ${currentSource} malformed range: ${value}`);
       }
-      throw new Error(`scope.yaml: source ${currentSource} malformed range: ${value}`);
+      if (currentRanges!.some((r) => r.low === range.low && r.high === range.high)) {
+        throw new Error(`scope.yaml: source ${currentSource} has a duplicate range: ${value}`);
+      }
+      currentRanges!.push(range);
+      continue;
     }
 
     throw new Error(`scope.yaml: unexpected indentation in line: ${line}`);
@@ -631,10 +638,15 @@ export function renderRegulatoryCoverageReport(coverage: RegulatoryCoverage): st
   );
   lines.push("");
   lines.push(
-    "The headline metric counts only provisions declared in scope in " +
-      "`sources/scope.yaml`. For transparency the raw corpus-wide figure is " +
-      `${fraction(coverage.overall.citedCount, coverage.overall.operativeCount)} ` +
-      `operative provisions, of which ${outOfScopeOperative} are out of scope.`,
+    "**The headline metric is a self-attestation.** Its denominator is the set " +
+      "of provisions declared in scope in `sources/scope.yaml` — narrowing that " +
+      "scope raises the percentage. Read it together with the raw corpus-wide " +
+      `figure (${fraction(
+        coverage.overall.citedCount,
+        coverage.overall.operativeCount,
+      )} operative provisions, ${outOfScopeOperative} out of scope) and review ` +
+      "`sources/scope.yaml` itself; the closure checks only guarantee that no " +
+      "cited provision falls outside the declared scope.",
   );
   lines.push("");
   lines.push(`Closure errors: ${coverage.closureErrors.length}`);

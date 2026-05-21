@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  compareParagrafIds,
   extractProvisions,
   findProvision,
   loadAllProvisions,
@@ -136,6 +137,21 @@ describe("ref parsing and round-trip", () => {
     for (const provision of provisions) {
       expect(findProvision(provisions, provision.ref)).toBe(provision);
     }
+  });
+});
+
+describe("compareParagrafIds", () => {
+  test("orders letter-suffixed paragraf identifiers numerically then by suffix", () => {
+    // This ordering is what scope-range membership ("§ 1-§ 9b" must contain
+    // "9" and "9b" but not "9c") depends on.
+    expect(compareParagrafIds("3", "3a")).toBeLessThan(0);
+    expect(compareParagrafIds("3a", "3")).toBeGreaterThan(0);
+    expect(compareParagrafIds("3a", "4")).toBeLessThan(0);
+    expect(compareParagrafIds("9", "9b")).toBeLessThan(0);
+    expect(compareParagrafIds("9a", "9b")).toBeLessThan(0);
+    expect(compareParagrafIds("9b", "9c")).toBeLessThan(0);
+    expect(compareParagrafIds("9b", "10")).toBeLessThan(0);
+    expect(compareParagrafIds("9b", "9b")).toBe(0);
   });
 });
 

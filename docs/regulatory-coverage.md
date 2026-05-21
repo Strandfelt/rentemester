@@ -56,6 +56,14 @@ downloaded source must appear in the manifest. The file is a hand-parsed,
 deterministic YAML subset — it is **reviewable**: the project owner makes the
 final scope call, the seeded ranges are a starting point.
 
+**The headline coverage metric is a self-attestation, not an objective fact.**
+Its denominator is whatever `sources/scope.yaml` declares — narrowing a range
+raises the percentage. The scope checks only guarantee that no *cited*
+provision falls *outside* the declared scope; they cannot stop scope being
+drawn too narrowly. Always read the in-scope figure together with the raw
+corpus-wide figure the report prints, and review `sources/scope.yaml` and its
+diffs as deliberately as the rules themselves.
+
 ## What the engine checks
 
 `computeRegulatoryCoverage()` (`src/core/regulatory-coverage.ts`) cross-checks
