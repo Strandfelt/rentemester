@@ -45,6 +45,125 @@ describe("init CLI", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("registers an init-created company in the workspace so the Cockpit sees it (#216)", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "rentemester-init-ws-"));
+    try {
+      const company = join(ws, "acme-aps");
+      const initProc = Bun.spawn(
+        ["bun", "run", "src/cli.ts", "init", "--company", company, "--format", "json"],
+        {
+          cwd: process.cwd(),
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, RENTEMESTER_WORKSPACE: ws, RENTEMESTER_COMPANY: "" },
+        },
+      );
+      const stdout = await new Response(initProc.stdout).text();
+      const stderr = await new Response(initProc.stderr).text();
+      const exitCode = await initProc.exited;
+      expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+
+      // The workspace manifest now lists the company.
+      const manifest = JSON.parse(await Bun.file(join(ws, "workspace.json")).text());
+      expect(manifest.companies.map((c: any) => c.slug)).toEqual(["acme-aps"]);
+
+      // JSON output exposes the registration outcome for agents.
+      const result = JSON.parse(stdout);
+      expect(result.workspaceRegistered).toBe(true);
+      expect(result.workspaceSlug).toBe("acme-aps");
+
+      // `company list` (the Cockpit's view) now finds it too.
+      const listProc = Bun.spawn(
+        ["bun", "run", "src/cli.ts", "company", "list", "--format", "json"],
+        {
+          cwd: process.cwd(),
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, RENTEMESTER_WORKSPACE: ws, RENTEMESTER_COMPANY: "" },
+        },
+      );
+      const listStdout = await new Response(listProc.stdout).text();
+      await listProc.exited;
+      expect(JSON.parse(listStdout).count).toBe(1);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a raw --company path outside any workspace is not registered (#216 back-compat)", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "rentemester-init-ws-out-"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "rentemester-init-elsewhere-"));
+    try {
+      const company = join(elsewhere, "company");
+      const proc = Bun.spawn(
+        ["bun", "run", "src/cli.ts", "init", "--company", company, "--format", "json"],
+        {
+          cwd: process.cwd(),
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, RENTEMESTER_WORKSPACE: ws, RENTEMESTER_COMPANY: "" },
+        },
+      );
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout).workspaceRegistered).toBe(false);
+      // The workspace manifest is untouched (not created by this init).
+      expect(JSON.parse(stdout).workspaceSlug).toBeUndefined();
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+      rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  test("human output shows an onboarding summary and next steps (#214)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-init-onboard-"));
+    try {
+      const company = join(root, "company");
+      const proc = Bun.spawn(
+        ["bun", "run", "src/cli.ts", "init", "--company", company, "--format", "human"],
+        { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+      );
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      // Summary of what was created, including the seeded chart of accounts.
+      expect(stdout).toContain("Standardkontoplan");
+      expect(stdout).toMatch(/\d+ konti/);
+      // The settings that matter are surfaced for confirmation.
+      expect(stdout).toContain("Regnskabsår");
+      expect(stdout).toContain("Momsperiode");
+      expect(stdout.toLowerCase()).toContain("kvartal");
+      // A clear next-steps path.
+      expect(stdout).toContain("Næste skridt");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("--format json output stays machine-stable for agents (#214)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-init-json-"));
+    try {
+      const company = join(root, "company");
+      const proc = Bun.spawn(
+        ["bun", "run", "src/cli.ts", "init", "--company", company, "--format", "json"],
+        { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+      );
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      // The whole stdout parses as a single JSON object — no prose mixed in.
+      const result = JSON.parse(stdout);
+      expect(result.ok).toBe(true);
+      expect(result.companyRoot).toBe(company);
+      expect(result.accountCount).toBeGreaterThan(0);
+      expect(result.fiscalYearStartMonth).toBe(1);
+      expect(result.vatPeriod).toBe("kvartal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("does not double-prefix DK in stored CVR or dashboard output", async () => {
     const root = mkdtempSync(join(tmpdir(), "rentemester-init-cli-cvr-"));
     const company = join(root, "company");

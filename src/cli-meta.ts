@@ -13,9 +13,13 @@ const GLOBAL_FLAGS = ["--help", "--example", "--format", "--json", "--actor", "-
 export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "init",
-    usage: "init --company <path> [--cvr <DK12345678>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
+    usage: "init --company <path> [--workspace <dir>] [--cvr <DK12345678>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
     description: "Initialiserer en virksomhed og opretter standardkontoplan.",
-    allowedFlags: ["--company", "--cvr", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    allowedFlags: ["--company", "--workspace", "--cvr", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    inputNotes: [
+      "Ligger virksomhedsmappen i et workspace (via --workspace eller RENTEMESTER_WORKSPACE), registreres virksomheden også i workspacet, så Cockpittet kan se den.",
+      "Momsperioden antages at være kvartal — afstem dine momsperioder hvis du afregner måneds- eller halvårsmoms.",
+    ],
   },
   {
     key: "company add",

@@ -160,6 +160,52 @@ export function initialiseCompanyVolume(
   return { companyRoot, dbPath: p.db };
 }
 
+/**
+ * Rentemester currently models VAT settlement on a quarterly cadence — the
+ * `vat_quarter` accounting period. There is no per-company VAT-period setting
+ * yet, so onboarding surfaces this assumption explicitly so the owner can
+ * confirm it fits their registration (some businesses file monthly or
+ * half-yearly) before they start booking.
+ */
+export const ASSUMED_VAT_PERIOD = "kvartal" as const;
+
+export type CompanyOnboardingSummary = {
+  /** Display name stored in the ledger. */
+  name: string;
+  cvr: string | null;
+  /** Month (1-12) the fiscal year starts in. */
+  fiscalYearStartMonth: number;
+  fiscalYearLabelStrategy: FiscalYearLabelStrategy;
+  /** The VAT settlement cadence Rentemester currently assumes. */
+  vatPeriod: typeof ASSUMED_VAT_PERIOD;
+  /** Number of accounts seeded into the chart of accounts. */
+  accountCount: number;
+};
+
+/**
+ * Reads a post-`init` onboarding summary from a company volume: the seeded
+ * chart-of-accounts size plus the settings a new owner must confirm (VAT
+ * period, fiscal year). Pure read — opens the ledger read-only.
+ */
+export function summariseCompanyVolume(companyRoot: string): CompanyOnboardingSummary {
+  const dbPath = join(companyRoot, "data", "ledger.sqlite");
+  const db = openDb(dbPath);
+  try {
+    const settings = getCompanySettings(db);
+    const row = db.query("SELECT COUNT(*) AS n FROM accounts").get() as { n: number };
+    return {
+      name: settings.name,
+      cvr: settings.cvr,
+      fiscalYearStartMonth: settings.fiscalYearStartMonth,
+      fiscalYearLabelStrategy: settings.fiscalYearLabelStrategy,
+      vatPeriod: ASSUMED_VAT_PERIOD,
+      accountCount: Number(row?.n ?? 0),
+    };
+  } finally {
+    db.close();
+  }
+}
+
 export type CreateCompanyOptions = CompanyInitOptions & {
   /** Required: display name; also the basis for an auto-derived slug. */
   name: string;

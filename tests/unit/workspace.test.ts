@@ -7,14 +7,16 @@ import {
   WORKSPACE_MANIFEST_FILE,
   adoptCompanyDir,
   initWorkspace,
+  isCompanyInsideWorkspace,
   listWorkspaceCompanies,
   loadWorkspaceManifest,
+  registerCompanyDirIntoWorkspace,
   resolveWorkspaceSlug,
   saveWorkspaceManifest,
   slugifyCompanyName,
   workspaceExists,
 } from "../../src/core/workspace";
-import { createCompany } from "../../src/core/company";
+import { createCompany, initialiseCompanyVolume } from "../../src/core/company";
 import { companyPaths } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 
@@ -203,6 +205,73 @@ describe("adoption of an unlisted company directory", () => {
       expect(() => adoptCompanyDir(root, "not-a-company")).toThrow();
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("registerCompanyDirIntoWorkspace (#216 init/cockpit unification)", () => {
+  test("detects whether a company directory sits inside a workspace", () => {
+    const ws = tmpRoot("ws-inside");
+    try {
+      expect(isCompanyInsideWorkspace(ws, join(ws, "acme"))).toBe(true);
+      expect(isCompanyInsideWorkspace(ws, join(ws, "acme", "nested"))).toBe(false);
+      expect(isCompanyInsideWorkspace(ws, ws)).toBe(false);
+      expect(isCompanyInsideWorkspace(ws, "/tmp/some-other-place")).toBe(false);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("registers an init-created company so the workspace can see it", () => {
+    const ws = tmpRoot("ws-register-init");
+    try {
+      const companyRoot = join(ws, "acme-aps");
+      initialiseCompanyVolume(companyRoot, { name: "Acme ApS" });
+
+      // Before registration the workspace manifest does not know the company.
+      expect(listWorkspaceCompanies(ws).map((c) => c.slug)).toEqual([]);
+
+      const result = registerCompanyDirIntoWorkspace(ws, companyRoot);
+      expect(result).toEqual({ status: "registered", slug: "acme-aps" });
+
+      const listed = listWorkspaceCompanies(ws);
+      expect(listed.map((c) => c.slug)).toEqual(["acme-aps"]);
+      expect(listed[0]?.name).toBe("Acme ApS");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("is idempotent — re-registering the same company is a no-op", () => {
+    const ws = tmpRoot("ws-register-idem");
+    try {
+      const companyRoot = join(ws, "acme-aps");
+      initialiseCompanyVolume(companyRoot, { name: "Acme ApS" });
+      expect(registerCompanyDirIntoWorkspace(ws, companyRoot).status).toBe("registered");
+      expect(registerCompanyDirIntoWorkspace(ws, companyRoot)).toEqual({
+        status: "already-registered",
+        slug: "acme-aps",
+      });
+      expect(listWorkspaceCompanies(ws)).toHaveLength(1);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("a company directory outside the workspace is left untouched", () => {
+    const ws = tmpRoot("ws-register-outside");
+    const elsewhere = tmpRoot("ws-register-elsewhere");
+    try {
+      const companyRoot = join(elsewhere, "company");
+      initialiseCompanyVolume(companyRoot, { name: "Outside Co" });
+      initWorkspace(ws);
+      expect(registerCompanyDirIntoWorkspace(ws, companyRoot)).toEqual({
+        status: "outside-workspace",
+      });
+      expect(listWorkspaceCompanies(ws)).toEqual([]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+      rmSync(elsewhere, { recursive: true, force: true });
     }
   });
 });

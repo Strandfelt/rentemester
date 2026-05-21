@@ -222,6 +222,75 @@ export function registerWorkspaceCompany(
 }
 
 /**
+ * True when `companyRoot` is a direct child directory of `workspaceRoot`, i.e.
+ * `<workspaceRoot>/<slug>/`. A company nested deeper, or outside the workspace,
+ * is not a workspace member and is rejected by the manifest helpers below.
+ */
+export function isCompanyInsideWorkspace(
+  workspaceRoot: string,
+  companyRoot: string,
+): boolean {
+  const ws = resolve(workspaceRoot);
+  const company = resolve(companyRoot);
+  const parent = company.slice(0, company.lastIndexOf(sep));
+  return parent === ws && company !== ws;
+}
+
+/**
+ * Result of {@link registerCompanyDirIntoWorkspace}: whether the company was
+ * newly added to the manifest, already present, or could not be registered
+ * because its directory does not sit directly inside the workspace.
+ */
+export type WorkspaceAutoRegisterResult =
+  | { status: "registered"; slug: string }
+  | { status: "already-registered"; slug: string }
+  | { status: "outside-workspace" };
+
+/**
+ * Registers a company directory that lives directly inside `workspaceRoot`
+ * (`<workspaceRoot>/<slug>/`) into the workspace manifest.
+ *
+ * This is the bridge that makes a company created via `rentemester init`
+ * visible to the cockpit (#216): `init` calls this after building the volume
+ * when a workspace is configured. It is intentionally forgiving — it never
+ * throws — so an unrelated `--company` path can never break `init`:
+ *  - directory not inside the workspace  → `outside-workspace` (no-op)
+ *  - slug already in the manifest        → `already-registered` (no-op)
+ *  - otherwise                           → `registered`
+ *
+ * The workspace manifest is created if it does not exist yet.
+ */
+export function registerCompanyDirIntoWorkspace(
+  workspaceRoot: string,
+  companyRoot: string,
+  options?: { name?: string; createdAt?: string },
+): WorkspaceAutoRegisterResult {
+  if (!isCompanyInsideWorkspace(workspaceRoot, companyRoot)) {
+    return { status: "outside-workspace" };
+  }
+  const resolvedCompany = resolve(companyRoot);
+  const slug = resolvedCompany.slice(resolvedCompany.lastIndexOf(sep) + 1);
+  if (!isValidSlug(slug)) {
+    // The directory name is not a usable slug — treat it like a non-member so
+    // `init` is never blocked by a path the workspace model cannot index.
+    return { status: "outside-workspace" };
+  }
+  if (findWorkspaceCompany(workspaceRoot, slug)) {
+    return { status: "already-registered", slug };
+  }
+  if (!workspaceExists(workspaceRoot)) initWorkspace(workspaceRoot);
+  const p = companyPaths(resolvedCompany);
+  const name = options?.name ?? readCompanyName(p.db) ?? slug;
+  registerWorkspaceCompany(workspaceRoot, {
+    slug,
+    name,
+    createdAt: options?.createdAt ?? new Date().toISOString(),
+    archived: false,
+  });
+  return { status: "registered", slug };
+}
+
+/**
  * Adopts a present-but-unlisted company directory into the manifest. The
  * directory must already contain a ledger DB; the company name is read from
  * its `companies` table when available, otherwise defaults to the slug.
