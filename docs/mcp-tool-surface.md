@@ -1,25 +1,44 @@
 # MCP Tool Surface — Rentemester
 
-Spec for hvordan Rentemesters CLI-kommandoer eksponeres som MCP-tools til
-agenter (Claude, Cursor, Claude Code, Codex osv.). Dokumentet er bygge-tegning
-for MCP-epicen (#89) og forudsætning for scaffold (#77), implementation (#78)
-og demo (#79).
+Den autoritative liste over de tools Rentemester-MCP-serveren eksponerer til
+agenter (Claude, Cursor, Claude Code, Codex osv.). Dokumentet startede som
+bygge-tegning for MCP-epicen (#89, scaffold #77, implementation #78) og
+vedligeholdes nu som facitliste mod den kørende server.
+
+> **Hold dette synkront.** Tool-tallet i dette dokument skal matche en
+> kørende server. Den hurtige måde at få den faktiske liste på er at drive
+> serveren over stdio og kalde `tools/list` — se `scripts/smoke-mcp.ts` for
+> et minimalt eksempel. Tæl aldrig tools i hånden.
 
 Kilder:
-- `src/cli-meta.ts` — den autoritative liste af CLI-kommandoer (49 kommandoer).
+- En kørende `src/mcp/server.ts` (`tools/list`) — facit for hvilke tools der
+  faktisk eksponeres og deres `annotations` (read-only/destructive-hints).
+- `src/mcp/registry.ts` — registrerer hele tool-surface'en pr. domæne.
+- `src/cli-meta.ts` — CLI-kommandoerne. MCP-surface'en er *tæt på* 1:1 med
+  CLI'en, men ikke fuldstændig — se "CLI/MCP-mapping" nedenfor.
 - `src/core/*.ts` — TypeScript-typer for inputs og resultater (`InvoicePayload`,
   `JournalEntryInput`, `BankImportRow`, `DocumentMetadata`, `ActorContext` osv.).
 - `src/cli-format.ts` — output-konventionen `{ ok, errors, ... }` som vi
   genbruger til MCP-svar.
 
+For den narrative kontrakt — hvordan en ekstern agent skal bruge den løse
+tool-surface (rækkefølge, confirm/destructive-konventioner, hvor
+forudsætninger ligger) — se [`docs/mcp-agent-contract.md`](mcp-agent-contract.md).
+Serveren leverer derudover en kort `instructions`-streng i `initialize`-svaret
+med det samme i komprimeret form.
+
 ## Designprincipper
 
-1. **En MCP-tool = præcis én CLI-kommando.** Tools navngives `snake_case` med
-   første led som domæne (`invoice_*`, `bank_*`, `journal_*`, `documents_*`,
-   `system_*`, `vat_*`, `customer_*`, `vendor_*`, `period_*`, `retention_*`,
-   `exceptions_*`, `accounts_*`, `reconcile_*`, `expense_*`, `audit_*`). Dette
-   matcher CLI'ens `domæne underkommando`-struktur 1:1 og gør det trivielt at
-   regenerere registret fra `COMMAND_SPECS`.
+1. **En MCP-tool = (typisk) én CLI-kommando.** Tools navngives `snake_case`
+   med første led som domæne (`invoice_*`, `bank_*`, `journal_*`,
+   `documents_*`, `system_*`, `vat_*`, `customer_*`, `vendor_*`, `period_*`,
+   `retention_*`, `exceptions_*`, `accounts_*`, `reconcile_*`, `expense_*`,
+   `audit_*`, `asset_*`, `mileage_*`, `recurring_invoice_*`, `mail_intake_*`,
+   `imap_intake_*`, `peppol_*`, `company_*`, `portfolio_*`, `import_*`).
+   Dette matcher CLI'ens `domæne underkommando`-struktur tæt — men ikke
+   100 %: nogle MCP-tools har ingen CLI-pendant og enkelte CLI-kommandoer
+   eksponeres ikke som tools. Kendte afvigelser er listet under
+   "CLI/MCP-mapping".
 2. **Typed inputs via zod genereret fra TypeScript-typerne.** For hver tool
    defineres en `z.object({...})`. Hvor kernen allerede har en type
    (`InvoicePayload`, `JournalEntryInput`, `BankImportRow`,
@@ -28,8 +47,7 @@ Kilder:
    `ReverseChargePurchaseInput`, `RepresentationPurchaseInput`,
    `ExportAuthorityPackageInput`, `RestoreSystemBackupInput`,
    `RecordExceptionInput`, `ResolveExceptionInput`) genereres zod-skemaet
-   parallelt og holdes synkroniseret via en unit-test (separat task — se
-   Forudsætninger).
+   parallelt.
 3. **Struktureret output `{ ok, data?, errors[], appliedRules? }`.** Vi
    genbruger kernens eksisterende `JournalPostResult`/`*Result`-shape og
    wrapper alle outputs i et fælles convolut. `ok=true` ⇒ `data` er sat;
@@ -37,121 +55,205 @@ Kilder:
    altid for kommandoer der bogfører (sporbarhed mod regelsæt).
 4. **Sikkerhedsklassifikation** på fire niveauer:
    - `read` — ingen state-bivirkninger; agenten må kalde frit og parallelt.
+     Markeret med `annotations.readOnlyHint: true`.
    - `write-reversible` — opretter state der kan tilbageføres via
-     `journal_reverse`, `invoice_credit_note`, eller `exception_resolve`.
+     `journal_reverse`, `invoice_credit_note`, `exception_resolve` eller ved
+     en korrigerende post. Kræver `confirm: true`.
    - `write-irreversible` — bogfører i append-only kæde (audit_log + hash);
      kan kun "rulles tilbage" via en modpostering. Kræver `confirm: true`.
-   - `destructive` — system-niveau (restore, retention purge, backup-rotation).
-     Kræver `confirm: true` **og** `confirmText: "<præcis fritekst>"`.
-5. **Actor-attribution er obligatorisk.** Hvert MCP-call sætter
-   `RENTEMESTER_ACTOR=agent:<client-info>` (jf. #63) før kerne-funktionen
-   kaldes. Format: `agent:claude-code/0.4.1 (user:mikkel@56n.dk)`.
-   `auditActor` skrives ind i `audit_log.actor` og udgør traceable kæde fra
-   agent-call til bogføring.
-6. **Idempotency-keys på alle writes.** Klienten kan sende
-   `idempotencyKey: "<uuid>"` i input. Serveren cacher senest succesfulde
-   svar i 24h og returnerer samme svar ved gen-kald — beskytter mod
-   dobbelt-bogføring ved netværks-retry.
+   - `destructive` — system-niveau (restore). Markeret med
+     `annotations.destructiveHint: true`. Kræver `confirm: true` **og**
+     `confirmText: "<præcis fritekst>"`.
+5. **Actor-attribution er obligatorisk.** Hvert MCP-call tilskrives som
+   `agent:<client-info>` (jf. #63). `auditActor` skrives ind i
+   `audit_log.actor` og udgør traceable kæde fra agent-call til bogføring.
+6. **Idempotency-keys på writes.** Klienten kan sende
+   `idempotencyKey: "<uuid>"` i input på de writes der understøtter det.
+   Beskytter mod dobbelt-bogføring ved netværks-retry. Flere intake-/
+   generér-tools er derudover idempotente af natur (`annotations.idempotentHint`).
 7. **Eksplicit `company`-parameter overalt.** Aldrig implicit "current
-   company"; agent skal altid pege på den absolutte sti. Forhindrer
-   utilsigtet cross-company-skade.
+   company"; agent skal altid pege på den absolutte sti. Workspace-tools
+   (`company_add`, `portfolio_overview`) tager i stedet en `workspace`-sti.
 
 ## Klassifikation
 
 | Niveau | Krav | Eksempler |
 |---|---|---|
-| `read` | Ingen | `audit_verify`, `bank_list`, `invoice_status`, `vat_report` |
-| `write-reversible` | `confirm: true` | `customer_create`, `vendor_create`, `bank_import`, `documents_ingest`, `exception_resolve` |
-| `write-irreversible` | `confirm: true` | `journal_post`, `invoice_issue`, `invoice_post`, `invoice_settle_bank`, `expense_book`, `vat_post_*` |
-| `destructive` | `confirm: true` + `confirmText` | `system_restore_backup`, fremtidige retention-purges |
+| `read` | Ingen | `audit_verify`, `bank_list`, `invoice_status`, `vat_report`, `portfolio_overview` |
+| `write-reversible` | `confirm: true` | `customer_create`, `vendor_create`, `bank_import`, `documents_ingest`, `exception_resolve`, `mileage_log` |
+| `write-irreversible` | `confirm: true` | `journal_post`, `invoice_issue`, `invoice_post`, `expense_book`, `vat_post_*`, `asset_register`, `system_backup` |
+| `destructive` | `confirm: true` + `confirmText` | `system_restore_backup` |
 
 `journal_reverse` er klassificeret som `write-irreversible`: den skriver en ny
 post i den append-only kæde — den modposterer en tidligere post, men kæden
 selv ændres ikke.
 
+## Tool-count summary
+
+Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
+
+- **Read-tools**: 33
+- **Write-reversible**: 10
+- **Write-irreversible**: 37
+- **Destructive**: 1 (`system_restore_backup`)
+- **Total**: **81**
+
 ## Read-tools
 
-| Tool | CLI-ækvivalent | Input | Output | Brief |
-|---|---|---|---|---|
-| `audit_verify` | `audit verify` | `{ company }` | `{ entries, ok, errors[] }` | Verificerer hash-chain og bogføringsintegritet. |
-| `accounts_list` | `accounts list` | `{ company }` | `{ accounts: AccountRow[] }` | Lister kontoplanen. |
-| `bank_list` | `bank list` | `{ company, status?, from?, to?, textMatch?, amount? }` | `{ transactions: BankTransactionRow[] }` | Lister importerede banktransaktioner med filtre. |
-| `bank_suggest_matches` | `bank suggest-matches` | `{ company, bankTransactionId?, max? }` | `{ suggestions: BankMatchSuggestion[] }` | Foreslår deterministiske match mellem uafstemte bank-poster og bilag. |
-| `customer_list` | `customer list` | `{ company, archived? }` | `{ customers: CustomerRecord[] }` | Lister kendte kunder. |
-| `customer_validate_vat` | `customer validate-vat` | `{ company, cvr }` | `{ valid, cachedAt, name?, address? }` | Validerer EU-VAT via VIES og cacher resultatet. |
-| `cvr_lookup` | `customer cvr-lookup` | `{ company, cvr }` | `{ company: CvrCompanyInfo, cached, fetchedAt? }` | Slår en dansk virksomhed op i CVR-registret og cacher snapshottet. Kræver CVR_USERNAME/CVR_PASSWORD. |
-| `documents_list` | `documents list` | `{ company }` | `{ documents: DocumentRow[] }` | Lister gemte bilag. |
-| `exceptions_list` | `exceptions list` | `{ company, status? }` | `{ exceptions: ExceptionRow[] }` | Lister exceptions-køen (open/resolved/all). |
-| `invoice_status` | `invoice status` | `{ company, documentId? | invoiceNumber?, asOf? }` | `{ status, openBalance, paidAmount, ... }` | Viser åben saldo og status på en faktura. |
-| `invoice_list` | `invoice list` | `{ company, status?, from?, to?, customerCvr?, customer?, invoiceNumber?, minAmount?, maxAmount?, asOf? }` | `{ invoices: IssuedInvoiceRow[] }` | Lister udstedte fakturaer med filtre. |
-| `invoice_find` | `invoice find` | `{ company, query?, customer?, amount?, invoiceNumber?, asOf? }` | `{ matches: IssuedInvoiceRow[] }` | Søger efter fakturaer på nummer, kunde eller beløb. |
-| `invoice_overdue` | `invoice overdue` | `{ company, asOf?, minDays? }` | `{ invoices: IssuedInvoiceRow[] }` | Lister forfaldne udstedte fakturaer. |
-| `invoice_interest_calc` | `invoice interest` | `{ company, documentId? | invoiceNumber?, asOf, referenceRate }` | `{ interestAmount, baseAmount, days, ratePct }` | Beregner morarente (uden at registrere). |
-| `invoice_compensation_calc` | `invoice compensation` | `{ company, documentId? | invoiceNumber?, asOf, amountDkk? }` | `{ compensationAmount, baseAmount }` | Beregner kompensationskrav for sen betaling. |
-| `invoice_validate` | `invoice validate` | `{ payload: InvoicePayload }` | `{ ok, errors[], appliedRules[] }` | Validerer faktura-payload uden at gemme. |
-| `journal_list` | `journal list` | `{ company }` | `{ entries: JournalEntryRow[] }` | Lister finansposteringer. |
-| `period_list` | (afledt af `period close` + `accounts list`)¹ | `{ company }` | `{ periods: AccountingPeriodRow[] }` | Lister regnskabsperioder. Kræver ny CLI-kommando (se Forudsætninger). |
-| `reconcile_bank` | `reconcile bank` | `{ company, from, to, status?, textMatch?, amount? }` | `{ matched: [...], unmatched: [...], totals }` | Bygger bank-afstemningsrapport for periode. |
-| `retention_status` | `retention status` | `{ company, asOf? }` | `{ rows: RetentionStatusRow[], expired, dueWithin30d }` | Viser opbevaringsfrister og udløbet materiale. |
-| `system_backup_status` | `system backup-status` | `{ company, asOf? }` | `{ compliant, lastBackupAt, dueAt, hoursOverdue? }` | Tjekker om backup-pligten er opfyldt. |
-| `system_healthcheck` | `system healthcheck` | `{ company }` | `{ ok, missing[] }` | Tjekker virksomhedsmappens integritet. |
-| `vat_report` | `vat report` | `{ company, from, to }` | `{ outputVat, inputVat, reverseCharge, netPayable, lines }` | Bygger momsrapport for perioden. |
-| `vendor_list` | `vendor list` | `{ company, archived? }` | `{ vendors: VendorRecord[] }` | Lister kendte leverandører. |
+33 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
 
-¹ `period_list` kræver en ny CLI-kommando der wrapper en SELECT mod
-`accounting_periods`-tabellen. Dokumenteret i Forudsætninger.
+| Tool | CLI-ækvivalent | Input | Brief |
+|---|---|---|---|
+| `accounts_list` | `accounts list` | `{ company }` | Lister kontoplanen. |
+| `asset_register_report` | `asset register-report` | `{ company }` | Aktivregister med akkumulerede afskrivninger og bogført værdi. |
+| `audit_verify` | `audit verify` | `{ company }` | Verificerer hash-chain og bogføringsintegritet. |
+| `bank_list` | `bank list` | `{ company, status?, from?, to?, textMatch?, amount?, account? }` | Lister importerede banktransaktioner med filtre. |
+| `bank_suggest_matches` | `bank suggest-matches` | `{ company, bankTransactionId?, max? }` | Foreslår deterministiske match mellem uafstemte bank-poster og bilag. |
+| `customer_list` | `customer list` | `{ company, archived? }` | Lister kendte kunder. |
+| `customer_validate_vat` | `customer validate-vat` | `{ company, cvr }` | Validerer EU-VAT via VIES og cacher resultatet. |
+| `cvr_lookup` | `customer cvr-lookup` | `{ company, cvr }` | Slår en dansk virksomhed op i CVR-registret. Kræver `CVR_USERNAME`/`CVR_PASSWORD`. |
+| `documents_list` | `documents list` | `{ company }` | Lister gemte bilag. |
+| `exceptions_list` | `exceptions list` | `{ company, status?, includeArchived? }` | Lister exceptions-køen (open/resolved/all). |
+| `import_archive_list` | `import archive` | `{ company, sourceSystem? }` | Lister pre-cut-over regnskabsår arkiveret fra et flerårigt eksport. |
+| `import_archive_year` | (afledt af `import archive`)¹ | `{ company, fiscalYear, sourceSystem? }` | Henter ét arkiveret regnskabsårs fulde posteringer + saldobalance. |
+| `invoice_compensation_calc` | `invoice compensation` | `{ company, documentId? \| invoiceNumber?, asOf, amountDkk? }` | Beregner kompensationskrav (uden at registrere). |
+| `invoice_find` | `invoice find` | `{ company, query?, customer?, invoiceNumber?, amount?, asOf? }` | Søger fakturaer på nummer, kunde eller beløb. |
+| `invoice_interest_calc` | `invoice interest` | `{ company, documentId? \| invoiceNumber?, asOf, referenceRate }` | Beregner morarente (uden at registrere). |
+| `invoice_list` | `invoice list` | `{ company, status?, from?, to?, customerCvr?, customer?, invoiceNumber?, minAmount?, maxAmount?, asOf? }` | Lister udstedte fakturaer med filtre. |
+| `invoice_overdue` | `invoice overdue` | `{ company, asOf?, minDays? }` | Lister forfaldne, ikke fuldt afregnede fakturaer. |
+| `invoice_status` | `invoice status` | `{ company, documentId? \| invoiceNumber?, asOf? }` | Viser åben saldo og status på en faktura. |
+| `invoice_validate` | `invoice validate` | `{ payload: InvoicePayload }` | Validerer faktura-payload uden at gemme. |
+| `journal_list` | `journal list` | `{ company }` | Lister finansposteringer. |
+| `mileage_list` | `mileage list` | `{ company }` | Lister registrerede kørselsposter. |
+| `mileage_report` | `mileage report` | `{ company, from, to }` | Deterministisk periode-rapport over kilometer og beløbsgrundlag. |
+| `period_list` | (ingen — kun MCP)² | `{ company }` | Lister regnskabsperioder (open/closed/reported). |
+| `portfolio_overview` | `dashboard` (delvist) | `{ workspace, asOf? }` | Status side om side for hver virksomhed i workspace'et. Intet konsolideres. |
+| `reconcile_bank` | `reconcile bank` | `{ company, from, to, status?, textMatch?, amount?, account? }` | Bygger bank-afstemningsrapport for periode. |
+| `recurring_invoice_list` | `recurring-invoice list` | `{ company, includeInactive? }` | Lister gentagende fakturaskabeloner. |
+| `retention_status` | `retention status` | `{ company, asOf? }` | Viser opbevaringsfrister og udløbet materiale. |
+| `system_backup_destination_list` | `system backup-destinations` | `{ company }` | Lister konfigurerede backup-destinationer med attestering. |
+| `system_backup_governance` | `system backup-governance` | `{ company, asOf? }` | Samlet backup-status: forfald, lås, destinationer, sikker placering. |
+| `system_backup_status` | `system backup-status` | `{ company, asOf? }` | Tjekker om backup-pligten er opfyldt. |
+| `system_healthcheck` | `system healthcheck` | `{ company }` | Tjekker virksomhedsmappens integritet. |
+| `vat_report` | `vat report` | `{ company, from, to }` | Bygger momsrapport for perioden. |
+| `vendor_list` | `vendor list` | `{ company, archived? }` | Lister kendte leverandører. |
+
+¹ `import_archive_year` har ingen selvstændig CLI-kommando; den hentes fra
+samme arkiv-artefakt som `import archive` skriver.
+² `period_list` — se "CLI/MCP-mapping" nedenfor.
 
 ## Write-tools
 
-Alle write-tools kræver `confirm: true`. Hvis flaget mangler returneres
+Alle write-tools kræver `confirm: true`. Mangler flaget returneres
 `{ ok: false, errors: ["confirm: true required for write tool <name>"] }`
-uden at kalde kernen.
+uden at kernen kaldes.
 
 ### write-reversible
 
-| Tool | CLI-ækvivalent | Input | Output | Brief |
-|---|---|---|---|---|
-| `bank_import` | `bank import` | `{ company, csvContent | csvPath, confirm }` | `BankImportResult` | Importerer banktransaktioner. Kan slettes ved at importere en ny CSV (vi har ikke implementeret slet, men import er deterministisk via `sourceFileHash`). |
-| `company_sync_cvr` | `company sync-cvr` | `{ company, confirm }` | `{ company: CvrCompanyInfo, updatedFields[], fiscalYearStartMonth }` | Henter virksomhedens stamdata fra CVR-registret og opdaterer companies-rækken. Regnskabsåret røres aldrig. |
-| `customer_create` | `customer create` | `{ company, input: CreateCustomerInput, fromCvr?, confirm }` | `{ customer: CustomerRecord }` | Opretter append-only kundepost. Kan arkiveres (ikke slettes). Med `fromCvr` udfyldes felter fra CVR-registret. |
-| `documents_ingest` | `documents ingest` | `{ company, filePath, metadata: DocumentMetadata, vendorId?, force?, confirm }` | `IngestDocumentResult` | Indlæser og hash-lagrer et bilag. Kan superseedes af nyt bilag. |
-| `exception_resolve` | `exceptions resolve` | `{ company, id, note?, confirm }` | `{ exception: ExceptionRow }` | Markerer exception som løst. Kan ikke gen-åbnes manuelt. |
-| `vendor_create` | `vendor create` | `{ company, input: CreateVendorInput, fromCvr?, confirm }` | `{ vendor: VendorRecord }` | Opretter append-only leverandørpost. Med `fromCvr` udfyldes felter fra CVR-registret. |
+10 tools. Opretter state der kan tilbageføres/arkiveres uden at røre den
+append-only finanskæde.
+
+| Tool | CLI-ækvivalent | Input | Brief |
+|---|---|---|---|
+| `bank_import` | `bank import` | `{ company, csvPath \| csvContent, account?, profile?, confirm }` | Importerer banktransaktioner fra CSV. Deterministisk via `sourceFileHash`. |
+| `company_sync_cvr` | `company sync-cvr` | `{ company, confirm }` | Henter virksomhedens stamdata fra CVR og opdaterer companies-rækken. Regnskabsåret røres ikke. |
+| `customer_create` | `customer create` | `{ company, input: CreateCustomerInput, fromCvr?, confirm }` | Opretter append-only kundepost. Kan arkiveres. |
+| `documents_ingest` | `documents ingest` | `{ company, filePath, metadata: DocumentMetadata, vendorId?, force?, confirm }` | Indlæser og hash-lagrer et bilag. |
+| `exception_resolve` | `exceptions resolve` | `{ company, id, note?, confirm }` | Markerer exception som løst. |
+| `imap_intake_poll` | `imap-intake poll` | `{ company, imapHost, imapPort?, imapUsername, imapMailbox?, sinceUid?, metadata?, metadataPerMessage?, force?, confirm }` | Poller en IMAP-postkasse og videresender vedhæftninger til bilags-pipelinen. Dedup-stabil. |
+| `mail_intake_ingest` | `mail-intake ingest` | `{ company, source, metadata?, metadataPerMessage?, force?, confirm }` | Indlæser en `.eml`-fil/maildrop-mappe og videresender vedhæftninger. Idempotent. |
+| `mileage_export` | `mileage export` | `{ company, from, to, outputDir, confirm }` | Skriver et deterministisk eksport-artefakt (JSON + CSV) over kørselsregnskabet. |
+| `mileage_log` | `mileage log` | `{ company, input, confirm }` | Tilføjer en append-only kørselspost. Skattemæssig behandling er brugerens ansvar. |
+| `vendor_create` | `vendor create` | `{ company, input: CreateVendorInput, fromCvr?, confirm }` | Opretter append-only leverandørpost. |
 
 ### write-irreversible
 
-| Tool | CLI-ækvivalent | Input | Output | Brief |
-|---|---|---|---|---|
-| `company_init` | `init` | `{ company, cvr?, fiscalYearStartMonth?, fiscalYearLabelStrategy?, confirm }` | `{ company, accountsSeeded, ... }` | Initialiserer virksomhedsmappe + standardkontoplan. |
-| `expense_book` | `expense book` | `{ company, documentId, bankTransactionId, expenseAccount, vatTreatment?, paymentAccount?, date?, text?, confirm }` | `BookExpenseFromBankResult` | Bogfører leverandørudgift fra bilag + bankpost. |
-| `invoice_apply_payment` | `invoice apply-payment` | `{ company, payload: InvoicePaymentPayload, confirm }` | `{ paymentId, openBalance, status }` | Registrerer fakturabetaling fra payload. |
-| `invoice_claim_compensation` | `invoice claim-compensation` | `{ company, documentId? | invoiceNumber?, asOf, amountDkk?, note?, confirm }` | `{ claimId }` | Registrerer kompensationskrav (uden at bogføre). |
-| `invoice_claim_interest` | `invoice claim-interest` | `{ company, documentId? | invoiceNumber?, asOf, referenceRate, note?, confirm }` | `{ claimId, interestAmount }` | Registrerer morarentekrav. |
-| `invoice_credit_note` | `invoice credit-note` | `{ company, payload: CreditNotePayload, confirm }` | `{ creditNoteId, creditNoteNo, ledgerEntryId }` | Udsteder kreditnota mod eksisterende faktura. |
-| `invoice_issue` | `invoice issue` | `{ company, payload: InvoicePayload, customerId?, confirm }` | `{ documentId, invoiceNo, pdfPath, sha256 }` | Udsteder kundefaktura + immutable snapshot. |
-| `invoice_post` | `invoice post` | `{ company, documentId? | invoiceNumber?, confirm }` | `JournalPostResult` | Bogfører udstedt faktura i finansen. |
-| `invoice_post_compensation` | `invoice post-compensation` | `{ company, documentId? | invoiceNumber?, date?, confirm }` | `JournalPostResult` | Bogfører registreret kompensation. |
-| `invoice_post_interest` | `invoice post-interest` | `{ company, documentId? | invoiceNumber?, claimId?, date?, confirm }` | `JournalPostResult` | Bogfører registreret morarentekrav. |
-| `invoice_post_reminder` | `invoice post-reminder` | `{ company, documentId? | invoiceNumber?, reminderId?, date?, confirm }` | `JournalPostResult` | Bogfører registreret rykker. |
-| `invoice_refund_bank` | `invoice refund-bank` | `{ company, payload: RefundPayload, confirm }` | `JournalPostResult` | Bogfører refundering til kunde fra banken. |
-| `invoice_remind` | `invoice remind` | `{ company, documentId? | invoiceNumber?, date, fee?, note?, confirm }` | `{ reminderId, fee }` | Registrerer rykker på forfalden faktura. |
-| `invoice_render` | `invoice render` | `{ company, documentId? | invoiceNumber?, confirm }` | `{ pdfPath, sha256, regenerated }` | Renderer (eller genskaber) deterministisk PDF for udstedt faktura. |
-| `invoice_settle_bank` | `invoice settle-bank` | `{ company, payload: SettlementPayload, confirm }` | `JournalPostResult` | Matcher bankbetaling mod faktura. |
-| `invoice_settle_claim_bank` | `invoice settle-claim-bank` | `{ company, payload: ClaimSettlementPayload, confirm }` | `JournalPostResult` | Matcher bankbetaling mod fakturakrav. |
-| `invoice_write_off_bad_debt` | `invoice write-off-bad-debt` | `{ company, payload: BadDebtPayload, confirm }` | `JournalPostResult` | Bogfører tab på debitor. |
-| `journal_post` | `journal post` | `{ company, payload: JournalEntryInput, confirm }` | `JournalPostResult` | Bogfører manuel finanspostering. |
-| `journal_reverse` | `journal reverse` | `{ company, entryId? | entryNo? | matchText?, matchDate?, matchDocumentId?, date, reason, confirm }` | `JournalReverseResult` | Tilbagefører bogført finanspostering ved at oprette modpost. |
-| `period_close` | `period close` | `{ company, from, to, kind?, status?, reference?, confirm }` | `CloseAccountingPeriodResult` | Lukker eller markerer regnskabsperiode. |
-| `vat_post_eu_service_purchase` | `vat post-eu-service-purchase` | `{ company, payload: ReverseChargePurchaseInput, confirm }` | `JournalPostResult` | Bogfører EU-servicekøb med reverse charge. |
-| `vat_post_representation_purchase` | `vat post-representation-purchase` | `{ company, payload: RepresentationPurchaseInput, confirm }` | `JournalPostResult` | Bogfører repræsentationsudgift med delvis momsfradrag. |
+37 tools. Bogfører i den append-only hash-kæde eller skriver
+revisionsklare/eksterne artefakter; kan kun "rulles tilbage" via en
+modpostering.
+
+| Tool | CLI-ækvivalent | Input | Brief |
+|---|---|---|---|
+| `asset_depreciate` | `asset depreciate` | `{ company, assetId, period, date, confirm }` | Bogfører en periodes afskrivning. |
+| `asset_register` | `asset register` | `{ company, name, category, acquisitionDate, cost, usefulLifeMonths, documentId, assetAccount, depreciationAccount, accumulatedAccount, note?, confirm }` | Registrerer et aktiv med lineær afskrivningsplan. |
+| `asset_write_off` | `asset write-off` | `{ company, name, category, acquisitionDate, cost, documentId, expenseAccount, date, thresholdRuleSource, confirmImmediateWriteOff, paymentAccount?, note?, confirm }` | Bogfører straksafskrivning af et mindre aktiv. |
+| `company_add` | `company add` | `{ workspace, name, slug?, cvr?, fiscalYearStartMonth?, fiscalYearLabelStrategy? }` | Opretter en ny virksomhed i workspace'et og initialiserer ledgeren. |
+| `expense_book` | `expense book` | `{ company, documentId, bankTransactionId, expenseAccount, vatTreatment?, paymentAccount?, date?, text?, confirm }` | Bogfører leverandørudgift fra bilag + bankpost. |
+| `invoice_apply_payment` | `invoice apply-payment` | `{ company, payload: InvoicePaymentPayload, confirm }` | Registrerer fakturabetaling fra payload. |
+| `invoice_claim_compensation` | `invoice claim-compensation` | `{ company, documentId? \| invoiceNumber?, asOf, amountDkk?, note?, confirm }` | Registrerer kompensationskrav. |
+| `invoice_claim_interest` | `invoice claim-interest` | `{ company, documentId? \| invoiceNumber?, asOf, referenceRate, note?, confirm }` | Registrerer morarentekrav. |
+| `invoice_credit_note` | `invoice credit-note` | `{ company, payload: CreditNotePayload, confirm }` | Udsteder kreditnota mod eksisterende faktura. |
+| `invoice_issue` | `invoice issue` | `{ company, payload: InvoicePayload, customerId?, confirm }` | Udsteder kundefaktura + immutable snapshot. |
+| `invoice_post` | `invoice post` | `{ company, documentId? \| invoiceNumber?, confirm }` | Bogfører udstedt faktura i finansen. |
+| `invoice_post_compensation` | `invoice post-compensation` | `{ company, documentId? \| invoiceNumber?, date?, confirm }` | Bogfører registreret kompensation. |
+| `invoice_post_interest` | `invoice post-interest` | `{ company, documentId? \| invoiceNumber?, claimId?, date?, confirm }` | Bogfører registreret morarentekrav. |
+| `invoice_post_reminder` | `invoice post-reminder` | `{ company, documentId? \| invoiceNumber?, reminderId?, date?, confirm }` | Bogfører registreret rykker. |
+| `invoice_refund_bank` | `invoice refund-bank` | `{ company, payload: RefundPayload, confirm }` | Bogfører refundering til kunde fra banken. |
+| `invoice_remind` | `invoice remind` | `{ company, documentId? \| invoiceNumber?, date, fee?, note?, confirm }` | Registrerer rykker på forfalden faktura. |
+| `invoice_render` | `invoice render` | `{ company, documentId? \| invoiceNumber?, confirm }` | Renderer (eller genskaber) deterministisk PDF. Idempotent. |
+| `invoice_send_email` | `invoice send` | `{ company, documentId? \| invoiceNumber?, kind?, to?, confirm }` | Sender faktura/rykker via SMTP med PDF vedhæftet. Idempotent. SMTP-config fra `config/smtp.json`. |
+| `invoice_settle_bank` | `invoice settle-bank` | `{ company, payload: SettlementPayload, confirm }` | Matcher bankbetaling mod faktura. |
+| `invoice_settle_claim_bank` | `invoice settle-claim-bank` | `{ company, payload: ClaimSettlementPayload, confirm }` | Matcher bankbetaling mod fakturakrav. |
+| `invoice_write_off_bad_debt` | `invoice write-off-bad-debt` | `{ company, payload: BadDebtPayload, confirm }` | Bogfører tab på debitor. |
+| `journal_post` | `journal post` | `{ company, payload: JournalEntryInput, confirm, idempotencyKey? }` | Bogfører manuel finanspostering. |
+| `journal_reverse` | `journal reverse` | `{ company, entryId? \| entryNo? \| matchText?, matchDate?, matchDocumentId?, date, reason, confirm }` | Tilbagefører bogført finanspostering ved at oprette modpost. |
+| `peppol_submit_public_invoice` | `invoice submit-public-peppol` | `{ company, documentId? \| invoiceNumber?, accessPoint, acknowledgement?, confirm }` | Bygger en idempotent PEPPOL-submission-envelope og registrerer forsøget. |
+| `period_close` | `period close` | `{ company, from, to, kind?, status?, reference?, confirm }` | Lukker eller markerer regnskabsperiode. |
+| `recurring_invoice_create` | `recurring-invoice create` | `{ company, name, interval, firstIssueDate, invoice, paymentTermsDays?, deliveryPeriodMode?, notes?, confirm }` | Opretter en gentagende fakturaskabelon. |
+| `recurring_invoice_generate` | `recurring-invoice generate` | `{ company, templateId, asOfDate, confirm }` | Materialiserer den forfaldne faktura for skabelonen. Idempotent pr. template/periode. |
+| `system_backup` | `system backup` | `{ company, at?, archive?, confirm }` | Opretter revisionsklar backup. `archive:true` pakker straks til ét `.tar`. |
+| `system_backup_archive` | `system backup-archive` | `{ company, backupId?, out?, confirm }` | Pakker en eksisterende backup til ét deterministisk `.tar` (+ `.sha256`). |
+| `system_backup_confirm_placement` | `system backup-confirm-placement` | `{ company, destinationId, backupId?, archiveSha256?, archiveSizeBytes?, actorKind?, at?, note?, confirm }` | Registrerer en backup-placering foretaget uden for Rentemester. |
+| `system_backup_destination_add` | `system backup-add-destination` | `{ company, label, kind, location, inEeaOrEu, attestedBy, regionCountry?, regionNote?, nonRelatedParty?, itSecurityMeetsStandards?, itSecurityNote?, at?, confirm }` | Tilføjer en backup-destination med EU/EØS-attestering (BEK 205/2024 § 4). |
+| `system_backup_destination_remove` | `system backup-remove-destination` | `{ company, id, confirm }` | Fjerner en konfigureret backup-destination. |
+| `system_backup_lock` | `system backup-lock` | `{ company, enforced, graceDays?, at?, confirm }` | Konfigurerer den frivillige bogførings-lås. |
+| `system_backup_place` | `system backup-place` | `{ company, archivePath, destinationId, actorKind?, at?, note?, confirm }` | Kopierer et backup-arkiv til en lokal/synkroniseret destination og verificerer med sha256. |
+| `system_export_authority` | `system export-authority` | `{ company, from, to, out, requestedAt?, requester?, confirm }` | Eksporterer materiale til myndighedsudlevering. |
+| `vat_post_eu_service_purchase` | `vat post-eu-service-purchase` | `{ company, payload: ReverseChargePurchaseInput, confirm }` | Bogfører EU-servicekøb med reverse charge. |
+| `vat_post_representation_purchase` | `vat post-representation-purchase` | `{ company, payload: RepresentationPurchaseInput, confirm }` | Bogfører repræsentationsudgift med delvis momsfradrag. |
+
+> De seks `system_backup_*`-konfigurations-tools (`*_archive`,
+> `*_confirm_placement`, `*_destination_add`, `*_destination_remove`,
+> `*_lock`, `*_place`) skriver state uden at bogføre i finanskæden. De
+> klassificeres her som `write-irreversible` fordi de er
+> `confirm`-gatede writes, men de oprettede records (destinationer,
+> placeringsregistreringer, lås-konfiguration) kan rettes ved nye kald.
 
 ## System-tools
 
-| Tool | CLI-ækvivalent | Klassifikation | Input | Output | Brief |
-|---|---|---|---|---|---|
-| `system_backup` | `system backup` | write-irreversible | `{ company, at?, confirm }` | `CreateSystemBackupResult` | Opretter revisionsklar backup. |
-| `system_export_authority` | `system export-authority` | write-irreversible | `{ company, from, to, out, requestedAt?, requester?, confirm }` | `ExportAuthorityPackageResult` | Eksporterer materiale til myndighedsudlevering. |
-| `system_restore_backup` | `system restore-backup` | **destructive** | `{ backupDir, targetCompany, verifyKey?, confirm, confirmText }` | `RestoreSystemBackupResult` | Gendanner backup til ny virksomhedssti. `confirmText` skal være `"RESTORE <targetCompany>"`. |
+`system_*`-tools dækker healthcheck, backup-governance og restore. De er
+fordelt på read- og write-tabellerne ovenfor efter klassifikation; her
+fremhæves kun det destruktive tool.
+
+| Tool | CLI-ækvivalent | Klassifikation | Input | Brief |
+|---|---|---|---|---|
+| `system_restore_backup` | `system restore-backup` | **destructive** | `{ backupDir, targetCompany, verifyKey?, confirm, confirmText }` | Gendanner backup til en ny virksomhedssti. `confirmText` skal være `"RESTORE <targetCompany>"` præcist. Sletter intet på source, men kan overskrive filer i `targetCompany`. |
+
+## CLI/MCP-mapping
+
+MCP-surface'en er *tæt på* 1:1 med CLI'en, men ikke fuldstændig. Kendte
+afvigelser pr. denne revision:
+
+- **`period_list` har ingen CLI-kommando.** Tool'et `period_list` lister
+  regnskabsperioder over MCP, men CLI'en har kun `period close` — der er
+  ingen `period list`-kommando. (Tidligere noterede dette dokument
+  `period list` som en CLI-kommando "der skal bygges"; den er aldrig blevet
+  bygget. MCP-tool'et læser `accounting_periods` direkte.) Vil man genskabe
+  1:1-mappingen skal en `period list`-CLI-kommando tilføjes — ellers er
+  dette en bevidst, dokumenteret afvigelse.
+- **`import_archive_year` har ingen selvstændig CLI-kommando.** Den henter
+  fra samme arkiv-artefakt som `import archive` skriver/lister.
+- **`portfolio_overview`** dækker delvist det CLI'en eksponerer som
+  `dashboard`, men er et workspace-tool (`workspace`-parameter, ikke
+  `company`).
+- **CLI-only-kommandoer uden MCP-tool.** Flere CLI-kommandoer eksponeres
+  ikke som tools, fx `init`, `serve`, `report *`, `vat momsangivelse`/
+  `vat filing`, `gdpr export`/`gdpr erase`, `opening-balance post`,
+  `bank-account add`/`list`, `import run`/`systems`/`contacts`,
+  `agent run`, `reg coverage`/`reg citations` og diverse
+  `system export-*`/`verify-*`-kommandoer. Disse driver lokale workflows
+  eller hører til den indbyggede `agent run`-loop og er bevidst holdt uden
+  for den løse agent-surface.
 
 ## Eksempel-handshakes
 
@@ -314,7 +416,7 @@ Forkert `confirmText` på destructive-tool:
 
 ## Actor-attribution
 
-MCP-serveren sætter `RENTEMESTER_ACTOR` env-var per kald (ikke globalt — det
+MCP-serveren sætter actor-konteksten per kald (ikke globalt — den
 serialiseres ind i kerne-funktionens `resolveActor()`-input via
 `createdBy`/`createdByProgram`).
 
@@ -326,10 +428,8 @@ Mapping fra MCP-client-info til actor-streng:
 | `createdByProgram` | MCP-client `name/version` | `claude-code/0.4.1` |
 | `auditActor` | Beregnet `"<createdBy> via <createdByProgram>"` | `agent:claude-code via claude-code/0.4.1` |
 
-Hvis MCP-klienten sender en `userContext` (fx via custom header eller MCP
-`clientInfo.userId`), opgraderes `createdBy` til
-`agent:<client>:<userId>` — fx `agent:claude-code:mikkel@56n.dk`. Dette
-matcher actor-allowlist-arbejdet i #63.
+Hvis MCP-klienten sender en `userContext`, opgraderes `createdBy` til
+`agent:<client>:<userId>` — fx `agent:claude-code:mikkel@56n.dk`.
 
 Hver write-tool tilskriver derudover automatisk:
 - `audit_log.event_type` = tool-navn (`journal_post`, `invoice_issue`, …)
@@ -338,61 +438,24 @@ Hver write-tool tilskriver derudover automatisk:
 
 ## Forudsætninger
 
-Følgende skal være på plads før implementation (#78):
+Disse forudsætninger lå til grund for MCP-implementationen og er nu på plads:
 
-1. **Dependencies tilføjes til `package.json`**:
-   - `@modelcontextprotocol/sdk` — MCP-server runtime.
-   - `zod` — input-validering. (Ikke i nuværende dependency-træ.)
+1. **Dependencies i `package.json`**: `@modelcontextprotocol/sdk` (MCP-server
+   runtime) og `zod` (input-validering).
+2. **Tool-registret som single-source-of-truth**: `src/mcp/registry.ts`
+   registrerer hele surface'en pr. domæne. `tests/unit/mcp-tool-surface.test.ts`
+   verificerer at dette dokument holdes synkront, og
+   `tests/unit/mcp-server.test.ts` driver en kørende server og verificerer
+   den faktiske tool-liste.
+3. **Strukturerede output-typer**: kernens `*Result`-typer wrappes i
+   `{ ok, data, errors, appliedRules }` af en lille adapter i MCP-laget.
+4. **`confirmText`-håndhævelse på destructive tools** via en helper i
+   MCP-laget; det destruktive `system_restore_backup` afvises uden korrekt
+   `confirmText`.
 
-2. **Ny CLI-kommando `period list`** (lille tilføjelse i `cli-meta.ts` +
-   `cli.ts` + en SELECT i `core/periods.ts`). MCP-tool `period_list`
-   afhænger af denne. Alternativ: eksponer kun via MCP og hold CLI uden
-   `period list`, men det bryder princippet "1 MCP-tool = 1 CLI-kommando".
+### Åbne afvigelser (ikke en forudsætning, men en bevidst gæld)
 
-3. **Ny CLI-kommando `audit log` (read)** der lister `audit_log`-tabellen.
-   Ikke i den oprindelige issue-scope men nødvendig hvis agenter skal kunne
-   debugge egne kald uden direkte DB-adgang. Markeres som stretch-goal.
-
-4. **`actor`-flag normalisering**: CLI accepterer allerede `--actor` og
-   `--actor-via` (jf. `cli-meta.ts` GLOBAL_FLAGS). MCP-serveren skal kalde
-   kernens `resolveActor({ createdBy, createdByProgram })` direkte i stedet
-   for at gå gennem env-var — env-var virker, men er race-condition-prone
-   ved parallelle MCP-kald i samme proces. Anbefalet ændring: alle
-   write-kernel-funktioner accepterer en `actor?: ResolveActorInput`-parameter.
-   (Nogle gør det allerede via `createdBy`/`createdByProgram` i payload —
-   tjek og udvid hvor manglende.)
-
-5. **Idempotency-cache**: en SQLite-tabel (eller in-memory map) der mapper
-   `idempotencyKey` → serialiseret response i 24h. Ny migration eller en
-   sidecar-fil i company-mappen.
-
-6. **Strukturerede output-typer**: kernen returnerer i dag `*Result`-typer
-   med `ok`/`errors`/`appliedRules` direkte på top-level. MCP-tools wrapper
-   disse i `{ ok, data, errors, appliedRules }` så `data` indeholder
-   selve nyttelasten uden `ok`/`errors`-felterne. En lille adapter-funktion
-   i MCP-laget tager sig af dette.
-
-7. **Tool-registret som single-source-of-truth**: `src/mcp/tools.ts` (når
-   skrevet i #77) eksporterer en array af `McpToolSpec`-objekter. En unit-test
-   sammenligner registret med `COMMAND_SPECS` og fejler hvis en CLI-kommando
-   mangler tool-mapping (eller omvendt).
-
-8. **`confirmText`-håndhævelse på destructive tools** kræver en ny helper
-   `requireConfirmText(input, expected)` i MCP-laget. Den findes ikke i
-   kernen i dag (CLI har ingen destructive-tools — `system restore-backup`
-   kan i dag køres uden bekræftelse fra CLI).
-
-## Tool-count summary
-
-- **Read-tools**: 22
-- **Write-reversible**: 5
-- **Write-irreversible**: 22 (inkl. `company_init`, `system_backup`,
-  `system_export_authority`)
-- **Destructive**: 1 (`system_restore_backup`)
-- **Total**: 50
-
-Bemærk: nogle CLI-kommandoer er bevidst slået sammen til samme tool (fx
-`invoice render` og `invoice render --regenerate` håndteres af samme
-`invoice_render`-tool), og enkelte beregningskommandoer er klassificeret som
-`read` selvom CLI-navnet kunne forvirre (`invoice interest` beregner kun;
-`invoice claim-interest` registrerer).
+- Den oprindelige plan om en ny `period list`-CLI-kommando blev aldrig
+  realiseret. `period_list` lever som MCP-tool uden CLI-pendant; se
+  "CLI/MCP-mapping". Dette er en accepteret afvigelse fra "1 tool = 1
+  CLI-kommando"-princippet, ikke en fejl der blokerer noget.
