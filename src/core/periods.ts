@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { insertAuditLog } from "./actor";
+import { insertAuditLog, resolveActor } from "./actor";
 import { isValidIsoDate as looksLikeIsoDate, addDays, todayIsoDate } from "./dates";
 
 export type AccountingPeriodKind = "vat_quarter" | "fiscal_year" | "custom";
@@ -31,6 +31,62 @@ const PERIOD_RULE_ID = "DK-BOOKKEEPING-PERIOD-LOCK-001";
 const PERIOD_KINDS = new Set<AccountingPeriodKind>(["vat_quarter", "fiscal_year", "custom"]);
 const PERIOD_STATUSES = new Set<Exclude<AccountingPeriodStatus, "open">>(["closed", "reported"]);
 
+/**
+ * Audit-log event type that drives a controlled reopen. The *latest*
+ * lifecycle event for an `accounting_period` entity is the authoritative
+ * state — that is how `period reopen` works without ever mutating the
+ * (immutable) period row: a reopen is an appended `period_reopen` fact, a
+ * re-close a fresh `period_close` fact. See `effectivePeriodState`.
+ */
+const PERIOD_REOPEN_EVENT = "period_reopen";
+
+/**
+ * The append-only lifecycle of an accounting period.
+ *
+ * The `accounting_periods_guard_update` schema trigger makes a closed/reported
+ * period row immutable — a row can never be moved back to `open`. A controlled
+ * reopen (#247) therefore cannot mutate the row; instead it appends a
+ * `period_reopen` event to the append-only, actor-attributed `audit_log`.
+ *
+ * `effectivePeriodState` replays those audit events for one period and returns
+ * its current effective state: a period whose most recent lifecycle event is a
+ * `period_reopen` is effectively `open` again (new postings allowed) even
+ * though its row still reads `closed`. A later `period close` appends a fresh
+ * `period_close` event and locks it again. Nothing is ever deleted, so the
+ * full close/reopen history stays auditable forever.
+ */
+export type EffectivePeriodState = "open" | "closed" | "reported";
+
+/**
+ * Replays the append-only audit lifecycle for a single accounting period and
+ * returns its effective state. `rowStatus` is the period row's stored status,
+ * used as the baseline when no lifecycle audit events exist (older periods,
+ * or periods closed before audit logging covered them).
+ */
+export function effectivePeriodState(
+  db: Database,
+  periodId: number,
+  rowStatus: AccountingPeriodStatus,
+): EffectivePeriodState {
+  const events = db
+    .query(
+      `SELECT event_type
+         FROM audit_log
+        WHERE entity_type = 'accounting_period'
+          AND entity_id = ?
+        ORDER BY id ASC`,
+    )
+    .all(String(periodId)) as Array<{ event_type: string }>;
+
+  let state: EffectivePeriodState = rowStatus;
+  for (const ev of events) {
+    if (ev.event_type === "period_report") state = "reported";
+    else if (ev.event_type === "period_close") state = "closed";
+    else if (ev.event_type === PERIOD_REOPEN_EVENT) state = "open";
+  }
+  return state;
+}
+
 
 function maxFutureDays() {
   const raw = process.env.RENTEMESTER_MAX_FUTURE_DAYS;
@@ -48,27 +104,37 @@ export function validateJournalTransactionDate(db: Database, transactionDate: st
     errors.push(`${fieldName} ${transactionDate} cannot be later than ${latestAllowedDate}`);
   }
 
-  const blocking = db.query(
+  // Every closed/reported period that covers the date. The row status alone
+  // is not authoritative — a period may have been reopened via the
+  // append-only `period reopen` path (#247), which leaves the row reading
+  // `closed` while its effective state is `open`. Such a period must NOT
+  // block new postings, so each candidate is replayed through its audit
+  // lifecycle and only those still effectively locked are reported.
+  const candidates = db.query(
     `SELECT id, period_start, period_end, kind, status, reference
        FROM accounting_periods
       WHERE period_start <= ?
         AND period_end >= ?
         AND status IN ('closed', 'reported')
-      ORDER BY period_end ASC, id ASC
-      LIMIT 1`
-  ).get(transactionDate, transactionDate) as {
+      ORDER BY period_end ASC, id ASC`
+  ).all(transactionDate, transactionDate) as Array<{
     id: number;
     period_start: string;
     period_end: string;
     kind: AccountingPeriodKind;
     status: Exclude<AccountingPeriodStatus, "open">;
     reference: string | null;
-  } | null;
+  }>;
+
+  const blocking = candidates.find(
+    (period) => effectivePeriodState(db, period.id, period.status) !== "open",
+  );
 
   if (blocking) {
+    const effective = effectivePeriodState(db, blocking.id, blocking.status);
     const referenceText = blocking.reference ? ` ref ${blocking.reference}` : "";
     errors.push(
-      `${fieldName} ${transactionDate} falls in ${blocking.status} period ${blocking.kind} ${blocking.period_start}..${blocking.period_end}${referenceText}`
+      `${fieldName} ${transactionDate} falls in ${effective} period ${blocking.kind} ${blocking.period_start}..${blocking.period_end}${referenceText}`
     );
   }
 
@@ -95,14 +161,45 @@ export function closeAccountingPeriod(db: Database, input: CloseAccountingPeriod
   if (errors.length > 0) return { ok: false, appliedRules, errors };
 
   const overlap = db.query(
-    `SELECT id, period_start, period_end, kind
+    `SELECT id, period_start, period_end, kind, status
        FROM accounting_periods
       WHERE kind = ?
         AND NOT (period_end < ? OR period_start > ?)
       LIMIT 1`
-  ).get(kind, periodStart, periodEnd) as { id: number; period_start: string; period_end: string; kind: AccountingPeriodKind } | null;
+  ).get(kind, periodStart, periodEnd) as
+    | { id: number; period_start: string; period_end: string; kind: AccountingPeriodKind; status: AccountingPeriodStatus }
+    | null;
 
   if (overlap) {
+    // An overlapping period that is *exactly* this period and has been
+    // reopened (#247) is not a real conflict — it is the same period being
+    // closed again. Re-close it by appending a fresh `period_close` event;
+    // the immutable row keeps its original `closed`/`reported` status.
+    const isSamePeriod = overlap.period_start === periodStart && overlap.period_end === periodEnd;
+    const overlapEffective = effectivePeriodState(db, overlap.id, overlap.status);
+    if (isSamePeriod && overlapEffective === "open") {
+      insertAuditLog(db, {
+        eventType: status === "reported" ? "period_report" : "period_close",
+        entityType: "accounting_period",
+        entityId: overlap.id,
+        message:
+          `Re-closed ${kind} period ${periodStart}..${periodEnd}` +
+          `${reference ? ` (${reference})` : ""} after a controlled reopen`,
+        createdBy: input.createdBy,
+        createdByProgram: input.createdByProgram,
+      });
+      return {
+        ok: true,
+        periodId: overlap.id,
+        periodStart,
+        periodEnd,
+        kind,
+        status,
+        reference,
+        appliedRules,
+        errors,
+      };
+    }
     return {
       ok: false,
       appliedRules,
@@ -142,6 +239,139 @@ export function closeAccountingPeriod(db: Database, input: CloseAccountingPeriod
     kind,
     status,
     reference,
+    appliedRules,
+    errors,
+  };
+}
+
+export type ReopenAccountingPeriodInput = {
+  periodStart: string;
+  periodEnd: string;
+  kind?: AccountingPeriodKind;
+  /** Mandatory free-text justification — recorded verbatim in the audit log. */
+  reason: string;
+  createdBy?: string;
+  createdByProgram?: string;
+};
+
+export type ReopenAccountingPeriodResult = {
+  ok: boolean;
+  periodId?: number;
+  periodStart?: string;
+  periodEnd?: string;
+  kind?: AccountingPeriodKind;
+  /** The period's effective state AFTER the reopen — `open` on success. */
+  effectiveStatus?: EffectivePeriodState;
+  /** The audit actor the reopen was attributed to. */
+  reopenedBy?: string;
+  reason?: string;
+  appliedRules: string[];
+  errors: string[];
+};
+
+/**
+ * Controlled, fully audit-logged reopen of a closed accounting period (#247).
+ *
+ * The previous `period close` help honestly stated there was no reopen path
+ * and that an early close "kun [kan] rettes ved at redigere ledger-databasen
+ * direkte" — a dead end for a non-technical owner. This is the supported
+ * recovery path.
+ *
+ * Integrity is kept intact precisely *because* nothing is overwritten:
+ *  - The `accounting_periods` row is never mutated — the schema trigger keeps
+ *    it immutable, and its `closed_at`/`closed_by`/bounds stay as historical
+ *    record.
+ *  - The reopen is a NEW row appended to the append-only `audit_log`, carrying
+ *    the actor, timestamp and the mandatory `reason`. It is therefore fully
+ *    attributable and can never be silently undone.
+ *  - A `reported` period (already submitted to SKAT/Erhvervsstyrelsen) is
+ *    refused — undoing an authority filing is not a bookkeeping operation.
+ *
+ * After a reopen, postings with a transaction date inside the period are
+ * accepted again (`validateJournalTransactionDate` replays the audit
+ * lifecycle). A later `period close` re-locks the same period.
+ */
+export function reopenAccountingPeriod(
+  db: Database,
+  input: ReopenAccountingPeriodInput,
+): ReopenAccountingPeriodResult {
+  const appliedRules = [PERIOD_RULE_ID];
+  const errors: string[] = [];
+  const periodStart = input.periodStart?.trim();
+  const periodEnd = input.periodEnd?.trim();
+  const kind = (input.kind ?? "vat_quarter").trim() as AccountingPeriodKind;
+  const reason = input.reason?.trim();
+
+  if (!looksLikeIsoDate(periodStart)) errors.push("periodStart must be YYYY-MM-DD");
+  if (!looksLikeIsoDate(periodEnd)) errors.push("periodEnd must be YYYY-MM-DD");
+  if (looksLikeIsoDate(periodStart) && looksLikeIsoDate(periodEnd) && periodStart > periodEnd) {
+    errors.push("periodStart must be before or equal to periodEnd");
+  }
+  if (!PERIOD_KINDS.has(kind)) errors.push("kind must be one of vat_quarter, fiscal_year, custom");
+  if (!reason) errors.push("reason is required: a reopen must record why the period is being reopened");
+
+  if (errors.length > 0) return { ok: false, appliedRules, errors };
+
+  const period = db.query(
+    `SELECT id, period_start, period_end, kind, status
+       FROM accounting_periods
+      WHERE period_start = ? AND period_end = ? AND kind = ?
+      LIMIT 1`
+  ).get(periodStart, periodEnd, kind) as
+    | { id: number; period_start: string; period_end: string; kind: AccountingPeriodKind; status: AccountingPeriodStatus }
+    | null;
+
+  if (!period) {
+    return {
+      ok: false,
+      appliedRules,
+      errors: [`no ${kind} period ${periodStart}..${periodEnd} exists to reopen`],
+    };
+  }
+
+  const effective = effectivePeriodState(db, period.id, period.status);
+
+  if (effective === "open") {
+    return {
+      ok: false,
+      appliedRules,
+      errors: [`${kind} period ${periodStart}..${periodEnd} is already open — nothing to reopen`],
+    };
+  }
+
+  if (effective === "reported") {
+    return {
+      ok: false,
+      appliedRules,
+      errors: [
+        `${kind} period ${periodStart}..${periodEnd} is reported (already submitted to the authority) ` +
+          `and cannot be reopened; correct it with a new posting in an open period instead`,
+      ],
+    };
+  }
+
+  // effective === 'closed' — append the reopen fact. The actor resolves the
+  // same way every mutating command does (--actor / RENTEMESTER_ACTOR / env),
+  // so the reopen is always clearly attributable.
+  const actor = resolveActor({ createdBy: input.createdBy, createdByProgram: input.createdByProgram });
+  insertAuditLog(db, {
+    eventType: PERIOD_REOPEN_EVENT,
+    entityType: "accounting_period",
+    entityId: period.id,
+    message: `Reopened ${kind} period ${periodStart}..${periodEnd} — reason: ${reason}`,
+    createdBy: input.createdBy,
+    createdByProgram: input.createdByProgram,
+  });
+
+  return {
+    ok: true,
+    periodId: period.id,
+    periodStart,
+    periodEnd,
+    kind,
+    effectiveStatus: "open",
+    reopenedBy: actor.auditActor,
+    reason,
     appliedRules,
     errors,
   };
