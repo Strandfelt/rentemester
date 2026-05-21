@@ -116,7 +116,65 @@ Omitting `--inbox` and `--bank-csv` runs a **deadline-only** check — useful
 for a scheduler that just wants the upcoming-deadline report.
 
 Output is human-readable by default, or a structured envelope with
-`--format json` (the report shape is `AgentRunReport` in `src/agent/loop.ts`).
+`--format json`. The JSON payload is the `AgentRunReport` produced by
+`runAgentLoop()` (`src/agent/loop.ts`); its shape is documented below.
+
+## The `--format json` report shape (`AgentRunReport`)
+
+A single run produces one `AgentRunReport` object. Top-level fields:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `ok` | `boolean` | `true` when the run completed without a fatal error. A `false` means the loop aborted (invalid `--as-of`, no initialised company, a missing inbox metadata sibling, a failed bank import, …); `errors[]` then carries the cause. Per-bilag rejections and unbookable transactions do **not** flip `ok` — they become exceptions. |
+| `actor` | `string` | The canonical actor id every mutation in this run was booked under (the fixed agent actor). |
+| `asOf` | `string` | `YYYY-MM-DD` — the explicit run date echoed back; the agent's only clock. |
+| `company` | `string` | Absolute path to the company directory the run operated on. |
+| `phases` | `string[]` | The phases the loop executed, in order: `ingest`, `book`, `route`, `reconcile`, `deadlines`, `report`. A run that aborts early lists only the phases reached. |
+| `documentsIngested` | `number` | Count of bilag from `--inbox` successfully ingested into the ledger this run. |
+| `documentsRejected` | `number` | Count of bilag the ledger refused (rules rejection or duplicate). A non-duplicate rejection also lands in `openExceptions`. |
+| `bankTransactionsImported` | `number` | Count of rows imported from `--bank-csv` (`0` when no `--bank-csv` was given). |
+| `expensesBooked` | `BookedExpense[]` | The expenses the agent booked automatically — confident bank-match **and** a single deterministic account rule. See below. |
+| `openExceptions` | `RoutedException[]` | Exceptions still open at end of run — the human's work list. See below. |
+| `upcomingDeadlines` | `DeadlineNotice[]` | VAT-quarter and fiscal-year deadlines relative to `asOf`. See below. |
+| `summary` | `string[]` | Plain-language (Danish) lines describing what was done and what needs the human. |
+| `errors` | `string[]` | Fatal-error messages. Empty on a clean run. |
+
+`expensesBooked[]` — one `BookedExpense` per auto-booked expense:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `documentNo` | `string` | The bilag's document number (falls back to `DOC-<documentId>`). |
+| `documentId` | `number` | The ingested document's id. |
+| `bankTransactionId` | `number` | The bank transaction the expense was matched to. |
+| `supplier` | `string` | Supplier name (`"ukendt"` when unknown). |
+| `amount` | `number` | The bank-transaction amount. |
+| `currency` | `string` | Currency of the transaction. |
+| `expenseAccount` | `string` | Account number the expense was booked to (from the deterministic supplier rule). |
+| `vatTreatment` | `string` | VAT treatment applied (from the supplier rule). |
+| `label` | `string` | Human label of the supplier-rule category. |
+| `journalEntryNo` | `string \| null` | The posted journal entry number, or `null` if unavailable. |
+
+`openExceptions[]` — one `RoutedException` per open exception:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `exceptionId` | `number` | The exception row id (use it with `exception resolve`). |
+| `type` | `string` | The exception type, e.g. `AGENT_DOCUMENT_REJECTED`, `AGENT_LOW_CONFIDENCE_MATCH`, `AGENT_NO_ACCOUNT_RULE`, `AGENT_POSSIBLE_FIXED_ASSET`, `AGENT_BOOKING_BLOCKED`, `AGENT_VAT_DEADLINE_OPEN`. |
+| `severity` | `string` | `low` / `medium` / `high`. |
+| `message` | `string` | Human-readable description of what the agent could not resolve. |
+| `requiredAction` | `string \| null` | The concrete next step for the human, or `null`. |
+
+`upcomingDeadlines[]` — one `DeadlineNotice` per relevant deadline:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `kind` | `"vat_quarter" \| "fiscal_year"` | Which statutory deadline this notice is for. |
+| `periodStart` | `string` | `YYYY-MM-DD` start of the period. |
+| `periodEnd` | `string` | `YYYY-MM-DD` end of the period. |
+| `dueDate` | `string` | `YYYY-MM-DD` statutory filing/finalisation deadline. |
+| `daysRemaining` | `number` | Days from `asOf` to `dueDate`; negative when the deadline is already past. |
+| `ready` | `boolean` | `true` when the period is already closed/reported and ready to file. `fiscal_year` notices are always `false` (the human finalises the årsrapport). |
+| `note` | `string` | Plain-language (Danish) status line for this deadline. |
 
 ## Out of scope
 
