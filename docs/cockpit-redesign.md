@@ -261,3 +261,29 @@ Alle fire drifts-iterationer (6–9) bygget og visuelt inspiceret. Cockpittet er
 nu et drifts-cockpit: faktisk banksaldo + afstemningsdifference, meningsfulde
 opgaver, forpligtelser med forfaldsdato, moms-deadline, likviditet/pengestrøm,
 drill-down, nøgletal. Endelig verifikation: **702 tests grønne · smoke grøn**.
+
+---
+
+## Runde 3 — historiske år i de rigtige views
+
+Ejer-feedback: de gode views kan kun ses for det levende år; man vil kunne se
+tilbage i tid (arkiv-data) og sammenligne på tværs af år. Dataene findes
+allerede — #197 arkiverede fuld saldobalance + alle posteringer pr. tidligere
+år. Bank-transaktioner går kun så langt tilbage som kontoudtoget rækker — det
+er accepteret; ingen kunstig udfyldning.
+
+### Iteration 10 — Arkiv-bevidste kerne-views
+- [ ] Backend: income-statement, balance, trial-balance, journal, overview
+      regner fra `import_archive_*` når det valgte år er arkiveret
+- [ ] Frontend: Resultatopgørelse, Balance, Saldobalance, Posteringer, Overblik
+      renderer arkiv-data (skrivebeskyttet-banner) i stedet for placeholderen
+- [ ] Views uden arkiv-data for gamle år (Bank/Moms/Forpligtelser/Likviditet/
+      Bilag/Fakturaer/Kontakter) viser en ærlig "ikke tilgængelig for
+      arkiverede år"-tilstand — ingen kunstig udfyldning
+- [ ] **Visuel inspektion**
+
+### Iteration 11 — Krydsår-overblik & oprydning
+- [ ] Udvid Flerårsoversigt: balance-/egenkapital-udvikling + nøgletal pr. år
+- [ ] Ryd op i Arkiv/vælger-UX — vælgeren virker overalt; Arkiv-fanens rolle
+      reduceres/forklares
+- [ ] **Visuel inspektion**
