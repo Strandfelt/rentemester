@@ -14,6 +14,7 @@ import { postJournalEntry } from "../../src/core/ledger";
 import { ingestDocument } from "../../src/core/documents";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { createCustomer, createVendor } from "../../src/core/master-data";
+import { recordException } from "../../src/core/exceptions";
 
 function tmpRoot(label: string) {
   return mkdtempSync(join(tmpdir(), `rentemester-${label}-`));
@@ -442,6 +443,56 @@ describe("cockpit API — overview (GET /api/companies/:slug/overview)", () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+
+  test("bank block reports actual balance and the gap to the booked balance", async () => {
+    const ws = makeWorkspace("ov-bank-actual", ["Acme ApS"]);
+    try {
+      // Booked balance on account 2000 nets +1250 (sale) −500 (purchase) = 750.
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      // Statement closes at 500 — short of the booked 750 by 250.
+      seedBankTransaction(ws, "acme-aps", "2026-04-01", "Indbetaling", 700, 700);
+      seedBankTransaction(ws, "acme-aps", "2026-04-10", "Gebyr", -200, 500);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const bank = res.body.overview.bank;
+      expect(bank.balance).toBe(750);
+      expect(bank.actualBalance).toBe(500);
+      expect(bank.difference).toBe(250);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("groups same-type exceptions into one Danish summary line", async () => {
+    const ws = makeWorkspace("ov-exc-group", ["Acme ApS"]);
+    try {
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      seedException(ws, "acme-aps", "UNMATCHED_BANK_TRANSACTION", "Bank transaction 1 unmatched");
+      seedException(ws, "acme-aps", "UNMATCHED_BANK_TRANSACTION", "Bank transaction 2 unmatched");
+      seedException(ws, "acme-aps", "UNMATCHED_BANK_TRANSACTION", "Bank transaction 3 unmatched");
+      seedException(ws, "acme-aps", "MAIL_INTAKE_NO_ATTACHMENT", "Mail without attachment");
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const exc = res.body.overview.exceptions;
+      expect(exc.count).toBe(4);
+      // Two groups: 3 bank rows + 1 mail row, each one line.
+      expect(exc.groups.length).toBe(2);
+      const bankGroup = exc.groups.find(
+        (g: { type: string }) => g.type === "UNMATCHED_BANK_TRANSACTION",
+      );
+      expect(bankGroup.count).toBe(3);
+      expect(bankGroup.label).toContain("3 banktransaktioner");
+      expect(bankGroup.link).toBe("bank");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("cockpit API — income statement (GET .../income-statement)", () => {
@@ -633,13 +684,18 @@ describe("cockpit API — journal (GET .../journal)", () => {
   });
 });
 
-/** Inserts an imported bank transaction directly into a company's ledger. */
+/**
+ * Inserts an imported bank transaction directly into a company's ledger.
+ * When `balanceAfter` is given the import's running balance is recorded — the
+ * statement figure the actual-balance helper reads.
+ */
 function seedBankTransaction(
   ws: string,
   slug: string,
   transactionDate: string,
   text: string,
   amount: number,
+  balanceAfter?: number,
 ) {
   const companyRoot = companyRootForSlug(ws, slug);
   const db = openDb(companyPaths(companyRoot).db);
@@ -647,9 +703,33 @@ function seedBankTransaction(
     migrate(db);
     db.query(
       `INSERT INTO bank_transactions
-         (transaction_date, text, amount, currency, transaction_hash, status)
-       VALUES (?, ?, ?, 'DKK', ?, 'imported')`,
-    ).run(transactionDate, text, amount, `hash-${transactionDate}-${text}`);
+         (transaction_date, text, amount, currency, transaction_hash, status,
+          balance_after)
+       VALUES (?, ?, ?, 'DKK', ?, 'imported', ?)`,
+    ).run(
+      transactionDate,
+      text,
+      amount,
+      `hash-${transactionDate}-${text}`,
+      balanceAfter ?? null,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/** Records an open exception of the given type directly in a company's ledger. */
+function seedException(
+  ws: string,
+  slug: string,
+  type: string,
+  message: string,
+) {
+  const companyRoot = companyRootForSlug(ws, slug);
+  const db = openDb(companyPaths(companyRoot).db);
+  try {
+    migrate(db);
+    recordException(db, { type, severity: "medium", message });
   } finally {
     db.close();
   }
@@ -672,6 +752,27 @@ describe("cockpit API — bank (GET .../bank)", () => {
       expect(b.transactions[0].reconciliationStatus).toBe("unmatched");
       expect(b.unmatchedCount).toBe(1);
       expect(b).toHaveProperty("bookedBalance");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  test("reports the actual statement balance and the gap to booked", async () => {
+    const ws = makeWorkspace("bnk-actual", ["Acme ApS"]);
+    try {
+      // Booked balance on account 2000 = 750 (see postPnlEntry).
+      postPnlEntry(ws, "acme-aps", "2026-03-15", 1000, 400);
+      seedBankTransaction(ws, "acme-aps", "2026-04-01", "Indbetaling", 700, 700);
+      seedBankTransaction(ws, "acme-aps", "2026-04-10", "Gebyr", -200, 500);
+      const res = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/bank?year=2026",
+      );
+      expect(res.status).toBe(200);
+      const b = res.body.bank;
+      expect(b.bookedBalance).toBe(750);
+      expect(b.actualBalance).toBe(500);
+      expect(b.difference).toBe(250);
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

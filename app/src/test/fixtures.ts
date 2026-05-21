@@ -105,7 +105,7 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
         expense: i === 0 ? 4563.04 : 0,
       })),
     },
-    bank: { balance: 41388.03 },
+    bank: { balance: 41388.03, actualBalance: 23654.75, difference: 17733.28 },
     vat: {
       periodStart: "2026-01-01",
       periodEnd: "2026-06-30",
@@ -114,7 +114,7 @@ export function overview(over: Partial<CompanyOverview> = {}): CompanyOverview {
       inputVat: 1086,
       payable: 3371,
     },
-    exceptions: { count: 0, rows: [] },
+    exceptions: { count: 0, rows: [], groups: [] },
     recentEntries: [],
     ...over,
   };
@@ -287,6 +287,8 @@ export function bank(over: Partial<CompanyBank> = {}): CompanyBank {
       },
     ],
     bookedBalance: 41388.03,
+    actualBalance: 23654.75,
+    difference: 17733.28,
     transactions: [
       {
         id: 1,

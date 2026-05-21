@@ -87,6 +87,54 @@ describe("DashboardView — Overblik", () => {
     expect(lastUrl).toContain("year=2025");
   });
 
+  test("the Bank card shows the actual balance, booked balance and difference", async () => {
+    mockFetch(overviewRoute());
+    renderDashboard();
+    await screen.findByRole("heading", { name: "Acme ApS" });
+    const bankCard = screen
+      .getByRole("heading", { name: "Bank" })
+      .closest(".status-card")!;
+    // Headline figure is the actual statement balance.
+    const figure = bankCard.querySelector(".status-figure")!;
+    expect(figure.textContent).toMatch(/23\.654,75/);
+    // The note carries the booked figure and the unreconciled gap.
+    const note = bankCard.querySelector(".status-note")!;
+    expect(note.textContent).toMatch(/Bogført.*41\.388,03/);
+    expect(
+      within(bankCard as HTMLElement).getByText(/ikke afstemt/),
+    ).toBeInTheDocument();
+  });
+
+  test("groups exceptions into one Danish, clickable summary line", async () => {
+    mockFetch(
+      overviewRoute({
+        exceptions: {
+          count: 362,
+          rows: [],
+          groups: [
+            {
+              type: "UNMATCHED_BANK_TRANSACTION",
+              count: 362,
+              severity: "medium",
+              label: "362 banktransaktioner mangler afstemning",
+              link: "bank",
+            },
+          ],
+        },
+      }),
+    );
+    renderDashboard();
+    const line = await screen.findByText(
+      "362 banktransaktioner mangler afstemning",
+    );
+    expect(line).toBeInTheDocument();
+    // The line links to the Bank view.
+    expect(line.closest("a")).toHaveAttribute(
+      "href",
+      "/companies/acme-aps/bank",
+    );
+  });
+
   test("an archived year shows the arkiv notice", async () => {
     mockFetch(overviewRoute({ archived: true, selectedYear: "2025" }));
     renderDashboard();

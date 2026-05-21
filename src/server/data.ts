@@ -567,6 +567,51 @@ function bankBalanceAsOf(db: Database, asOfDate: string): number {
   return roundKroner(row.bal);
 }
 
+/**
+ * Actual bank balance from the imported statement, kroner — the `balance_after`
+ * of the most recent `bank_transactions` row (latest `transaction_date`, then
+ * latest id) per bank account, summed across accounts.
+ *
+ * This is what the owner's bank app shows; it can differ from the booked
+ * ledger balance when transactions are imported but not yet reconciled. Rows
+ * with no `balance_after` (a generic CSV import that omitted the running
+ * balance) are skipped. Returns `null` when no statement balance is known.
+ */
+function actualBankBalanceAsOf(db: Database, asOfDate: string): number | null {
+  // The latest dated row per bank account (id breaks same-date ties). Rows
+  // imported before #187 have a null bank_account_id — group them together as
+  // one logical account so a single statement still surfaces.
+  const rows = db
+    .query(
+      `SELECT bt.balance_after AS balanceAfter
+         FROM bank_transactions bt
+         JOIN (
+           SELECT bank_account_id AS acc,
+                  MAX(transaction_date) AS maxDate
+             FROM bank_transactions
+            WHERE transaction_date <= ?
+              AND balance_after IS NOT NULL
+            GROUP BY bank_account_id
+         ) latest
+           ON (bt.bank_account_id IS latest.acc
+               OR (bt.bank_account_id IS NULL AND latest.acc IS NULL))
+          AND bt.transaction_date = latest.maxDate
+        WHERE bt.transaction_date <= ?
+          AND bt.balance_after IS NOT NULL
+          AND bt.id = (
+            SELECT MAX(b2.id) FROM bank_transactions b2
+             WHERE (b2.bank_account_id IS bt.bank_account_id)
+               AND b2.transaction_date = bt.transaction_date
+               AND b2.balance_after IS NOT NULL
+               AND b2.transaction_date <= ?
+          )`,
+    )
+    .all(asOfDate, asOfDate, asOfDate) as Array<{ balanceAfter: number }>;
+  if (rows.length === 0) return null;
+  const total = rows.reduce((sum, r) => sum + Number(r.balanceAfter ?? 0), 0);
+  return roundKroner(total);
+}
+
 const MONTH_NAMES_DK = [
   "jan", "feb", "mar", "apr", "maj", "jun",
   "jul", "aug", "sep", "okt", "nov", "dec",
@@ -649,7 +694,7 @@ export function buildCompanyOverview(
           resultat: 0,
           months: [] as OverviewMonth[],
         },
-        bank: { balance: 0 },
+        bank: { balance: 0, actualBalance: null, difference: null },
         vat: {
           periodStart: `${selectedLabel}-01-01`,
           periodEnd: `${selectedLabel}-06-30`,
@@ -658,7 +703,11 @@ export function buildCompanyOverview(
           inputVat: 0,
           payable: 0,
         },
-        exceptions: { count: 0, rows: [] as ExceptionPreview[] },
+        exceptions: {
+          count: 0,
+          rows: [] as ExceptionPreview[],
+          groups: [] as ExceptionGroup[],
+        },
         recentEntries: [] as RecentEntry[],
       };
     }
@@ -699,7 +748,9 @@ export function buildCompanyOverview(
     const vat = useSecondHalf ? h2 : h1;
     const vatHalf: 1 | 2 = useSecondHalf ? 2 : 1;
 
-    // The exception queue.
+    // The exception queue — grouped by type into one Danish summary line each,
+    // so the "Opgaver" card reads "362 banktransaktioner mangler afstemning"
+    // rather than 362 individual English exception messages.
     const exceptions = listExceptions(db, { status: "open" });
     const exceptionRows: ExceptionPreview[] = exceptions.rows
       .slice(0, 6)
@@ -709,6 +760,12 @@ export function buildCompanyOverview(
         severity: row.severity,
         message: row.message,
       }));
+    const exceptionGroups = groupExceptions(
+      exceptions.rows.map((row: any) => ({
+        type: row.type,
+        severity: row.severity,
+      })),
+    );
 
     // The most recent posted journal entries within the selected year.
     const entryRows = db
@@ -740,6 +797,15 @@ export function buildCompanyOverview(
       amount: Math.round(Number(r.amount ?? 0) * 100) / 100,
     }));
 
+    // Bank: the booked ledger balance plus the actual statement balance (the
+    // latest imported `balance_after`) and the gap between them. The owner
+    // needs the actual figure — the booked one alone is misleading when the
+    // import is not yet reconciled.
+    const bookedBalance = bankBalanceAsOf(db, yearEnd);
+    const actualBalance = actualBankBalanceAsOf(db, yearEnd);
+    const bankDifference =
+      actualBalance === null ? null : roundKroner(bookedBalance - actualBalance);
+
     return {
       slug: entry.slug,
       selectedYear: selectedLabel,
@@ -752,7 +818,11 @@ export function buildCompanyOverview(
         resultat: pl.result,
         months,
       },
-      bank: { balance: bankBalanceAsOf(db, yearEnd) },
+      bank: {
+        balance: bookedBalance,
+        actualBalance,
+        difference: bankDifference,
+      },
       vat: {
         periodStart: vat.periodStart,
         periodEnd: vat.periodEnd,
@@ -761,7 +831,11 @@ export function buildCompanyOverview(
         inputVat: vat.inputVat,
         payable: vat.payable,
       },
-      exceptions: { count: exceptions.count, rows: exceptionRows },
+      exceptions: {
+        count: exceptions.count,
+        rows: exceptionRows,
+        groups: exceptionGroups,
+      },
       recentEntries,
     };
   } finally {
@@ -775,6 +849,120 @@ type ExceptionPreview = {
   severity: string;
   message: string;
 };
+
+/**
+ * One grouped exception line for the Overblik "Opgaver" card — every open
+ * exception of one `type` collapsed into a single Danish, actionable summary
+ * with a count and a deep-link target.
+ */
+export type ExceptionGroup = {
+  /** The shared `exceptions.type`. */
+  type: string;
+  /** Open exceptions of this type. */
+  count: number;
+  /** The highest severity among the grouped exceptions. */
+  severity: "low" | "medium" | "high";
+  /** A Danish one-liner, e.g. "362 banktransaktioner mangler afstemning". */
+  label: string;
+  /** The cockpit sub-view this group links to, e.g. "bank"; null when none. */
+  link: string | null;
+};
+
+const SEVERITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
+
+/**
+ * Builds the Danish summary line for a group of `count` same-type exceptions.
+ * Known types get a tailored, pluralised sentence and a deep-link target;
+ * unknown types fall back to a generic count so nothing is ever dropped.
+ */
+function describeExceptionGroup(
+  type: string,
+  count: number,
+): { label: string; link: string | null } {
+  const n = count;
+  switch (type) {
+    case "UNMATCHED_BANK_TRANSACTION":
+      return {
+        label: `${n} ${
+          n === 1 ? "banktransaktion mangler" : "banktransaktioner mangler"
+        } afstemning`,
+        link: "bank",
+      };
+    case "BANK_BALANCE_GAP":
+      return {
+        label: `${n} ${n === 1 ? "afvigelse" : "afvigelser"} mellem bogført og faktisk banksaldo`,
+        link: "bank",
+      };
+    case "MAIL_INTAKE_NO_ATTACHMENT":
+      return {
+        label: `${n} ${n === 1 ? "indkommen mail" : "indkomne mails"} uden vedhæftet bilag`,
+        link: null,
+      };
+    case "MAIL_INTAKE_AMBIGUOUS_METADATA":
+      return {
+        label: `${n} ${n === 1 ? "bilag" : "bilag"} med uklare oplysninger fra mail`,
+        link: null,
+      };
+    case "MAIL_INTAKE_INGEST_BLOCKED":
+      return {
+        label: `${n} ${n === 1 ? "mail kunne" : "mails kunne"} ikke indlæses`,
+        link: null,
+      };
+    case "ASSET_WRITEOFF_MISSING_DOCUMENTATION":
+      return {
+        label: `${n} ${n === 1 ? "aktiv-afskrivning mangler" : "aktiv-afskrivninger mangler"} dokumentation`,
+        link: null,
+      };
+    case "ASSET_WRITEOFF_ELIGIBILITY_UNCERTAIN":
+      return {
+        label: `${n} ${n === 1 ? "aktiv-afskrivning" : "aktiv-afskrivninger"} med usikker fradragsret`,
+        link: null,
+      };
+    default:
+      return {
+        label: `${n} ${n === 1 ? "undtagelse" : "undtagelser"} kræver gennemgang`,
+        link: null,
+      };
+  }
+}
+
+/**
+ * Collapses a list of open exceptions into one summary line per `type`. Each
+ * group carries a Danish, actionable label and the highest severity seen, so
+ * the cockpit renders "362 banktransaktioner mangler afstemning" instead of
+ * 362 individual English lines. Deterministic: groups are ordered by severity
+ * (high first), then by descending count, then by type.
+ */
+function groupExceptions(
+  rows: Array<{ type: string; severity: string }>,
+): ExceptionGroup[] {
+  const byType = new Map<string, { count: number; severity: string }>();
+  for (const row of rows) {
+    const existing = byType.get(row.type);
+    if (existing) {
+      existing.count += 1;
+      if ((SEVERITY_RANK[row.severity] ?? 0) > (SEVERITY_RANK[existing.severity] ?? 0)) {
+        existing.severity = row.severity;
+      }
+    } else {
+      byType.set(row.type, { count: 1, severity: row.severity });
+    }
+  }
+  const groups: ExceptionGroup[] = [];
+  for (const [type, agg] of byType) {
+    const { label, link } = describeExceptionGroup(type, agg.count);
+    const severity =
+      agg.severity === "high" || agg.severity === "medium" ? agg.severity : "low";
+    groups.push({ type, count: agg.count, severity, label, link });
+  }
+  groups.sort(
+    (a, b) =>
+      (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0) ||
+      b.count - a.count ||
+      a.type.localeCompare(b.type),
+  );
+  return groups;
+}
 
 type RecentEntry = {
   id: number;
@@ -1280,6 +1468,8 @@ export function buildCompanyBank(
         periodEnd: `${ctx.selectedLabel}-12-31`,
         accounts,
         bookedBalance: 0,
+        actualBalance: null,
+        difference: null,
         transactions: [] as BankTransactionRow[],
         matchedCount: 0,
         unmatchedCount: 0,
@@ -1333,6 +1523,14 @@ export function buildCompanyBank(
       (t) => t.reconciliationStatus === "matched",
     ).length;
 
+    // The booked ledger balance vs the actual statement balance (the latest
+    // imported `balance_after`). Their gap is the headline of a bank page —
+    // money the owner has on paper but not in the account, or vice versa.
+    const bookedBalance = bankBalanceAsOf(ctx.db, yearEnd);
+    const actualBalance = actualBankBalanceAsOf(ctx.db, yearEnd);
+    const difference =
+      actualBalance === null ? null : roundKroner(bookedBalance - actualBalance);
+
     return {
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
@@ -1342,7 +1540,9 @@ export function buildCompanyBank(
       periodStart: yearStart,
       periodEnd: yearEnd,
       accounts,
-      bookedBalance: bankBalanceAsOf(ctx.db, yearEnd),
+      bookedBalance,
+      actualBalance,
+      difference,
       transactions,
       matchedCount,
       unmatchedCount: transactions.length - matchedCount,

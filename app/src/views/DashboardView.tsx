@@ -89,9 +89,9 @@ export function DashboardView() {
           </div>
 
           <div className="status-grid">
-            <BankCard balance={o.bank.balance} currency={currency} />
+            <BankCard bank={o.bank} currency={currency} />
             <VatCard vat={o.vat} currency={currency} />
-            <ExceptionsCard exceptions={o.exceptions} />
+            <ExceptionsCard slug={slug} exceptions={o.exceptions} />
             <RecentEntriesCard
               entries={o.recentEntries}
               currency={currency}
@@ -166,16 +166,44 @@ function StatusCard({
 }
 
 function BankCard({
-  balance,
+  bank,
   currency,
 }: {
-  balance: number;
+  bank: CompanyOverview["bank"];
   currency: string;
 }) {
+  const { balance, actualBalance, difference } = bank;
+  // The actual statement balance is the headline figure when it is known —
+  // it is what the owner's bank app shows. The booked balance and the gap
+  // sit below it, clearly labelled, so a difference is never mistaken.
+  const reconciled = difference !== null && Math.abs(difference) < 0.005;
   return (
     <StatusCard title="Bank">
-      <div className="status-figure">{formatKroner(balance, currency)}</div>
-      <p className="muted status-note">Bogført saldo på bank- og kassekonti</p>
+      <div className="status-figure">
+        {formatKroner(actualBalance ?? balance, currency)}
+      </div>
+      {actualBalance === null ? (
+        <p className="muted status-note">
+          Bogført saldo på bank- og kassekonti — intet kontoudtog importeret
+        </p>
+      ) : (
+        <p className="muted status-note">
+          Kontoudtog {formatKroner(actualBalance, currency)} · Bogført{" "}
+          {formatKroner(balance, currency)}
+          {difference !== null && (
+            <>
+              {" · "}
+              {reconciled ? (
+                <span className="bank-diff ok">Afstemt</span>
+              ) : (
+                <span className="bank-diff alert">
+                  Difference {formatKroner(difference, currency)} — ikke afstemt
+                </span>
+              )}
+            </>
+          )}
+        </p>
+      )}
     </StatusCard>
   );
 }
@@ -199,11 +227,22 @@ function VatCard({
   );
 }
 
+// Maps a cockpit-relative `link` target from a grouped exception to its route.
+function exceptionLinkTo(slug: string, link: string | null): string | null {
+  if (link === "bank") return `/companies/${slug}/bank`;
+  return null;
+}
+
 function ExceptionsCard({
+  slug,
   exceptions,
 }: {
+  slug: string;
   exceptions: CompanyOverview["exceptions"];
 }) {
+  // Exceptions are grouped by type into one Danish, actionable line each, so
+  // the card reads "362 banktransaktioner mangler afstemning" rather than
+  // listing every individual exception.
   return (
     <StatusCard title="Opgaver">
       <div
@@ -214,21 +253,35 @@ function ExceptionsCard({
         {exceptions.count}
       </div>
       {exceptions.count === 0 ? (
-        <p className="muted status-note">Ingen åbne undtagelser.</p>
+        <p className="muted status-note">Ingen åbne opgaver.</p>
       ) : (
         <ul className="status-list">
-          {exceptions.rows.map((r) => (
-            <li key={r.id}>
-              <span
-                className={`flag ${
-                  r.severity === "high" ? "critical" : "warning"
-                }`}
-              >
-                {r.severity}
-              </span>{" "}
-              {r.message}
-            </li>
-          ))}
+          {exceptions.groups.map((g) => {
+            const to = exceptionLinkTo(slug, g.link);
+            const body = (
+              <>
+                <span
+                  className={`flag ${
+                    g.severity === "high" ? "critical" : "warning"
+                  }`}
+                >
+                  {g.count}
+                </span>{" "}
+                {g.label}
+              </>
+            );
+            return (
+              <li key={g.type}>
+                {to ? (
+                  <Link className="status-link" to={to}>
+                    {body}
+                  </Link>
+                ) : (
+                  body
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </StatusCard>

@@ -941,6 +941,63 @@ table.statement-table td.num.muted {
 .invoices-summary {
   margin-bottom: var(--space-lg);
 }
+/* Bank summary carries three cards (faktisk · bogført · afstemning). */
+.bank-summary {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* The booked-vs-actual gap banner — the headline of the Bank view. */
+.bank-diff-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+.bank-diff-banner p {
+  margin: 0;
+  font-size: var(--text-size-sm);
+  color: var(--text-dim);
+}
+.bank-diff-banner .flag {
+  flex-shrink: 0;
+}
+.bank-diff-banner.alert {
+  background: var(--surface-2);
+  border-left: 3px solid var(--warning);
+}
+.bank-diff-banner.ok {
+  border-left: 3px solid var(--ok);
+}
+.bank-diff-banner.neutral {
+  border-left: 3px solid var(--border);
+}
+.bank-diff-figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-size-xl);
+  font-weight: var(--text-weight-bold);
+  color: var(--warning);
+}
+
+/* The booked-vs-actual note inside the Overblik Bank card. */
+.bank-diff.alert {
+  color: var(--warning);
+  font-weight: var(--text-weight-semibold);
+}
+.bank-diff.ok {
+  color: var(--ok);
+  font-weight: var(--text-weight-semibold);
+}
+
+/* A grouped exception line that deep-links into another view. */
+.status-link {
+  color: inherit;
+  text-decoration: none;
+}
+.status-link:hover,
+.status-link:focus-visible {
+  text-decoration: underline;
+}
 
 /* ==========================================================================
    Arkiv — read-only archived year, and Flerårsoversigt
@@ -986,6 +1043,10 @@ table.statement-table td.num.muted {
 @media (max-width: 880px) {
   .kpi-row {
     grid-template-columns: 1fr;
+  }
+  /* The three bank summary cards stack to two, then one (see 640px). */
+  .bank-summary {
+    grid-template-columns: repeat(2, 1fr);
   }
   /* The grouped sub-nav wraps group-by-group; once it does, drop the
      hairline dividers and indent — each group reads as its own short row. */

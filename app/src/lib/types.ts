@@ -157,6 +157,20 @@ export type OverviewExceptionRow = {
   message: string;
 };
 
+/**
+ * One grouped exception line for the "Opgaver" card — every open exception of
+ * one `type` collapsed into a single Danish, actionable summary line.
+ */
+export type OverviewExceptionGroup = {
+  type: string;
+  count: number;
+  severity: "low" | "medium" | "high";
+  /** Danish one-liner, e.g. "362 banktransaktioner mangler afstemning". */
+  label: string;
+  /** The cockpit sub-view this group links to (e.g. "bank"); null when none. */
+  link: string | null;
+};
+
 export type OverviewRecentEntry = {
   id: number;
   entryNo: string;
@@ -189,7 +203,14 @@ export type CompanyOverview = {
     resultat: number;
     months: OverviewMonth[];
   };
-  bank: { balance: number };
+  bank: {
+    /** Booked ledger balance of the bank/cash accounts at the year end, kroner. */
+    balance: number;
+    /** Actual statement balance (latest imported `balance_after`), kroner; null when unknown. */
+    actualBalance: number | null;
+    /** balance − actualBalance; the unreconciled gap, kroner; null when unknown. */
+    difference: number | null;
+  };
   vat: {
     periodStart: string;
     periodEnd: string;
@@ -201,7 +222,11 @@ export type CompanyOverview = {
     /** outputVat − inputVat; positive is payable to SKAT, kroner. */
     payable: number;
   };
-  exceptions: { count: number; rows: OverviewExceptionRow[] };
+  exceptions: {
+    count: number;
+    rows: OverviewExceptionRow[];
+    groups: OverviewExceptionGroup[];
+  };
   recentEntries: OverviewRecentEntry[];
 };
 
@@ -390,6 +415,10 @@ export type CompanyBank = {
   accounts: BankAccountInfo[];
   /** Booked ledger balance of the bank/cash accounts at the year end, kroner. */
   bookedBalance: number;
+  /** Actual statement balance (latest imported `balance_after`), kroner; null when unknown. */
+  actualBalance: number | null;
+  /** bookedBalance − actualBalance; the unreconciled gap, kroner; null when unknown. */
+  difference: number | null;
   transactions: BankTransactionRow[];
   matchedCount: number;
   unmatchedCount: number;
