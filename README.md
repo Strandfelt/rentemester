@@ -203,7 +203,7 @@ Rentemester er stadig under udvikling og bør endnu ikke være din eneste kilde 
 - automatisk bogføring af fakturaer til debitorer, omsætning og salgsmoms
 - følg forfald, og beregn og bogfør lovbestemt morarente, rykkergebyrer og kompensationsbeløb ved for sen betaling
 - afskriv tab på en kunde der ikke betaler, med korrekt momsregulering
-- forbered e-faktura til offentlige kunder: EAN/GLN-eksport, et OIOUBL-handoff-dokument og en PEPPOL-forsendelseskuvert
+- forbered e-faktura til offentlige kunder: EAN/GLN-eksport og et gyldigt Peppol BIS Billing 3.0-dokument, klar til forsendelse via et access point
 
 **Moms og rapporter**
 

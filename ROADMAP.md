@@ -77,11 +77,11 @@ CSV-import virker, men friktionen forsvinder først når bank-transaktioner kan 
 
 Skal designes så Rentemester aldrig opbevarer bank-credentials i klartekst — kun OAuth-tokens med refresh.
 
-### PEPPOL / OIOUBL
+### E-faktura til det offentlige (PEPPOL)
 
-Første slices er nu landet som deterministisk EAN/GLN preview-eksport og et deterministisk OIOUBL-handoff-artifact for offentlige kunder: fakturaen kan markeres med public-recipient metadata, eksporteres som stabil preview og materialiseres som OIOUBL til videre handoff.
+Fakturaer til offentlige kunder kan markeres med public-recipient metadata og eksporteres som et gyldigt **Peppol BIS Billing 3.0**-dokument. Transport-sømmen (`transmitPublicEInvoicePeppol`) er på plads: en injiceret transmitter afleverer dokumentet, og udfaldet registreres idempotent og auditbart.
 
-Det næste trin er direkte PEPPOL-transport via access point. Det er ikke teknisk svært, men det kræver registrering hos et access point og en skarp trust-boundary omkring selve submission-leddet.
+Det sidste trin er den ægte transport via et selv-hostet access point (Oxalis). Det kræver et MitID systemcertifikat og en endpoint-registrering i NemHandelsRegistret, som kun virksomhedsejeren kan skaffe — ikke en kommerciel tredjepart. Hele opsætningen er dokumenteret i [docs/peppol-nemhandel.md](docs/peppol-nemhandel.md).
 
 Relevant når der er brugere der har offentlige kunder.
 
