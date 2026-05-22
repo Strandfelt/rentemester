@@ -159,7 +159,8 @@ describe("init CLI", () => {
       expect(result.companyRoot).toBe(company);
       expect(result.accountCount).toBeGreaterThan(0);
       expect(result.fiscalYearStartMonth).toBe(1);
-      expect(result.vatPeriod).toBe("kvartal");
+      // #289: vatPeriod is the canonical period-type value; quarterly default.
+      expect(result.vatPeriod).toBe("quarter");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -188,6 +189,83 @@ describe("init CLI", () => {
       expect(allowlist.has("system:rentemester")).toBe(true);
       // An actor that was never seeded is still rejected.
       expect(allowlist.has("agent:freja")).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #289: the VAT period type (month/quarter/half-year) must be settable at
+  // init and stored on the company profile, so a company that files monthly or
+  // half-yearly VAT is no longer stuck with the quarterly assumption.
+  test("--vat-period half-year stores half-yearly VAT and surfaces it in output", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-init-vat-period-"));
+    const company = join(root, "company");
+    try {
+      const proc = Bun.spawn([
+        "bun", "run", "src/cli.ts", "init",
+        "--company", company,
+        "--vat-period", "half-year",
+        "--format", "json",
+      ], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+      const stdout = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      const exitCode = await proc.exited;
+      expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+
+      // JSON output reports the chosen cadence, not the quarterly default.
+      const result = JSON.parse(stdout);
+      expect(result.vatPeriod).toBe("half-year");
+
+      // The cadence is stored on the company row so reads stay consistent.
+      const db = openDb(companyPaths(company).db);
+      migrate(db);
+      const row = db.query(
+        `SELECT vat_period_type FROM companies WHERE id = 1`,
+      ).get() as any;
+      expect(row.vat_period_type).toBe("half-year");
+      db.close();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #289: default cadence stays quarterly so existing companies are unaffected.
+  test("init without --vat-period defaults to quarterly VAT", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-init-vat-default-"));
+    const company = join(root, "company");
+    try {
+      const proc = Bun.spawn([
+        "bun", "run", "src/cli.ts", "init", "--company", company, "--format", "json",
+      ], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout).vatPeriod).toBe("quarter");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #289: the onboarding help must point at the --vat-period flag instead of
+  // giving advice the owner cannot follow.
+  test("human onboarding advice points at the --vat-period flag (#289)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-init-vat-advice-"));
+    const company = join(root, "company");
+    try {
+      const proc = Bun.spawn([
+        "bun", "run", "src/cli.ts", "init",
+        "--company", company,
+        "--vat-period", "month",
+        "--format", "human",
+      ], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+      // The cadence shown reflects the chosen setting.
+      expect(stdout).toContain("Momsperiode");
+      expect(stdout.toLowerCase()).toContain("måned");
+      // The advice is now actionable: it names the flag that changes it.
+      expect(stdout).toContain("--vat-period");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

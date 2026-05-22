@@ -1,0 +1,9 @@
+# Eksempel: opret en virksomhed med en bestemt momsperiode.
+# --vat-period sætter den momscadence virksomheden er registreret for hos
+# SKAT. Vælg én af: month (måneds-moms), quarter (kvartals-moms, standard)
+# eller half-year (halvårs-moms). Momsperioder og -frister følger valget.
+# Sprang du --vat-period over, antages quarter.
+rentemester init --company <sti> \
+  --vat-period half-year \
+  --name "Eksempel ApS" \
+  --cvr DK12345678

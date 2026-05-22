@@ -55,12 +55,15 @@ const SIDE_EFFECTING_COMMANDS = new Set([
 export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "init",
-    usage: "init --company <path> [--workspace <dir>] [--name <text>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
+    usage: "init --company <path> [--workspace <dir>] [--name <text>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--vat-period month|quarter|half-year] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>] [--fiscal-year-start-month <1-12>] [--fiscal-year-label-strategy end-year|start-year|span]",
     description: "Initialiserer en virksomhed og opretter standardkontoplan. Virksomhedens egen identitet (navn, adresse, CVR) og betalingsoplysninger (bankkonto/IBAN, betalingsfrist) registreres her én gang og flyder automatisk med på hver udstedt faktura og dens PDF.",
-    allowedFlags: ["--company", "--workspace", "--name", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--bank-name", "--bank-reg", "--bank-account", "--iban", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    allowedFlags: ["--company", "--workspace", "--name", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--vat-period", "--bank-name", "--bank-reg", "--bank-account", "--iban", "--fiscal-year-start-month", "--fiscal-year-label-strategy"],
+    examplePath: "examples/init-vat-period.txt",
+    exampleHint: "rentemester init --example",
+    exampleNote: "Eksemplet er en kommandolinje-skabelon — udskift <sti> med din egen virksomhedsmappe og vælg den momsperiode du er registreret for hos SKAT.",
     inputNotes: [
       "Ligger virksomhedsmappen i et workspace (via --workspace eller RENTEMESTER_WORKSPACE), registreres virksomheden også i workspacet, så Cockpittet kan se den.",
-      "Momsperioden antages at være kvartal — afstem dine momsperioder hvis du afregner måneds- eller halvårsmoms.",
+      "--vat-period sætter virksomhedens momsperiode: month (måneds-moms), quarter (kvartals-moms) eller half-year (halvårs-moms). Standard er quarter. Vælg den periode du er registreret for hos SKAT — momsperioder og -frister følger dette valg.",
       "Virksomhedsprofilen kan rettes senere med 'company set-profile' — du behøver aldrig at indtaste din egen stamdata på en faktura igen.",
     ],
   },
@@ -139,6 +142,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
     inputNotes: [
       "--confirm yes er påkrævet: restore kan overskrive filer i --target-company",
       "Restore rører aldrig backup-kilden — kun --target-company skrives",
+      "--verify-key peger på den symmetriske HMAC-nøgle, der godtgør backuppens ægthed (manifestets HMAC-tag). Kræves typisk for et .tar-arkiv; for en backup-mappe udledes nøglen ellers fra virksomhedens backups-mappe.",
+      "--public-key peger på den asymmetriske ed25519-offentlige nøgle, der verificerer backuppens ed25519-signatur — den signatur 'system backup --sign-with-ed25519' tilføjer, så en uafhængig 3.-part kan bekræfte ægtheden uden at kende HMAC-nøglen. Den adskiller sig fra --verify-key: --verify-key er den symmetriske HMAC-nøgle, --public-key den asymmetriske ed25519-nøgle. Se docs/backup-security.md.",
       "MCP-ækvivalenten system_restore_backup kræver confirm:true + confirmText='RESTORE <targetCompany>'",
     ],
   },
