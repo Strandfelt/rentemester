@@ -5,6 +5,109 @@ import { isValidIsoDate as looksLikeIsoDate, addDays, todayIsoDate } from "./dat
 export type AccountingPeriodKind = "vat_quarter" | "fiscal_year" | "custom";
 export type AccountingPeriodStatus = "open" | "closed" | "reported";
 
+/**
+ * #289: the VAT settlement cadence a company is registered for with SKAT.
+ * Danish businesses file monthly, quarterly or half-yearly VAT depending on
+ * turnover. Rentemester historically hardcoded `quarter`; this type makes the
+ * cadence an explicit, per-company setting so VAT periods and their deadlines
+ * follow the company's real registration. `quarter` stays the default so
+ * companies created before the setting existed are unaffected.
+ */
+export type VatPeriodType = "month" | "quarter" | "half-year";
+
+/** The default VAT cadence — Rentemester's historical assumption. */
+export const DEFAULT_VAT_PERIOD_TYPE: VatPeriodType = "quarter";
+
+const VAT_PERIOD_TYPES = new Set<VatPeriodType>(["month", "quarter", "half-year"]);
+
+/**
+ * Validate a VAT-period-type input. Accepts exactly `month`, `quarter` or
+ * `half-year`; returns null on anything else so callers can surface a clear
+ * error. Note this is the canonical machine value — distinct from the Danish
+ * display label ("måned" / "kvartal" / "halvår").
+ */
+export function normalizeVatPeriodType(value?: string | null): VatPeriodType | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return VAT_PERIOD_TYPES.has(trimmed as VatPeriodType) ? (trimmed as VatPeriodType) : null;
+}
+
+/** Danish display label for a VAT period type — used in onboarding/help output. */
+export function vatPeriodTypeLabelDa(type: VatPeriodType): string {
+  switch (type) {
+    case "month":
+      return "måned";
+    case "half-year":
+      return "halvår";
+    case "quarter":
+    default:
+      return "kvartal";
+  }
+}
+
+/** Number of calendar months a single VAT period spans for each cadence. */
+function vatPeriodMonthSpan(type: VatPeriodType): number {
+  switch (type) {
+    case "month":
+      return 1;
+    case "half-year":
+      return 6;
+    case "quarter":
+    default:
+      return 3;
+  }
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+export type VatPeriodWindow = {
+  /** First day of the VAT period (YYYY-MM-DD). */
+  start: string;
+  /** Last day of the VAT period (YYYY-MM-DD). */
+  end: string;
+  /** SKAT filing/payment deadline: 1st of the 3rd month after period end. */
+  filingDeadline: string;
+  /** The cadence this window was computed for. */
+  vatPeriodType: VatPeriodType;
+};
+
+/**
+ * #289: the VAT period window that contains `isoDate`, for a company on the
+ * given VAT cadence. A monthly company gets a one-month window, a quarterly
+ * company a three-month window, a half-yearly company a six-month window — so
+ * the period (and therefore every VAT deadline derived from it) follows the
+ * company's real SKAT registration instead of a hardcoded quarter.
+ *
+ * The filing deadline is the 1st of the third month after the period ends,
+ * consistent across cadences with `core/vat.ts#vatFilingDeadline`.
+ */
+export function vatPeriodWindowFor(isoDate: string, type: VatPeriodType): VatPeriodWindow {
+  const year = Number(isoDate.slice(0, 4));
+  const month = Number(isoDate.slice(5, 7)); // 1-based
+  const span = vatPeriodMonthSpan(type);
+  // The 1-based index of the period within the year, then its first month.
+  const periodIndex = Math.floor((month - 1) / span);
+  const startMonth = periodIndex * span + 1;
+  const endMonth = startMonth + span - 1;
+  // Day 0 of the next month is the last day of `endMonth`.
+  const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
+  // Filing deadline: 1st of the third month after the period-end month.
+  let deadlineMonth = endMonth + 3;
+  let deadlineYear = year;
+  while (deadlineMonth > 12) {
+    deadlineMonth -= 12;
+    deadlineYear += 1;
+  }
+  return {
+    start: `${year}-${pad2(startMonth)}-01`,
+    end: `${year}-${pad2(endMonth)}-${pad2(lastDay)}`,
+    filingDeadline: `${deadlineYear}-${pad2(deadlineMonth)}-01`,
+    vatPeriodType: type,
+  };
+}
+
 export type CloseAccountingPeriodInput = {
   periodStart: string;
   periodEnd: string;

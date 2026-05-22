@@ -201,6 +201,45 @@ describe("CLI help, examples, and human formatting", () => {
     }
   });
 
+  // #297: `system restore-backup --help` documents --public-key in its
+  // Inputnoter — previously the flag appeared in "Tilladte flags" but only
+  // --verify-key was explained, leaving the asymmetric-signature flag a
+  // mystery.
+  test("system restore-backup help documents --public-key", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "system", "restore-backup", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Inputnoter:");
+    // The Inputnoter block now explains --public-key, not just --verify-key.
+    expect(stdout).toMatch(/--public-key/);
+    expect(stdout).toMatch(/--verify-key/);
+    // It is described as the ed25519 / asymmetric-signature key.
+    expect(stdout.toLowerCase()).toContain("ed25519");
+    // And points the reader at the backup-security doc.
+    expect(stdout).toContain("docs/backup-security.md");
+  });
+
+  // #289: `init --help` must document the new --vat-period flag so the owner
+  // can actually act on the "afregner du måneds- eller halvårsmoms"-advice.
+  test("init help documents the --vat-period flag", async () => {
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "init", "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Inputnoter:");
+    expect(stdout).toContain("--vat-period");
+    expect(stdout).toMatch(/month\|quarter\|half-year/);
+  });
+
   // #231: recurring-invoice create and opening-balance post advertise
   // --example; the registered example files must exist and parse.
   test("recurring-invoice create --example emits a parseable template", async () => {

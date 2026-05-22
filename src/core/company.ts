@@ -16,8 +16,35 @@ import {
   slugifyCompanyName,
   isValidSlug,
 } from "./workspace";
+import {
+  normalizeVatPeriodType,
+  DEFAULT_VAT_PERIOD_TYPE,
+  type VatPeriodType,
+} from "./periods";
 
 export type FiscalYearLabelStrategy = "end-year" | "start-year" | "span";
+
+/**
+ * #289: the `companies.vat_period_type` column predates no migration in
+ * `schema.sql`; older ledgers (and the base schema) do not have it. Ensure it
+ * exists before writing to / reading the company row. Defaults to `quarter`
+ * so existing companies keep Rentemester's historical assumption unchanged.
+ */
+function ensureVatPeriodColumn(db: Database): void {
+  const cols = db.query("PRAGMA table_info(companies)").all() as Array<{ name: string }>;
+  if (!cols.some((col) => col.name === "vat_period_type")) {
+    db.exec(
+      "ALTER TABLE companies ADD COLUMN vat_period_type TEXT NOT NULL DEFAULT 'quarter' " +
+        "CHECK(vat_period_type IN ('month', 'quarter', 'half-year'));",
+    );
+  }
+}
+
+/** True when the `companies` table carries the `vat_period_type` column. */
+function hasVatPeriodColumn(db: Database): boolean {
+  const cols = db.query("PRAGMA table_info(companies)").all() as Array<{ name: string }>;
+  return cols.some((col) => col.name === "vat_period_type");
+}
 
 export type CompanySettings = {
   id: number;
@@ -43,6 +70,13 @@ export type CompanySettings = {
    * date to its due date. Captured once so every issued invoice inherits it.
    */
   paymentTermsDays: number;
+  /**
+   * #289: the VAT settlement cadence the company is registered for with SKAT
+   * (`month` / `quarter` / `half-year`). Drives VAT period windows and their
+   * filing deadlines. Defaults to `quarter` so companies created before this
+   * setting existed keep Rentemester's historical assumption unchanged.
+   */
+  vatPeriodType: VatPeriodType;
 };
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 14;
@@ -65,6 +99,7 @@ const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   auditWaived: null,
   cvrSyncedAt: null,
   paymentTermsDays: DEFAULT_PAYMENT_TERMS_DAYS,
+  vatPeriodType: DEFAULT_VAT_PERIOD_TYPE,
 };
 
 /**
@@ -241,6 +276,11 @@ export type CompanyInitOptions = {
   city?: string | null;
   /** #221: default payment terms in days (issue date -> due date). */
   paymentTermsDays?: number | string | null;
+  /**
+   * #289: the company's VAT settlement cadence (`month` / `quarter` /
+   * `half-year`). Defaults to `quarter` when omitted.
+   */
+  vatPeriodType?: string | null;
   /** #221: payment details; when any field is set a bank account is created. */
   payment?: CompanyPaymentInput;
   /**
@@ -325,11 +365,19 @@ export function initialiseCompanyVolume(
       throw new Error("paymentTermsDays must be an integer between 0 and 365");
     }
   }
+  if (options.vatPeriodType !== undefined && options.vatPeriodType !== null) {
+    if (normalizeVatPeriodType(options.vatPeriodType) === null) {
+      throw new Error("vatPeriodType must be one of month, quarter, half-year");
+    }
+  }
 
   const p = ensureCompanyDirs(companyRoot);
   const db = openDb(p.db);
   try {
     migrate(db);
+    // #289: the VAT-cadence column is not yet part of schema.sql; add it
+    // defensively so a fresh ledger and an older one both carry it.
+    ensureVatPeriodColumn(db);
     seedAccounts(db);
     const cvr = normalizeCvr(options.cvr);
     const fiscalYearStartMonth =
@@ -342,10 +390,12 @@ export function initialiseCompanyVolume(
     const city = options.city?.trim() || null;
     const paymentTermsDays =
       normalizePaymentTermsDays(options.paymentTermsDays) ?? DEFAULT_PAYMENT_TERMS_DAYS;
+    const vatPeriodType =
+      normalizeVatPeriodType(options.vatPeriodType) ?? DEFAULT_VAT_PERIOD_TYPE;
     db.query(
       `INSERT INTO companies (id, name, cvr, fiscal_year_start_month, fiscal_year_label_strategy,
-                              address, postal_code, city, payment_terms_days)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                              address, postal_code, city, payment_terms_days, vat_period_type)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          cvr = excluded.cvr,
@@ -354,8 +404,19 @@ export function initialiseCompanyVolume(
          address = excluded.address,
          postal_code = excluded.postal_code,
          city = excluded.city,
-         payment_terms_days = excluded.payment_terms_days`,
-    ).run(name, cvr, fiscalYearStartMonth, fiscalYearLabelStrategy, address, postalCode, city, paymentTermsDays);
+         payment_terms_days = excluded.payment_terms_days,
+         vat_period_type = excluded.vat_period_type`,
+    ).run(
+      name,
+      cvr,
+      fiscalYearStartMonth,
+      fiscalYearLabelStrategy,
+      address,
+      postalCode,
+      city,
+      paymentTermsDays,
+      vatPeriodType,
+    );
     // #221: capture payment details once — create the primary bank account so
     // every customer-facing invoice PDF shows where to pay.
     if (hasPaymentInfo(options.payment)) {
@@ -374,15 +435,6 @@ export function initialiseCompanyVolume(
   return { companyRoot, dbPath: p.db };
 }
 
-/**
- * Rentemester currently models VAT settlement on a quarterly cadence — the
- * `vat_quarter` accounting period. There is no per-company VAT-period setting
- * yet, so onboarding surfaces this assumption explicitly so the owner can
- * confirm it fits their registration (some businesses file monthly or
- * half-yearly) before they start booking.
- */
-export const ASSUMED_VAT_PERIOD = "kvartal" as const;
-
 export type CompanyOnboardingSummary = {
   /** Display name stored in the ledger. */
   name: string;
@@ -390,8 +442,11 @@ export type CompanyOnboardingSummary = {
   /** Month (1-12) the fiscal year starts in. */
   fiscalYearStartMonth: number;
   fiscalYearLabelStrategy: FiscalYearLabelStrategy;
-  /** The VAT settlement cadence Rentemester currently assumes. */
-  vatPeriod: typeof ASSUMED_VAT_PERIOD;
+  /**
+   * #289: the company's VAT settlement cadence — the canonical period-type
+   * value (`month` / `quarter` / `half-year`), as configured at `init`.
+   */
+  vatPeriod: VatPeriodType;
   /** Number of accounts seeded into the chart of accounts. */
   accountCount: number;
   /**
@@ -418,7 +473,7 @@ export function summariseCompanyVolume(companyRoot: string): CompanyOnboardingSu
       cvr: settings.cvr,
       fiscalYearStartMonth: settings.fiscalYearStartMonth,
       fiscalYearLabelStrategy: settings.fiscalYearLabelStrategy,
-      vatPeriod: ASSUMED_VAT_PERIOD,
+      vatPeriod: settings.vatPeriodType,
       accountCount: Number(row?.n ?? 0),
       // #241: an issued invoice's PDF carries a BETALING block only when a
       // payment account is configured. Reuse the invoice-side resolver so the
@@ -475,6 +530,7 @@ export function createCompany(
     postalCode: options.postalCode,
     city: options.city,
     paymentTermsDays: options.paymentTermsDays,
+    vatPeriodType: options.vatPeriodType,
     payment: options.payment,
     onboardingActor: options.onboardingActor,
   });
@@ -490,10 +546,14 @@ export function createCompany(
 }
 
 export function getCompanySettings(db: Database): CompanySettings {
+  // #289: older ledgers (and the base schema.sql) may lack `vat_period_type`.
+  // Read it only when present; absent → fall back to the quarterly default so
+  // a pre-#289 company is unaffected.
+  const vatColumn = hasVatPeriodColumn(db) ? "vat_period_type" : "NULL AS vat_period_type";
   const row = db.query(
     `SELECT id, name, country, currency, cvr, fiscal_year_start_month, fiscal_year_label_strategy,
             address, postal_code, city, company_form, industry_code, industry_text,
-            cvr_status, audit_waived, cvr_synced_at, payment_terms_days
+            cvr_status, audit_waived, cvr_synced_at, payment_terms_days, ${vatColumn}
        FROM companies
       ORDER BY id ASC
       LIMIT 1`
@@ -515,6 +575,7 @@ export function getCompanySettings(db: Database): CompanySettings {
     audit_waived: number | null;
     cvr_synced_at: string | null;
     payment_terms_days: number | null;
+    vat_period_type: string | null;
   } | null;
 
   if (!row) return DEFAULT_COMPANY_SETTINGS;
@@ -537,6 +598,7 @@ export function getCompanySettings(db: Database): CompanySettings {
     cvrSyncedAt: row.cvr_synced_at,
     paymentTermsDays:
       normalizePaymentTermsDays(row.payment_terms_days) ?? DEFAULT_PAYMENT_TERMS_DAYS,
+    vatPeriodType: normalizeVatPeriodType(row.vat_period_type) ?? DEFAULT_VAT_PERIOD_TYPE,
   };
 }
 

@@ -5,6 +5,7 @@ import {
   summariseCompanyVolume,
   type CompanyOnboardingSummary,
 } from "../core/company";
+import { vatPeriodTypeLabelDa } from "../core/periods";
 import {
   registerCompanyDirIntoWorkspace,
   resolveConfiguredWorkspaceRoot,
@@ -95,14 +96,13 @@ function buildOnboardingLines(
     );
   }
 
+  const vatLabel = vatPeriodTypeLabelDa(summary.vatPeriod);
   lines.push("");
   lines.push("Tjek disse indstillinger — de er svære at ændre senere:");
   lines.push(`  - Regnskabsår: starter 1. ${monthName} (${fiscalLabel})`);
+  lines.push(`  - Momsperiode: ${vatLabel}. Afregner du en anden momsperiode,`);
   lines.push(
-    `  - Momsperiode: kvartal (Rentemester antager kvartalsmoms). Afregner du`,
-  );
-  lines.push(
-    `    måneds- eller halvårsmoms, så afstem dine momsperioder efter det.`,
+    `    så kør 'init --vat-period month|quarter|half-year' (standard: quarter).`,
   );
   lines.push(`  - CVR: ${summary.cvr ?? "ikke sat — sæt det med 'init --cvr <DK########>'"}`);
 
@@ -144,6 +144,8 @@ export function register(dispatch: CommandDispatch): void {
         cvr: ctx.arg("--cvr"),
         fiscalYearStartMonth: ctx.arg("--fiscal-year-start-month"),
         fiscalYearLabelStrategy: ctx.arg("--fiscal-year-label-strategy"),
+        // #289: the company's VAT settlement cadence — month/quarter/half-year.
+        vatPeriodType: ctx.arg("--vat-period"),
         address: ctx.trimToNull(ctx.arg("--address")) ?? undefined,
         postalCode: ctx.trimToNull(ctx.arg("--postal-code")) ?? undefined,
         city: ctx.trimToNull(ctx.arg("--city")) ?? undefined,
