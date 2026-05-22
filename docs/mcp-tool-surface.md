@@ -165,15 +165,15 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 
 Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 
-- **Read-tools**: 39
+- **Read-tools**: 42
 - **Write-reversible**: 11
-- **Write-irreversible**: 39
+- **Write-irreversible**: 41
 - **Destructive**: 1 (`system_restore_backup`)
-- **Total**: **90**
+- **Total**: **95**
 
 ## Read-tools
 
-39 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
+42 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
 
 | Tool | CLI-ækvivalent | Input | Brief |
 |---|---|---|---|
@@ -204,6 +204,7 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 | `journal_list` | `journal list` | `{ company }` | Lister finansposteringer. |
 | `mileage_list` | `mileage list` | `{ company }` | Lister registrerede kørselsposter. |
 | `mileage_report` | `mileage report` | `{ company, from, to }` | Deterministisk periode-rapport over kilometer og beløbsgrundlag. |
+| `payable_list` | `payable list` | `{ company, status?, asOfDate?, supplier?, vendorId?, from?, to?, minDays? }` | Bygger kreditorlisten: åbne leverandørposter med åben saldo og forfaldsintervaller (forfaldne/ikke-forfaldne). |
 | `period_list` | (ingen — kun MCP)² | `{ company }` | Lister regnskabsperioder (open/closed/reported). |
 | `portfolio_overview` | `dashboard` (delvist) | `{ workspace, asOf? }` | Status side om side for hver virksomhed i workspace'et. Intet konsolideres. |
 | `reconcile_bank` | `reconcile bank` | `{ company, from, to, status?, textMatch?, amount?, account? }` | Bygger bank-afstemningsrapport for periode. |
@@ -214,6 +215,8 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 | `system_backup_status` | `system backup-status` | `{ company, asOf? }` | Tjekker om backup-pligten er opfyldt. |
 | `system_healthcheck` | `system healthcheck` | `{ company }` | Tjekker virksomhedsmappens integritet. |
 | `tax_return_prepare` | `report tax` | `{ company, from, to }` | Forbereder selskabets skattepligtige indkomst (oplysningsskema) for et lukket regnskabsår: årets resultat + deterministiske skattemæssige reguleringer + 22% selskabsskat (kun ApS). Ikke-deterministiske poster markeres som needs-review. |
+| `vat_eu_sales_list` | `vat eu-sales-list` | `{ company, from, to }` | EU-salg uden moms-liste (VIES recapitulative statement): værdien af grænseoverskridende B2B-salg uden dansk moms grupperet pr. køber-VAT-nummer. |
+| `vat_oss_report` | `vat oss-report` | `{ company, from, to }` | OSS-rapportskelet (One Stop Shop, første slice): grundlaget for digitale ydelser solgt til EU-forbrugere. Ikke en OSS-indberetning til SKAT. |
 | `vat_report` | `vat report` | `{ company, from, to }` | Bygger momsrapport for perioden. |
 | `vendor_list` | `vendor list` | `{ company, archived? }` | Lister kendte leverandører. |
 
@@ -281,7 +284,7 @@ append-only finanskæde.
 
 ### write-irreversible
 
-37 tools. Bogfører i den append-only hash-kæde eller skriver
+41 tools. Bogfører i den append-only hash-kæde eller skriver
 revisionsklare/eksterne artefakter; kan kun "rulles tilbage" via en
 modpostering.
 
@@ -312,6 +315,8 @@ modpostering.
 | `invoice_write_off_bad_debt` | `invoice write-off-bad-debt` | `{ company, payload: BadDebtPayload, confirm }` | Bogfører tab på debitor. |
 | `journal_post` | `journal post` | `{ company, payload: JournalEntryInput, confirm }` | Bogfører manuel finanspostering. |
 | `journal_reverse` | `journal reverse` | `{ company, entryId? \| entryNo? \| matchText?, matchDate?, matchDocumentId?, date, reason, confirm }` | Tilbagefører bogført finanspostering ved at oprette modpost. |
+| `payable_pay` | `payable pay` | `{ company, payableId, bankTransactionId, amount?, date?, paymentAccount?, note?, confirm }` | Matcher en udgående bankbetaling mod en åben kreditorpost (debit 7000 Leverandørgæld, credit bank). |
+| `payable_register` | `payable register` | `{ company, documentId, billDate, dueDate, expenseAccount, vatTreatment?, vendorId?, note?, confirm }` | Registrerer et bogført leverandørbilag som en åben kreditorpost (debit udgift + købsmoms, credit 7000 Leverandørgæld). |
 | `peppol_submit_public_invoice` | `invoice submit-public-peppol` | `{ company, documentId? \| invoiceNumber?, accessPoint, acknowledgement?, confirm }` | Bygger en idempotent PEPPOL-submission-envelope og registrerer forsøget. |
 | `period_close` | `period close` | `{ company, from, to, kind?, status?, reference?, confirm }` | Lukker eller markerer regnskabsperiode. |
 | `recurring_invoice_create` | `recurring-invoice create` | `{ company, name, interval, firstIssueDate, invoice: InvoicePayload, paymentTermsDays?, deliveryPeriodMode?, notes?, confirm }` | Opretter en gentagende fakturaskabelon. `invoice` er en typet `InvoicePayload` (samme form som `invoice_issue`) — men dato-/nummerfelter (`invoiceNumber`, `issueDate`, `dueDate`, leveringsdatoer) sættes IKKE her; `recurring_invoice_generate` udleder dem pr. periode. |
