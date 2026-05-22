@@ -138,9 +138,18 @@ describe("public e-invoice preview export", () => {
     expect(first.sha256).toBe(second.sha256);
     expect(first.xml).toBe(second.xml);
     expect(readFileSync(outPath, "utf8")).toBe(first.xml);
-    expect(first.xml).toContain("<cbc:CustomizationID>urn:fdc:oioubl.dk:trns:billing:invoice:3.0</cbc:CustomizationID>");
-    expect(first.xml).toContain("<cbc:ProfileID>urn:fdc:oioubl.dk:bis:billing_with_response:3</cbc:ProfileID>");
-    expect(first.xml).toContain('<cbc:EndpointID schemeID="0188">5790000000001</cbc:EndpointID>');
+    expect(first.xml).toContain(
+      "<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>",
+    );
+    expect(first.xml).toContain("<cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>");
+    // Buyer (public authority) addressed by its EAN/GLN under Peppol scheme 0088.
+    expect(first.xml).toContain('<cbc:EndpointID schemeID="0088">5790000000001</cbc:EndpointID>');
+    // Seller electronic address is mandatory in Peppol BIS (BR-62), DK CVR scheme 0184.
+    expect(first.xml).toContain('<cbc:EndpointID schemeID="0184">DK12345678</cbc:EndpointID>');
+    // Country code is mandatory on both postal addresses (BR-09 / BR-11).
+    expect(first.xml).toContain("<cbc:IdentificationCode>DK</cbc:IdentificationCode>");
+    // Buyer name carried as the legal RegistrationName (BT-44).
+    expect(first.xml).toContain("<cbc:RegistrationName>Københavns Kommune</cbc:RegistrationName>");
 
     const auditRows = db.query(
       "SELECT event_type, entity_type, entity_id, message FROM audit_log WHERE event_type = 'public_einvoice_oioubl_export' ORDER BY id ASC",

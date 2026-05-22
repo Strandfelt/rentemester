@@ -8,9 +8,20 @@ import { formatAmount } from "./money";
 
 const RULE_ID = "DK-INVOICE-PUBLIC-EXPORT-001";
 const OIOUBL_RULE_ID = "DK-INVOICE-PUBLIC-OIOUBL-001";
+
+// The public-recipient handoff document is a Peppol BIS Billing 3.0 invoice
+// (UBL 2.1). Denmark's national OIOUBL 3.0 format was cancelled in January
+// 2026; Peppol BIS Billing 3.0 is accepted by every Danish public authority
+// and is the format NemHandel itself is migrating onto. The surrounding
+// "OioUbl" function/CLI names are kept for interface stability.
 const OIOUBL_UBL_VERSION = "2.1";
-const OIOUBL_CUSTOMIZATION_ID = "urn:fdc:oioubl.dk:trns:billing:invoice:3.0";
-const OIOUBL_PROFILE_ID = "urn:fdc:oioubl.dk:bis:billing_with_response:3";
+const PEPPOL_BIS_CUSTOMIZATION_ID =
+  "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
+const PEPPOL_BIS_PROFILE_ID = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+// Peppol participant identifier schemes (ISO 6523): 0088 = GLN/EAN for the
+// buying public authority, 0184 = Danish CVR for the selling company.
+const BUYER_ENDPOINT_SCHEME_ID = "0088";
+const SELLER_ENDPOINT_SCHEME_ID = "0184";
 const PEPPOL_SUBMIT_RULE_ID = "DK-PEPPOL-SUBMIT-001";
 const PEPPOL_ENVELOPE_VERSION = "rentemester:dk:peppol-submission:v1";
 
@@ -74,13 +85,21 @@ function formatVatPercent(value: number | null | undefined) {
   return Number.isInteger(value) ? String(value) : String(value <= 1 ? value * 100 : value);
 }
 
-function buildAddressXml(tagName: string, address: string | null | undefined, indent = "") {
+function buildAddressXml(
+  tagName: string,
+  address: string | null | undefined,
+  indent = "",
+  countryCode = "DK",
+) {
   if (!hasText(address)) return "";
   return [
     `${indent}<${tagName}>`,
     `${indent}  <cac:AddressLine>`,
     xmlTag("cbc:Line", address.trim(), `${indent}    `),
     `${indent}  </cac:AddressLine>`,
+    `${indent}  <cac:Country>`,
+    xmlTag("cbc:IdentificationCode", countryCode, `${indent}    `),
+    `${indent}  </cac:Country>`,
     `${indent}</${tagName}>`,
   ].join("\n");
 }
@@ -197,8 +216,8 @@ function buildPublicEInvoiceOioUblXml(invoiceNumber: string, payload: InvoicePay
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">',
     xmlTag("cbc:UBLVersionID", OIOUBL_UBL_VERSION, "  "),
-    xmlTag("cbc:CustomizationID", OIOUBL_CUSTOMIZATION_ID, "  "),
-    xmlTag("cbc:ProfileID", OIOUBL_PROFILE_ID, "  "),
+    xmlTag("cbc:CustomizationID", PEPPOL_BIS_CUSTOMIZATION_ID, "  "),
+    xmlTag("cbc:ProfileID", PEPPOL_BIS_PROFILE_ID, "  "),
     xmlTag("cbc:ID", invoiceNumber, "  "),
     xmlTag("cbc:IssueDate", payload.issueDate, "  "),
     xmlTag("cbc:DueDate", payload.dueDate, "  "),
@@ -206,6 +225,7 @@ function buildPublicEInvoiceOioUblXml(invoiceNumber: string, payload: InvoicePay
     xmlTag("cbc:DocumentCurrencyCode", currency, "  "),
     "  <cac:AccountingSupplierParty>",
     "    <cac:Party>",
+    xmlTagWithAttrs("cbc:EndpointID", { schemeID: SELLER_ENDPOINT_SCHEME_ID }, payload.seller?.vatOrCvr, "      "),
     "      <cac:PartyName>",
     xmlTag("cbc:Name", payload.seller?.name, "        "),
     "      </cac:PartyName>",
@@ -224,11 +244,14 @@ function buildPublicEInvoiceOioUblXml(invoiceNumber: string, payload: InvoicePay
     "  </cac:AccountingSupplierParty>",
     "  <cac:AccountingCustomerParty>",
     "    <cac:Party>",
-    xmlTagWithAttrs("cbc:EndpointID", { schemeID: "0188" }, payload.buyer?.eanNumber, "      "),
+    xmlTagWithAttrs("cbc:EndpointID", { schemeID: BUYER_ENDPOINT_SCHEME_ID }, payload.buyer?.eanNumber, "      "),
     "      <cac:PartyName>",
     xmlTag("cbc:Name", payload.buyer?.name, "        "),
     "      </cac:PartyName>",
     buildAddressXml("cac:PostalAddress", payload.buyer?.address, "      "),
+    "      <cac:PartyLegalEntity>",
+    xmlTag("cbc:RegistrationName", payload.buyer?.name, "        "),
+    "      </cac:PartyLegalEntity>",
     "    </cac:Party>",
     "  </cac:AccountingCustomerParty>",
     "  <cac:TaxTotal>",
@@ -507,8 +530,8 @@ function buildPeppolSubmissionEnvelope(args: {
     xmlTag("Status", args.status, "  "),
     "  <Document>",
     xmlTag("InvoiceNumber", args.invoiceNumber, "    "),
-    xmlTag("Format", "OIOUBL", "    "),
-    xmlTag("Profile", OIOUBL_CUSTOMIZATION_ID, "    "),
+    xmlTag("Format", "PEPPOL-BIS-3.0", "    "),
+    xmlTag("Profile", PEPPOL_BIS_CUSTOMIZATION_ID, "    "),
     xmlTag("HandoffArtifactSha256", args.oioublSha256, "    "),
     "  </Document>",
     "  <AccessPoint>",
@@ -603,8 +626,12 @@ export function submitPublicEInvoicePeppol(
 
   // Derive the receiver endpoint id from the OIOUBL artifact (EndpointID),
   // so the submission envelope stays consistent with the validated handoff.
-  const endpointMatch = oioubl.xml?.match(/<cbc:EndpointID schemeID="0188">([^<]+)<\/cbc:EndpointID>/);
-  const receiver = endpointMatch ? `0188:${endpointMatch[1]}` : "0188:unknown";
+  const endpointMatch = oioubl.xml?.match(
+    new RegExp(`<cbc:EndpointID schemeID="${BUYER_ENDPOINT_SCHEME_ID}">([^<]+)</cbc:EndpointID>`),
+  );
+  const receiver = endpointMatch
+    ? `${BUYER_ENDPOINT_SCHEME_ID}:${endpointMatch[1]}`
+    : `${BUYER_ENDPOINT_SCHEME_ID}:unknown`;
 
   const idempotencyKey = createHash("sha256")
     .update(
