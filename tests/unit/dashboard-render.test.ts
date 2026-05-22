@@ -580,6 +580,11 @@ function fixtureWithRecurringFeatures(): DashboardInput {
         },
       ],
     },
+    // An UNDER-budget expense month, consistent with real buildBudgetVsActual
+    // output: for an expense line variance = budget − actual = +800
+    // (favourable), while the aggregate totalVariance = totalActual −
+    // totalBudget = −800. The pill must be derived from the per-line variance,
+    // not the raw aggregate (whose sign depends on account mix).
     budgetVsActual: {
       ok: true,
       appliedRules: ["budget:vs-actual"],
@@ -598,7 +603,7 @@ function fixtureWithRecurringFeatures(): DashboardInput {
       ],
       totalBudget: 5000,
       totalActual: 4200,
-      totalVariance: 800,
+      totalVariance: -800,
       errors: [],
     },
     liquidity: {
@@ -666,6 +671,56 @@ describe("renderDashboard — recurring-feature cards", () => {
     expect(html).toContain("Likviditetsprognose");
     // 3-month forecast, final projected balance 31.000,00 kr.
     expect(html).toContain("31.000,00 kr.");
+  });
+
+  // #cockpit-wiring-review-4: the under-budget expense month must read calm.
+  test("the budget pill reads favourable for an under-budget expense month", () => {
+    // The fixture is an under-budget expense: per-line variance +800 (good),
+    // raw totalVariance −800. The pill must reflect the favourable per-line
+    // variance, not the negative aggregate.
+    const html = renderDashboard(fixtureWithRecurringFeatures());
+    expect(html).toContain("budget overholdt");
+    expect(html).not.toContain("budgetafvigelse");
+  });
+
+  // #cockpit-wiring-review-4: the bug. An OVER-budget expense month has a
+  // positive raw totalVariance (totalActual − totalBudget > 0) — keying the
+  // pill off that shows a green "budget overholdt" pill for overspending, the
+  // opposite of reality. The pill must come from the per-line signed variance.
+  test("the budget pill reads UNFAVOURABLE for an over-budget expense month", () => {
+    const overBudget: DashboardInput = {
+      ...fixtureWithRecurringFeatures(),
+      budgetVsActual: {
+        ok: true,
+        appliedRules: ["budget:vs-actual"],
+        periodStart: "2026-05",
+        periodEnd: "2026-05",
+        lines: [
+          {
+            accountNo: "3000",
+            accountName: "Software",
+            accountType: "expense",
+            period: "2026-05",
+            budget: 5000,
+            // Overspent: actual 7000 > budget 5000. For an expense line the
+            // real buildBudgetVsActual yields variance = budget − actual =
+            // −2000 (unfavourable). The raw totalVariance = totalActual −
+            // totalBudget = +2000 (which naively looks "good").
+            actual: 7000,
+            variance: -2000,
+          },
+        ],
+        totalBudget: 5000,
+        totalActual: 7000,
+        totalVariance: 2000,
+        errors: [],
+      },
+    };
+    const html = renderDashboard(overBudget);
+    // The pill must NOT be the green "budget overholdt" — overspending is
+    // unfavourable.
+    expect(html).toContain("budgetafvigelse");
+    expect(html).not.toContain("budget overholdt");
   });
 
   test("renders the tax card with estimated corporate tax for a closed year", () => {

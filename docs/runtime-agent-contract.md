@@ -45,13 +45,20 @@ depend on an earlier one's output.
    - `AGENT_BOOKING_BLOCKED` — the ledger refused the posting (a guardrail
      fired, e.g. a missing VIES validation); the agent obeys.
 4. **payables** — settle the **unambiguous creditor payments** and surface the
-   overdue ones. An unmatched outgoing DKK bank line whose absolute amount
-   equals the open balance of *exactly one* open payable is settled through
-   the existing `payPayableFromBank` feature. Zero candidates or more than
-   one ⇒ ambiguous — the agent never guesses; the line stays for the reconcile
-   phase. Every open creditor item past its due date is escalated as an
-   `AGENT_PAYABLE_OVERDUE` exception. The agent **never** forces a settlement
-   the ledger refuses.
+   overdue ones. An outgoing DKK bank line auto-settles a payable only when
+   **both** hold: (a) its absolute amount equals the open balance of *exactly
+   one* open payable, **and** (b) the bank line strongly corroborates that
+   payable — its free text / counterparty name / reference names the supplier
+   or carries the bill number. An **amount-only** match is *not* enough: an
+   owner draw, salary or tax payment can coincidentally equal a creditor's
+   balance, and auto-settling it would be a wrong write to the append-only
+   ledger. When the amount matches but corroboration is weak, the agent
+   **surfaces it as an `AGENT_PAYABLE_MATCH_UNCERTAIN` exception — it does not
+   post** (the same "surface, never guess" stance as the accrual-recognition
+   and fixed-asset paths). Zero candidates or more than one ⇒ ambiguous; the
+   line stays for the reconcile phase. Every open creditor item past its due
+   date is escalated as an `AGENT_PAYABLE_OVERDUE` exception. The agent
+   **never** forces a settlement the ledger refuses.
 5. **reconcile** — sync every bank transaction with no posted journal entry
    into the exception queue (`UNMATCHED_BANK_TRANSACTION`), via the shared
    reconciliation function. It runs *after* the payables phase so a creditor
@@ -64,8 +71,20 @@ depend on an earlier one's output.
    yet posted, as an `AGENT_ACCRUAL_RECOGNITION_DUE` exception. Like a
    possible fixed-asset purchase, the agent **surfaces — it does not auto-post**
    the recognition entry: choosing the posting date stays with the human.
+   Finally, when the *previous* fiscal year is closed, the slice's
+   tax-return needs-review flags are surfaced as
+   `AGENT_TAX_RETURN_NEEDS_REVIEW` exceptions.
 7. **report** — produce the end-of-run report: what was booked, what creditor
    items were settled, what was left in exceptions, which deadlines are near.
+
+> **Idempotency of the surfacing syncs.** The overdue-payable, due-accrual and
+> tax-needs-review syncs run every loop with a moving `--as-of`. They dedup on
+> a **stable row identity** (the payable id / the `(accrual, period)` pair /
+> the `(fiscal-year, needs-review-kind)` pair) — never on the message, which
+> would otherwise carry a volatile "N dage overforfalden pr. \<date\>" and
+> create a fresh duplicate every run. Each sync also **resolves** its exception
+> once the underlying item is no longer pending (the bill is paid, the period
+> is posted, the flag no longer fires).
 
 ## Hard boundaries — the guardrails
 
@@ -185,7 +204,7 @@ A single run produces one `AgentRunReport` object. Top-level fields:
 | Field | Type | Meaning |
 |-------|------|---------|
 | `exceptionId` | `number` | The exception row id (use it with `exception resolve`). |
-| `type` | `string` | The exception type, e.g. `AGENT_DOCUMENT_REJECTED`, `AGENT_LOW_CONFIDENCE_MATCH`, `AGENT_NO_ACCOUNT_RULE`, `AGENT_POSSIBLE_FIXED_ASSET`, `AGENT_BOOKING_BLOCKED`, `AGENT_VAT_DEADLINE_OPEN`, `AGENT_PAYABLE_OVERDUE`, `AGENT_ACCRUAL_RECOGNITION_DUE`. |
+| `type` | `string` | The exception type, e.g. `AGENT_DOCUMENT_REJECTED`, `AGENT_LOW_CONFIDENCE_MATCH`, `AGENT_NO_ACCOUNT_RULE`, `AGENT_POSSIBLE_FIXED_ASSET`, `AGENT_BOOKING_BLOCKED`, `AGENT_VAT_DEADLINE_OPEN`, `AGENT_PAYABLE_OVERDUE`, `AGENT_PAYABLE_MATCH_UNCERTAIN`, `AGENT_ACCRUAL_RECOGNITION_DUE`, `AGENT_TAX_RETURN_NEEDS_REVIEW`. |
 | `severity` | `string` | `low` / `medium` / `high`. |
 | `message` | `string` | Human-readable description of what the agent could not resolve. |
 | `requiredAction` | `string \| null` | The concrete next step for the human, or `null`. |

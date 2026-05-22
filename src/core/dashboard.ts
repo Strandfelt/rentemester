@@ -900,10 +900,13 @@ function accrualsSection(
   due: DueAccrualRecognitionResult | undefined,
 ): string {
   const remainingExposure = register?.totals.remainingAmount ?? 0;
-  const accrualCount = register?.accruals.length ?? 0;
-  if (accrualCount === 0) {
+  const accruals = register?.accruals ?? [];
+  if (accruals.length === 0) {
     return `<div class="empty-state">Ingen periodeafgrænsningsposter</div>`;
   }
+  // "Aktive" = not fully recognised — a fully-recognised accrual no longer
+  // carries balance-sheet exposure, so counting it would overstate the card.
+  const activeCount = accruals.filter((a) => !a.fullyRecognized).length;
   const dueCount = due?.periods.length ?? 0;
   const dueAmount = due?.totalDueAmount ?? 0;
   const duePill = dueCount > 0
@@ -912,7 +915,7 @@ function accrualsSection(
   return `<div class="status-row">
     <div>
       <div class="label">Resterende balanceeksponering</div>
-      <div class="detail">${accrualCount} aktiv${accrualCount === 1 ? "" : "e"} periodeafgrænsningsposter</div>
+      <div class="detail">${activeCount} aktiv${activeCount === 1 ? "" : "e"} periodeafgrænsningsposter</div>
     </div>
     <div class="amount-lg">${escapeHtml(formatDkk(remainingExposure))}</div>
   </div>
@@ -937,19 +940,22 @@ function budgetLiquiditySection(
 
   const hasBudget = budget && budget.ok && budget.lines.length > 0;
   if (hasBudget) {
-    const variance = budget!.totalVariance;
-    // totalVariance is totalActual − totalBudget; the meaning depends on the
-    // account mix, so the dashboard states it neutrally and lets the figure
-    // speak. A non-negative variance reads calm; a shortfall reads warning.
-    const pill = variance >= 0
+    // The raw `totalVariance` (= totalActual − totalBudget) is NOT a
+    // favourability signal — its sign depends on the account mix, so an
+    // over-budget expense month yields a POSITIVE total. The per-line
+    // `BudgetVsActualLine.variance` already encodes "positive = favourable"
+    // for every account type (expense: budget − actual; income/other: actual
+    // − budget). Their sum is therefore the correct favourability figure.
+    const favourability = budget!.lines.reduce((sum, line) => sum + line.variance, 0);
+    const pill = favourability >= 0
       ? `<span class="pill success">budget overholdt</span>`
-      : `<span class="pill warning">afvigelse</span>`;
+      : `<span class="pill warning">budgetafvigelse</span>`;
     parts.push(`<div class="status-row">
     <div>
       <div class="label">Budget vs. faktisk · ${escapeHtml(budget!.periodStart)}</div>
       <div class="detail">budget <span class="mono">${escapeHtml(formatDkk(budget!.totalBudget))}</span> · faktisk <span class="mono">${escapeHtml(formatDkk(budget!.totalActual))}</span></div>
     </div>
-    <div>${pill} <span class="muted">${escapeHtml(formatDkk(variance))}</span></div>
+    <div>${pill} <span class="muted">${escapeHtml(formatDkk(favourability))}</span></div>
   </div>`);
   } else {
     parts.push(`<div class="status-row">

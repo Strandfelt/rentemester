@@ -35,6 +35,7 @@ import {
   syncUnmatchedBankTransactionExceptions,
   syncOverduePayableExceptions,
   syncAccrualRecognitionDueExceptions,
+  syncTaxReturnReviewExceptions,
 } from "../core/exceptions";
 import { buildPayablesList, payPayableFromBank } from "../core/payables";
 import { listDueAccrualRecognitionPeriods } from "../core/accruals";
@@ -517,14 +518,71 @@ function routeException(
   }
 }
 
+// Company-form / currency tokens that carry no identifying signal — two
+// unrelated "… ApS" creditors both contain APS. Mirrors the STOP_TOKENS in
+// `bank-suggest-matches.ts`; kept local so `matchPayables` stays self-contained.
+const PAYABLE_MATCH_STOP_TOKENS = new Set([
+  "APS", "A/S", "AS", "IVS", "P/S", "PS", "K/S", "KS", "I/S", "IS",
+  "AMBA", "FMBA", "SMBA", "GMBH", "LTD", "INC", "PLC", "LLC", "AB", "OY",
+  "DKK", "EUR", "USD", "SEK", "NOK", "GBP",
+  "FOR", "OG", "THE", "AND", "VED", "MED", "TIL", "FRA", "DEN", "DET",
+]);
+
+/** Identifying tokens of a name/text — upper-cased, ≥3 chars, stop-words dropped. */
+function payableMatchTokens(value: string | null | undefined): string[] {
+  return Array.from(
+    new Set(
+      (value ?? "")
+        .toUpperCase()
+        .split(/[^\p{L}\p{N}-]+/u)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 3)
+        .filter((t) => !PAYABLE_MATCH_STOP_TOKENS.has(t)),
+    ),
+  );
+}
+
 /**
- * Settles the unambiguous creditor payments.
+ * Whether a bank line strongly corroborates a payable beyond the amount.
  *
- * A bank transaction is matched against a payable only when the match is
- * fully deterministic: an outgoing DKK bank line, not yet linked to any
- * journal entry, whose absolute amount equals the open balance of EXACTLY ONE
- * open payable. Zero candidates or more than one ⇒ ambiguous; the agent does
- * NOT guess — the line stays unmatched and the reconcile phase surfaces it.
+ * An amount-only match is unsafe: an owner draw / salary / tax payment with no
+ * bilag can equal a creditor's open balance by coincidence. The agent only
+ * auto-settles when the bank line's identifying text (free text, counterparty
+ * name, reference, message) shares an identifying token with the supplier
+ * name, OR carries the bill number. Otherwise the match is uncertain.
+ */
+function bankLineCorroboratesPayable(
+  bank: { text: string | null; counterparty_name: string | null; reference: string | null; message: string | null },
+  payable: { supplierName: string | null; billNo: string | null },
+): boolean {
+  const combined = [bank.text, bank.counterparty_name, bank.reference, bank.message]
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .join(" ");
+  // The bill number appearing verbatim in the bank text is strong evidence.
+  if (payable.billNo && combined.toUpperCase().includes(payable.billNo.toUpperCase())) {
+    return true;
+  }
+  // Otherwise require an identifying-token overlap with the supplier name.
+  const supplierTokens = new Set(payableMatchTokens(payable.supplierName));
+  if (supplierTokens.size === 0) return false;
+  return payableMatchTokens(combined).some((t) => supplierTokens.has(t));
+}
+
+/**
+ * Settles the unambiguous creditor payments — and ONLY the unambiguous ones.
+ *
+ * A bank transaction auto-settles a payable only when BOTH hold:
+ *  1. its absolute amount equals the open balance of EXACTLY ONE open payable
+ *     (zero or more than one ⇒ ambiguous), AND
+ *  2. the bank line strongly corroborates that payable — its text /
+ *     counterparty / reference names the supplier or carries the bill number.
+ *
+ * An amount-only match is NOT enough: an owner draw, salary or tax payment can
+ * coincidentally equal a creditor's balance, and auto-settling it would be a
+ * wrong write to the append-only ledger. When the amount matches but
+ * corroboration is weak, the agent SURFACES it as an `AGENT_PAYABLE_MATCH_UNCERTAIN`
+ * exception for the human — it never posts. (Same "surface, never guess"
+ * stance as the accrual-recognition and fixed-asset paths.)
  *
  * Settlement goes through the existing `payPayableFromBank` feature, so the
  * ledger still has the final word, and every mutation is attributed to the
@@ -534,16 +592,28 @@ function matchPayables(db: Database, report: AgentRunReport): void {
   const openPayables = buildPayablesList(db, { status: "open" });
   if (!openPayables.ok || openPayables.rows.length === 0) return;
 
-  // Unmatched outgoing DKK bank lines — no posted journal entry, negative
-  // amount. Stable order: ascending id, so the run is replayable.
+  // Unmatched outgoing DKK bank lines — no POSTED journal entry, negative
+  // amount. The `je.status = 'posted'` filter matches reconciliation.ts and
+  // syncUnmatchedBankTransactionExceptions: a reversed settlement entry must
+  // NOT keep its bank line excluded. Stable order: ascending id, replayable.
   const bankRows = db.query(
-    `SELECT bt.id, bt.amount, bt.currency
+    `SELECT bt.id, bt.amount, bt.currency, bt.text, bt.reference, bt.counterparty_name, bt.message
        FROM bank_transactions bt
-       LEFT JOIN journal_entries je ON je.source_bank_transaction_id = bt.id
+       LEFT JOIN journal_entries je
+         ON je.source_bank_transaction_id = bt.id
+        AND je.status = 'posted'
       WHERE je.id IS NULL
         AND bt.amount < 0
       ORDER BY bt.id ASC`,
-  ).all() as Array<{ id: number; amount: number; currency: string }>;
+  ).all() as Array<{
+    id: number;
+    amount: number;
+    currency: string;
+    text: string | null;
+    reference: string | null;
+    counterparty_name: string | null;
+    message: string | null;
+  }>;
 
   for (const bank of bankRows) {
     if ((bank.currency ?? "DKK").trim().toUpperCase() !== "DKK") continue;
@@ -554,6 +624,35 @@ function matchPayables(db: Database, report: AgentRunReport): void {
     );
     if (candidates.length !== 1) continue; // 0 or >1 ⇒ ambiguous, never guessed
     const payable = candidates[0]!;
+
+    // An amount-only match without supplier corroboration is NOT auto-settled.
+    // Surface it for the human instead — never guess a ledger write.
+    if (!bankLineCorroboratesPayable(bank, payable)) {
+      const supplier = payable.supplierName ?? "ukendt leverandør";
+      routeException(db, report, {
+        type: "AGENT_PAYABLE_MATCH_UNCERTAIN",
+        severity: "medium",
+        message:
+          `Banktransaktion ${bank.id} "${(bank.text ?? "").trim() || "(ingen tekst)"}" på ` +
+          `${Math.abs(Number(bank.amount)).toLocaleString("da-DK")} kr. har samme beløb som ` +
+          `kreditorpost #${payable.payableId} til ${supplier}, men banklinjens tekst nævner ` +
+          `hverken leverandøren eller bilagsnummeret — agenten afregner den ikke automatisk, ` +
+          `da et beløbssammenfald alene ikke er sikkert nok.`,
+        requiredAction:
+          `Kontroller om banktransaktionen rent faktisk er betalingen af kreditorpost ` +
+          `#${payable.payableId}, og afregn den i så fald manuelt med 'payable pay'.`,
+        relatedBankTransactionId: bank.id,
+        relatedDocumentId: payable.documentId,
+        sourceEvidence: {
+          rule: AGENT_RULE_ID,
+          bankTransactionId: bank.id,
+          payableId: payable.payableId,
+          openBalance: payable.openBalance,
+          reason: "amount-only match, no supplier/bill-no corroboration",
+        },
+      });
+      continue;
+    }
 
     const paid = payPayableFromBank(db, {
       payableId: payable.payableId,
@@ -709,6 +808,18 @@ function checkDeadlines(db: Database, asOf: string, report: AgentRunReport): voi
     report.accrualRecognitionsDue = due.periods.length;
     syncAccrualRecognitionDueExceptions(db, asOf);
   }
+
+  // --- Closed-year tax-return needs-review ---
+  // The corporate tax return rests on a CLOSED fiscal year, so the relevant
+  // year is the one BEFORE the current (open) one — one day before `fy.start`
+  // lands inside the previous fiscal year. `syncTaxReturnReviewExceptions`
+  // itself no-ops unless that year is actually closed/reported.
+  const previousFy = fiscalYearForDate(
+    addDays(fy.start, -1),
+    settings.fiscalYearStartMonth,
+    settings.fiscalYearLabelStrategy,
+  );
+  syncTaxReturnReviewExceptions(db, previousFy.start, previousFy.end);
 }
 
 /** Builds the plain-language end-of-run summary lines. */

@@ -22,6 +22,7 @@ import { closeAccountingPeriod } from "../../src/core/periods";
 import { ingestDocument } from "../../src/core/documents";
 import { registerPayable } from "../../src/core/payables";
 import { registerAccrual } from "../../src/core/accruals";
+import { registerAsset, postDepreciationPeriod } from "../../src/core/assets";
 
 const DEMO_DIR = join(import.meta.dir, "..", "..", "examples", "agent-demo");
 const INBOX = join(DEMO_DIR, "inbox");
@@ -319,6 +320,144 @@ describe("runtime bookkeeper agent — deterministic agent-run (#183)", () => {
 
         // The payables phase ran.
         expect(report.phases).toContain("payables");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(inboxDir, { recursive: true, force: true });
+      }
+    });
+
+    // #cockpit-wiring-review-2: an amount-only match is NOT safe. An owner
+    // draw / salary / tax payment with no bilag that happens to equal a
+    // payable's open balance must NOT be auto-settled against an unrelated
+    // creditor — that is a wrong write to the append-only ledger. When the
+    // amount matches but there is no corroboration (counterparty/text does not
+    // name the supplier), the agent SURFACES it, it does not post.
+    test("does NOT auto-settle a payable on an amount-only match without corroboration", () => {
+      const root = freshCompany();
+      const inboxDir = mkdtempSync(join(tmpdir(), "rentemester-agent-payables-unsafe-inbox-"));
+      try {
+        const db = openDb(companyPaths(root).db);
+        migrate(db);
+
+        const bill = join(inboxDir, "bill.txt");
+        writeFileSync(bill, "Leverandørbilag\n2500 DKK\n");
+        const doc = ingestDocument(db, root, bill, {
+          source: "email",
+          issueDate: "2026-03-01",
+          invoiceNo: "KRED-X",
+          deliveryDescription: "Leverandørydelse",
+          amountIncVat: 2500,
+          currency: "DKK",
+          sender: { name: "Webhotellet ApS", address: "Vej 1", vatOrCvr: "DK11112222" },
+          recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+          vatAmount: 500,
+          paymentDetails: "Bank",
+        });
+        expect(doc.ok).toBe(true);
+        const payable = registerPayable(db, {
+          documentId: doc.documentId!,
+          billDate: "2026-03-01",
+          dueDate: "2026-03-31",
+          expenseAccountNo: "3000",
+        });
+        expect(payable.ok).toBe(true);
+        db.close();
+
+        // An outgoing payment of the EXACT same amount, but the text is an
+        // owner draw — it names nothing about the "Webhotellet ApS" creditor.
+        const bankCsv = join(inboxDir, "bank.csv");
+        writeFileSync(
+          bankCsv,
+          "transaction_date,text,amount,currency\n2026-04-02,Privathævning ejer,-2500,DKK\n",
+        );
+
+        const report = runAgentLoop({ companyRoot: root, asOf: AS_OF, bankCsvPath: bankCsv });
+        expect(report.ok).toBe(true);
+
+        // The amount matches but nothing corroborates the supplier — the agent
+        // must NOT have auto-settled the payable.
+        expect(report.payablesMatched.length).toBe(0);
+
+        // It is surfaced for the human as a suggestion, never guessed.
+        const suggestEx = report.openExceptions.find(
+          (x) => x.type === "AGENT_PAYABLE_MATCH_UNCERTAIN",
+        );
+        expect(suggestEx).toBeDefined();
+        expect(suggestEx!.requiredAction).toContain("payable pay");
+
+        // The payable is still open (unpaid) — no ledger settlement happened.
+        const after = openDb(companyPaths(root).db);
+        const settlement = after
+          .query("SELECT COUNT(*) AS n FROM payable_payments")
+          .get() as { n: number };
+        after.close();
+        expect(settlement.n).toBe(0);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(inboxDir, { recursive: true, force: true });
+      }
+    });
+
+    test("surfaces closed-year tax-return needs-review flags as exceptions", () => {
+      // #cockpit-wiring-review-5: syncTaxReturnReviewExceptions must actually
+      // be wired into the loop. A closed prior fiscal year with a deterministic
+      // needs-review flag (book depreciation) reaches the exception queue.
+      const root = freshCompany();
+      const inboxDir = mkdtempSync(join(tmpdir(), "rentemester-agent-tax-inbox-"));
+      try {
+        const db = openDb(companyPaths(root).db);
+        migrate(db);
+        const bilag = join(inboxDir, "udstyr.txt");
+        writeFileSync(bilag, "Driftsmiddel\n40000 DKK\n");
+        const doc = ingestDocument(db, root, bilag, {
+          source: "email",
+          issueDate: "2025-01-15",
+          invoiceNo: "EQ-2025-1",
+          deliveryDescription: "Maskine",
+          amountIncVat: 40000,
+          currency: "DKK",
+          sender: { name: "Maskinhandel ApS", address: "Vej 1", vatOrCvr: "DK55556666" },
+          recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+          vatAmount: 0,
+          paymentDetails: "Bank",
+        });
+        expect(doc.ok).toBe(true);
+        const asset = registerAsset(db, {
+          name: "Maskine",
+          category: "equipment",
+          acquisitionDate: "2025-01-15",
+          cost: 40000,
+          usefulLifeMonths: 60,
+          purchaseDocumentId: doc.documentId!,
+        });
+        expect(asset.ok).toBe(true);
+        expect(
+          postDepreciationPeriod(db, {
+            assetId: asset.assetId!,
+            periodIndex: 1,
+            transactionDate: "2025-02-15",
+          }).ok,
+        ).toBe(true);
+        // Close the 2025 fiscal year so the tax return can be prepared.
+        expect(
+          closeAccountingPeriod(db, {
+            periodStart: "2025-01-01",
+            periodEnd: "2025-12-31",
+            kind: "fiscal_year",
+            status: "closed",
+            createdBy: "system:test",
+          }).ok,
+        ).toBe(true);
+        db.close();
+
+        // The run's as-of date is in 2026 — the closed year is the prior one.
+        const report = runAgentLoop({ companyRoot: root, asOf: AS_OF });
+        expect(report.ok).toBe(true);
+        const taxEx = report.openExceptions.find(
+          (x) => x.type === "AGENT_TAX_RETURN_NEEDS_REVIEW",
+        );
+        expect(taxEx).toBeDefined();
+        expect(taxEx!.message).toContain("Oplysningsskema");
       } finally {
         rmSync(root, { recursive: true, force: true });
         rmSync(inboxDir, { recursive: true, force: true });

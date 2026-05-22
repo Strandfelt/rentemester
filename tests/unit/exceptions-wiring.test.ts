@@ -9,7 +9,8 @@ import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { seedAccounts, postJournalEntry } from "../../src/core/ledger";
 import { ingestDocument } from "../../src/core/documents";
-import { registerPayable } from "../../src/core/payables";
+import { registerPayable, payPayableFromBank } from "../../src/core/payables";
+import { importBankCsv } from "../../src/core/bank";
 import { registerAccrual, recognizeAccrualPeriod } from "../../src/core/accruals";
 import { closeAccountingPeriod } from "../../src/core/periods";
 import {
@@ -108,6 +109,72 @@ describe("syncOverduePayableExceptions", () => {
     rmSync(root, { recursive: true, force: true });
     rmSync(inbox, { recursive: true, force: true });
   });
+
+  // #cockpit-wiring-review-1: the agent loop runs daily with a moving --as-of.
+  // The dedup MUST key on the payable's stable identity, not the volatile
+  // "N dage overforfalden pr. <date>" message — else every run creates a new
+  // duplicate row for the same unpaid bill.
+  test("is idempotent across DIFFERENT as-of dates — never duplicates", () => {
+    const { root, inbox, db } = setup("rentemester-exc-payable-idem-");
+    const documentId = ingestPurchase(db, root, inbox, "Software ApS", "V-3001", 1250, 250);
+    expect(
+      registerPayable(db, { documentId, billDate: "2026-01-10", dueDate: "2026-02-09", expenseAccountNo: "3000" }).ok,
+    ).toBe(true);
+
+    // Three runs on three consecutive overdue dates — overdueDays moves each
+    // time. Only the first creates; the rest are idempotent.
+    const first = syncOverduePayableExceptions(db, "2026-03-01");
+    const second = syncOverduePayableExceptions(db, "2026-03-15");
+    const third = syncOverduePayableExceptions(db, "2026-04-01");
+    expect(first.created).toBe(1);
+    expect(second.created).toBe(0);
+    expect(third.created).toBe(0);
+
+    // Exactly ONE open AGENT_PAYABLE_OVERDUE row exists, not three.
+    const open = listExceptions(db, { status: "open" });
+    const payableExceptions = open.rows.filter((r) => r.type === "AGENT_PAYABLE_OVERDUE");
+    expect(payableExceptions.length).toBe(1);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("resolves the exception once the payable is fully paid", () => {
+    const { root, inbox, db } = setup("rentemester-exc-payable-resolve-");
+    const documentId = ingestPurchase(db, root, inbox, "Software ApS", "V-4001", 1250, 250);
+    const registered = registerPayable(db, {
+      documentId,
+      billDate: "2026-01-10",
+      dueDate: "2026-02-09",
+      expenseAccountNo: "3000",
+    });
+    expect(registered.ok).toBe(true);
+
+    // Surface the overdue exception.
+    expect(syncOverduePayableExceptions(db, "2026-03-01").created).toBe(1);
+    expect(
+      listExceptions(db, { status: "open" }).rows.some((r) => r.type === "AGENT_PAYABLE_OVERDUE"),
+    ).toBe(true);
+
+    // Pay the bill from the bank.
+    const csv = join(inbox, "bank.csv");
+    writeFileSync(csv, "transaction_date,text,amount,currency\n2026-03-05,Betaling Software ApS,-1250,DKK\n");
+    expect(importBankCsv(db, root, csv).ok).toBe(true);
+    const bankId = (db.query("SELECT id FROM bank_transactions LIMIT 1").get() as { id: number }).id;
+    expect(payPayableFromBank(db, { payableId: registered.payableId!, bankTransactionId: bankId }).ok).toBe(true);
+
+    // A re-sync must RESOLVE the now-stale overdue exception.
+    const resync = syncOverduePayableExceptions(db, "2026-03-10");
+    expect(resync.resolvedStale).toBeGreaterThanOrEqual(1);
+    expect(
+      listExceptions(db, { status: "open" }).rows.some((r) => r.type === "AGENT_PAYABLE_OVERDUE"),
+    ).toBe(false);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
 });
 
 describe("syncAccrualRecognitionDueExceptions", () => {
@@ -144,6 +211,78 @@ describe("syncAccrualRecognitionDueExceptions", () => {
     expect(recognizeAccrualPeriod(db, { accrualId: reg.accrualId!, periodIndex: 1 }).ok).toBe(true);
     const afterPost = syncAccrualRecognitionDueExceptions(db, "2026-02-15");
     expect(afterPost.created).toBe(0);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  // #cockpit-wiring-review-1: idempotent across moving as-of dates.
+  test("is idempotent across DIFFERENT as-of dates — never duplicates", () => {
+    const { root, inbox, db } = setup("rentemester-exc-accrual-idem-");
+    const documentId = ingestPurchase(db, root, inbox, "Forsikring ApS", "FORS-2", 9000, 0);
+    const reg = registerAccrual(db, {
+      accrualType: "prepaid_expense",
+      description: "Forsikring helår",
+      totalAmount: 9000,
+      recognitionPeriods: 3,
+      firstRecognitionDate: "2026-01-31",
+      registrationDate: "2026-01-05",
+      resultAccountNo: "3150",
+      documentId,
+    });
+    expect(reg.ok).toBe(true);
+
+    // Period 1 (31-01) is due on all three dates; its overdueDays moves.
+    const first = syncAccrualRecognitionDueExceptions(db, "2026-02-05");
+    const second = syncAccrualRecognitionDueExceptions(db, "2026-02-20");
+    expect(first.created).toBe(1);
+    expect(second.created).toBe(0);
+
+    // As of 2026-03-05 periods 1 AND 2 are due — period 2 is newly created,
+    // period 1 stays the single existing row (still 1 total for period 1).
+    const third = syncAccrualRecognitionDueExceptions(db, "2026-03-05");
+    expect(third.created).toBe(1); // only period 2 is new
+
+    const open = listExceptions(db, { status: "open" });
+    const accrualExceptions = open.rows.filter((r) => r.type === "AGENT_ACCRUAL_RECOGNITION_DUE");
+    // Exactly two rows: one per due period, no per-date duplicates.
+    expect(accrualExceptions.length).toBe(2);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("resolves the exception once the recognition period is posted", () => {
+    const { root, inbox, db } = setup("rentemester-exc-accrual-resolve-");
+    const documentId = ingestPurchase(db, root, inbox, "Forsikring ApS", "FORS-3", 9000, 0);
+    const reg = registerAccrual(db, {
+      accrualType: "prepaid_expense",
+      description: "Forsikring helår",
+      totalAmount: 9000,
+      recognitionPeriods: 3,
+      firstRecognitionDate: "2026-01-31",
+      registrationDate: "2026-01-05",
+      resultAccountNo: "3150",
+      documentId,
+    });
+    expect(reg.ok).toBe(true);
+
+    expect(syncAccrualRecognitionDueExceptions(db, "2026-02-15").created).toBe(1);
+    expect(
+      listExceptions(db, { status: "open" }).rows.some((r) => r.type === "AGENT_ACCRUAL_RECOGNITION_DUE"),
+    ).toBe(true);
+
+    // Post period 1.
+    expect(recognizeAccrualPeriod(db, { accrualId: reg.accrualId!, periodIndex: 1 }).ok).toBe(true);
+
+    // A re-sync must RESOLVE the now-posted period's stale exception.
+    const resync = syncAccrualRecognitionDueExceptions(db, "2026-02-20");
+    expect(resync.resolvedStale).toBeGreaterThanOrEqual(1);
+    expect(
+      listExceptions(db, { status: "open" }).rows.some((r) => r.type === "AGENT_ACCRUAL_RECOGNITION_DUE"),
+    ).toBe(false);
 
     db.close();
     rmSync(root, { recursive: true, force: true });
