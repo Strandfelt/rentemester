@@ -11,10 +11,12 @@ import { getCompanySettings } from "../core/company";
 import { buildInvoiceList, buildOverdueInvoiceList } from "../core/invoice-list";
 import { listBankTransactions } from "../core/reconciliation";
 import { listExceptions } from "../core/exceptions";
-import { buildVatReport } from "../core/vat";
+import { buildVatReport, type VatPeriodReport } from "../core/vat";
+import { effectivePeriodState } from "../core/periods";
 import { getBackupComplianceStatus } from "../core/system-backups";
 import { listRecentAuditLog } from "../core/audit-log";
 import { verifyAuditChain } from "../core/ledger";
+import type { Database } from "bun:sqlite";
 import { currentRuleBundleVersion } from "../core/rules-metadata";
 import {
   renderDashboard,
@@ -53,6 +55,96 @@ function quarterPeriodForDate(asOfDate: string): { start: string; end: string } 
     start: `${year}-${pad(startMonth)}-01`,
     end: `${year}-${pad(endMonth)}-${pad(lastDay)}`,
   };
+}
+
+/** The YYYY-MM-DD calendar bounds of quarter `q` (1–4) in `year`. */
+function quarterBounds(year: number, q: number): { start: string; end: string } {
+  const startMonth = (q - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    start: `${year}-${pad(startMonth)}-01`,
+    end: `${year}-${pad(endMonth)}-${pad(lastDay)}`,
+  };
+}
+
+/** Whether a VAT report carries any booked VAT activity at all. */
+function vatReportHasActivity(report: VatPeriodReport): boolean {
+  return (
+    report.outputVat !== 0 ||
+    report.inputVat !== 0 ||
+    report.netVatPayable !== 0 ||
+    report.totalJournalEntryCount > 0
+  );
+}
+
+/**
+ * Whether the VAT quarter `year`/`q` has already been reported to SKAT — i.e.
+ * an `accounting_periods` row whose bounds exactly match the quarter is in the
+ * effective `reported` state. A reported quarter's momsangivelse is filed and
+ * paid, so the dashboard must look past it to the next outstanding one.
+ */
+function vatQuarterIsReported(db: Database, year: number, q: number): boolean {
+  const { start, end } = quarterBounds(year, q);
+  const row = db
+    .query(
+      `SELECT id, status
+         FROM accounting_periods
+        WHERE kind = 'vat_quarter'
+          AND period_start = ? AND period_end = ?
+        ORDER BY id DESC
+        LIMIT 1`,
+    )
+    .get(start, end) as { id: number; status: "open" | "closed" | "reported" } | undefined;
+  if (!row) return false;
+  return effectivePeriodState(db, row.id, row.status) === "reported";
+}
+
+/**
+ * The VAT period the dashboard's "Næste deadline" box must surface.
+ *
+ * SKAT settles VAT per calendar quarter. The owner needs to see the *earliest*
+ * quarter whose momsangivelse is still outstanding — the one that costs money
+ * if forgotten — NOT whichever quarter today happens to fall in. Picking the
+ * current calendar quarter (the old behaviour) hid a booked, still-unpaid
+ * earlier quarter behind an empty "0,00 DKK" box. (#281)
+ *
+ * Selection: scan the prior year's quarters then the as-of year's, in
+ * chronological order, and return the first quarter that carries booked VAT
+ * activity and is not yet reported. When nothing qualifies (a fresh company,
+ * or every active quarter already filed) fall back to the calendar quarter the
+ * as-of date falls in, so the box still shows a sensible upcoming deadline.
+ *
+ * This mirrors the Cockpit overview's `selectVatQuarter` intent — dashboard,
+ * `vat momsangivelse` and `agent run` all point at the same outstanding
+ * quarter for a company.
+ */
+function selectVatPeriodForDashboard(
+  db: Database,
+  asOfDate: string,
+): { start: string; end: string } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(asOfDate);
+  const fallback = quarterPeriodForDate(asOfDate);
+  if (!m) return fallback;
+  const asOfYear = parseInt(m[1]!, 10);
+
+  // Scan chronologically: last year's four quarters, then this year's. The
+  // earliest unreported quarter with activity is the one currently owed.
+  for (const year of [asOfYear - 1, asOfYear]) {
+    for (const q of [1, 2, 3, 4]) {
+      const bounds = quarterBounds(year, q);
+      // Don't surface a quarter that has not started yet.
+      if (bounds.start > asOfDate) continue;
+      const report = buildVatReport(db, bounds.start, bounds.end);
+      if (!report.ok) continue;
+      if (!vatReportHasActivity(report)) continue;
+      if (vatQuarterIsReported(db, year, q)) continue;
+      return bounds;
+    }
+  }
+  // No outstanding quarter — show the calendar quarter today falls in.
+  return fallback;
 }
 
 function daysBetween(a: string, b: string): number {
@@ -144,7 +236,11 @@ export function register(dispatch: CommandDispatch): void {
     const overdueInvoices = buildOverdueInvoiceList(db, { asOfDate });
     const unlinkedBank = listBankTransactions(db, { status: "unmatched" });
     const exceptions = buildExceptionsForDashboard(listExceptions(db, { status: "open" }));
-    const period = quarterPeriodForDate(asOfDate);
+    // The "Næste deadline" box must point at the earliest VAT quarter that is
+    // still unreported and carries activity — not the calendar quarter today
+    // falls in (#281). The render-engine derives its label/countdown from
+    // `vatPeriod.periodStart`, so the box always matches the figure shown.
+    const period = selectVatPeriodForDashboard(db, asOfDate);
     const vatPeriod = buildVatReport(db, period.start, period.end);
     const vatDaysRemaining = daysBetween(asOfDate, period.end);
     const recentActivity = listRecentAuditLog(db, 10);

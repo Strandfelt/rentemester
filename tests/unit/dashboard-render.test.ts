@@ -306,8 +306,31 @@ describe("renderDashboard — structure", () => {
 
   test("recent activity messages are shown in full without truncation", () => {
     // The fixture's longest message must appear verbatim, not cut mid-word.
-    expect(html).toContain("Ingested supporting document DOC-2026-000004 (a8626d2599f1b3c0)");
+    expect(html).toContain("Bilag DOC-2026-000004 indlæst (a8626d2599f1b3c0)");
     expect(html).not.toContain("a8626d2599f1b3c0…");
+  });
+
+  // #286: the "Seneste aktivitet" strip must read in plain Danish — the audit
+  // log persists English detail messages ("Created customer ...", "Rendered
+  // invoice PDF ...", "Company volume initialized"), but the Danish-facing
+  // dashboard must translate them, like it already does the event headings.
+  test("recent activity detail text is rendered in Danish, not English", () => {
+    const englishMessages: DashboardInput = {
+      ...buildFixture(),
+      recentActivity: [
+        { id: 300, eventType: "customer_create", entityType: "customer", entityId: "7", message: "Created customer Storkunde A/S", actor: "cli", createdAt: "2026-05-17 09:00:00" },
+        { id: 301, eventType: "invoice_render_pdf", entityType: "invoice", entityId: "9", message: "Rendered invoice PDF 2026-0007", actor: "cli", createdAt: "2026-05-17 09:05:00" },
+        { id: 302, eventType: "init", entityType: "company", entityId: null, message: "Company volume initialized", actor: "system", createdAt: "2026-05-17 08:00:00" },
+      ],
+    };
+    const out = renderDashboard(englishMessages);
+    // The translated Danish detail text appears, the English source text does not.
+    expect(out).toContain("Kunde oprettet: Storkunde A/S");
+    expect(out).toContain("Faktura-PDF genereret: 2026-0007");
+    expect(out).toContain("Virksomhed oprettet");
+    expect(out).not.toContain("Created customer");
+    expect(out).not.toContain("Rendered invoice PDF");
+    expect(out).not.toContain("Company volume initialized");
   });
 
   test("metric label avoids internal jargon for unlinked bank entries", () => {
@@ -326,6 +349,41 @@ describe("renderDashboard — structure", () => {
     expect(html).not.toContain("44 dage tilbage");
     // 2026-05-17 → 2026-09-01 is 107 days.
     expect(html).toContain("107 dage tilbage");
+  });
+
+  // #281: the "Næste deadline" box must describe the quarter the supplied
+  // `vatPeriod` actually covers — the earliest unreported VAT quarter with
+  // activity the CLI selected — NOT whichever calendar quarter `asOfDate`
+  // happens to fall in. An owner who sees the current empty quarter when an
+  // earlier quarter still owes 5.400 kr to SKAT misses the payment.
+  test("deadline box describes the supplied vatPeriod quarter, not the as-of quarter", () => {
+    // asOfDate is 2026-05-22 (Q2) but the supplied vatPeriod is Q1 2026 with
+    // 5.400 kr of booked output VAT still unreported.
+    const q1Due: DashboardInput = {
+      ...buildFixture(),
+      asOfDate: "2026-05-22",
+      vatPeriod: {
+        ...buildFixture().vatPeriod,
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+        outputVat: 5400,
+        inputVat: 0,
+        netVatPayable: 5400,
+      },
+    };
+    const out = renderDashboard(q1Due);
+    // The deadline box names Q1 2026 and counts down to its real SKAT
+    // deadline (1 June 2026), not Q2.
+    expect(out).toContain("Q1 2026");
+    expect(out).toContain("2026-06-01");
+    expect(out).not.toContain("Q2 2026");
+    // The deadline card carries the real 5.400 kr payable, never 0,00.
+    const cardMatch = /<div class="deadline-card">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/.exec(out);
+    expect(cardMatch).not.toBeNull();
+    const card = cardMatch![0];
+    // The payable amount is the real 5.400 kr, never 0.
+    expect(card).toContain("5.400,00 DKK");
+    expect(card).toMatch(/amount-lg">5\.400,00\u00a0DKK</);
   });
 
   // #263: the dashboard must not stop at a bare exception count — it lists

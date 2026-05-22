@@ -218,6 +218,21 @@ function quarterPeriod(asOfDate: string): { label: string; start: string; end: s
   return { label, start, end, quarter, year };
 }
 
+/**
+ * Quarter info for the VAT period the CLI actually selected — the earliest
+ * VAT quarter that is still unreported and carries activity (#281). The CLI
+ * computes that period and supplies it as `vatPeriod.periodStart`; the
+ * render-engine must label and count down to *that* quarter, NOT whichever
+ * calendar quarter `asOfDate` happens to fall in (an owner who sees the
+ * current empty quarter misses an earlier, still-due momsbetaling).
+ *
+ * The start date alone identifies the quarter (a VAT period is always a
+ * calendar quarter); `end` is recomputed so a degenerate period still renders.
+ */
+function quarterFromPeriodStart(periodStart: string): { label: string; start: string; end: string; quarter: number; year: number } {
+  return quarterPeriod(periodStart);
+}
+
 function daysAgoLabel(days: number | null): string {
   if (days == null) return "ingen registreret";
   if (days <= 0) return "i dag";
@@ -655,6 +670,53 @@ function activityEventLabel(eventType: string): string {
   return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : "Aktivitet";
 }
 
+// The audit log persists its detail messages in English ("Created customer
+// ...", "Rendered invoice PDF ...", "Company volume initialized"). The event
+// headings are already translated (#233), but the detail text below each one
+// still leaked English onto the Danish-facing dashboard. The patterns below
+// translate each known message template to plain Danish, preserving the
+// variable part (customer name, invoice number, ...) verbatim. An unknown
+// message falls through untouched so no information is ever lost. (#286)
+const ACTIVITY_MESSAGE_PATTERNS: Array<{ re: RegExp; da: (m: RegExpMatchArray) => string }> = [
+  { re: /^Company volume initialized$/, da: () => "Virksomhed oprettet" },
+  { re: /^Created customer (.+)$/s, da: (m) => `Kunde oprettet: ${m[1]}` },
+  { re: /^Created vendor (.+)$/s, da: (m) => `Leverandør oprettet: ${m[1]}` },
+  { re: /^Created full backup (.+)$/s, da: (m) => `Fuld backup oprettet: ${m[1]}` },
+  { re: /^Created recurring invoice template (.+)$/s, da: (m) => `Fakturaskabelon oprettet: ${m[1]}` },
+  { re: /^Re-rendered invoice PDF (.+)$/s, da: (m) => `Faktura-PDF gendannet: ${m[1]}` },
+  { re: /^Rendered invoice PDF (.+)$/s, da: (m) => `Faktura-PDF genereret: ${m[1]}` },
+  { re: /^Ingested supporting document (\S+) \((.+)\)$/s, da: (m) => `Bilag ${m[1]} indlæst (${m[2]})` },
+  { re: /^Ingested supporting document (.+)$/s, da: (m) => `Bilag ${m[1]} indlæst` },
+  { re: /^Issued invoice (.+)$/s, da: (m) => `Faktura udstedt: ${m[1]}` },
+  { re: /^Issued credit note (.+?) for (.+)$/s, da: (m) => `Kreditnota ${m[1]} udstedt for ${m[2]}` },
+  { re: /^Posted journal entry (.+)$/s, da: (m) => `Finanspostering bogført: ${m[1]}` },
+  { re: /^Reversed journal entry (.+?) with (.+)$/s, da: (m) => `Finanspostering ${m[1]} tilbageført med ${m[2]}` },
+  { re: /^Added bank account (.+)$/s, da: (m) => `Bankkonto oprettet: ${m[1]}` },
+  { re: /^Imported (\d+) bank transactions from (.+)$/s, da: (m) => `${m[1]} banktransaktioner importeret fra ${m[2]}` },
+  { re: /^Applied payment (.+?) to invoice (.+)$/s, da: (m) => `Betaling ${m[1]} registreret på faktura ${m[2]}` },
+  { re: /^Applied refund (.+?) to invoice (.+)$/s, da: (m) => `Refundering ${m[1]} bogført på faktura ${m[2]}` },
+  { re: /^Applied claim receipt (.+?) to invoice (.+?) via combined settlement$/s, da: (m) => `Indbetaling på krav ${m[1]} registreret på faktura ${m[2]} via samlet afregning` },
+  { re: /^Applied claim receipt (.+?) to invoice (.+)$/s, da: (m) => `Indbetaling på krav ${m[1]} registreret på faktura ${m[2]}` },
+  { re: /^Wrote off bad debt (.+?) on invoice (.+)$/s, da: (m) => `Tab på debitor ${m[1]} bogført på faktura ${m[2]}` },
+  { re: /^Registered asset (.+)$/s, da: (m) => `Aktiv registreret: ${m[1]}` },
+  { re: /^Posted opening balance \(primobalance\) pr\. (.+?) as (.+)$/s, da: (m) => `Primobalance pr. ${m[1]} bogført som ${m[2]}` },
+  { re: /^Restored from backup (.+)$/s, da: (m) => `Gendannet fra backup ${m[1]}` },
+];
+
+/**
+ * Render an audit-log detail message in plain Danish. The audit log itself
+ * stores English templates (immutable history); the dashboard translates them
+ * for display only. Unknown messages pass through unchanged. (#286)
+ */
+function activityMessageDanish(message: string): string {
+  const text = message ?? "";
+  for (const { re, da } of ACTIVITY_MESSAGE_PATTERNS) {
+    const m = re.exec(text);
+    if (m) return da(m);
+  }
+  return text;
+}
+
 function activityList(rows: AuditLogRow[]): string {
   if (rows.length === 0) {
     return `<div class="empty-state">Ingen aktivitet endnu</div>`;
@@ -663,7 +725,7 @@ function activityList(rows: AuditLogRow[]): string {
     `  <div class="time">${escapeHtml(formatTimestampShort(row.createdAt))}</div>
   <div class="actor">${escapeHtml(row.actor)}</div>
   <div class="event">${escapeHtml(activityEventLabel(row.eventType))}</div>
-  <div class="message">${escapeHtml(row.message)}</div>`
+  <div class="message">${escapeHtml(activityMessageDanish(row.message))}</div>`
   ).join("\n");
   return `<div class="activity-log">
 ${items}
@@ -671,7 +733,12 @@ ${items}
 }
 
 function deadlineSection(input: DashboardInput): string {
-  const period = quarterPeriod(input.asOfDate);
+  // The "Næste deadline" box must describe the VAT quarter the CLI selected —
+  // the earliest unreported quarter that carries activity — NOT the calendar
+  // quarter today falls in. The CLI delivers that quarter as `vatPeriod`; the
+  // render-engine keys the label/deadline off `vatPeriod.periodStart` so the
+  // box always agrees with the figure shown beside it. (#281)
+  const period = quarterFromPeriodStart(input.vatPeriod.periodStart);
   // The countdown must target the real SKAT filing/payment deadline — the 1st
   // of the third month after the quarter ends — NOT the period-end date the
   // wrong `vatDaysRemaining` measured. (#236)
