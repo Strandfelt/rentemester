@@ -59,6 +59,7 @@ import {
   handleInvoiceIssue,
   handleInvoicePost,
   handleInvoiceSettle,
+  handleReopenPeriod,
   handleResolveException,
 } from "./write-handlers";
 
@@ -346,6 +347,9 @@ async function handleCompanyCreate(
       cvr: optionalString(body, "cvr") ?? null,
       fiscalYearStartMonth: optionalString(body, "fiscalYearStartMonth"),
       fiscalYearLabelStrategy: optionalString(body, "fiscalYearLabelStrategy"),
+      // #300: the VAT settlement cadence. `initialiseCompanyVolume` validates
+      // it and throws on an unknown value — re-mapped to a 400 below.
+      vatPeriodType: optionalString(body, "vatPeriodType"),
       ...(payment ? { payment } : {}),
     });
   } catch (err) {
@@ -647,6 +651,16 @@ export async function handleRequest(
       if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
       const slug = decodeURIComponent(periodCloseMatch[1]!);
       return await handleClosePeriod(config, request, slug);
+    }
+
+    // Bookkeeping write route (#301): reopen a closed accounting period — the
+    // controlled, audit-logged recovery path for a period closed too early.
+    const periodReopenMatch =
+      /^\/api\/companies\/([^/]+)\/periods\/reopen$/.exec(path);
+    if (periodReopenMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(periodReopenMatch[1]!);
+      return await handleReopenPeriod(config, request, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

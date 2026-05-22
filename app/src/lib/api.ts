@@ -11,6 +11,8 @@ import type {
   CashflowResponse,
   ClosePeriodInput,
   ClosePeriodResponse,
+  ReopenPeriodInput,
+  ReopenPeriodResponse,
   CompanyListResponse,
   CompanyProfileInput,
   CompanySettingsResponse,
@@ -250,6 +252,27 @@ export const api = {
           periodEnd: input.periodEnd,
           ...(input.kind ? { kind: input.kind } : {}),
           ...(input.reference ? { reference: input.reference } : {}),
+          confirm: true,
+        }),
+      },
+    ).then((r) => r.period),
+
+  /**
+   * Reopens a closed accounting period (#301) — the controlled, audit-logged
+   * recovery path for a period closed too early. `reason` is recorded verbatim
+   * in the audit log. Calls the same `reopenAccountingPeriod` core the CLI's
+   * `period reopen` uses; the server's pipeline requires `confirm`.
+   */
+  reopenPeriod: (slug: string, input: ReopenPeriodInput) =>
+    request<ReopenPeriodResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/periods/reopen`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+          ...(input.kind ? { kind: input.kind } : {}),
+          reason: input.reason,
           confirm: true,
         }),
       },

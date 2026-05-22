@@ -108,6 +108,98 @@ export function vatPeriodWindowFor(isoDate: string, type: VatPeriodType): VatPer
   };
 }
 
+/**
+ * #299: a short Danish display label for the VAT period a window describes.
+ * Quarterly periods read "Q1 2026"; monthly periods read "Maj 2026"; half-year
+ * periods read "1. halvår 2026" / "2. halvår 2026". A quarterly company keeps
+ * the exact "Q<n> <year>" string the cockpit and dashboard have always shown,
+ * so back-compat for the default cadence is byte-identical.
+ */
+export function vatPeriodLabel(window: VatPeriodWindow): string {
+  const year = Number(window.start.slice(0, 4));
+  const startMonth = Number(window.start.slice(5, 7)); // 1-based
+  switch (window.vatPeriodType) {
+    case "month":
+      return `${VAT_MONTH_NAMES_DA[startMonth - 1]} ${year}`;
+    case "half-year": {
+      const half = startMonth <= 6 ? 1 : 2;
+      return `${half}. halvår ${year}`;
+    }
+    case "quarter":
+    default: {
+      const quarter = Math.floor((startMonth - 1) / 3) + 1;
+      return `Q${quarter} ${year}`;
+    }
+  }
+}
+
+/** Danish month names, capitalised, for `vatPeriodLabel`'s monthly cadence. */
+const VAT_MONTH_NAMES_DA = [
+  "Januar", "Februar", "Marts", "April", "Maj", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "December",
+];
+
+/**
+ * #299: every VAT period window that starts inside calendar `year`, for a
+ * company on the given cadence — 12 for a monthly company, 4 for a quarterly
+ * company, 2 for a half-yearly company. Returned in chronological order.
+ *
+ * This is the single source of truth for "which VAT periods does a company
+ * have in a year" — the cockpit's per-period selection, the obligations list
+ * and the dashboard all iterate it instead of hardcoding Q1..Q4.
+ */
+export function vatPeriodsForYear(year: number, type: VatPeriodType): VatPeriodWindow[] {
+  const span = vatPeriodMonthSpan(type);
+  const windows: VatPeriodWindow[] = [];
+  for (let startMonth = 1; startMonth <= 12; startMonth += span) {
+    windows.push(vatPeriodWindowFor(`${year}-${pad2(startMonth)}-01`, type));
+  }
+  return windows;
+}
+
+/**
+ * #300: writes the company's VAT settlement cadence (`vat_period_type`) onto
+ * the single `companies` row. The cadence is set at `init`/`company add`; this
+ * is the supported path to change it afterwards — used by `company set-profile`
+ * and the cockpit's PATCH-profile endpoint.
+ *
+ * The column is ensured (older ledgers and the base schema may lack it) before
+ * the write, and a CHECK constraint guards the value, so an invalid cadence is
+ * rejected here too. Returns whether the value actually changed.
+ */
+export function setCompanyVatPeriodType(
+  db: Database,
+  type: VatPeriodType,
+): { ok: boolean; changed: boolean; errors: string[] } {
+  if (!VAT_PERIOD_TYPES.has(type)) {
+    return {
+      ok: false,
+      changed: false,
+      errors: ["vatPeriodType must be one of month, quarter, half-year"],
+    };
+  }
+  // Ensure the column exists — older ledgers (and the base schema) lack it.
+  const cols = db.query("PRAGMA table_info(companies)").all() as Array<{ name: string }>;
+  if (!cols.some((col) => col.name === "vat_period_type")) {
+    db.exec(
+      "ALTER TABLE companies ADD COLUMN vat_period_type TEXT NOT NULL DEFAULT 'quarter' " +
+        "CHECK(vat_period_type IN ('month', 'quarter', 'half-year'));",
+    );
+  }
+  const before = db
+    .query("SELECT vat_period_type AS t FROM companies WHERE id = 1")
+    .get() as { t: string | null } | null;
+  if (!before) {
+    return {
+      ok: false,
+      changed: false,
+      errors: ["company has not been initialised — run 'rentemester init' first"],
+    };
+  }
+  db.query("UPDATE companies SET vat_period_type = ? WHERE id = 1").run(type);
+  return { ok: true, changed: before.t !== type, errors: [] };
+}
+
 export type CloseAccountingPeriodInput = {
   periodStart: string;
   periodEnd: string;

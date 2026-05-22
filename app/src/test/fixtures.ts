@@ -316,6 +316,7 @@ export function bank(over: Partial<CompanyBank> = {}): CompanyBank {
     bookedBalance: 41388.03,
     actualBalance: 23654.75,
     difference: 17733.28,
+    bankStatementStatus: "known",
     transactions: [
       {
         id: 1,
@@ -349,15 +350,24 @@ export function vat(over: Partial<CompanyVat> = {}): CompanyVat {
     archived: false,
     company: STATEMENT_COMPANY,
     fiscalYears: STATEMENT_FISCAL_YEARS,
-    periodStart: "2026-04-01",
-    periodEnd: "2026-06-30",
-    periodLabel: "Q2 2026",
+    // A past, already-ended quarter (#301): closing it is the normal flow with
+    // no "period not over yet" warning. Tests that exercise the future-end
+    // warning override `periodEnd` with a date in the future.
+    periodStart: "2026-01-01",
+    periodEnd: "2026-03-31",
+    periodLabel: "Q1 2026",
     outputVat: 4457,
     outputVatAdjustment: 0,
     inputVat: 1086,
     payable: 3371,
-    deadline: "2026-09-01",
-    daysRemaining: 103,
+    deadline: "2026-06-01",
+    daysRemaining: 30,
+    // #303: the VAT period's effective lifecycle state. The fixture defaults to
+    // an OPEN, not-yet-filing-ready period — the historical pre-#303 behaviour
+    // — so the "Luk momsperiode" action is offered. Tests that need a closed
+    // (reopenable) or reported period override these two fields.
+    periodStatus: "open",
+    momsangivelseReady: false,
     rubrikker: {
       salgsmoms: 4457,
       momsAfVarekobUdland: 0,
@@ -666,6 +676,8 @@ export function companySettings(
     cvrStatus: null,
     auditWaived: null,
     cvrSyncedAt: null,
+    // #300: the VAT settlement cadence — defaults to the historical `quarter`.
+    vatPeriodType: "quarter",
     payment: null,
     ...over,
   };

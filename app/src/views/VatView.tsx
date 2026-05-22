@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { formatKroner } from "../lib/format";
+import { formatKroner, todayIso } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyVat, VatRubrikker } from "../lib/types";
 import { Banner, ErrorState, Loading } from "../components/Feedback";
@@ -23,7 +23,11 @@ export function VatView() {
   const state = useAsync<CompanyVat>(() => api.vat(slug, year), [slug, year]);
   // True while the close-period ConfirmDialog is open (#287).
   const [closing, setClosing] = useState(false);
-  // Set after a successful period close — surfaced as a success banner.
+  // True while the reopen-period ConfirmDialog is open (#301).
+  const [reopening, setReopening] = useState(false);
+  // #301: the second, explicit confirmation a future-end period close needs.
+  const [futureEndAcknowledged, setFutureEndAcknowledged] = useState(false);
+  // Set after a successful period close / reopen — surfaced as a success banner.
   const [closedNotice, setClosedNotice] = useState<string | null>(null);
 
   if (state.loading && !state.data) return <Loading label="Henter moms…" />;
@@ -33,6 +37,13 @@ export function VatView() {
   const v = state.data!;
   const currency = v.company.currency || "DKK";
   const payablePositive = v.payable >= 0;
+  // #301: a period whose end date is still in the future has not ended yet —
+  // closing it now is almost always a mistake, so the confirm dialog warns.
+  const periodEndsInFuture = v.periodEnd > todayIso();
+  // #301: a closed (not reported) period can be reopened from the cockpit.
+  const canReopen = !v.archived && v.periodStatus === "closed";
+  // #303: a momsangivelse is only filing-ready for a closed/reported period.
+  const provisional = !v.archived && !v.momsangivelseReady;
 
   return (
     <section className="statement">
@@ -45,15 +56,28 @@ export function VatView() {
           </p>
         </div>
         <div className="row-actions">
-          {/* #287: closing the VAT quarter is the prerequisite for a
-              momsangivelse — hidden for an archived (read-only) year. */}
-          {!v.archived && (
+          {/* #287: closing the VAT period is the prerequisite for a
+              momsangivelse — hidden for an archived (read-only) year. Once the
+              period is closed the action becomes a reopen instead (#301). */}
+          {!v.archived && v.periodStatus === "open" && (
             <button
               type="button"
               className="btn"
-              onClick={() => setClosing(true)}
+              onClick={() => {
+                setFutureEndAcknowledged(false);
+                setClosing(true);
+              }}
             >
               Luk momsperiode
+            </button>
+          )}
+          {canReopen && (
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setReopening(true)}
+            >
+              Genåbn momsperiode
             </button>
           )}
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
@@ -75,15 +99,57 @@ export function VatView() {
         <ConfirmDialog
           title="Luk momsperiode"
           body={
-            <p>
-              Luk momsperioden <strong>{v.periodLabel}</strong> ({v.periodStart}{" "}
-              – {v.periodEnd}). En lukket periode er en forudsætning for at
-              indberette momsangivelsen, og bogføring i perioden låses bagefter.
-            </p>
+            <>
+              <p>
+                Luk momsperioden <strong>{v.periodLabel}</strong> (
+                {v.periodStart} – {v.periodEnd}). En lukket periode er en
+                forudsætning for at indberette momsangivelsen, og bogføring i
+                perioden låses bagefter.
+              </p>
+              {/* #301: a future period-end means the period is not over yet.
+                  Warn clearly and require a second, explicit acknowledgement
+                  before the close can go through. */}
+              {periodEndsInFuture && (
+                <>
+                  <Banner kind="warning">
+                    Denne momsperiode er <strong>ikke afsluttet endnu</strong> —
+                    slutdatoen {v.periodEnd} ligger i fremtiden. Lukker du nu,
+                    blokeres bogføring med dato i perioden, og tallene i
+                    momsangivelsen kan stadig nå at ændre sig. Luk normalt først
+                    perioden, når den er forbi.
+                  </Banner>
+                  <label className="confirm-ack">
+                    <input
+                      type="checkbox"
+                      checked={futureEndAcknowledged}
+                      onChange={(e) =>
+                        setFutureEndAcknowledged(e.target.checked)
+                      }
+                    />
+                    Jeg forstår at perioden ikke er afsluttet, og vil lukke den
+                    alligevel.
+                  </label>
+                  <p className="muted">
+                    Lukker du ved en fejl, kan perioden genåbnes igen herfra
+                    (Genåbn momsperiode).
+                  </p>
+                </>
+              )}
+            </>
           }
           confirmLabel="Luk perioden"
           confirmKind="danger"
           onConfirm={async () => {
+            // #301: a future-end period close requires the explicit extra
+            // acknowledgement. Without it the close is blocked with a clear
+            // message rather than going through silently.
+            if (periodEndsInFuture && !futureEndAcknowledged) {
+              throw {
+                code: "bad_request",
+                message:
+                  "Bekræft først at du vil lukke en periode der ikke er afsluttet endnu — sæt flueben i feltet ovenfor.",
+              };
+            }
             await api.closePeriod(slug, {
               periodStart: v.periodStart,
               periodEnd: v.periodEnd,
@@ -92,8 +158,22 @@ export function VatView() {
             setClosedNotice(
               `Momsperioden er lukket — ${v.periodLabel} kan nu indberettes.`,
             );
+            state.reload();
           }}
           onClose={() => setClosing(false)}
+        />
+      )}
+
+      {reopening && (
+        <ReopenDialog
+          vat={v}
+          onReopened={(label) => {
+            setClosedNotice(
+              `Momsperioden ${label} er genåbnet — bogføring i perioden er tilladt igen.`,
+            );
+            state.reload();
+          }}
+          onClose={() => setReopening(false)}
         />
       )}
 
@@ -104,6 +184,17 @@ export function VatView() {
           <p className="statement-asof muted">
             {v.periodLabel} · {v.periodStart} – {v.periodEnd}
           </p>
+
+          {/* #303: for an OPEN period the figures are not final — say so,
+              honestly, instead of presenting a ready-to-file momsangivelse. */}
+          {provisional && (
+            <Banner kind="warning">
+              Åben periode — foreløbige tal. Momsperioden {v.periodLabel} er
+              ikke lukket endnu, så tallene kan stadig ændre sig og udgør ikke
+              en indberetningsklar momsangivelse. Luk perioden, når den er
+              forbi, for at få de endelige tal.
+            </Banner>
+          )}
           <div className="card statement-card">
             <table className="data statement-table">
               <tbody>
@@ -151,7 +242,11 @@ export function VatView() {
             <DeadlineCountdown days={v.daysRemaining} />
           </div>
 
-          <RubrikkerCard rubrikker={v.rubrikker} currency={currency} />
+          <RubrikkerCard
+            rubrikker={v.rubrikker}
+            currency={currency}
+            provisional={provisional}
+          />
 
           <p className="statement-check ok">
             {payablePositive
@@ -169,23 +264,46 @@ export function VatView() {
  * types into the momsangivelse on skat.dk. Surfacing these (#257) means the
  * cockpit's VAT view is filing-complete: rubrik A/B/C and the foreign
  * goods/services VAT no longer force a trip to the terminal's
- * `vat momsangivelse`. The figures are identical to the CLI's.
+ * `vat momsangivelse`.
+ *
+ * #303: for an OPEN period the terminal `vat momsangivelse` refuses to produce
+ * a momsangivelse at all (it requires a closed/reported vat_quarter period).
+ * The card must therefore NOT claim its figures match that command — instead
+ * it marks them provisional and says a closed period is the prerequisite.
  */
 function RubrikkerCard({
   rubrikker,
   currency,
+  provisional,
 }: {
   rubrikker: VatRubrikker;
   currency: string;
+  provisional: boolean;
 }) {
   const owedPositive = rubrikker.momstilsvar >= 0;
   return (
     <div className="card statement-card">
-      <h3 className="statement-subhead">SKAT-rubrikker (momsangivelse)</h3>
+      <h3 className="statement-subhead">
+        {provisional
+          ? "SKAT-rubrikker (foreløbige — åben periode)"
+          : "SKAT-rubrikker (momsangivelse)"}
+      </h3>
       <p className="muted statement-note">
-        De felter du udfylder i momsangivelsen på skat.dk (TastSelv Erhverv).
-        Tallene er de samme, som <code>vat momsangivelse</code> i terminalen
-        viser.
+        {provisional ? (
+          <>
+            De felter der hører til momsangivelsen på skat.dk (TastSelv
+            Erhverv). Momsperioden er <strong>ikke lukket endnu</strong>, så
+            tallene er foreløbige og udgør ikke en indberetningsklar
+            momsangivelse — <code>vat momsangivelse</code> i terminalen afviser
+            en åben periode. Luk perioden for at få de endelige tal.
+          </>
+        ) : (
+          <>
+            De felter du udfylder i momsangivelsen på skat.dk (TastSelv
+            Erhverv). Tallene er de samme, som <code>vat momsangivelse</code> i
+            terminalen viser.
+          </>
+        )}
       </p>
       <table className="data statement-table">
         <tbody>
@@ -254,9 +372,67 @@ function RubrikkerCard({
 }
 
 /**
+ * The reopen-period confirm dialog (#301). Reopening is a controlled,
+ * audit-logged action — it requires a free-text reason, recorded verbatim in
+ * the audit log. The dialog reuses `ConfirmDialog`'s note field for that
+ * reason and blocks the action until a reason is given.
+ */
+function ReopenDialog({
+  vat,
+  onReopened,
+  onClose,
+}: {
+  vat: CompanyVat;
+  onReopened: (label: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <ConfirmDialog
+      title="Genåbn momsperiode"
+      body={
+        <>
+          <p>
+            Genåbn momsperioden <strong>{vat.periodLabel}</strong> (
+            {vat.periodStart} – {vat.periodEnd}). Bogføring med dato i perioden
+            bliver tilladt igen.
+          </p>
+          <p className="muted">
+            Genåbningen er en kontrolleret, fuldt revisionssporet handling — den
+            tilføjes som en ny linje i revisionssporet med din begrundelse.
+            Selve periode-rækken ændres aldrig. En allerede indberettet
+            (reported) periode kan ikke genåbnes.
+          </p>
+        </>
+      }
+      confirmLabel="Genåbn perioden"
+      confirmKind="danger"
+      noteLabel="Begrundelse (påkrævet)"
+      notePlaceholder="Hvorfor genåbnes perioden? (fx 'bilag bogført for sent')"
+      onConfirm={async (reason) => {
+        if (reason.trim().length === 0) {
+          throw {
+            code: "bad_request",
+            message:
+              "Angiv en begrundelse — en genåbning skal kunne spores i revisionssporet.",
+          };
+        }
+        await api.reopenPeriod(vat.slug, {
+          periodStart: vat.periodStart,
+          periodEnd: vat.periodEnd,
+          kind: "vat_quarter",
+          reason: reason.trim(),
+        });
+        onReopened(vat.periodLabel);
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
+/**
  * The "X dage tilbage" countdown to the VAT filing deadline. Turns critical
  * once the deadline is near or passed, so an owner sees the urgency at a
- * glance — the quarterly momsangivelse is easy to forget.
+ * glance — the momsangivelse is easy to forget.
  */
 function DeadlineCountdown({ days }: { days: number }) {
   if (days < 0) {

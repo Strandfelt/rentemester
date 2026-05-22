@@ -88,9 +88,15 @@ export function BankView() {
                   : formatKroner(b.actualBalance, currency)}
               </div>
               <p className="muted status-note">
-                {b.actualBalance === null
-                  ? "Intet kontoudtog importeret"
-                  : "Seneste saldo fra kontoudtoget"}
+                {/* #305: distinguish "no statement imported" from "a
+                    statement was imported but its CSV had no balance column".
+                    Saying "intet kontoudtog importeret" for the second case
+                    would wrongly suggest the import failed. */}
+                {b.actualBalance !== null
+                  ? "Seneste saldo fra kontoudtoget"
+                  : b.bankStatementStatus === "no-balance-column"
+                    ? "Banksaldo ukendt — kontoudtoget havde ingen saldo-kolonne"
+                    : "Intet kontoudtog importeret"}
               </p>
             </div>
             <div className="card status-card">
@@ -186,12 +192,27 @@ function BankDifferenceBanner({
   currency: string;
 }) {
   if (bank.actualBalance === null || bank.difference === null) {
+    // #305: a statement WITH transactions but no balance column is not the
+    // same as no statement at all — the wording must reflect which it is.
+    const noBalanceColumn = bank.bankStatementStatus === "no-balance-column";
     return (
       <div className="card bank-diff-banner neutral">
         <span className="flag">Bank</span>
         <p>
-          Intet kontoudtog importeret for {bank.selectedYear} — kun den bogførte
-          saldo {formatKroner(bank.bookedBalance, currency)} kan vises.
+          {noBalanceColumn ? (
+            <>
+              Kontoudtoget for {bank.selectedYear} indeholder ingen
+              saldo-kolonne, så den faktiske banksaldo er ukendt — kun den
+              bogførte saldo {formatKroner(bank.bookedBalance, currency)} kan
+              vises.
+            </>
+          ) : (
+            <>
+              Intet kontoudtog importeret for {bank.selectedYear} — kun den
+              bogførte saldo {formatKroner(bank.bookedBalance, currency)} kan
+              vises.
+            </>
+          )}
         </p>
       </div>
     );

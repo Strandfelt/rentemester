@@ -4,7 +4,15 @@
 
 import { useState } from "react";
 import { api, ApiError } from "../lib/api";
+import type { VatPeriodType } from "../lib/types";
 import { Banner } from "./Feedback";
+
+/** The VAT-cadence options for the create-company selector (#300). */
+const VAT_PERIOD_OPTIONS: Array<{ value: VatPeriodType; label: string }> = [
+  { value: "month", label: "Måned (måneds-moms)" },
+  { value: "quarter", label: "Kvartal (kvartals-moms)" },
+  { value: "half-year", label: "Halvår (halvårs-moms)" },
+];
 
 export function CompanyForm({
   onCreated,
@@ -17,6 +25,8 @@ export function CompanyForm({
   const [slug, setSlug] = useState("");
   const [cvr, setCvr] = useState("");
   const [fiscalMonth, setFiscalMonth] = useState("1");
+  // #300: the VAT settlement cadence — defaults to the historical `quarter`.
+  const [vatPeriodType, setVatPeriodType] = useState<VatPeriodType>("quarter");
   // #284: optional bank/payment details — captured at creation so the very
   // first invoice already carries payment instructions.
   const [bankName, setBankName] = useState("");
@@ -47,6 +57,7 @@ export function CompanyForm({
         slug: slug.trim() || undefined,
         cvr: cvr.trim() || undefined,
         fiscalYearStartMonth: fiscalMonth.trim() || undefined,
+        vatPeriodType,
         ...(payment ? { payment } : {}),
       });
       onCreated(created.slug);
@@ -111,6 +122,25 @@ export function CompanyForm({
             </option>
           ))}
         </select>
+      </label>
+
+      <label>
+        Momsperiode
+        <select
+          name="vatPeriodType"
+          value={vatPeriodType}
+          onChange={(e) => setVatPeriodType(e.target.value as VatPeriodType)}
+        >
+          {VAT_PERIOD_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Den momsperiode virksomheden er registreret for hos SKAT — månedlig,
+          kvartalsvis eller halvårlig. Kan ændres senere under Administrér.
+        </span>
       </label>
 
       <label>

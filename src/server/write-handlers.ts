@@ -31,11 +31,17 @@ import { issueInvoice } from "../core/issued-invoices";
 import { postIssuedInvoiceToLedger } from "../core/invoice-booking";
 import { settleInvoiceFromBank } from "../core/invoice-settlement";
 import {
+  getCompanySettings,
   resolveCompanyPaymentDetails,
   setCompanyProfile,
   type CompanyPaymentInput,
 } from "../core/company";
-import { closeAccountingPeriod } from "../core/periods";
+import {
+  closeAccountingPeriod,
+  reopenAccountingPeriod,
+  setCompanyVatPeriodType,
+  normalizeVatPeriodType,
+} from "../core/periods";
 import type { ServerConfig } from "./config";
 import { ApiError } from "./errors";
 import { withCockpitActor } from "./actor";
@@ -792,6 +798,20 @@ export async function handleCompanyProfile(
         paymentTermsDays = body.paymentTermsDays;
       }
 
+      // #300: the VAT settlement cadence is editable from the cockpit. An
+      // unknown value is a 400 — the column has a CHECK constraint, so a bad
+      // string would otherwise fail opaquely.
+      const vatPeriodTypeRaw = optionalBodyString(body, "vatPeriodType");
+      let vatPeriodType: ReturnType<typeof normalizeVatPeriodType> | undefined;
+      if (vatPeriodTypeRaw !== undefined) {
+        vatPeriodType = normalizeVatPeriodType(vatPeriodTypeRaw);
+        if (vatPeriodType === null) {
+          throw ApiError.badRequest(
+            "'vatPeriodType' must be 'month', 'quarter' or 'half-year' when present",
+          );
+        }
+      }
+
       const hasPayment =
         payment !== undefined && Object.keys(payment).length > 0;
       if (
@@ -801,23 +821,57 @@ export async function handleCompanyProfile(
         postalCode === undefined &&
         city === undefined &&
         paymentTermsDays === undefined &&
+        vatPeriodType === undefined &&
         !hasPayment
       ) {
         throw ApiError.badRequest(
           "provide at least one profile field to update " +
-            "(name, cvr, address, postalCode, city, paymentTermsDays, payment)",
+            "(name, cvr, address, postalCode, city, paymentTermsDays, vatPeriodType, payment)",
         );
       }
 
-      const updated = setCompanyProfile(ctx.db, {
-        ...(name !== undefined ? { name } : {}),
-        ...(cvr !== undefined ? { cvr } : {}),
-        ...(address !== undefined ? { address } : {}),
-        ...(postalCode !== undefined ? { postalCode } : {}),
-        ...(city !== undefined ? { city } : {}),
-        ...(paymentTermsDays !== undefined ? { paymentTermsDays } : {}),
-        ...(hasPayment ? { payment } : {}),
-      });
+      // #300: the VAT cadence lives on the company row but `setCompanyProfile`
+      // does not own it — write it first via the periods-core helper so the
+      // settings the response carries reflect the new cadence.
+      if (vatPeriodType !== undefined && vatPeriodType !== null) {
+        const vatResult = setCompanyVatPeriodType(ctx.db, vatPeriodType);
+        if (!vatResult.ok) {
+          throw ApiError.badRequest(vatResult.errors[0] ?? "could not set VAT period type");
+        }
+      }
+
+      const hasProfileField =
+        name !== undefined ||
+        cvr !== undefined ||
+        address !== undefined ||
+        postalCode !== undefined ||
+        city !== undefined ||
+        paymentTermsDays !== undefined ||
+        hasPayment;
+      const updated = hasProfileField
+        ? setCompanyProfile(ctx.db, {
+            ...(name !== undefined ? { name } : {}),
+            ...(cvr !== undefined ? { cvr } : {}),
+            ...(address !== undefined ? { address } : {}),
+            ...(postalCode !== undefined ? { postalCode } : {}),
+            ...(city !== undefined ? { city } : {}),
+            ...(paymentTermsDays !== undefined ? { paymentTermsDays } : {}),
+            ...(hasPayment ? { payment } : {}),
+          })
+        : // Only the VAT cadence changed — re-read the settings so the response
+          // shape stays identical to a full profile edit.
+          {
+            ok: true as const,
+            settings: getCompanySettings(ctx.db),
+            updatedFields: ["vatPeriodType"],
+            errors: [] as string[],
+          };
+      if (updated.ok && vatPeriodType !== undefined && hasProfileField) {
+        updated.updatedFields = [
+          ...(updated.updatedFields ?? []),
+          "vatPeriodType",
+        ];
+      }
       // Re-resolve the payment block so the response carries the same
       // `{ ...settings, payment }` shape `GET .../company` returns — the
       // Cockpit form mirrors the persisted state without a re-fetch.
@@ -917,6 +971,88 @@ export async function handleClosePeriod(
       kind: result.kind ?? null,
       status: result.status ?? null,
       reference: result.reference ?? null,
+    },
+  });
+}
+
+// --------------------------------------------------------------------------
+// Reopen an accounting period (#301).
+//
+// The cockpit could close a VAT period but had no way back — an owner who
+// closed a period too early (e.g. before the period had even ended) was stuck
+// unless they dropped to the CLI's `period reopen`. This route is the third
+// caller of the SAME `reopenAccountingPeriod` core function the CLI uses: the
+// reopen is a controlled, fully audit-logged, append-only fact — the immutable
+// period row is never mutated.
+// --------------------------------------------------------------------------
+
+/**
+ * POST /api/companies/:slug/periods/reopen — reopens a closed accounting
+ * period.
+ *
+ * Body: `{ periodStart: string, periodEnd: string, kind?: 'vat_quarter' |
+ * 'fiscal_year' | 'custom', reason: string, confirm: true }`. The mandatory
+ * `reason` is recorded verbatim in the audit log. Calls the SAME
+ * `reopenAccountingPeriod` core the CLI's `period reopen` uses, so a `reported`
+ * period (already filed) is refused and an already-open period is a no-op —
+ * both surface as a 409 via `withCompanyMutation`.
+ */
+export async function handleReopenPeriod(
+  config: ServerConfig,
+  request: Request,
+  slug: string,
+): Promise<Response> {
+  const result = await withCompanyMutation(
+    request,
+    config,
+    slug,
+    (ctx, body) => {
+      const periodStart = requireBodyString(body, "periodStart");
+      const periodEnd = requireBodyString(body, "periodEnd");
+      const reason = requireBodyString(body, "reason");
+      const kindRaw = body.kind;
+      if (
+        kindRaw !== undefined &&
+        kindRaw !== "vat_quarter" &&
+        kindRaw !== "fiscal_year" &&
+        kindRaw !== "custom"
+      ) {
+        throw ApiError.badRequest(
+          "'kind' must be 'vat_quarter', 'fiscal_year' or 'custom' when present",
+        );
+      }
+      const reopened = reopenAccountingPeriod(ctx.db, {
+        periodStart,
+        periodEnd,
+        ...(kindRaw ? { kind: kindRaw } : {}),
+        reason,
+        createdBy: ctx.actor.createdBy,
+        createdByProgram: ctx.actor.createdByProgram,
+      });
+      return {
+        ok: reopened.ok,
+        errors: reopened.errors,
+        periodId: reopened.periodId,
+        periodStart: reopened.periodStart,
+        periodEnd: reopened.periodEnd,
+        kind: reopened.kind,
+        effectiveStatus: reopened.effectiveStatus,
+        reopenedBy: reopened.reopenedBy,
+        reason: reopened.reason,
+      };
+    },
+    { requireConfirm: true },
+  );
+
+  return okResponse({
+    period: {
+      id: result.periodId ?? null,
+      periodStart: result.periodStart ?? null,
+      periodEnd: result.periodEnd ?? null,
+      kind: result.kind ?? null,
+      effectiveStatus: result.effectiveStatus ?? null,
+      reopenedBy: result.reopenedBy ?? null,
+      reason: result.reason ?? null,
     },
   });
 }

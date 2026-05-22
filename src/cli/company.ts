@@ -6,6 +6,11 @@ import {
   syncCompanyFromCvr,
   type CreateCompanyResult,
 } from "../core/company";
+import {
+  normalizeVatPeriodType,
+  setCompanyVatPeriodType,
+  vatPeriodTypeLabelDa,
+} from "../core/periods";
 import { migrate } from "../core/db";
 import {
   initWorkspace,
@@ -143,6 +148,29 @@ export function register(dispatch: CommandDispatch): void {
       accountNo: ctx.trimToNull(ctx.arg("--bank-account")) ?? undefined,
       iban: ctx.trimToNull(ctx.arg("--iban")) ?? undefined,
     };
+
+    // #300: `--vat-period` changes the company's VAT settlement cadence after
+    // init. `setCompanyProfile` does not own the `vat_period_type` column, so
+    // the cadence is written via the periods-core helper. An unknown value is
+    // refused before any profile field is touched.
+    if (hasFlag("--vat-period")) {
+      const vatPeriod = normalizeVatPeriodType(ctx.arg("--vat-period"));
+      if (vatPeriod === null) {
+        ctx.emitResult({
+          ok: false,
+          errors: ["--vat-period must be one of month, quarter, half-year"],
+        });
+        db.close();
+        process.exit(1);
+      }
+      const vatResult = setCompanyVatPeriodType(db, vatPeriod);
+      if (!vatResult.ok) {
+        ctx.emitResult({ ok: false, errors: vatResult.errors });
+        db.close();
+        process.exit(1);
+      }
+    }
+
     const result = setCompanyProfile(db, {
       name: hasFlag("--name") ? ctx.arg("--name") : undefined,
       cvr: hasFlag("--cvr") ? ctx.arg("--cvr") : undefined,
@@ -152,7 +180,17 @@ export function register(dispatch: CommandDispatch): void {
       paymentTermsDays: hasFlag("--payment-terms") ? ctx.arg("--payment-terms") : undefined,
       payment,
     });
-    ctx.emitResult(result as unknown as Record<string, unknown>);
+    // Reflect the cadence on the result so the JSON output and human summary
+    // show the live profile after the edit.
+    const settings = getCompanySettings(db);
+    const enriched = {
+      ...result,
+      vatPeriodType: settings.vatPeriodType,
+      ...(hasFlag("--vat-period") && result.ok
+        ? { updatedFields: [...(result.updatedFields ?? []), "vatPeriodType"] }
+        : {}),
+    };
+    ctx.emitResult(enriched as unknown as Record<string, unknown>);
     db.close();
     if (!result.ok) process.exit(1);
   });
@@ -170,6 +208,10 @@ export function register(dispatch: CommandDispatch): void {
         postalCode: settings.postalCode,
         city: settings.city,
         paymentTermsDays: settings.paymentTermsDays,
+        // #300: the VAT settlement cadence — the canonical value plus its
+        // Danish label, so the owner sees which momsperiode the company files.
+        vatPeriodType: settings.vatPeriodType,
+        vatPeriodLabel: vatPeriodTypeLabelDa(settings.vatPeriodType),
       },
     });
     db.close();

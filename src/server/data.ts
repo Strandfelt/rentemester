@@ -29,6 +29,14 @@ import {
   buildTrialBalance,
 } from "../core/financial-statements";
 import { listBankAccounts } from "../core/bank";
+import {
+  vatPeriodWindowFor,
+  vatPeriodsForYear,
+  vatPeriodLabel,
+  effectivePeriodState,
+  type VatPeriodType,
+  type EffectivePeriodState,
+} from "../core/periods";
 import { getBackupComplianceStatus } from "../core/system-backups";
 import { listRecentAuditLog } from "../core/audit-log";
 import { verifyAuditChain } from "../core/ledger";
@@ -216,18 +224,14 @@ function summariseCompany(
     // Actual bank balance from the imported statement (what the bank shows).
     const actualBankBalance = actualBankBalanceAsOf(db, yearEnd);
 
-    // VAT: the booked quarterly position — the latest quarter that carries
-    // activity. Quarterly is the only VAT cadence Rentemester supports, so the
-    // cockpit and the static dashboard / CLI agree on the period type.
-    const { quarter: vatQuarter, position: vatPos } = selectVatQuarter(
-      db,
-      yearNum,
-    );
-    const deadline = vatQuarterDeadline(yearNum, vatQuarter);
+    // VAT: the booked position for the company's actual VAT period — the
+    // period (month / quarter / half-year, per `vatPeriodType`) that is due
+    // now. Every cockpit surface reads the same cadence, so they agree (#299).
+    const vatPeriod = selectVatPeriod(db, yearNum, company.vatPeriodType);
     const vat: CompanyVatSummary = {
-      payable: vatPos.payable,
-      deadline,
-      daysRemaining: daysBetween(todayIsoDate(), deadline),
+      payable: vatPeriod.position.payable,
+      deadline: vatPeriod.deadline,
+      daysRemaining: daysBetween(todayIsoDate(), vatPeriod.deadline),
     };
 
     // Open tasks — open exceptions grouped into Danish summary lines.
@@ -408,16 +412,15 @@ export function buildCompanyDashboardData(
     const overdueInvoices = buildOverdueInvoiceList(db, { asOfDate });
     const unlinkedBank = listBankTransactions(db, { status: "unmatched" });
     const exceptions = listExceptions(db, { status: "open" });
-    // VAT: surface the earliest unreported quarter — the one the owner must
+    // VAT: surface the earliest unreported VAT period — the one the owner must
     // file now — exactly as the Overblik card and `vat momsangivelse` do
-    // (#281). The old `quarterPeriodForDate(asOfDate)` path keyed off the
-    // calendar quarter of the as-of date, which wrongly showed an empty
-    // current quarter when the activity sat in an earlier, unfiled one.
+    // (#281). #299: the period follows the company's real VAT cadence
+    // (`vatPeriodType`), so a monthly/half-yearly filer sees its own period.
     const { year: vatYear } = currentFiscalYear(db, company);
-    const { quarter: vatQuarter } = selectVatQuarter(db, vatYear);
-    const period = quarterPeriod(vatYear, vatQuarter);
+    const vatSelection = selectVatPeriod(db, vatYear, company.vatPeriodType);
+    const period = { start: vatSelection.start, end: vatSelection.end };
     const vatPeriod = buildVatReport(db, period.start, period.end);
-    const vatDeadline = vatQuarterDeadline(vatYear, vatQuarter);
+    const vatDeadline = vatSelection.deadline;
     const vatDaysRemaining = daysBetween(asOfDate, vatDeadline);
     const recentActivity = listRecentAuditLog(db, 10);
     const backup = getBackupComplianceStatus(db, companyRoot, asOfDate);
@@ -603,59 +606,13 @@ export function resolvePathYear(raw: string): number {
   return parseInt(raw, 10);
 }
 
-/** The two ISO dates [start, end] for a quarter (1–4) of the calendar year. */
-function quarterPeriod(
-  year: number,
-  quarter: 1 | 2 | 3 | 4,
-): { start: string; end: string } {
-  const startMonth = (quarter - 1) * 3 + 1;
-  const endMonth = startMonth + 2;
-  const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return {
-    start: `${year}-${pad(startMonth)}-01`,
-    end: `${year}-${pad(endMonth)}-${pad(lastDay)}`,
-  };
-}
-
 /**
- * The statutory VAT filing/payment deadline for a Danish company on the
- * standard quarterly settlement schedule — the only VAT cadence Rentemester
- * supports (see `core/vat.ts` and `core/vat-filing.ts`, which key the
- * momsangivelse to a `vat_quarter` accounting period). The momsangivelse for a
- * quarter must be filed and paid by the 1st of the third month after the
- * period ends:
- *
- *  - Q1 (Jan–Mar) → 1 June the same year
- *  - Q2 (Apr–Jun) → 1 September the same year
- *  - Q3 (Jul–Sep) → 1 December the same year
- *  - Q4 (Oct–Dec) → 1 March the following year
- *
- * `quarter` is 1–4; `year` is the calendar year the quarter belongs to. This
- * mirrors `core/vat.ts#vatFilingDeadline` (1st of period-end month + 3) so the
- * cockpit and the CLI agree on the deadline. Returned as a YYYY-MM-DD date.
+ * VAT period windows + their statutory filing deadlines are computed by
+ * `core/periods.ts#vatPeriodWindowFor` / `vatPeriodsForYear`, generalised over
+ * the company's VAT cadence (`vatPeriodType`, #299). The cockpit, the static
+ * dashboard and the CLI all read the same core helpers so they never disagree
+ * on the period type or its deadline.
  */
-export function vatQuarterDeadline(year: number, quarter: 1 | 2 | 3 | 4): string {
-  const endMonth = (quarter - 1) * 3 + 3;
-  let deadlineMonth = endMonth + 3;
-  let deadlineYear = year;
-  while (deadlineMonth > 12) {
-    deadlineMonth -= 12;
-    deadlineYear += 1;
-  }
-  return `${deadlineYear}-${String(deadlineMonth).padStart(2, "0")}-01`;
-}
-
-/** The 1–4 calendar quarter that the YYYY-MM-DD date `iso` falls in. */
-function quarterOfDate(iso: string): 1 | 2 | 3 | 4 {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  const month = m ? parseInt(m[2]!, 10) : 1;
-  return (Math.floor((Math.min(Math.max(month, 1), 12) - 1) / 3) + 1) as
-    | 1
-    | 2
-    | 3
-    | 4;
-}
 
 /** Whether a VAT position carries any booked activity at all. */
 function vatQuarterHasActivity(pos: VatPosition): boolean {
@@ -687,44 +644,100 @@ function vatQuarterHasActivity(pos: VatPosition): boolean {
  *
  * Returns the quarter number plus its VAT position so callers do not recompute.
  */
-function selectVatQuarter(
+/**
+ * The VAT period the cockpit surfaces — generalised over the company's VAT
+ * cadence (#299).
+ *
+ * Selection mirrors the historical quarterly logic, period-type-agnostic: for
+ * the current calendar year, prefer the period today falls in, falling back to
+ * the latest active period when it (and every earlier one) is empty; for a past
+ * year, the latest active period, or the year's first period when nothing has
+ * activity. A monthly company picks among 12 periods, a quarterly company among
+ * 4, a half-yearly company among 2 — but a `quarter` company gets the exact
+ * same period the old `selectVatQuarter` did, so nothing observable changes.
+ *
+ * Returns the chosen period's window, its booked VAT position, a Danish label
+ * and the statutory filing deadline so callers do not recompute any of it.
+ */
+function selectVatPeriod(
   db: Database,
   year: number,
-): { quarter: 1 | 2 | 3 | 4; position: VatPosition } {
-  const positions: Record<1 | 2 | 3 | 4, VatPosition> = {
-    1: vatPositionForPeriod(db, quarterPeriod(year, 1).start, quarterPeriod(year, 1).end),
-    2: vatPositionForPeriod(db, quarterPeriod(year, 2).start, quarterPeriod(year, 2).end),
-    3: vatPositionForPeriod(db, quarterPeriod(year, 3).start, quarterPeriod(year, 3).end),
-    4: vatPositionForPeriod(db, quarterPeriod(year, 4).start, quarterPeriod(year, 4).end),
-  };
+  vatType: VatPeriodType,
+): {
+  start: string;
+  end: string;
+  label: string;
+  deadline: string;
+  position: VatPosition;
+} {
+  const windows = vatPeriodsForYear(year, vatType);
+  const positions = windows.map((w) => vatPositionForPeriod(db, w.start, w.end));
 
   const today = todayIsoDate();
   const currentYear = parseInt(today.slice(0, 4), 10);
 
-  // The latest quarter at or before `cap` that carries activity, or null.
-  const latestActiveUpTo = (cap: 1 | 2 | 3 | 4): 1 | 2 | 3 | 4 | null => {
-    for (const q of [4, 3, 2, 1] as const) {
-      if (q <= cap && vatQuarterHasActivity(positions[q])) return q;
+  // The latest period index at or before `cap` that carries activity, or null.
+  const latestActiveUpTo = (cap: number): number | null => {
+    for (let i = windows.length - 1; i >= 0; i -= 1) {
+      if (i <= cap && vatQuarterHasActivity(positions[i]!)) return i;
     }
     return null;
   };
 
-  let selected: 1 | 2 | 3 | 4;
+  // The index of the period that contains today (clamped into the year).
+  const indexOfDate = (iso: string): number => {
+    const target = vatPeriodWindowFor(iso, vatType).start;
+    const idx = windows.findIndex((w) => w.start === target);
+    return idx >= 0 ? idx : windows.length - 1;
+  };
+
+  let selected: number;
   if (year === currentYear) {
-    // The current year: surface the quarter that is due now. Prefer the
-    // quarter today falls in; if it (and every earlier quarter) is empty,
-    // fall back to the latest active quarter so a fully-loaded later quarter
-    // is still shown rather than an empty current one.
-    const currentQuarter = quarterOfDate(today);
+    const currentIndex = indexOfDate(today);
     selected =
-      latestActiveUpTo(currentQuarter) ?? latestActiveUpTo(4) ?? currentQuarter;
+      latestActiveUpTo(currentIndex) ??
+      latestActiveUpTo(windows.length - 1) ??
+      currentIndex;
   } else {
-    // A past (or future) year: the latest quarter with activity, or Q1 when
-    // the whole year is empty.
-    selected = latestActiveUpTo(4) ?? 1;
+    selected = latestActiveUpTo(windows.length - 1) ?? 0;
   }
 
-  return { quarter: selected, position: positions[selected] };
+  const window = windows[selected]!;
+  return {
+    start: window.start,
+    end: window.end,
+    label: vatPeriodLabel(window),
+    deadline: window.filingDeadline,
+    position: positions[selected]!,
+  };
+}
+
+/**
+ * The effective lifecycle state of the VAT period `start`..`end` — `open`,
+ * `closed` or `reported` (#303). A momsangivelse may only be filed for a
+ * closed or reported period; for an open period the cockpit must mark the
+ * figures as provisional. Replays the append-only `period reopen`/`close`
+ * audit lifecycle, so a period that was closed-then-reopened reads `open`.
+ */
+function vatPeriodEffectiveStatus(
+  db: Database,
+  start: string,
+  end: string,
+): EffectivePeriodState {
+  const row = db
+    .query(
+      `SELECT id, status
+         FROM accounting_periods
+        WHERE kind = 'vat_quarter'
+          AND period_start = ? AND period_end = ?
+        ORDER BY id DESC
+        LIMIT 1`,
+    )
+    .get(start, end) as
+    | { id: number; status: "open" | "closed" | "reported" }
+    | undefined;
+  if (!row) return "open";
+  return effectivePeriodState(db, row.id, row.status);
 }
 
 /** Rounds a kroner amount to whole øre, killing float drift. */
@@ -1362,13 +1375,11 @@ export function buildCompanyOverview(
       });
     }
 
-    // VAT position: each quarter settles separately. Surface the latest
-    // quarter that carries activity — quarterly is the only VAT cadence
-    // Rentemester supports, so the cockpit agrees with the static dashboard.
-    const { quarter: vatQuarter, position: vat } = selectVatQuarter(
-      db,
-      yearNum,
-    );
+    // VAT position: each VAT period settles separately. Surface the period
+    // (month / quarter / half-year, per the company's `vatPeriodType`) that is
+    // due now, so the cockpit agrees with the static dashboard and CLI (#299).
+    const vatSelection = selectVatPeriod(db, yearNum, company.vatPeriodType);
+    const vat = vatSelection.position;
 
     // The exception queue — grouped by type into one Danish summary line each,
     // so the "Opgaver" card reads "362 banktransaktioner mangler afstemning"
@@ -1463,11 +1474,11 @@ export function buildCompanyOverview(
     const egenkapitalandel =
       bs.totalAssets !== 0 ? equityTotal / bs.totalAssets : null;
 
-    const vatDeadline = vatQuarterDeadline(yearNum, vatQuarter);
+    const vatDeadline = vatSelection.deadline;
     const vatBlock: OverviewVat = {
       periodStart: vat.periodStart,
       periodEnd: vat.periodEnd,
-      periodLabel: `Q${vatQuarter} ${yearNum}`,
+      periodLabel: vatSelection.label,
       outputVat: vat.outputVat,
       outputVatAdjustment: vat.outputVatAdjustment,
       inputVat: vat.inputVat,
@@ -2471,6 +2482,7 @@ export function buildCompanyBank(
         bookedBalance: 0,
         actualBalance: null,
         difference: null,
+        bankStatementStatus: "none" as "known" | "no-balance-column" | "none",
         transactions: [] as BankTransactionRow[],
         matchedCount: 0,
         unmatchedCount: 0,
@@ -2532,6 +2544,25 @@ export function buildCompanyBank(
     const difference =
       actualBalance === null ? null : roundKroner(bookedBalance - actualBalance);
 
+    // #305: `actualBalance === null` has two very different causes — no
+    // statement imported at all, or a statement WAS imported but its CSV had
+    // no balance column. The cockpit must not say "intet kontoudtog
+    // importeret" for the second case: an owner who just imported a CSV would
+    // think the import silently failed. `bankStatementStatus` distinguishes
+    // them so the UI can say "banksaldo ukendt — kontoudtoget havde ingen
+    // saldo-kolonne" instead.
+    const hasAnyTransactions =
+      transactions.length > 0 ||
+      (ctx.db
+        .query("SELECT 1 FROM bank_transactions LIMIT 1")
+        .get() as unknown) !== null;
+    const bankStatementStatus: "known" | "no-balance-column" | "none" =
+      actualBalance !== null
+        ? "known"
+        : hasAnyTransactions
+          ? "no-balance-column"
+          : "none";
+
     return {
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
@@ -2544,6 +2575,7 @@ export function buildCompanyBank(
       bookedBalance,
       actualBalance,
       difference,
+      bankStatementStatus,
       transactions,
       matchedCount,
       unmatchedCount: transactions.length - matchedCount,
@@ -2560,11 +2592,17 @@ export function buildCompanyBank(
 export type CompanyVat = ReturnType<typeof buildCompanyVat>;
 
 /**
- * Moms — the VAT return for the selected calendar fiscal year. Each half-year
- * settles separately; the first half is surfaced by default, switching to the
- * second only when the first is empty and the second carries activity — the
- * same selection `buildCompanyOverview` uses. The figures come from the booked
- * VAT accounts via `vatPositionForPeriod`. Money is kroner.
+ * Moms — the VAT return for the selected calendar fiscal year. The VAT period
+ * follows the company's own settlement cadence (`vatPeriodType` — month /
+ * quarter / half-year, #299); the period that is due now is surfaced, the same
+ * selection `buildCompanyOverview` uses. The figures come from the booked VAT
+ * accounts via `vatPositionForPeriod`. Money is kroner.
+ *
+ * #303: `periodStatus` reports the period's effective lifecycle state. A
+ * momsangivelse may only be FILED for a `closed`/`reported` period — for an
+ * `open` period the figures are provisional, and the cockpit must say so
+ * rather than claim they match the terminal `vat momsangivelse` (which refuses
+ * an open period). `momsangivelseReady` is the single flag the SPA keys off.
  */
 export function buildCompanyVat(
   workspaceRoot: string,
@@ -2576,36 +2614,58 @@ export function buildCompanyVat(
     const companyBlock = statementCompanyBlock(ctx.company);
     if (ctx.isArchivedOnly) {
       const archYear = parseInt(ctx.selectedLabel, 10);
-      const archPeriod = quarterPeriod(archYear, 1);
+      const archWindow = vatPeriodWindowFor(
+        `${archYear}-01-01`,
+        ctx.company.vatPeriodType,
+      );
       return {
         slug: ctx.entry.slug,
         selectedYear: ctx.selectedLabel,
         archived: true,
         company: companyBlock,
         fiscalYears: ctx.years,
-        periodStart: archPeriod.start,
-        periodEnd: archPeriod.end,
-        periodLabel: `Q1 ${ctx.selectedLabel}`,
+        periodStart: archWindow.start,
+        periodEnd: archWindow.end,
+        periodLabel: vatPeriodLabel(archWindow),
         outputVat: 0,
         outputVatAdjustment: 0,
         inputVat: 0,
         payable: 0,
-        deadline: vatQuarterDeadline(archYear, 1),
-        daysRemaining: daysBetween(todayIsoDate(), vatQuarterDeadline(archYear, 1)),
+        deadline: archWindow.filingDeadline,
+        daysRemaining: daysBetween(todayIsoDate(), archWindow.filingDeadline),
+        // An archived year carries no live period to close — treat as open so
+        // no provisional figures are ever claimed filing-ready.
+        periodStatus: "open" as EffectivePeriodState,
+        momsangivelseReady: false,
         rubrikker: emptyVatRubrikker(),
       };
     }
 
     const yearNum = parseInt(ctx.selectedLabel, 10);
-    // Quarterly settlement — the only VAT cadence Rentemester supports. Surface
-    // the latest quarter that carries activity, the same selection the static
+    // Surface the VAT period (month / quarter / half-year, per the company's
+    // `vatPeriodType`) that is due now — the same selection the static
     // dashboard and the Overblik view use, so the period type never depends on
-    // which screen the owner looks at.
-    const { quarter, position: vat } = selectVatQuarter(ctx.db, yearNum);
+    // which screen the owner looks at (#299).
+    const vatSelection = selectVatPeriod(
+      ctx.db,
+      yearNum,
+      ctx.company.vatPeriodType,
+    );
+    const vat = vatSelection.position;
 
-    // The statutory filing/payment deadline for the surfaced quarter, plus a
+    // The statutory filing/payment deadline for the surfaced period, plus a
     // signed countdown from today — negative once the deadline has passed.
-    const deadline = vatQuarterDeadline(yearNum, quarter);
+    const deadline = vatSelection.deadline;
+
+    // #303: a momsangivelse is only filing-ready for a closed/reported period.
+    // For an open period the cockpit shows the figures as PROVISIONAL.
+    const periodStatus = vatPeriodEffectiveStatus(
+      ctx.db,
+      vat.periodStart,
+      vat.periodEnd,
+    );
+    const momsangivelseReady =
+      periodStatus === "closed" || periodStatus === "reported";
 
     // The full SKAT TastSelv rubrics — the same numbers the CLI's
     // `vat momsangivelse` reports — so an owner can file straight from here.
@@ -2623,13 +2683,15 @@ export function buildCompanyVat(
       fiscalYears: ctx.years,
       periodStart: vat.periodStart,
       periodEnd: vat.periodEnd,
-      periodLabel: `Q${quarter} ${yearNum}`,
+      periodLabel: vatSelection.label,
       outputVat: vat.outputVat,
       outputVatAdjustment: vat.outputVatAdjustment,
       inputVat: vat.inputVat,
       payable: vat.payable,
       deadline,
       daysRemaining: daysBetween(todayIsoDate(), deadline),
+      periodStatus,
+      momsangivelseReady,
       rubrikker,
     };
   } finally {
@@ -3391,21 +3453,20 @@ export function buildCompanyObligations(
     const yearEnd = `${yearNum}-12-31`;
     const obligations: ObligationRow[] = [];
 
-    // VAT: each quarter settles separately. Surface every quarter that carries
-    // a payable so the owner sees each filing deadline; if no quarter has a
-    // payable, no VAT obligation is shown. Quarterly is the only VAT cadence
-    // Rentemester supports — the same period type every other surface uses.
-    for (const quarter of [1, 2, 3, 4] as const) {
-      const period = quarterPeriod(yearNum, quarter);
-      const position = vatPositionForPeriod(ctx.db, period.start, period.end);
+    // VAT: each VAT period settles separately. Surface every period that
+    // carries a payable so the owner sees each filing deadline; if no period
+    // has a payable, no VAT obligation is shown. #299: the periods follow the
+    // company's real VAT cadence (`vatPeriodType`) — a monthly filer sees up to
+    // twelve VAT lines, a half-yearly filer two — never a hardcoded quarter.
+    for (const window of vatPeriodsForYear(yearNum, ctx.company.vatPeriodType)) {
+      const position = vatPositionForPeriod(ctx.db, window.start, window.end);
       if (position.payable > 0) {
-        const dueDate = vatQuarterDeadline(yearNum, quarter);
         obligations.push({
           kind: "vat",
-          label: `Moms — Q${quarter} ${yearNum}`,
+          label: `Moms — ${vatPeriodLabel(window)}`,
           amount: position.payable,
-          dueDate,
-          daysRemaining: daysBetween(today, dueDate),
+          dueDate: window.filingDeadline,
+          daysRemaining: daysBetween(today, window.filingDeadline),
           accountNo: null,
         });
       }

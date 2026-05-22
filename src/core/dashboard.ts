@@ -17,6 +17,12 @@ import type { BankTransactionListResult } from "./reconciliation";
 import type { VatPeriodReport } from "./vat";
 import type { BackupComplianceStatus } from "./system-backups";
 import type { AuditLogRow } from "./audit-log";
+import {
+  vatPeriodWindowFor,
+  vatPeriodLabel,
+  DEFAULT_VAT_PERIOD_TYPE,
+  type VatPeriodType,
+} from "./periods";
 
 // --------------------------------------------------------------------------
 // Types
@@ -201,62 +207,11 @@ function truncate(value: string, max: number): string {
   return value.slice(0, max - 1) + "…";
 }
 
-/** YYYY-MM-DD → quarter info for the period containing the date. */
-function quarterPeriod(asOfDate: string): { label: string; start: string; end: string; quarter: number; year: number } {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(asOfDate);
-  if (!m) return { label: "—", start: asOfDate, end: asOfDate, quarter: 0, year: 0 };
-  const year = parseInt(m[1]!, 10);
-  const month = parseInt(m[2]!, 10);
-  const quarter = Math.floor((month - 1) / 3) + 1;
-  const startMonth = (quarter - 1) * 3 + 1;
-  const endMonth = startMonth + 2;
-  const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate(); // pure math, no Date.now
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const start = `${year}-${pad(startMonth)}-01`;
-  const end = `${year}-${pad(endMonth)}-${pad(lastDay)}`;
-  const label = `Q${quarter} ${year} (01-${pad(startMonth)} → ${pad(lastDay)}-${pad(endMonth)})`;
-  return { label, start, end, quarter, year };
-}
-
-/**
- * Quarter info for the VAT period the CLI actually selected — the earliest
- * VAT quarter that is still unreported and carries activity (#281). The CLI
- * computes that period and supplies it as `vatPeriod.periodStart`; the
- * render-engine must label and count down to *that* quarter, NOT whichever
- * calendar quarter `asOfDate` happens to fall in (an owner who sees the
- * current empty quarter misses an earlier, still-due momsbetaling).
- *
- * The start date alone identifies the quarter (a VAT period is always a
- * calendar quarter); `end` is recomputed so a degenerate period still renders.
- */
-function quarterFromPeriodStart(periodStart: string): { label: string; start: string; end: string; quarter: number; year: number } {
-  return quarterPeriod(periodStart);
-}
-
 function daysAgoLabel(days: number | null): string {
   if (days == null) return "ingen registreret";
   if (days <= 0) return "i dag";
   if (days === 1) return "1 dag siden";
   return `${days} dage siden`;
-}
-
-/**
- * SKAT filing/payment deadline for a quarter — the 1st of the third month
- * after the period ends (e.g. Q2 ends 30-06 → due 01-09). This is the date
- * that costs money with SKAT if missed; the dashboard previously counted down
- * to the period END date, which is too early and wrong. (#236)
- *
- * Pure calendar math from `endMonth`/`year`; the render-engine stays
- * deterministic.
- */
-function vatFilingDeadlineForQuarter(year: number, endMonth: number): string {
-  let deadlineMonth = endMonth + 3;
-  let deadlineYear = year;
-  while (deadlineMonth > 12) {
-    deadlineMonth -= 12;
-    deadlineYear += 1;
-  }
-  return `${deadlineYear}-${String(deadlineMonth).padStart(2, "0")}-01`;
 }
 
 /** Signed day difference `toDate - fromDate` between two YYYY-MM-DD dates, UTC-based, pure. */
@@ -733,19 +688,28 @@ ${items}
 }
 
 function deadlineSection(input: DashboardInput): string {
-  // The "Næste deadline" box must describe the VAT quarter the CLI selected —
-  // the earliest unreported quarter that carries activity — NOT the calendar
-  // quarter today falls in. The CLI delivers that quarter as `vatPeriod`; the
+  // The "Næste momsfrist" box must describe the VAT period the CLI selected —
+  // the earliest unreported period that carries activity — NOT the calendar
+  // period today falls in. The CLI delivers that period as `vatPeriod`; the
   // render-engine keys the label/deadline off `vatPeriod.periodStart` so the
   // box always agrees with the figure shown beside it. (#281)
-  const period = quarterFromPeriodStart(input.vatPeriod.periodStart);
-  // The countdown must target the real SKAT filing/payment deadline — the 1st
-  // of the third month after the quarter ends — NOT the period-end date the
-  // wrong `vatDaysRemaining` measured. (#236)
-  const endMonth = period.quarter > 0 ? (period.quarter - 1) * 3 + 3 : 0;
-  const deadline = period.quarter > 0
-    ? vatFilingDeadlineForQuarter(period.year, endMonth)
+  //
+  // #299: the period window + label + filing deadline follow the company's
+  // real VAT cadence (`vatPeriodType`) — a half-yearly filer sees "1. halvår
+  // 2026" with the half-year deadline, not a quarter. For a `quarter` company
+  // the window/label/deadline are byte-identical to the historical behaviour.
+  const vatType: VatPeriodType =
+    input.company.vatPeriodType ?? DEFAULT_VAT_PERIOD_TYPE;
+  const validStart = /^(\d{4})-(\d{2})-(\d{2})/.test(input.vatPeriod.periodStart);
+  const window = validStart
+    ? vatPeriodWindowFor(input.vatPeriod.periodStart, vatType)
     : null;
+  const period = {
+    label: window ? vatPeriodLabel(window) : "—",
+  };
+  // The countdown targets the real SKAT filing/payment deadline — the 1st of
+  // the third month after the period ends — for the company's actual cadence.
+  const deadline = window ? window.filingDeadline : null;
   const daysRemaining = deadline ? signedDaysBetween(input.asOfDate, deadline) : 0;
   const errors = input.vatPeriod.errors ?? [];
   let pill: string;

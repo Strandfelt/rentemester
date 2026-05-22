@@ -37,12 +37,14 @@ describe("VatView — Moms", () => {
     ).toBeInTheDocument();
   });
 
-  test("shows the quarterly period label", async () => {
+  test("shows the VAT period label", async () => {
     mockFetch(route());
     renderView();
+    // The period label is surfaced in several places for an open period
+    // (the sub-heading and the provisional-figures notes), so match all.
     expect(
-      await screen.findByText(/Q2 2026/),
-    ).toBeInTheDocument();
+      (await screen.findAllByText(/Q1 2026/)).length,
+    ).toBeGreaterThan(0);
   });
 
   test("shows the full SKAT momsangivelse rubrics", async () => {
@@ -141,8 +143,8 @@ describe("VatView — Moms", () => {
       "POST /api/companies/acme-aps/periods/close": {
         period: {
           id: 1,
-          periodStart: "2026-04-01",
-          periodEnd: "2026-06-30",
+          periodStart: "2026-01-01",
+          periodEnd: "2026-03-31",
           kind: "vat_quarter",
           status: "closed",
           reference: null,
@@ -178,6 +180,125 @@ describe("VatView — Moms", () => {
     );
     expect(
       await screen.findByText(/Bogføring er låst/i),
+    ).toBeInTheDocument();
+  });
+
+  // #303: an OPEN VAT period's figures are provisional — the cockpit must say
+  // so honestly rather than presenting a ready-to-file momsangivelse.
+  test("an open period is marked provisional, not filing-ready", async () => {
+    mockFetch(route({ periodStatus: "open", momsangivelseReady: false }));
+    renderView();
+    expect(
+      await screen.findByText(/Åben periode — foreløbige tal/i),
+    ).toBeInTheDocument();
+    // The rubrics heading is flagged provisional.
+    expect(
+      screen.getByText(/SKAT-rubrikker \(foreløbige — åben periode\)/i),
+    ).toBeInTheDocument();
+  });
+
+  // #303: a closed period's figures ARE final — no provisional banner, and the
+  // rubrics carry the normal "ready momsangivelse" heading.
+  test("a closed period shows final figures with no provisional banner", async () => {
+    mockFetch(route({ periodStatus: "closed", momsangivelseReady: true }));
+    renderView();
+    await screen.findByText(/SKAT-rubrikker \(momsangivelse\)/i);
+    expect(
+      screen.queryByText(/Åben periode — foreløbige tal/i),
+    ).not.toBeInTheDocument();
+    // A closed period offers no "close" action — it is already closed.
+    expect(
+      screen.queryByRole("button", { name: /Luk momsperiode/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  // #301: a closed period can be reopened from the cockpit — the controlled,
+  // audit-logged recovery path for a period closed too early.
+  test("offers a reopen action for a closed period and reopens it", async () => {
+    mockFetch({
+      ...route({ periodStatus: "closed", momsangivelseReady: true }),
+      "POST /api/companies/acme-aps/periods/reopen": {
+        period: {
+          id: 1,
+          periodStart: "2026-01-01",
+          periodEnd: "2026-03-31",
+          kind: "vat_quarter",
+          effectiveStatus: "open",
+          reopenedBy: "user:test",
+          reason: "bilag bogført for sent",
+        },
+      },
+    });
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Genåbn momsperiode/i }),
+    );
+    // The reopen requires a free-text reason recorded in the audit log.
+    const reason = await screen.findByRole("textbox");
+    await userEvent.type(reason, "bilag bogført for sent");
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Genåbn perioden/i }),
+    );
+    expect(
+      await screen.findByText(/er genåbnet/i),
+    ).toBeInTheDocument();
+  });
+
+  // #301: a reopen with no reason is blocked — a reopen must be traceable.
+  test("a reopen with an empty reason is blocked", async () => {
+    mockFetch(route({ periodStatus: "closed", momsangivelseReady: true }));
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Genåbn momsperiode/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Genåbn perioden/i }),
+    );
+    expect(
+      await screen.findByText(/Angiv en begrundelse/i),
+    ).toBeInTheDocument();
+  });
+
+  // #301: closing a period whose end date is still in the future warns clearly
+  // and requires an explicit second acknowledgement before the close goes
+  // through — closing a not-yet-ended period is almost always a mistake.
+  test("closing a not-yet-ended period warns and needs an acknowledgement", async () => {
+    mockFetch({
+      // A period that ends far in the future — it has not ended yet.
+      ...route({ periodEnd: "2099-12-31" }),
+      "POST /api/companies/acme-aps/periods/close": {
+        period: {
+          id: 1,
+          periodStart: "2026-01-01",
+          periodEnd: "2099-12-31",
+          kind: "vat_quarter",
+          status: "closed",
+          reference: null,
+        },
+      },
+    });
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Luk momsperiode/i }),
+    );
+    // The dialog warns the period is not over yet.
+    expect(
+      await screen.findByText(/ikke afsluttet endnu/i),
+    ).toBeInTheDocument();
+    // Confirming WITHOUT ticking the acknowledgement is blocked.
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Luk perioden/i }),
+    );
+    expect(
+      await screen.findByText(/Bekræft først/i),
+    ).toBeInTheDocument();
+    // After ticking the acknowledgement the close goes through.
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Luk perioden/i }),
+    );
+    expect(
+      await screen.findByText(/Momsperioden er lukket/i),
     ).toBeInTheDocument();
   });
 });

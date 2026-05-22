@@ -147,6 +147,51 @@ describe("ManageCompanyView", () => {
     ).toBeInTheDocument();
   });
 
+  // #300 — the VAT settlement cadence is editable from the cockpit profile.
+  test("the profile form shows the company's VAT cadence", async () => {
+    mockFetch({
+      ...companiesRoute(),
+      "GET /api/companies/acme-aps/company": {
+        company: companySettings({ vatPeriodType: "half-year" }),
+      },
+    });
+    renderAt(<ManageCompanyView />, {
+      route: "/companies/acme-aps/manage",
+      path: "/companies/:slug/manage",
+    });
+    const select = (await screen.findByLabelText(
+      /Momsperiode/i,
+    )) as HTMLSelectElement;
+    expect(select.value).toBe("half-year");
+  });
+
+  test("PATCHes the company profile with a changed VAT cadence", async () => {
+    mockFetch({
+      ...companiesRoute(),
+      "PATCH /api/companies/acme-aps/company": {
+        company: companySettings({ vatPeriodType: "month" }),
+      },
+    });
+    renderAt(<ManageCompanyView />, {
+      route: "/companies/acme-aps/manage",
+      path: "/companies/:slug/manage",
+    });
+    await userEvent.selectOptions(
+      await screen.findByLabelText(/Momsperiode/i),
+      "month",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Gem stamdata/i }),
+    );
+    expect(
+      await screen.findByText(/Stamdata opdateret/i),
+    ).toBeInTheDocument();
+    // The form reflects the persisted cadence after the round-trip.
+    expect(
+      (screen.getByLabelText(/Momsperiode/i) as HTMLSelectElement).value,
+    ).toBe("month");
+  });
+
   test("warns when no payment details are configured", async () => {
     mockFetch(companiesRoute());
     renderAt(<ManageCompanyView />, {

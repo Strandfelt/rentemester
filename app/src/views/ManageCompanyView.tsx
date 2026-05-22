@@ -9,7 +9,18 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { Banner, ErrorState, Loading } from "../components/Feedback";
-import type { CompanyEntry, CompanySettings } from "../lib/types";
+import type {
+  CompanyEntry,
+  CompanySettings,
+  VatPeriodType,
+} from "../lib/types";
+
+/** The VAT-cadence options for the profile / create-company selectors (#300). */
+const VAT_PERIOD_OPTIONS: Array<{ value: VatPeriodType; label: string }> = [
+  { value: "month", label: "Måned (måneds-moms)" },
+  { value: "quarter", label: "Kvartal (kvartals-moms)" },
+  { value: "half-year", label: "Halvår (halvårs-moms)" },
+];
 
 export function ManageCompanyView() {
   const { slug = "" } = useParams();
@@ -176,6 +187,10 @@ function ProfileCard({
   const [address, setAddress] = useState(initial.address ?? "");
   const [postalCode, setPostalCode] = useState(initial.postalCode ?? "");
   const [city, setCity] = useState(initial.city ?? "");
+  // #300: the VAT settlement cadence is editable from the cockpit.
+  const [vatPeriodType, setVatPeriodType] = useState<VatPeriodType>(
+    initial.vatPeriodType,
+  );
   const [bankName, setBankName] = useState(initial.payment?.bankName ?? "");
   const [registrationNo, setRegistrationNo] = useState(
     initial.payment?.registrationNo ?? "",
@@ -206,6 +221,7 @@ function ProfileCard({
         address: address.trim(),
         postalCode: postalCode.trim(),
         city: city.trim(),
+        vatPeriodType,
         payment: {
           bankName: bankName.trim(),
           registrationNo: registrationNo.trim(),
@@ -214,6 +230,7 @@ function ProfileCard({
         },
       });
       setSettings(updated);
+      setVatPeriodType(updated.vatPeriodType);
       setNotice("Stamdata opdateret.");
     } catch (err) {
       setError(
@@ -270,6 +287,26 @@ function ProfileCard({
             onChange={(e) => setCity(e.target.value)}
             placeholder="København"
           />
+        </label>
+        <label>
+          Momsperiode
+          <select
+            name="vatPeriodType"
+            value={vatPeriodType}
+            onChange={(e) =>
+              setVatPeriodType(e.target.value as VatPeriodType)
+            }
+          >
+            {VAT_PERIOD_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <span className="field-hint">
+            Den momsperiode virksomheden er registreret for hos SKAT.
+            Momsperioder og -frister følger dette valg.
+          </span>
         </label>
         <label>
           Pengeinstitut

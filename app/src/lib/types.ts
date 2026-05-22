@@ -514,6 +514,14 @@ export type CompanyBank = {
   actualBalance: number | null;
   /** bookedBalance − actualBalance; the unreconciled gap, kroner; null when unknown. */
   difference: number | null;
+  /**
+   * Why `actualBalance` is or is not known (#305):
+   *  - `known`             — a statement balance was imported and is shown;
+   *  - `no-balance-column` — transactions WERE imported, but the CSV carried
+   *    no balance column, so the bank saldo is unknown (NOT "not imported");
+   *  - `none`              — no bank statement has been imported at all.
+   */
+  bankStatementStatus: "known" | "no-balance-column" | "none";
   transactions: BankTransactionRow[];
   matchedCount: number;
   unmatchedCount: number;
@@ -557,7 +565,10 @@ export type CompanyVat = {
   fiscalYears: FiscalYearEntry[];
   periodStart: string;
   periodEnd: string;
-  /** The quarterly VAT period label, e.g. "Q2 2026". */
+  /**
+   * The VAT period label — follows the company's settlement cadence (#299):
+   * "Q2 2026" (quarter), "Maj 2026" (month), "1. halvår 2026" (half-year).
+   */
   periodLabel: string;
   /**
    * Genuine output VAT on sales (salgsmoms) for the period, kroner — gross,
@@ -576,6 +587,19 @@ export type CompanyVat = {
   deadline: string;
   /** Signed countdown from today to the deadline; negative once passed. */
   daysRemaining: number;
+  /**
+   * The VAT period's effective lifecycle state (#303). `open` means the period
+   * is NOT yet closed — its figures are provisional and a momsangivelse cannot
+   * be filed for it. `closed`/`reported` means the figures are final.
+   */
+  periodStatus: "open" | "closed" | "reported";
+  /**
+   * True only when the momsangivelse is filing-ready — i.e. the period is
+   * closed or reported. The terminal `vat momsangivelse` refuses an open
+   * period, so the cockpit must not present the rubrics as a ready-to-file
+   * momsangivelse unless this is true (#303).
+   */
+  momsangivelseReady: boolean;
   /** The full SKAT TastSelv momsangivelse rubrics for the period. */
   rubrikker: VatRubrikker;
 };
@@ -859,12 +883,17 @@ export type CashflowResponse = {
   cashflow: CompanyCashflow;
 };
 
+/** The three VAT settlement cadences a Danish company can be registered for. */
+export type VatPeriodType = "month" | "quarter" | "half-year";
+
 export type CreateCompanyInput = {
   name: string;
   slug?: string;
   cvr?: string;
   fiscalYearStartMonth?: string;
   fiscalYearLabelStrategy?: string;
+  /** The VAT settlement cadence (#300). Defaults to `quarter` server-side. */
+  vatPeriodType?: VatPeriodType;
   /** Optional bank/payment details — sets up the primary bank account (#284). */
   payment?: CompanyPaymentInput;
 };
@@ -893,6 +922,8 @@ export type CompanyProfileInput = {
   postalCode?: string;
   city?: string;
   paymentTermsDays?: number;
+  /** The VAT settlement cadence (#300) — month / quarter / half-year. */
+  vatPeriodType?: VatPeriodType;
   payment?: CompanyPaymentInput;
 };
 
@@ -929,6 +960,8 @@ export type CompanySettings = {
   auditWaived: boolean | null;
   /** ISO timestamp the CVR stamdata was last synced; null when never. */
   cvrSyncedAt: string | null;
+  /** The VAT settlement cadence the company is registered for with SKAT (#300). */
+  vatPeriodType: VatPeriodType;
   /** The company's own bank/payment details; null when none is configured. */
   payment: CompanyPaymentDetails | null;
 };
@@ -959,6 +992,31 @@ export type ClosePeriodInput = {
   periodEnd: string;
   kind?: "vat_quarter" | "fiscal_year" | "custom";
   reference?: string;
+};
+
+/** The result of `POST /api/companies/:slug/periods/reopen` (#301). */
+export type ReopenPeriodResult = {
+  id: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  kind: string | null;
+  /** The period's effective state after the reopen — `open` on success. */
+  effectiveStatus: "open" | "closed" | "reported" | null;
+  reopenedBy: string | null;
+  reason: string | null;
+};
+
+export type ReopenPeriodResponse = {
+  ok: true;
+  period: ReopenPeriodResult;
+};
+
+/** Input for `api.reopenPeriod` (#301). `reason` is recorded in the audit log. */
+export type ReopenPeriodInput = {
+  periodStart: string;
+  periodEnd: string;
+  kind?: "vat_quarter" | "fiscal_year" | "custom";
+  reason: string;
 };
 
 export type CvrManagementMember = { name: string; role: string };

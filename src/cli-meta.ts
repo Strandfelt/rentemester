@@ -100,9 +100,9 @@ export const COMMAND_SPECS: CommandSpec[] = [
     // be discoverable and self-documenting — its --help, flags and --example
     // are part of that promise.
     key: "company set-profile",
-    usage: "company set-profile --company <slug|path> [--name <text>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>]",
-    description: "Retter virksomhedens egen profil efter init: navn, CVR, adresse, betalingsfrist og betalingsoplysninger (bankkonto/IBAN). Hver efterfølgende udstedt faktura og dens PDF arver de nye værdier automatisk — du indtaster aldrig din egen stamdata på en faktura.",
-    allowedFlags: ["--company", "--name", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--bank-name", "--bank-reg", "--bank-account", "--iban"],
+    usage: "company set-profile --company <slug|path> [--name <text>] [--cvr <DK12345678>] [--address <text>] [--postal-code <text>] [--city <text>] [--payment-terms <0-365>] [--vat-period month|quarter|half-year] [--bank-name <text>] [--bank-reg <regnr>] [--bank-account <kontonr>] [--iban <IBAN>]",
+    description: "Retter virksomhedens egen profil efter init: navn, CVR, adresse, betalingsfrist, momsperiode og betalingsoplysninger (bankkonto/IBAN). Hver efterfølgende udstedt faktura og dens PDF arver de nye værdier automatisk — du indtaster aldrig din egen stamdata på en faktura.",
+    allowedFlags: ["--company", "--name", "--cvr", "--address", "--postal-code", "--city", "--payment-terms", "--vat-period", "--bank-name", "--bank-reg", "--bank-account", "--iban"],
     examplePath: "examples/company-set-profile.txt",
     exampleHint: "rentemester company set-profile --example",
     exampleNote: "Eksemplet er en kommandolinje-skabelon — udskift <sti-eller-slug> og bankoplysningerne med dine egne.",
@@ -111,12 +111,13 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "Angav du ingen bankkonto ved 'init', så sæt --bank-name/--bank-reg/--bank-account (og evt. --iban) her: uden dem får en udstedt fakturas PDF INGEN BETALING-blok, og kunden kan ikke se hvor pengene skal hen.",
       "Bankkontoen er append-only: den oprettes ved første kald med bankoplysninger. Et senere kald opretter ikke en ny konto — opdatér i stedet kontoen direkte hvis oplysningerne ændrer sig.",
       "--payment-terms er standard betalingsfrist i dage (udstedelsesdato → forfaldsdato), heltal 0-365.",
+      "--vat-period ændrer virksomhedens momsperiode: month (måneds-moms), quarter (kvartals-moms) eller half-year (halvårs-moms). Vælg den periode du er registreret for hos SKAT — momsperioder, -frister og momsangivelsen følger dette valg overalt (dashboard, cockpit, 'period close').",
     ],
   },
   {
     key: "company profile",
     usage: "company profile --company <slug|path>",
-    description: "Viser virksomhedens nuværende profil: navn, CVR, adresse og standard betalingsfrist. Ren læsning — ændrer intet.",
+    description: "Viser virksomhedens nuværende profil: navn, CVR, adresse, standard betalingsfrist og momsperiode. Ren læsning — ændrer intet.",
     allowedFlags: ["--company"],
   },
   {
@@ -428,7 +429,15 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "--date: bogføringsdato YYYY-MM-DD; udelades den, bruges bankpostens dato",
     ],
   },
-  { key: "vat report", usage: "vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en momsrapport for perioden.", allowedFlags: ["--company", "--from", "--to"] },
+  {
+    key: "vat report",
+    usage: "vat report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en momsrapport for perioden.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "--json/--format json-outputtets feltliste er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå rapportens skema op dér før maskinel parsing.",
+    ],
+  },
   {
     key: "vat post-eu-service-purchase",
     usage: "vat post-eu-service-purchase --company <path> --input <file.json>",
@@ -646,9 +655,33 @@ export const COMMAND_SPECS: CommandSpec[] = [
   { key: "asset register-report", usage: "asset register-report --company <path>", description: "Viser aktivregister med akkumulerede afskrivninger og bogført værdi.", allowedFlags: ["--company"] },
   // ===== END FIXED ASSETS (#124, #125) =====
   // ===== FINANCIAL STATEMENTS (#176) =====
-  { key: "report trial-balance", usage: "report trial-balance --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en saldobalance med debet, kredit og saldo pr. konto for perioden.", allowedFlags: ["--company", "--from", "--to"] },
-  { key: "report profit-loss", usage: "report profit-loss --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>", description: "Bygger en resultatopgørelse (indtægter minus omkostninger) for perioden.", allowedFlags: ["--company", "--from", "--to"] },
-  { key: "report balance", usage: "report balance --company <path> --as-of <YYYY-MM-DD>", description: "Bygger en balance (aktiver, passiver, egenkapital) på en given dato.", allowedFlags: ["--company", "--as-of"] },
+  {
+    key: "report trial-balance",
+    usage: "report trial-balance --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en saldobalance med debet, kredit og saldo pr. konto for perioden.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "--json/--format json-outputtets feltliste er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå rapportens skema op dér før maskinel parsing.",
+    ],
+  },
+  {
+    key: "report profit-loss",
+    usage: "report profit-loss --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en resultatopgørelse (indtægter minus omkostninger) for perioden.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "--json/--format json-outputtets feltliste er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå rapportens skema op dér før maskinel parsing.",
+    ],
+  },
+  {
+    key: "report balance",
+    usage: "report balance --company <path> --as-of <YYYY-MM-DD>",
+    description: "Bygger en balance (aktiver, passiver, egenkapital) på en given dato.",
+    allowedFlags: ["--company", "--as-of"],
+    inputNotes: [
+      "--json/--format json-outputtets feltliste er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå rapportens skema op dér før maskinel parsing.",
+    ],
+  },
   // ===== END FINANCIAL STATEMENTS (#176) =====
   // ===== VAT FILING (#178) =====
   {
@@ -659,6 +692,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     inputNotes: [
       "FORUDSÆTNING: --from..--to skal præcist matche en LUKKET (closed) eller INDBERETTET (reported) vat_quarter-periode. Er der ingen sådan periode, afvises kaldet med exit 1 og errors[]: \"VAT period <from>..<to> is not closed: a momsangivelse requires a closed or reported vat_quarter accounting period covering exactly this period — run 'period close' first\".",
       "RETTELSE: luk perioden først med 'rentemester period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --kind vat_quarter' (kræver en actor), og kør derefter momsangivelsen igen med nøjagtigt samme datoer.",
+      "--json/--format json-outputtets felter (SKAT-rubrikker, momstilsvar m.m.) er en CLI-only rapport. Det fulde skema er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå formen op dér før maskinel parsing.",
     ],
   },
   {
@@ -669,6 +703,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     inputNotes: [
       "FORUDSÆTNING: --from..--to skal præcist matche en LUKKET (closed) eller INDBERETTET (reported) vat_quarter-periode. Er der ingen sådan periode, afvises kaldet med exit 1 og errors[]: \"VAT period <from>..<to> is not closed: a momsangivelse requires a closed or reported vat_quarter accounting period covering exactly this period — run 'period close' first\".",
       "RETTELSE: luk perioden først med 'rentemester period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --kind vat_quarter' (kræver en actor), og kør derefter momsangivelsen igen med nøjagtigt samme datoer.",
+      "--json/--format json-outputtets felter (SKAT-rubrikker, momstilsvar m.m.) er en CLI-only rapport. Det fulde skema er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå formen op dér før maskinel parsing.",
     ],
   },
   // ===== END VAT FILING (#178) =====
@@ -712,6 +747,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
     inputNotes: [
       "Den registrerede identificeres med --cvr og/eller --name",
       "Hver post markeres med opbevaringsfrist og om den stadig er under bogføringspligt",
+      "--json/--format json-outputtets feltliste (indsigtsrapportens form) er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå skemaet op dér før maskinel parsing.",
     ],
   },
   {
@@ -736,6 +772,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "--from / --to afgrænser regnskabsåret (skal være helt dækket af en lukket/indberettet periode)",
       "Kræver registreret CVR og balancerede bøger",
       "--ixbrl-out skriver en deterministisk iXBRL (inline-XBRL) XHTML-fil mod et afgrænset micro/small-taksonomi-udsnit",
+      "--json/--format json-outputtets feltliste (årsrapportens form) er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå skemaet op dér før maskinel parsing.",
     ],
   },
   // ===== END ANNUAL REPORT (#177) =====
@@ -796,6 +833,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "--metadata-dir: hvor metadata-JSON ligger (standard: samme som --inbox)",
       "--bank-csv: bankudtog der importeres før match/afstemning",
       "Agenten bogfører som agent:rentemester-bookkeeper og handler kun inden for guardrails",
+      "--json/--format json udskriver en AgentRunReport. Felternes betydning og det fulde skema er dokumenteret i docs/runtime-agent-contract.md — læs det før du parser outputtet maskinelt.",
     ],
   },
   // ===== END RUNTIME AGENT (#183) =====
