@@ -663,6 +663,17 @@ td.num,
 .modal-field-grid .modal-field {
   min-width: 0;
 }
+/* A single checkbox option inside a modal — a row, not the stacked
+   label-over-input of a text field. */
+.modal-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.modal-checkbox input {
+  width: auto;
+  padding: 0;
+}
 /* One editable line-item row in the invoice-issue modal (#213, slice 4) —
    description / quantity / unit price, plus an optional Fjern button. */
 .invoice-line-row {

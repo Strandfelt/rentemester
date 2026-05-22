@@ -315,6 +315,26 @@ export const api = {
     ).then((r) => r.import),
 
   /**
+   * Imports an export file from another accounting system. The browser reads
+   * the chosen file and passes its text as `content`; the server recognises
+   * which system the file came from and routes it to the matching importer.
+   * Destructive (it appends master data), so the body carries `confirm: true`.
+   */
+  importData: (slug: string, input: DataImportInput) =>
+    request<{ ok: true; import: DataImportSummary }>(
+      `/api/companies/${encodeURIComponent(slug)}/import`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: input.fileName,
+          content: input.content,
+          enrichCvr: input.enrichCvr === true,
+          confirm: true,
+        }),
+      },
+    ).then((r) => r.import),
+
+  /**
    * Ingests a document/voucher (bilag) (#213, slice 3). The browser reads the
    * (possibly binary) file and passes it base64-encoded; the server decodes it
    * to a temp file and calls the same core ingest the CLI/MCP use. Destructive,
@@ -465,6 +485,38 @@ export type BankImportInput = {
   csvContent: string;
   account?: string;
   profile?: string;
+};
+
+/** Input for `api.importData` — the file name + text, plus the CVR-enrich opt-in. */
+export type DataImportInput = {
+  fileName: string;
+  content: string;
+  enrichCvr?: boolean;
+};
+
+/** The source system + data type the server recognised an imported file as. */
+export type DataImportDetected = {
+  id: string;
+  label: string;
+  system: string;
+  dataType: string;
+};
+
+/** The contact-import counts the server echoes back. */
+export type DataImportCounts = {
+  parsed: number;
+  customersCreated: number;
+  vendorsCreated: number;
+  skipped: number;
+  enriched: number;
+  enrichmentFailures: number;
+};
+
+/** The file-import result the server echoes back. */
+export type DataImportSummary = {
+  detected: DataImportDetected | null;
+  summary: DataImportCounts;
+  errors: string[];
 };
 
 /** The bank-import result the server echoes back. */

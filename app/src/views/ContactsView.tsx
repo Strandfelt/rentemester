@@ -8,6 +8,7 @@
 // fetched from the response. A company with no contacts shows a graceful
 // empty state.
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
@@ -18,6 +19,7 @@ import type {
 } from "../lib/types";
 import { ErrorState, Loading } from "../components/Feedback";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import { ImportModal } from "../components/ImportModal";
 
 /** VAT-treatment codes from the ledger, mapped to a Danish label. */
 const VAT_TREATMENT_LABELS: Record<string, string> = {
@@ -34,6 +36,8 @@ export function ContactsView() {
     () => api.contacts(slug),
     [slug],
   );
+  // True while the generic file-import modal is open.
+  const [importing, setImporting] = useState(false);
 
   if (state.loading && !state.data)
     return <Loading label="Henter kontakter…" />;
@@ -60,6 +64,13 @@ export function ContactsView() {
           </p>
         </div>
         <div className="row-actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setImporting(true)}
+          >
+            Importér
+          </button>
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
             Administrér
           </Link>
@@ -73,12 +84,21 @@ export function ContactsView() {
         onYearChange={setYear}
       />
 
+      {importing && (
+        <ImportModal
+          slug={slug}
+          onImported={state.reload}
+          onClose={() => setImporting(false)}
+        />
+      )}
+
       {total === 0 ? (
         <div className="card archived-notice">
           <h3>Ingen kontakter endnu</h3>
           <p className="muted">
             Der er ingen registrerede kunder eller leverandører for denne
-            virksomhed. Kontakter oprettes som stamdata og vises her.
+            virksomhed. Brug «Importér» ovenfor til at hente kontakter fra et
+            tidligere bogføringssystem — eller opret dem som stamdata.
           </p>
         </div>
       ) : (

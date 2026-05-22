@@ -74,7 +74,7 @@ export function BankView() {
       )}
 
       {b.archived ? (
-        <ArchivedNotice year={b.selectedYear} />
+        <ArchivedBankView bank={b} currency={currency} />
       ) : (
         <>
           <BankDifferenceBanner bank={b} currency={currency} />
@@ -250,16 +250,86 @@ function BankDifferenceBanner({
   );
 }
 
-function ArchivedNotice({ year }: { year: string }) {
+// An archived fiscal year (#197): the ledger lives in the read-only archive,
+// but the imported bank statement is live, append-only data that legitimately
+// spans archived years too. The transactions are shown; the booked-balance and
+// reconciliation comparison is not — there is no live ledger for that year to
+// reconcile against, so a "difference" banner would be misleading.
+function ArchivedBankView({
+  bank,
+  currency,
+}: {
+  bank: CompanyBank;
+  currency: string;
+}) {
+  // The statement's closing balance for an archived year is the running
+  // balance after its last imported transaction — exact, unlike a cross-year
+  // "as of year-end" figure that could borrow a balance from another year.
+  const lastTx =
+    bank.transactions.length > 0
+      ? bank.transactions[bank.transactions.length - 1]!
+      : null;
+  const closingBalance = lastTx?.runningBalance ?? null;
   return (
-    <div className="card archived-notice">
-      <h3>Bank er ikke tilgængelig for {year}</h3>
-      <p className="muted">
-        {year} er et arkiveret regnskabsår. Bankafstemning bygger på de
-        importerede kontoudtog, og der findes ingen kontoudtogsdata for et
-        arkiveret år — det vises derfor ikke. Resultatopgørelse, balance,
-        saldobalance og posteringer for {year} er tilgængelige.
-      </p>
-    </div>
+    <>
+      <div className="card bank-diff-banner neutral">
+        <span className="flag">Arkiveret år</span>
+        <p>
+          {bank.selectedYear} er et arkiveret regnskabsår fra et tidligere
+          bogføringssystem. Banktransaktionerne fra det importerede kontoudtog
+          vises herunder. Selve bogføringen og afstemningen for arkiverede år
+          ligger i regnskabet fra dengang — ikke i Rentemesters aktive ledger.
+        </p>
+      </div>
+
+      {lastTx && closingBalance !== null && (
+        <div className="status-grid bank-summary">
+          <div className="card status-card">
+            <h3>Saldo på kontoudtoget</h3>
+            <div className="status-figure">
+              {formatKroner(closingBalance, currency)}
+            </div>
+            <p className="muted status-note">
+              Efter seneste postering den {lastTx.date}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="card statement-card table-scroll">
+        <table className="data statement-table">
+          <thead>
+            <tr>
+              <th>Dato</th>
+              <th>Tekst</th>
+              <th className="num">Beløb</th>
+              <th className="num">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bank.transactions.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="empty-inline">
+                  Ingen banktransaktioner importeret for {bank.selectedYear}.
+                </td>
+              </tr>
+            ) : (
+              bank.transactions.map((tx) => (
+                <tr key={tx.id}>
+                  <td className="entry-date">{tx.date}</td>
+                  <td>{tx.text}</td>
+                  <td className="num">{formatKroner(tx.amount, currency)}</td>
+                  <td className="num">
+                    {tx.runningBalance === null
+                      ? "—"
+                      : formatKroner(tx.runningBalance, currency)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

@@ -435,26 +435,13 @@ export function buildCompanyBank(
       accountNo: a.accountNo,
       ledgerAccountNo: a.ledgerAccountNo,
     }));
-    if (ctx.isArchivedOnly) {
-      return {
-        slug: ctx.entry.slug,
-        selectedYear: ctx.selectedLabel,
-        archived: true,
-        company: companyBlock,
-        fiscalYears: ctx.years,
-        periodStart: `${ctx.selectedLabel}-01-01`,
-        periodEnd: `${ctx.selectedLabel}-12-31`,
-        accounts,
-        bookedBalance: 0,
-        actualBalance: null,
-        difference: null,
-        bankStatementStatus: "none" as "known" | "no-balance-column" | "none",
-        transactions: [] as BankTransactionRow[],
-        matchedCount: 0,
-        unmatchedCount: 0,
-      };
-    }
-
+    // Archived years (#197) keep their LEDGER in the read-only archive — but a
+    // bank statement is live, append-only data that legitimately spans both
+    // archived and live years (a Dinero migration archives 2023-2025 while the
+    // owner's bank CSV covers 2024-2026). The imported `bank_transactions` rows
+    // are therefore shown for every selected year; only the `archived` flag
+    // tells the cockpit to present them without the live-ledger reconciliation
+    // and booked-balance comparison it cannot meaningfully do for those years.
     const yearNum = parseInt(ctx.selectedLabel, 10);
     const yearStart = `${yearNum}-01-01`;
     const yearEnd = `${yearNum}-12-31`;
@@ -532,7 +519,7 @@ export function buildCompanyBank(
     return {
       slug: ctx.entry.slug,
       selectedYear: ctx.selectedLabel,
-      archived: false,
+      archived: ctx.isArchivedOnly,
       company: companyBlock,
       fiscalYears: ctx.years,
       periodStart: yearStart,

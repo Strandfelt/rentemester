@@ -67,13 +67,15 @@ describe("BankView — Bank", () => {
     ).toBeInTheDocument();
   });
 
-  test("an archived year shows the arkiv notice", async () => {
-    mockFetch(
-      route({ archived: true, selectedYear: "2025", transactions: [] }),
-    );
+  test("an archived year shows the imported transactions with an arkiv notice", async () => {
+    mockFetch(route({ archived: true, selectedYear: "2025" }));
     renderView();
     expect(
-      await screen.findByText(/Bank er ikke tilgængelig for 2025/),
+      await screen.findByText(/2025 er et arkiveret regnskabsår/),
+    ).toBeInTheDocument();
+    // The imported statement rows are still shown for the archived year.
+    expect(
+      screen.getByText("Indbetaling faktura 1001"),
     ).toBeInTheDocument();
   });
 
@@ -89,11 +91,9 @@ describe("BankView — Bank", () => {
   });
 
   test("an archived year offers no import action", async () => {
-    mockFetch(
-      route({ archived: true, selectedYear: "2025", transactions: [] }),
-    );
+    mockFetch(route({ archived: true, selectedYear: "2025" }));
     renderView();
-    await screen.findByText(/Bank er ikke tilgængelig for 2025/);
+    await screen.findByText(/2025 er et arkiveret regnskabsår/);
     expect(
       screen.queryByRole("button", { name: "Importér kontoudtog" }),
     ).not.toBeInTheDocument();

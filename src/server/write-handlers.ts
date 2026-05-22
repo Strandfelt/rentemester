@@ -20,6 +20,8 @@ import {
   syncUnmatchedBankTransactionExceptions,
 } from "../core/exceptions";
 import { importBankCsv } from "../core/bank";
+import { importDineroContacts } from "../core/import/dinero-contacts";
+import { detectImportSource } from "../core/import/source-detect";
 import { ingestDocument, type DocumentMetadata } from "../core/documents";
 import { resolveDocumentMasterData, resolveInvoiceMasterData } from "../core/master-data";
 import {
@@ -219,6 +221,76 @@ export async function handleBankImport(
       profile: result.profile,
       balanceWarnings: result.balanceWarnings ?? [],
       exceptionsCreated: result.exceptionsCreated ?? 0,
+    },
+  });
+}
+
+/**
+ * POST /api/companies/:slug/import — the cockpit's generic file-import.
+ *
+ * Body: `{ fileName: string, content: string, enrichCvr?: boolean,
+ * confirm: true }`. The browser reads the chosen export file and POSTs its
+ * text; the handler recognises WHICH system the file came from
+ * (`detectImportSource`) and routes it to the matching core importer. Today
+ * one source is recognised — a Dinero "Kontakter" CSV, landed in the
+ * customer/vendor master data via the same `importDineroContacts` core the
+ * CLI's `import contacts` uses.
+ *
+ * A write (it appends master-data rows) so `requireConfirm` is set; the upload
+ * route is capped by `maxBodyBytes`. Goes through `withCompanyMutation`, so the
+ * backup lock, the localhost gate and actor attribution all apply. A file that
+ * matches no known format is a 400 with the supported-formats list.
+ */
+export async function handleDataImport(
+  config: ServerConfig,
+  request: Request,
+  slug: string,
+): Promise<Response> {
+  const result = await withCompanyMutation(
+    request,
+    config,
+    slug,
+    async (ctx, body) => {
+      const fileName = requireBodyString(body, "fileName");
+      const content = requireBodyString(body, "content");
+      const enrichCvr = body.enrichCvr === true;
+
+      const detection = detectImportSource(fileName, content);
+      if (!detection.ok) {
+        throw ApiError.badRequest(detection.errors.join(" "));
+      }
+      const source = detection.module;
+
+      if (source.dataType === "contacts") {
+        const imported = await importDineroContacts(ctx.db, content, {
+          enrichCvr,
+        });
+        return {
+          ok: imported.ok,
+          errors: imported.errors,
+          detected: {
+            id: source.id,
+            label: source.label,
+            system: source.system,
+            dataType: source.dataType,
+          },
+          summary: imported.summary,
+        };
+      }
+
+      // Unreachable today — every registered module's dataType is "contacts".
+      throw ApiError.badRequest(
+        `Datatypen '${source.dataType}' understøttes ikke endnu.`,
+      );
+    },
+    { requireConfirm: true, maxBodyBytes: MAX_UPLOAD_BODY_BYTES },
+  );
+
+  return okResponse({
+    import: {
+      detected: result.detected,
+      summary: result.summary,
+      errors: result.errors,
     },
   });
 }

@@ -55,6 +55,7 @@ import {
   handleBankImport,
   handleClosePeriod,
   handleCompanyProfile,
+  handleDataImport,
   handleDocumentIngest,
   handleInvoiceIssue,
   handleInvoicePost,
@@ -605,6 +606,15 @@ export async function handleRequest(
       if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
       const slug = decodeURIComponent(bankImportMatch[1]!);
       return await handleBankImport(config, request, slug);
+    }
+
+    // Cockpit write route: the generic file-import. Recognises which system
+    // an export file came from and routes it to the matching core importer.
+    const dataImportMatch = /^\/api\/companies\/([^/]+)\/import$/.exec(path);
+    if (dataImportMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(dataImportMatch[1]!);
+      return await handleDataImport(config, request, slug);
     }
 
     // Bookkeeping write route (#213, slice 3): ingest a document (bilag).
