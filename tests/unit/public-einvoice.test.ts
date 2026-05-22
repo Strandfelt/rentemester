@@ -10,6 +10,8 @@ import {
   exportPublicEInvoiceOioUbl,
   exportPublicEInvoicePreview,
   submitPublicEInvoicePeppol,
+  transmitPublicEInvoicePeppol,
+  type PeppolTransmitter,
 } from "../../src/core/public-einvoice";
 
 const PUBLIC_INVOICE = {
@@ -364,6 +366,210 @@ describe("public e-invoice PEPPOL submission", () => {
       .get(result.idempotencyKey!) as { status: string; transmission_id: string | null };
     expect(row.status).toBe("acknowledged");
     expect(row.transmission_id).toBe("tx-9001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("public e-invoice PEPPOL transmission", () => {
+  const okTransmitter: PeppolTransmitter = () => ({
+    ok: true,
+    transmissionId: "tx-test-0001",
+    transmittedAt: "2026-05-22T10:00:00Z",
+  });
+  const failTransmitter: PeppolTransmitter = () => ({
+    ok: false,
+    error: "access point unavailable",
+  });
+
+  test("transmits an invoice and records it as an acknowledged submission", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-peppol-transmit-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const issued = issueInvoice(db, root, { ...PUBLIC_INVOICE });
+    expect(issued.ok).toBe(true);
+
+    const result = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      okTransmitter,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("acknowledged");
+    expect(result.transmissionId).toBe("tx-test-0001");
+
+    const row = db
+      .query(
+        "SELECT status, transmission_id, acknowledged_at FROM peppol_submissions WHERE invoice_document_id = ?",
+      )
+      .get(issued.documentId!) as {
+      status: string;
+      transmission_id: string | null;
+      acknowledged_at: string | null;
+    };
+    expect(row.status).toBe("acknowledged");
+    expect(row.transmission_id).toBe("tx-test-0001");
+    expect(row.acknowledged_at).toBe("2026-05-22T10:00:00Z");
+
+    const audit = db
+      .query("SELECT message FROM audit_log WHERE event_type = 'public_einvoice_peppol_transmission'")
+      .all() as Array<{ message: string }>;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.message).toContain("tx-test-0001");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("is idempotent: an already-transmitted invoice is not transmitted again", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-peppol-transmit-idem-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const issued = issueInvoice(db, root, { ...PUBLIC_INVOICE });
+    expect(issued.ok).toBe(true);
+
+    let calls = 0;
+    const countingTransmitter: PeppolTransmitter = () => {
+      calls += 1;
+      return { ok: true, transmissionId: "tx-once", transmittedAt: "2026-05-22T10:00:00Z" };
+    };
+
+    const first = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      countingTransmitter,
+    );
+    const second = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      countingTransmitter,
+    );
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(second.status).toBe("acknowledged");
+    expect(second.transmissionId).toBe("tx-once");
+    // The transmitter ran exactly once — the second call short-circuits.
+    expect(calls).toBe(1);
+    const rows = db.query("SELECT id FROM peppol_submissions").all() as Array<{ id: number }>;
+    expect(rows).toHaveLength(1);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("records a failed transmission in the audit log without writing a submission row", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-peppol-transmit-fail-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const issued = issueInvoice(db, root, { ...PUBLIC_INVOICE });
+    expect(issued.ok).toBe(true);
+
+    const result = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      failTransmitter,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("access point unavailable");
+
+    const rows = db.query("SELECT id FROM peppol_submissions").all() as Array<{ id: number }>;
+    expect(rows).toHaveLength(0);
+
+    const audit = db
+      .query("SELECT message FROM audit_log WHERE event_type = 'public_einvoice_peppol_transmission'")
+      .all() as Array<{ message: string }>;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.message).toContain("failed");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a failed transmission can be retried and reach acknowledged", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-peppol-transmit-retry-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const issued = issueInvoice(db, root, { ...PUBLIC_INVOICE });
+    expect(issued.ok).toBe(true);
+
+    const failed = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      failTransmitter,
+    );
+    expect(failed.ok).toBe(false);
+
+    const retried = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      okTransmitter,
+    );
+    expect(retried.ok).toBe(true);
+    expect(retried.status).toBe("acknowledged");
+
+    const rows = db.query("SELECT status FROM peppol_submissions").all() as Array<{ status: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe("acknowledged");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("surfaces OIOUBL validation errors without calling the transmitter", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-peppol-transmit-invalid-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    // Omit dueDate -> OIOUBL handoff validation fails before any transport.
+    const { dueDate, ...withoutDueDate } = PUBLIC_INVOICE;
+    const issued = issueInvoice(db, root, withoutDueDate);
+    expect(issued.ok).toBe(true);
+
+    let calls = 0;
+    const spyTransmitter: PeppolTransmitter = () => {
+      calls += 1;
+      return { ok: true, transmissionId: "tx-x", transmittedAt: "2026-05-22T10:00:00Z" };
+    };
+
+    const result = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      spyTransmitter,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("dueDate");
+    expect(calls).toBe(0);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("treats a thrown transmitter error as a failed transmission", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-peppol-transmit-throw-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    const issued = issueInvoice(db, root, { ...PUBLIC_INVOICE });
+    expect(issued.ok).toBe(true);
+
+    const throwingTransmitter: PeppolTransmitter = () => {
+      throw new Error("socket reset by access point");
+    };
+
+    const result = await transmitPublicEInvoicePeppol(
+      db,
+      { invoiceDocumentId: issued.documentId!, accessPoint: ACCESS_POINT },
+      throwingTransmitter,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("socket reset by access point");
+
+    const rows = db.query("SELECT id FROM peppol_submissions").all() as Array<{ id: number }>;
+    expect(rows).toHaveLength(0);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

@@ -476,6 +476,8 @@ export type SubmitPublicEInvoicePeppolResult = {
   /** True when an existing submission record was reused (idempotent re-run). */
   duplicate?: boolean;
   outPath?: string;
+  /** Transport transmission id, set once the invoice has actually been transmitted. */
+  transmissionId?: string;
   appliedRules: string[];
   errors: string[];
 };
@@ -577,6 +579,38 @@ function rowToSubmissionResult(
 }
 
 /**
+ * Derive the stable identity of a public-invoice submission shared by the
+ * submission and transmission paths: the invoice number, the receiver
+ * participant id (read back from the OIOUBL EndpointID so it stays consistent
+ * with the validated handoff) and the idempotency key.
+ */
+function deriveSubmissionIdentity(
+  oioubl: ExportPublicEInvoiceResult,
+  invoiceDocumentId: number,
+  accessPoint: PeppolAccessPointConfig,
+) {
+  const invoiceNumber = oioubl.invoiceNumber ?? String(invoiceDocumentId);
+  const endpointMatch = oioubl.xml?.match(
+    new RegExp(`<cbc:EndpointID schemeID="${BUYER_ENDPOINT_SCHEME_ID}">([^<]+)</cbc:EndpointID>`),
+  );
+  const receiver = endpointMatch
+    ? `${BUYER_ENDPOINT_SCHEME_ID}:${endpointMatch[1]}`
+    : `${BUYER_ENDPOINT_SCHEME_ID}:unknown`;
+  const idempotencyKey = createHash("sha256")
+    .update(
+      [
+        invoiceNumber,
+        oioubl.sha256 ?? "",
+        accessPoint.accessPointId.trim(),
+        accessPoint.senderEndpointId.trim(),
+        receiver,
+      ].join("|"),
+    )
+    .digest("hex");
+  return { invoiceNumber, receiver, idempotencyKey };
+}
+
+/**
  * Produces a deterministic PEPPOL submission envelope for an already-validated
  * public-recipient invoice, building on the existing OIOUBL handoff artifact.
  *
@@ -622,28 +656,11 @@ export function submitPublicEInvoicePeppol(
     };
   }
 
-  const invoiceNumber = oioubl.invoiceNumber ?? String(input.invoiceDocumentId);
-
-  // Derive the receiver endpoint id from the OIOUBL artifact (EndpointID),
-  // so the submission envelope stays consistent with the validated handoff.
-  const endpointMatch = oioubl.xml?.match(
-    new RegExp(`<cbc:EndpointID schemeID="${BUYER_ENDPOINT_SCHEME_ID}">([^<]+)</cbc:EndpointID>`),
+  const { invoiceNumber, receiver, idempotencyKey } = deriveSubmissionIdentity(
+    oioubl,
+    input.invoiceDocumentId,
+    input.accessPoint,
   );
-  const receiver = endpointMatch
-    ? `${BUYER_ENDPOINT_SCHEME_ID}:${endpointMatch[1]}`
-    : `${BUYER_ENDPOINT_SCHEME_ID}:unknown`;
-
-  const idempotencyKey = createHash("sha256")
-    .update(
-      [
-        invoiceNumber,
-        oioubl.sha256,
-        input.accessPoint.accessPointId.trim(),
-        input.accessPoint.senderEndpointId.trim(),
-        receiver,
-      ].join("|"),
-    )
-    .digest("hex");
 
   // Idempotent fast-path: an identical submission already exists.
   const existing = db
@@ -718,4 +735,147 @@ export function submitPublicEInvoicePeppol(
     appliedRules: [PEPPOL_SUBMIT_RULE_ID],
     errors: [],
   };
+}
+
+// ============================================================================
+// PEPPOL transmission
+//
+// One step beyond the #128 submission envelope: hand the OIOUBL invoice to a
+// transport that actually delivers it through an access point, and record the
+// outcome.
+//
+// The transport itself is an INJECTED dependency (`PeppolTransmitter`) so this
+// orchestration stays deterministic and unit-testable. The production
+// transmitter drives the self-hosted NemHandel eDelivery access point
+// (Oxalis); it is wired in separately once an access point and a MitID system
+// certificate are available, and its credentials never enter core state.
+//
+// A successful transmission is recorded as an `acknowledged` peppol_submissions
+// row (reusing submitPublicEInvoicePeppol's acknowledgement path). A failed
+// attempt is recorded only in the append-only audit log — no submission row is
+// written, so a later retry can still reach `acknowledged`.
+// ============================================================================
+
+/** Outcome of one transport attempt through an access point. */
+export type PeppolTransmissionOutcome =
+  | { ok: true; transmissionId: string; transmittedAt: string }
+  | { ok: false; error: string };
+
+/**
+ * Performs the actual AS4 transport of an OIOUBL invoice through an access
+ * point. Injected so the orchestration here stays deterministic and testable.
+ */
+export type PeppolTransmitter = (input: {
+  oioublXml: string;
+  oioublSha256: string;
+  receiverEndpointId: string;
+  accessPoint: PeppolAccessPointConfig;
+}) => Promise<PeppolTransmissionOutcome> | PeppolTransmissionOutcome;
+
+export type TransmitPublicEInvoicePeppolInput = {
+  invoiceDocumentId: number;
+  accessPoint: PeppolAccessPointConfig;
+};
+
+/**
+ * Transmits a public-recipient invoice through an access point and records the
+ * outcome.
+ *
+ * Idempotent: when the invoice was already transmitted (an `acknowledged`
+ * submission row exists for the derived idempotency key) the transmitter is
+ * not invoked again. A failed attempt is recorded in the audit log only, so a
+ * subsequent retry can still succeed and produce the `acknowledged` record.
+ */
+export async function transmitPublicEInvoicePeppol(
+  db: Database,
+  input: TransmitPublicEInvoicePeppolInput,
+  transmitter: PeppolTransmitter,
+): Promise<SubmitPublicEInvoicePeppolResult> {
+  const configErrors = validateAccessPointConfig(input.accessPoint);
+  if (configErrors.length > 0) {
+    return { ok: false, appliedRules: [PEPPOL_SUBMIT_RULE_ID], errors: configErrors };
+  }
+
+  // Reuse the shipped OIOUBL handoff slice as the validated transport payload;
+  // its own validation surfaces missing public-recipient metadata.
+  const oioubl = exportPublicEInvoiceOioUbl(db, { invoiceDocumentId: input.invoiceDocumentId });
+  if (!oioubl.ok || !oioubl.sha256 || !oioubl.xml) {
+    return {
+      ok: false,
+      invoiceNumber: oioubl.invoiceNumber,
+      appliedRules: [PEPPOL_SUBMIT_RULE_ID, ...oioubl.appliedRules],
+      errors:
+        oioubl.errors.length > 0
+          ? oioubl.errors
+          : ["PEPPOL transmission could not generate the required OIOUBL handoff artifact"],
+    };
+  }
+
+  const { invoiceNumber, receiver, idempotencyKey } = deriveSubmissionIdentity(
+    oioubl,
+    input.invoiceDocumentId,
+    input.accessPoint,
+  );
+
+  // Idempotent fast-path: this invoice was already transmitted successfully.
+  const existing = db
+    .query(
+      `SELECT id, invoice_document_id, invoice_no, idempotency_key, submission_reference,
+              access_point_id, receiver_endpoint_id, oioubl_sha256, envelope_sha256,
+              envelope_xml, status, transmission_id, acknowledged_at
+       FROM peppol_submissions WHERE idempotency_key = ? LIMIT 1`,
+    )
+    .get(idempotencyKey) as PeppolSubmissionRow | null;
+  if (existing && existing.status === "acknowledged") {
+    return {
+      ...rowToSubmissionResult(existing, invoiceNumber, true),
+      transmissionId: existing.transmission_id ?? undefined,
+    };
+  }
+
+  // Perform the transport. A thrown error is treated as a failed attempt.
+  let outcome: PeppolTransmissionOutcome;
+  try {
+    outcome = await transmitter({
+      oioublXml: oioubl.xml,
+      oioublSha256: oioubl.sha256,
+      receiverEndpointId: receiver,
+      accessPoint: input.accessPoint,
+    });
+  } catch (error) {
+    outcome = { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  if (!outcome.ok) {
+    insertAuditLog(db, {
+      eventType: "public_einvoice_peppol_transmission",
+      entityType: "document",
+      entityId: input.invoiceDocumentId,
+      message:
+        `PEPPOL transmission failed for invoice ${invoiceNumber} ` +
+        `via access point ${input.accessPoint.accessPointId.trim()}: ${outcome.error}`,
+    });
+    return {
+      ok: false,
+      invoiceNumber,
+      appliedRules: [PEPPOL_SUBMIT_RULE_ID],
+      errors: [`PEPPOL transmission failed: ${outcome.error}`],
+    };
+  }
+
+  // Success: record the submission as acknowledged with the transmission id.
+  const submitted = submitPublicEInvoicePeppol(db, {
+    invoiceDocumentId: input.invoiceDocumentId,
+    accessPoint: input.accessPoint,
+    acknowledgement: { transmissionId: outcome.transmissionId, acknowledgedAt: outcome.transmittedAt },
+  });
+  insertAuditLog(db, {
+    eventType: "public_einvoice_peppol_transmission",
+    entityType: "document",
+    entityId: input.invoiceDocumentId,
+    message:
+      `Transmitted invoice ${invoiceNumber} via access point ${input.accessPoint.accessPointId.trim()} ` +
+      `(transmission ${outcome.transmissionId}, status ${submitted.status})`,
+  });
+  return { ...submitted, transmissionId: outcome.transmissionId };
 }
