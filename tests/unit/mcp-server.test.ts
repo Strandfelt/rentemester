@@ -476,6 +476,45 @@ describe("MCP tools full surface (#78)", () => {
     expect(structured?.errors?.[0]).toContain("confirm: true required");
   });
 
+  test("#307 — system_restore_backup with confirm:true but omitted confirmText returns the envelope, not -32602", async () => {
+    // confirmText is schema-optional: an omitted confirmText must reach the
+    // handler and yield the normal { ok:false, errors:[...] } envelope —
+    // exactly like a confirmText MISMATCH — never a raw -32602 input error.
+    const response = await client.send("tools/call", {
+      name: "system_restore_backup",
+      arguments: {
+        backupDir: "/tmp/does-not-exist",
+        targetCompany: "/tmp/does-not-exist-target",
+        confirm: true,
+      },
+    });
+    expect(response.error).toBeUndefined();
+    const structured = response.result?.structuredContent;
+    expect(structured, "expected an envelope, got a raw -32602").toBeDefined();
+    expect(structured?.ok).toBe(false);
+    expect(structured?.errors?.[0]).toContain("confirmText must match");
+  });
+
+  test("#306 — system_restore_backup accepts a publicKey (ed25519) parameter", async () => {
+    // The ed25519 public key must be reachable from MCP, mirroring the CLI's
+    // --public-key. Supplying it on a non-existent backup still surfaces a
+    // normal envelope (no schema rejection of the publicKey field).
+    const response = await client.send("tools/call", {
+      name: "system_restore_backup",
+      arguments: {
+        backupDir: "/tmp/does-not-exist",
+        targetCompany: "/tmp/does-not-exist-target",
+        publicKey: "/tmp/does-not-exist.pub",
+        confirm: true,
+        confirmText: "RESTORE /tmp/does-not-exist-target",
+      },
+    });
+    expect(response.error).toBeUndefined();
+    const structured = response.result?.structuredContent;
+    expect(structured, "publicKey must be an accepted schema field").toBeDefined();
+    expect(structured?.ok).toBe(false);
+  });
+
   test("missing company path error does not leak the absolute path to the caller", async () => {
     const secretPath = join(tmpdir(), "rentemester-secret-host-dir-abc123");
     const response = await client.send("tools/call", {

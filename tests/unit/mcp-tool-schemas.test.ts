@@ -688,6 +688,31 @@ describe("#277 — older tools' flat scalar fields carry field descriptions", ()
     expect(typeof desc).toBe("string");
     expect(desc).toContain("RESTORE <targetCompany>");
   });
+
+  test("#306 — system_restore_backup.verifyKey is described as the symmetric HMAC key", () => {
+    const props = schemaOf("system_restore_backup").properties ?? {};
+    const desc: string = props.verifyKey?.description ?? "";
+    expect(desc.toLowerCase()).toContain("hmac");
+    expect(desc.toLowerCase()).toContain("symmetric");
+    // It must NOT mislabel itself AS the ed25519 public key — the previous
+    // (buggy) description said "an ed25519 public key used to verify ...".
+    expect(desc.toLowerCase()).not.toContain("an ed25519 public key");
+  });
+
+  test("#306 — system_restore_backup exposes a publicKey (ed25519) field", () => {
+    const props = schemaOf("system_restore_backup").properties ?? {};
+    const desc: string = props.publicKey?.description ?? "";
+    expect(typeof props.publicKey, "publicKey field must exist").toBe("object");
+    expect(desc.toLowerCase()).toContain("ed25519");
+  });
+
+  test("#307 — system_restore_backup.confirmText is schema-optional", () => {
+    // confirmText must NOT be in the required[] list, so an omitted
+    // confirmText reaches the handler and gets the envelope (not -32602).
+    const schema = schemaOf("system_restore_backup");
+    const required: string[] = schema.required ?? [];
+    expect(required).not.toContain("confirmText");
+  });
 });
 
 describe("#294 — scalar-flag tools carry field descriptions and the documentId|invoiceNumber selector", () => {

@@ -69,6 +69,13 @@ Without it the server returns
 cannot post by accident, and a dry "what would happen" call is impossible —
 deciding to write is always an explicit, logged act.
 
+> **Exception — the destructive tool says `destructive`, not `write`.** The
+> one `destructive` tool, `system_restore_backup`, returns
+> `confirm: true required for destructive tool system_restore_backup` — the
+> word **destructive**, not **write**. An agent that string-matches
+> `required for write tool` will therefore MISS the restore tool. Match on
+> the shared prefix `confirm: true required for` to catch both.
+
 `confirm: true` is not a rubber stamp. The agent should only set it once it
 has gathered the preconditions (read first — see below) and is committing to
 the mutation.
@@ -127,6 +134,30 @@ first; only then fall through to reading `structuredContent.errors[]`.
 files in the target company directory — the double confirmation is the
 guardrail against pointing it at the wrong directory.
 
+Both gates yield the normal `{ ok:false, errors:[...] }` envelope — never a
+raw `-32602` (#307):
+
+- A missing `confirm` (or `confirm: false`) →
+  `confirm: true required for destructive tool system_restore_backup`.
+  Note the word **destructive**, not **write**.
+- A missing/empty **or** mismatched `confirmText` →
+  `confirmText must match 'RESTORE <targetCompany>' exactly (got: '…')`.
+  `confirmText` is schema-OPTIONAL precisely so that an omitted value
+  reaches the handler and gets this envelope, instead of being rejected by
+  SDK input validation with a `-32602`. Omission and mismatch are therefore
+  indistinguishable from the agent's side: both are the same envelope.
+
+`system_restore_backup` also accepts two optional verification-key paths,
+mirroring the CLI's `--verify-key` / `--public-key`:
+
+- `verifyKey` — path to the **symmetric HMAC** verification key
+  (`.backup-manifest.key`). Verifies the manifest's HMAC tag.
+- `publicKey` — path to the **asymmetric ed25519 public key**. Verifies the
+  manifest's ed25519 signature, letting a third party check authenticity
+  without the HMAC key.
+
+They are distinct keys; do not pass an ed25519 `.pub` file as `verifyKey`.
+
 ## Ordering — read before you write
 
 There is no enforced phase order, but the correct shape of work is
@@ -164,7 +195,8 @@ Common precondition failures and the fix:
 | `errors[]` says | Meaning | Fix |
 |---|---|---|
 | `confirm: true required for write tool …` | Write attempted without `confirm`. | Re-call with `confirm: true`. |
-| `confirmText must match …` | `system_restore_backup` confirmText wrong. | Supply `RESTORE <targetCompany>` exactly. |
+| `confirm: true required for destructive tool system_restore_backup` | `system_restore_backup` attempted without `confirm`. The destructive tool says `destructive`, not `write` — match `confirm: true required for` to catch both. | Re-call with `confirm: true`. |
+| `confirmText must match …` | `system_restore_backup` confirmText missing/empty **or** wrong (#307 — both cases give this envelope, never `-32602`). | Supply `RESTORE <targetCompany>` exactly. |
 | balance / "går ikke i nul" | Journal entry debit ≠ credit. | Correct the lines so they balance. |
 | `<field> <date> falls in <closed\|reported> period <kind> <start>..<end>` | Posting into a closed or reported period. | Post in an open period. Reopening a closed period is **CLI-only** — there is no MCP tool for it; surface it to the human to run `rentemester period reopen` (a controlled, audit-logged action; a `reported` period cannot be reopened). |
 | VIES / VAT validation missing | EU customer not VAT-validated. | Run `customer_validate_vat` first. |
