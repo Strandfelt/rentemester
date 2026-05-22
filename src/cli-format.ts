@@ -1,5 +1,11 @@
 import { vatFilingDeadline } from "./core/vat";
 import { formatKronerDa } from "./core/money";
+import {
+  invoiceStatusDa,
+  severityDa,
+  exceptionStatusDa,
+  FALLBACK_UKENDT,
+} from "./core/messages";
 
 export type OutputFormat = "json" | "human";
 
@@ -232,25 +238,6 @@ function asArray(value: unknown): Array<Record<string, unknown>> {
     ? value.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
     : [];
 }
-
-/** Danish labels for the exception severities and statuses. */
-const SEVERITY_DA: Record<string, string> = {
-  low: "lav",
-  medium: "middel",
-  high: "høj",
-};
-const EXCEPTION_STATUS_DA: Record<string, string> = {
-  open: "åben",
-  resolved: "løst",
-};
-const INVOICE_STATUS_DA: Record<string, string> = {
-  open: "åben",
-  paid: "betalt",
-  credited: "krediteret",
-  refunded: "refunderet",
-  overpaid: "overbetalt",
-  written_off: "afskrevet",
-};
 
 /**
  * Render a read/report `result` payload as Danish human-readable text.
@@ -689,7 +676,7 @@ function renderInvoiceStatus(result: Record<string, unknown>): string {
   lines.push("");
 
   const statusCode = typeof result.status === "string" ? result.status : "";
-  const statusDa = INVOICE_STATUS_DA[statusCode] ?? statusCode ?? "ukendt";
+  const statusDa = invoiceStatusDa(statusCode) ?? FALLBACK_UKENDT;
   const open = typeof result.openBalance === "number" ? result.openBalance : Number(result.openBalance);
 
   if (statusCode === "paid") {
@@ -1105,8 +1092,13 @@ function renderExceptionsList(result: Record<string, unknown>): string {
   );
   lines.push("");
   for (const row of rows) {
-    const severity = SEVERITY_DA[String(row.severity)] ?? asText(row.severity);
-    const status = EXCEPTION_STATUS_DA[String(row.status)] ?? asText(row.status);
+    // `severityDa`/`exceptionStatusDa` echo an unknown code back unchanged;
+    // when the row carries no usable code at all (missing or empty), fall back
+    // to `asText` so the value renders as the standard dash.
+    const severityCode = asText(row.severity, "");
+    const statusCodeRaw = asText(row.status, "");
+    const severity = severityCode ? severityDa(severityCode, "short") : asText(row.severity);
+    const status = statusCodeRaw ? exceptionStatusDa(statusCodeRaw) : asText(row.status);
     lines.push(`#${asText(row.id)} — ${asText(row.message)}`);
     lines.push(`  Type: ${asText(row.type)} | Alvorlighed: ${severity} | Status: ${status}`);
     if (row.requiredAction) {
