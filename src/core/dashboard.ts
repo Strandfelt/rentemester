@@ -23,6 +23,7 @@ import {
   DEFAULT_VAT_PERIOD_TYPE,
   type VatPeriodType,
 } from "./periods";
+import { formatKronerDa } from "./money";
 
 // --------------------------------------------------------------------------
 // Types
@@ -151,27 +152,18 @@ function escapeHtml(value: string | number | null | undefined): string {
 // --------------------------------------------------------------------------
 
 /**
- * Format an amount as `1.234,56 DKK` with non-breaking space before currency.
+ * Format an amount as canonical Danish kroner-og-øre, e.g. `1.234,56 kr.`.
  * Always 2 decimals, period thousand-sep, comma decimal-sep, minus prefix for
- * negatives. Uses scaled integer math via toFixed to avoid float drift on the
- * deterministic input ranges this dashboard operates on (DKK with 2 decimals).
+ * negatives.
+ *
+ * #314: this used to emit `1.234,56 DKK` (NBSP + "DKK" suffix); it now
+ * delegates to the single canonical formatter `formatKronerDa` in
+ * `core/money.ts`, so the dashboard emits the identical `" kr."` string as
+ * every other human-facing surface. The `formatDkk` name is kept because the
+ * dashboard render-engine and its tests reference it.
  */
 export function formatDkk(amount: number): string {
-  if (!Number.isFinite(amount)) return "—";
-  const negative = amount < 0;
-  const abs = Math.abs(amount);
-  // money-allowed: display-only formatting of already-rounded DKK, not currency math.
-  const fixed = abs.toFixed(2);
-  const [whole, frac] = fixed.split(".");
-  let grouped = "";
-  for (let i = 0; i < whole!.length; i++) {
-    const remaining = whole!.length - i;
-    grouped += whole![i];
-    if (remaining > 1 && remaining % 3 === 1) grouped += ".";
-  }
-  const sign = negative ? "-" : "";
-  // Non-breaking space U+00A0 between number and currency.
-  return `${sign}${grouped},${frac} DKK`;
+  return formatKronerDa(amount);
 }
 
 /** YYYY-MM-DD → "17. maj 2026" */
