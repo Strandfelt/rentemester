@@ -778,13 +778,14 @@ export const COMMAND_SPECS: CommandSpec[] = [
   // ===== ANNUAL REPORT (#177) =====
   {
     key: "report annual",
-    usage: "report annual --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--ixbrl-out <file.xhtml>]",
+    usage: "report annual --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--ixbrl-out <file.xhtml>] | report annual --ixbrl-taxonomy",
     description: "Samler en årsrapport for regnskabsklasse B (resultatopgørelse, balance, noteskelet og ledelsespåtegning) for et lukket regnskabsår og kan skrive en deterministisk iXBRL-fil. Rentemester forbereder; ejer/revisor gennemgår og indberetter.",
-    allowedFlags: ["--company", "--from", "--to", "--ixbrl-out"],
+    allowedFlags: ["--company", "--from", "--to", "--ixbrl-out", "--ixbrl-taxonomy"],
     inputNotes: [
       "--from / --to afgrænser regnskabsåret (skal være helt dækket af en lukket/indberettet periode)",
       "Kræver registreret CVR og balancerede bøger",
-      "--ixbrl-out skriver en deterministisk iXBRL (inline-XBRL) XHTML-fil mod et afgrænset micro/small-taksonomi-udsnit",
+      "--ixbrl-out skriver en deterministisk iXBRL (inline-XBRL) XHTML-fil mod et afgrænset, versioneret micro/small-taksonomi-udsnit (resultatopgørelse, balance, ledelsespåtegning og anvendt regnskabspraksis)",
+      "--ixbrl-taxonomy udskriver det afgrænsede iXBRL-taksonomi-udsnit (navn, version og elementliste) uden at læse ledgeren — kræver hverken --from/--to eller --company",
       "--json/--format json-outputtets feltliste (årsrapportens form) er dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå skemaet op dér før maskinel parsing.",
     ],
   },
