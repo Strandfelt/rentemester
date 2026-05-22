@@ -65,6 +65,9 @@ import { registerEmailTools } from "./tools/email";
 // ===== IMPORT ARCHIVE (#197) =====
 import { registerImportTools } from "./tools/import";
 // ===== END IMPORT ARCHIVE (#197) =====
+// ===== PAYABLES / KREDITORSTYRING =====
+import { registerPayableTools } from "./tools/payable";
+// ===== END PAYABLES / KREDITORSTYRING =====
 
 // Wraps a write tool's callback with the opt-in backup lock. The MCP tool
 // files are not uniform — some use the withCompanyDbConfirmed helper, some
@@ -162,4 +165,7 @@ export function registerAllTools(server: McpServer): void {
   // ===== IMPORT ARCHIVE (#197) =====
   registerImportTools(server);
   // ===== END IMPORT ARCHIVE (#197) =====
+  // ===== PAYABLES / KREDITORSTYRING =====
+  registerPayableTools(server);
+  // ===== END PAYABLES / KREDITORSTYRING =====
 }

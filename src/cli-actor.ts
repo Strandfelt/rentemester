@@ -81,6 +81,10 @@ export const MUTATING_COMMANDS = new Set([
   // ===== RUNTIME AGENT (#183) =====
   "agent run",
   // ===== END RUNTIME AGENT (#183) =====
+  // ===== PAYABLES / KREDITORSTYRING =====
+  "payable register",
+  "payable pay",
+  // ===== END PAYABLES / KREDITORSTYRING =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

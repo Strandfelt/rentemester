@@ -1238,3 +1238,76 @@ BEGIN
   SELECT RAISE(ABORT, 'import document links are append-only audit links and cannot be deleted');
 END;
 -- ===== END IMPORT DOCUMENT LINKS (#196) =====
+
+-- ===== PAYABLES / KREDITORSTYRING =====
+-- The accounts-payable open-item register, symmetric to the debitor side.
+-- A registered supplier bill (`payables`) is an open item that owes money to
+-- a creditor: it carries a due date and is recognised in the ledger as a
+-- balanced journal entry (debit expense + købsmoms, credit 7000 Leverandørgæld).
+-- Outgoing bank payments are matched against the open item in `payable_payments`
+-- (debit 7000 Leverandørgæld, credit bank). The open balance is gross amount
+-- minus the sum of applied payments. Both tables are append-only audit data:
+-- corrections go through journal reversals and a fresh payment application,
+-- never an UPDATE/DELETE — exactly like invoice_payments on the debitor side.
+CREATE TABLE IF NOT EXISTS payables (
+  id INTEGER PRIMARY KEY,
+  document_id INTEGER NOT NULL UNIQUE,
+  vendor_id INTEGER,
+  supplier_name TEXT,
+  bill_no TEXT,
+  bill_date TEXT NOT NULL,
+  due_date TEXT NOT NULL,
+  gross_amount NUMERIC NOT NULL CHECK(gross_amount > 0),
+  net_amount NUMERIC NOT NULL CHECK(net_amount >= 0),
+  vat_amount NUMERIC NOT NULL CHECK(vat_amount >= 0),
+  currency TEXT NOT NULL DEFAULT 'DKK',
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(vendor_id) REFERENCES vendors(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE TABLE IF NOT EXISTS payable_payments (
+  id INTEGER PRIMARY KEY,
+  payable_id INTEGER NOT NULL,
+  bank_transaction_id INTEGER,
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  payment_date TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK(amount > 0),
+  currency TEXT NOT NULL DEFAULT 'DKK',
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(payable_id) REFERENCES payables(id),
+  FOREIGN KEY(bank_transaction_id) REFERENCES bank_transactions(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payables_document ON payables(document_id);
+CREATE INDEX IF NOT EXISTS idx_payable_payments_payable ON payable_payments(payable_id);
+
+CREATE TRIGGER IF NOT EXISTS payables_no_update
+BEFORE UPDATE ON payables
+BEGIN
+  SELECT RAISE(ABORT, 'payables are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS payables_no_delete
+BEFORE DELETE ON payables
+BEGIN
+  SELECT RAISE(ABORT, 'payables are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS payable_payments_no_update
+BEFORE UPDATE ON payable_payments
+BEGIN
+  SELECT RAISE(ABORT, 'payable payments are append-only; add a correcting payment application instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS payable_payments_no_delete
+BEFORE DELETE ON payable_payments
+BEGIN
+  SELECT RAISE(ABORT, 'payable payments are append-only; add a correcting payment application instead');
+END;
+-- ===== END PAYABLES / KREDITORSTYRING =====

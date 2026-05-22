@@ -79,6 +79,9 @@ import { register as registerAgent } from "./cli/agent";
 // ===== REGULATORY COVERAGE =====
 import { register as registerReg } from "./cli/reg";
 // ===== END REGULATORY COVERAGE =====
+// ===== PAYABLES / KREDITORSTYRING =====
+import { register as registerPayable } from "./cli/payable";
+// ===== END PAYABLES / KREDITORSTYRING =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -262,6 +265,9 @@ for (const registerFn of [
   // ===== REGULATORY COVERAGE =====
   registerReg,
   // ===== END REGULATORY COVERAGE =====
+  // ===== PAYABLES / KREDITORSTYRING =====
+  registerPayable,
+  // ===== END PAYABLES / KREDITORSTYRING =====
 ]) {
   registerFn(dispatch);
 }
