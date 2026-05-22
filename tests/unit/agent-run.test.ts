@@ -15,6 +15,9 @@ import { initialiseCompanyVolume } from "../../src/core/company";
 import { runAgentLoop } from "../../src/agent/loop";
 import { formatRunReport } from "../../src/agent/run";
 import { AGENT_ACTOR_ID } from "../../src/agent/contract";
+import { openDb, migrate } from "../../src/core/db";
+import { companyPaths } from "../../src/core/paths";
+import { closeAccountingPeriod } from "../../src/core/periods";
 
 const DEMO_DIR = join(import.meta.dir, "..", "..", "examples", "agent-demo");
 const INBOX = join(DEMO_DIR, "inbox");
@@ -180,6 +183,43 @@ describe("runtime bookkeeper agent — deterministic agent-run (#183)", () => {
       expect(report.ok).toBe(false);
       expect(report.errors.join(" ")).toContain("--as-of");
       expect(report.expensesBooked).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #282: the agent-run deadline note for a closed VAT period must report the
+  // momstilsvar in kroner — `netVatPayable` is already a kroner amount, so
+  // labelling it "øre" understates the obligation by a factor of 100.
+  test("a closed VAT period's deadline note shows momstilsvar in kroner, not øre (#282)", () => {
+    const root = freshCompany();
+    try {
+      // Close the previous VAT quarter so its deadline note fires the
+      // "Momsperioden er lukket" branch with the momstilsvar amount.
+      const db = openDb(companyPaths(root).db);
+      migrate(db);
+      const closed = closeAccountingPeriod(db, {
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+        kind: "vat_quarter",
+        createdBy: "system:test",
+        createdByProgram: "agent-run-test",
+      });
+      expect(closed.ok).toBe(true);
+      db.close();
+
+      const report = runAgentLoop({ companyRoot: root, asOf: AS_OF });
+      expect(report.ok).toBe(true);
+
+      const closedQuarter = report.upcomingDeadlines.find(
+        (d) => d.kind === "vat_quarter" && d.periodStart === "2026-01-01" && d.ready,
+      );
+      expect(closedQuarter).toBeDefined();
+      // The note must use the kroner formatter ("kr.") and must NOT label the
+      // amount as "øre".
+      expect(closedQuarter!.note).toContain("momstilsvar");
+      expect(closedQuarter!.note).toContain("kr.");
+      expect(closedQuarter!.note).not.toContain("øre");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

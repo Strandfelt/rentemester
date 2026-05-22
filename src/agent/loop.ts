@@ -38,6 +38,7 @@ import { buildVatReport } from "../core/vat";
 import { buildVatFiling } from "../core/vat-filing";
 import { fiscalYearForDate } from "../core/fiscal-year";
 import { isValidIsoDate, diffDays, addDays } from "../core/dates";
+import { formatKroner } from "../cli-format";
 import {
   AGENT_ACTOR_ID,
   AGENT_PROGRAM,
@@ -534,7 +535,7 @@ function reportVatQuarter(
     daysRemaining,
     ready: periodReady,
     note: periodReady
-      ? `Momsperioden er lukket — momsangivelse klar (momstilsvar ${net} øre).`
+      ? `Momsperioden er lukket — momsangivelse klar (momstilsvar ${formatKroner(net)}).`
       : `Momsperioden er endnu ikke lukket — luk den med 'period close' før momsangivelse.`,
   });
 
