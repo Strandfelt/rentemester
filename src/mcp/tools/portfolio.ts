@@ -27,6 +27,7 @@ import { existsSync } from "node:fs";
 import { z } from "zod";
 import { createCompany, getCompanySettings } from "../../core/company";
 import { companyPaths } from "../../core/paths";
+import { diffDaysSafe as daysBetween } from "../../core/dates";
 import { openDb, migrate } from "../../core/db";
 import { verifyAuditChain } from "../../core/ledger";
 import { buildInvoiceList } from "../../core/invoice-list";
@@ -88,16 +89,6 @@ function quarterPeriodForDate(asOfDate: string): { start: string; end: string } 
   const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
   const pad = (n: number) => String(n).padStart(2, "0");
   return { start: `${year}-${pad(startMonth)}-01`, end: `${year}-${pad(endMonth)}-${pad(lastDay)}` };
-}
-
-/** Whole-day difference `b - a` for two `YYYY-MM-DD` dates. */
-function daysBetween(a: string, b: string): number {
-  const pa = /^(\d{4})-(\d{2})-(\d{2})/.exec(a);
-  const pb = /^(\d{4})-(\d{2})-(\d{2})/.exec(b);
-  if (!pa || !pb) return 0;
-  const da = Date.UTC(parseInt(pa[1]!, 10), parseInt(pa[2]!, 10) - 1, parseInt(pa[3]!, 10));
-  const db = Date.UTC(parseInt(pb[1]!, 10), parseInt(pb[2]!, 10) - 1, parseInt(pb[3]!, 10));
-  return Math.round((db - da) / 86400000);
 }
 
 /**
