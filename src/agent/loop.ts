@@ -277,8 +277,8 @@ function runPhases(db: Database, input: AgentRunInput, report: AgentRunReport): 
           recordException(db, {
             type: "AGENT_DOCUMENT_REJECTED",
             severity: "medium",
-            message: `Bilag ${bilag.stem} was rejected by the ledger: ${(res.errors ?? []).join("; ")}`,
-            requiredAction: "Review the bilag metadata and re-ingest it manually.",
+            message: `Bilag ${bilag.stem} blev afvist af bogføringen: ${(res.errors ?? []).join("; ")}`,
+            requiredAction: "Gennemgå bilagets metadata, ret fejlen, og indlæs bilaget igen manuelt.",
             sourceEvidence: { rule: AGENT_RULE_ID, bilag: bilag.stem, errors: res.errors ?? [] },
           });
         }
@@ -330,10 +330,11 @@ function runPhases(db: Database, input: AgentRunInput, report: AgentRunReport): 
         type: "AGENT_LOW_CONFIDENCE_MATCH",
         severity: "medium",
         message:
-          `Bank transaction ${row.bankTransactionId} "${row.text}" matched document ${best.documentId} ` +
-          `at confidence ${best.confidence.toFixed(2)} — below the ${AUTO_BOOK_CONFIDENCE_THRESHOLD} auto-book threshold`,
+          `Banktransaktion ${row.bankTransactionId} "${row.text}" matcher bilag ${best.documentId} ` +
+          `med en sikkerhed på ${best.confidence.toFixed(2)} — under grænsen på ${AUTO_BOOK_CONFIDENCE_THRESHOLD} ` +
+          `for automatisk bogføring, så agenten bogfører den ikke selv.`,
         requiredAction:
-          "Review the suggested match, then book it manually with 'expense book' or settle it.",
+          "Gennemgå det foreslåede match, og bogfør det derefter manuelt med 'expense book' — eller udlign det.",
         relatedBankTransactionId: row.bankTransactionId,
         relatedDocumentId: best.documentId,
         sourceEvidence: {
@@ -352,10 +353,11 @@ function runPhases(db: Database, input: AgentRunInput, report: AgentRunReport): 
         type: "AGENT_NO_ACCOUNT_RULE",
         severity: "medium",
         message:
-          `Bank transaction ${row.bankTransactionId} confidently matches document ${best.documentId} ` +
-          `(supplier '${best.supplierName ?? "ukendt"}') but no account rule applies — the agent will not guess an account`,
+          `Banktransaktion ${row.bankTransactionId} matcher sikkert bilag ${best.documentId} ` +
+          `(leverandør '${best.supplierName ?? "ukendt"}'), men der findes ingen kontoregel for leverandøren — ` +
+          `agenten gætter ikke på en konto.`,
         requiredAction:
-          "Add an account rule for this supplier or book the expense manually with 'expense book'.",
+          "Opret en kontoregel for leverandøren, eller bogfør udgiften manuelt med 'expense book'.",
         relatedBankTransactionId: row.bankTransactionId,
         relatedDocumentId: best.documentId,
         sourceEvidence: { rule: AGENT_RULE_ID, supplierName: best.supplierName ?? null },
@@ -546,10 +548,12 @@ function reportVatQuarter(
       type: "AGENT_VAT_DEADLINE_OPEN",
       severity: daysRemaining < 0 ? "high" : "medium",
       message:
-        `VAT quarter ${quarter.start}..${quarter.end} is not closed and its momsangivelse ` +
-        `is due ${dueDate} (${daysRemaining} days from ${asOf})`,
+        `Momskvartalet ${quarter.start}..${quarter.end} er endnu ikke lukket, og momsangivelsen ` +
+        (daysRemaining < 0
+          ? `skulle have været indberettet ${dueDate} (fristen er overskredet med ${Math.abs(daysRemaining)} dage pr. ${asOf}).`
+          : `skal indberettes senest ${dueDate} (${daysRemaining} dage fra ${asOf}).`),
       requiredAction:
-        "Close the VAT period with 'period close --kind vat_quarter' then file the momsangivelse.",
+        "Luk momsperioden med 'period close --kind vat_quarter', og indberet derefter momsangivelsen.",
       sourceEvidence: { rule: AGENT_RULE_ID, dueDate, daysRemaining, periodStatus: filing.periodStatus },
     });
   }
