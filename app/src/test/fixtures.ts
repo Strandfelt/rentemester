@@ -491,6 +491,7 @@ export function documents(
         journalEntryId: 2,
         journalEntryText: "Køb af kontorartikler",
         journalEntryTotal: 1250,
+        hasFile: true,
       },
     ],
     linkedCount: 1,

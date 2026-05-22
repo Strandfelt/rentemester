@@ -115,12 +115,13 @@ export function DocumentsView() {
               <th>Dato</th>
               <th className="num">Beløb inkl. moms</th>
               <th>Postering</th>
+              <th>Bilagsfil</th>
             </tr>
           </thead>
           <tbody>
             {d.documents.length === 0 ? (
               <tr>
-                <td colSpan={7} className="empty-inline">
+                <td colSpan={8} className="empty-inline">
                   Ingen bilag ingested endnu.
                 </td>
               </tr>
@@ -158,6 +159,19 @@ export function DocumentsView() {
                       </div>
                     ) : (
                       <span className="flag warning">Ikke bogført</span>
+                    )}
+                  </td>
+                  <td>
+                    {doc.hasFile ? (
+                      <a
+                        href={api.documentFileUrl(slug, doc.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Åbn bilag
+                      </a>
+                    ) : (
+                      <span className="muted">—</span>
                     )}
                   </td>
                 </tr>

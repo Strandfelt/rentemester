@@ -630,6 +630,8 @@ export type DocumentRow = {
   journalEntryText: string | null;
   /** The linked journal entry's total (summed debit side), kroner. */
   journalEntryTotal: number | null;
+  /** True when the document has a stored file the cockpit can open. */
+  hasFile: boolean;
 };
 
 export type CompanyDocuments = {

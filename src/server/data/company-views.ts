@@ -24,6 +24,7 @@ import { fiscalYearForDate } from "../../core/fiscal-year";
 import { buildInvoiceList } from "../../core/invoice-list";
 import { listCustomers, listVendors } from "../../core/master-data";
 import { listBankAccounts } from "../../core/bank";
+import { resolveDocumentFile } from "../../core/documents";
 import {
   vatPeriodWindowFor,
   vatPeriodsForYear,
@@ -678,6 +679,8 @@ export type DocumentRow = {
   journalEntryText: string | null;
   /** The linked journal entry's total (summed debit side), kroner. */
   journalEntryTotal: number | null;
+  /** True when the document has a stored file the cockpit can open. */
+  hasFile: boolean;
 };
 
 export type CompanyDocuments = ReturnType<typeof buildCompanyDocuments>;
@@ -715,6 +718,7 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
                 d.amount_inc_vat  AS amountIncVat,
                 d.currency        AS currency,
                 d.status          AS status,
+                d.stored_path     AS storedPath,
                 idl.voucher_ref   AS voucherRef,
                 je.id             AS journalEntryId,
                 je.entry_no       AS journalEntryNo,
@@ -739,6 +743,7 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       amountIncVat: number | null;
       currency: string;
       status: string;
+      storedPath: string | null;
       voucherRef: string | null;
       journalEntryId: number | null;
       journalEntryNo: string | null;
@@ -769,6 +774,7 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
         r.journalEntryId === null || r.journalEntryTotal === null
           ? null
           : roundKroner(r.journalEntryTotal),
+      hasFile: r.storedPath != null,
     }));
     const linkedCount = documents.filter(
       (d) => d.journalEntryNo !== null,
@@ -781,6 +787,40 @@ export function buildCompanyDocuments(workspaceRoot: string, slug: string) {
       linkedCount,
       unlinkedCount: documents.length - linkedCount,
     };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Resolves a single ingested document's stored file so the cockpit can serve
+ * it back to a human. The same notFound shape the other document reads use is
+ * thrown for an unknown company, a missing ledger, or a document without a
+ * readable file.
+ */
+export function resolveCompanyDocumentFile(
+  workspaceRoot: string,
+  slug: string,
+  documentId: number,
+): { path: string; mimeType: string; filename: string } {
+  const entry = findWorkspaceCompany(workspaceRoot, slug);
+  if (!entry) {
+    throw ApiError.notFound(`no company with slug '${slug}' in the workspace`);
+  }
+  const companyRoot = companyRootForSlug(workspaceRoot, slug);
+  const dbPath = companyPaths(companyRoot).db;
+  if (!existsSync(dbPath)) {
+    throw ApiError.notFound(`company '${slug}' has no ledger`);
+  }
+
+  const db = openDb(dbPath);
+  try {
+    migrate(db);
+    const resolved = resolveDocumentFile(db, companyRoot, documentId);
+    if (!resolved.ok) {
+      throw ApiError.notFound(resolved.error);
+    }
+    return resolved.file;
   } finally {
     db.close();
   }

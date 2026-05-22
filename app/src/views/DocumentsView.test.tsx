@@ -74,6 +74,7 @@ describe("DocumentsView — Bilag", () => {
             journalEntryId: 5,
             journalEntryText: "Kontorartikler hos Lev ApS",
             journalEntryTotal: 412.5,
+            hasFile: true,
           },
         ],
         linkedCount: 1,
@@ -108,6 +109,7 @@ describe("DocumentsView — Bilag", () => {
             journalEntryId: null,
             journalEntryText: null,
             journalEntryTotal: null,
+            hasFile: true,
           },
         ],
         linkedCount: 0,
@@ -148,5 +150,30 @@ describe("DocumentsView — Bilag", () => {
     expect(
       screen.getByRole("dialog", { name: "Indlæs bilag" }),
     ).toBeInTheDocument();
+  });
+
+  test("offers a link to open a document's stored file", async () => {
+    mockFetch(route());
+    renderView();
+    const link = await screen.findByRole("link", { name: "Åbn bilag" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/companies/acme-aps/documents/1/file",
+    );
+  });
+
+  test("shows no file link when the document has no stored file", async () => {
+    mockFetch(
+      route({
+        documents: [{ ...documents().documents[0]!, hasFile: false }],
+        linkedCount: 1,
+        unlinkedCount: 0,
+      }),
+    );
+    renderView();
+    await screen.findByRole("heading", { name: "Acme ApS" });
+    expect(
+      screen.queryByRole("link", { name: "Åbn bilag" }),
+    ).not.toBeInTheDocument();
   });
 });

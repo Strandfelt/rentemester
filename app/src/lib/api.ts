@@ -165,6 +165,14 @@ export const api = {
       `/api/companies/${encodeURIComponent(slug)}/documents`,
     ).then((r) => r.documents),
 
+  /**
+   * URL of a stored bilag file — opened directly in a new browser tab, so it
+   * is a plain URL builder rather than a fetch. The server serves the file
+   * inline with its recorded MIME type.
+   */
+  documentFileUrl: (slug: string, id: number) =>
+    `/api/companies/${encodeURIComponent(slug)}/documents/${id}/file`,
+
   archive: (slug: string, year: string) =>
     request<ArchiveResponse>(
       `/api/companies/${encodeURIComponent(slug)}/archive/${encodeURIComponent(

@@ -90,6 +90,7 @@ export {
   buildCompanyBank,
   buildCompanyVat,
   buildCompanyDocuments,
+  resolveCompanyDocumentFile,
   buildCompanyInvoices,
   buildCompanyContacts,
   buildCompanyObligations,
