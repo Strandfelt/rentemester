@@ -473,6 +473,28 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   {
+    key: "vat eu-sales-list",
+    usage: "vat eu-sales-list --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger EU-salg uden moms-listen (VIES recapitulative statement) for perioden: en liste pr. kunde med EU-momsnummer og samlet værdi af grænseoverskridende B2B-salg uden dansk moms. En selvstændig indberetning ved siden af momsangivelsen.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "Listen dækker udstedte fakturaer med vatTreatment foreign_reverse_charge i perioden (efter udstedelsesdato).",
+      "Kun fakturaer med et parsebart EU-momsnummer (ikke dansk) på køberen tæller med; øvrige rapporteres som advarsler.",
+      "Read-only: Rentemester producerer listen — du indberetter den selv. Kræver ikke en lukket periode.",
+    ],
+  },
+  {
+    key: "vat oss-report",
+    usage: "vat oss-report --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description: "Bygger en deterministisk OSS-rapport (One Stop Shop, første slice): det samlede grundlag for digitale ydelser solgt til EU-forbrugere bogført med momskoden OSS_EU_CONSUMER. Bevidst smal — ikke en OSS-indberetning til SKAT.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "Rapporten viser kun OSS-forbrugersalgets samlede grundlag — den splitter ikke pr. destinationsland eller momssats.",
+      "OSS-salg holdes ude af momsangivelsens standard-rubrikker; OSS-returangivelsen indberetter du selv.",
+      "Read-only. Kræver ikke en lukket periode.",
+    ],
+  },
+  {
     key: "period close",
     usage: "period close --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--kind vat_quarter|fiscal_year|custom] [--status closed|reported] [--reference <text>]",
     description: "Lukker eller markerer en regnskabsperiode. En lukket periode blokerer ny bogføring med transaktionsdato i perioden — og er en forudsætning for 'vat momsangivelse' og 'report annual'.",

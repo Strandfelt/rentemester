@@ -2,6 +2,8 @@
  * MCP-tools for moms.
  *
  *  - `vat_report` (read)
+ *  - `vat_eu_sales_list` (read)
+ *  - `vat_oss_report` (read)
  *  - `vat_post_eu_service_purchase` (write-irreversible)
  *  - `vat_post_representation_purchase` (write-irreversible)
  */
@@ -15,6 +17,8 @@ import {
   type ReverseChargePurchaseInput,
   type RepresentationPurchaseInput,
 } from "../../core/vat";
+import { buildViesRecapitulativeStatement } from "../../core/vat-vies-list";
+import { buildOssReport } from "../../core/vat-oss";
 import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
@@ -139,6 +143,51 @@ export function registerVatTools(server: McpServer): void {
     },
     withCompanyDb<{ company: string; from: string; to: string }>(server, ({ db, args }) => {
       const result = buildVatReport(db, args.from, args.to);
+      return wrapCoreResult(result);
+    }),
+  );
+
+  server.registerTool(
+    "vat_eu_sales_list",
+    {
+      title: "EU sales list (EU-salg uden moms)",
+      description:
+        "Bygger EU-salg uden moms-listen (VIES recapitulative statement) for perioden: " +
+        "en liste pr. kunde med EU-momsnummer og samlet værdi af grænseoverskridende " +
+        "B2B-salg uden dansk moms. En selvstændig indberetning ved siden af momsangivelsen. " +
+        "Read-only.",
+      inputSchema: {
+        company: z.string().min(1),
+        from: z.string().min(1).describe("Period start, YYYY-MM-DD."),
+        to: z.string().min(1).describe("Period end, YYYY-MM-DD."),
+      },
+      outputSchema: envelopeShape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    withCompanyDb<{ company: string; from: string; to: string }>(server, ({ db, args }) => {
+      const result = buildViesRecapitulativeStatement(db, args.from, args.to);
+      return wrapCoreResult(result);
+    }),
+  );
+
+  server.registerTool(
+    "vat_oss_report",
+    {
+      title: "OSS report (One Stop Shop, first slice)",
+      description:
+        "Bygger en deterministisk OSS-rapport (One Stop Shop, første slice): det samlede " +
+        "grundlag for digitale ydelser solgt til EU-forbrugere bogført med momskoden " +
+        "OSS_EU_CONSUMER. Bevidst smal — ikke en OSS-indberetning til SKAT. Read-only.",
+      inputSchema: {
+        company: z.string().min(1),
+        from: z.string().min(1).describe("Period start, YYYY-MM-DD."),
+        to: z.string().min(1).describe("Period end, YYYY-MM-DD."),
+      },
+      outputSchema: envelopeShape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    withCompanyDb<{ company: string; from: string; to: string }>(server, ({ db, args }) => {
+      const result = buildOssReport(db, args.from, args.to);
       return wrapCoreResult(result);
     }),
   );
