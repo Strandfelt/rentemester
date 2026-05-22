@@ -1,4 +1,5 @@
 import { vatFilingDeadline } from "./core/vat";
+import { formatKronerDa } from "./core/money";
 
 export type OutputFormat = "json" | "human";
 
@@ -205,18 +206,13 @@ export type HumanReportKind =
 /**
  * Format a DKK amount as Danish kroner-og-øre, e.g. 38.3 -> "38,30 kr.",
  * -1234.5 -> "-1.234,50 kr.". Non-finite/missing input yields "—".
+ *
+ * Thin re-export of the single canonical formatter `formatKronerDa` in
+ * `core/money.ts` — kept under the historical name so the many call sites in
+ * this file stay unchanged. (#314)
  */
 export function formatKroner(value: unknown): string {
-  const num = typeof value === "number" ? value : Number(value);
-  if (value == null || value === "" || !Number.isFinite(num)) return "—";
-  const negative = num < 0;
-  const cents = Math.round(Math.abs(num) * 100);
-  const whole = Math.floor(cents / 100);
-  const fraction = (cents % 100).toString().padStart(2, "0");
-  const wholeText = whole
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return `${negative ? "-" : ""}${wholeText},${fraction} kr.`;
+  return formatKronerDa(value);
 }
 
 /** Render an integer count, falling back to 0 for missing values. */
