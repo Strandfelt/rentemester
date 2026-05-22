@@ -98,4 +98,63 @@ describe("ManageCompanyView", () => {
       await screen.findByText(/Opdaterede felter: address, city/i),
     ).toBeInTheDocument();
   });
+
+  // #284 — the Cockpit owner must be able to set bank/payment details so
+  // their invoices carry payment instructions.
+  test("shows the profile / bank section", async () => {
+    mockFetch(companiesRoute());
+    renderAt(<ManageCompanyView />, {
+      route: "/companies/acme-aps/manage",
+      path: "/companies/:slug/manage",
+    });
+    expect(
+      await screen.findByLabelText(/Kontonummer/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Registreringsnummer/i)).toBeInTheDocument();
+  });
+
+  test("PATCHes the company profile with bank details", async () => {
+    mockFetch({
+      ...companiesRoute(),
+      "PATCH /api/companies/acme-aps/company": {
+        company: companySettings({
+          payment: {
+            bankName: "Danske Bank",
+            registrationNo: "1234",
+            accountNo: "0001234567",
+            iban: null,
+          },
+        }),
+      },
+    });
+    renderAt(<ManageCompanyView />, {
+      route: "/companies/acme-aps/manage",
+      path: "/companies/:slug/manage",
+    });
+    await userEvent.type(
+      await screen.findByLabelText(/Registreringsnummer/i),
+      "1234",
+    );
+    await userEvent.type(
+      screen.getByLabelText(/Kontonummer/i),
+      "0001234567",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Gem stamdata/i }),
+    );
+    expect(
+      await screen.findByText(/Stamdata opdateret/i),
+    ).toBeInTheDocument();
+  });
+
+  test("warns when no payment details are configured", async () => {
+    mockFetch(companiesRoute());
+    renderAt(<ManageCompanyView />, {
+      route: "/companies/acme-aps/manage",
+      path: "/companies/:slug/manage",
+    });
+    expect(
+      await screen.findByText(/uden betalingsoplysninger/i),
+    ).toBeInTheDocument();
+  });
 });

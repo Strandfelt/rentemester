@@ -775,6 +775,7 @@ export type ContactsResponse = {
 export type ObligationKind =
   | "vat"
   | "corporation-tax"
+  | "annual-report"
   | "creditors"
   | "auditor"
   | "other";
@@ -864,6 +865,8 @@ export type CreateCompanyInput = {
   cvr?: string;
   fiscalYearStartMonth?: string;
   fiscalYearLabelStrategy?: string;
+  /** Optional bank/payment details — sets up the primary bank account (#284). */
+  payment?: CompanyPaymentInput;
 };
 
 export type UpdateCompanyInput = {
@@ -871,9 +874,43 @@ export type UpdateCompanyInput = {
   archived?: boolean;
 };
 
+/** Optional bank fields on the create-company form (#284). */
+export type CompanyPaymentInput = {
+  bankName?: string;
+  registrationNo?: string;
+  accountNo?: string;
+  iban?: string;
+};
+
+/**
+ * The editable company profile fields (#284) — what `PATCH .../company` accepts.
+ * Only the fields present are changed; the rest keep their current value.
+ */
+export type CompanyProfileInput = {
+  name?: string;
+  cvr?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  paymentTermsDays?: number;
+  payment?: CompanyPaymentInput;
+};
+
 // --- company settings + CVR sync (GET .../company, POST .../sync-cvr) -------
 
-/** The full companies row, including CVR-register stamdata. */
+/**
+ * The company's payment/bank details — the primary bank account every issued
+ * invoice's payment block reads from. Null on `CompanySettings` when no bank
+ * account is configured yet.
+ */
+export type CompanyPaymentDetails = {
+  bankName: string | null;
+  registrationNo: string | null;
+  accountNo: string | null;
+  iban: string | null;
+};
+
+/** The full companies row, including CVR-register stamdata + bank details. */
 export type CompanySettings = {
   id: number;
   name: string;
@@ -892,11 +929,36 @@ export type CompanySettings = {
   auditWaived: boolean | null;
   /** ISO timestamp the CVR stamdata was last synced; null when never. */
   cvrSyncedAt: string | null;
+  /** The company's own bank/payment details; null when none is configured. */
+  payment: CompanyPaymentDetails | null;
 };
 
 export type CompanySettingsResponse = {
   ok: true;
   company: CompanySettings;
+};
+
+/** The result of `POST /api/companies/:slug/periods/close` (#287). */
+export type ClosePeriodResult = {
+  id: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  kind: string | null;
+  status: string | null;
+  reference: string | null;
+};
+
+export type ClosePeriodResponse = {
+  ok: true;
+  period: ClosePeriodResult;
+};
+
+/** Input for `api.closePeriod`. */
+export type ClosePeriodInput = {
+  periodStart: string;
+  periodEnd: string;
+  kind?: "vat_quarter" | "fiscal_year" | "custom";
+  reference?: string;
 };
 
 export type CvrManagementMember = { name: string; role: string };

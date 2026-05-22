@@ -135,6 +135,8 @@ function ManageForm({
         </div>
       </form>
 
+      <ProfileCard slug={company.slug} initial={settings} />
+
       <CvrCard slug={company.slug} initial={settings} />
 
       <div className="card" style={{ marginTop: 24, maxWidth: 460 }}>
@@ -151,6 +153,170 @@ function ManageForm({
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The editable company profile + bank-details card (#284).
+ *
+ * A Cockpit owner must be able to record the company's own postal address,
+ * default payment terms and — critically — its bank account. Without a bank
+ * account every issued invoice goes out with no payment instructions, so the
+ * card warns prominently when none is configured. Saving calls the same
+ * `setCompanyProfile` core function the CLI's `company profile` command uses.
+ */
+function ProfileCard({
+  slug,
+  initial,
+}: {
+  slug: string;
+  initial: CompanySettings;
+}) {
+  const [settings, setSettings] = useState(initial);
+  const [address, setAddress] = useState(initial.address ?? "");
+  const [postalCode, setPostalCode] = useState(initial.postalCode ?? "");
+  const [city, setCity] = useState(initial.city ?? "");
+  const [bankName, setBankName] = useState(initial.payment?.bankName ?? "");
+  const [registrationNo, setRegistrationNo] = useState(
+    initial.payment?.registrationNo ?? "",
+  );
+  const [accountNo, setAccountNo] = useState(
+    initial.payment?.accountNo ?? "",
+  );
+  const [iban, setIban] = useState(initial.payment?.iban ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const hasPayment = Boolean(
+    settings.payment &&
+      (settings.payment.bankName ||
+        settings.payment.registrationNo ||
+        settings.payment.accountNo ||
+        settings.payment.iban),
+  );
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await api.updateCompanyProfile(slug, {
+        address: address.trim(),
+        postalCode: postalCode.trim(),
+        city: city.trim(),
+        payment: {
+          bankName: bankName.trim(),
+          registrationNo: registrationNo.trim(),
+          accountNo: accountNo.trim(),
+          iban: iban.trim(),
+        },
+      });
+      setSettings(updated);
+      setNotice("Stamdata opdateret.");
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Kunne ikke gemme stamdata.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 460 }}>
+      <h3 style={{ marginTop: 0 }}>Stamdata og bankoplysninger</h3>
+      <p className="muted">
+        Virksomhedens egen adresse og bankkonto. Bankkontoen vises som
+        betalingsoplysninger på alle fakturaer du udsteder.
+      </p>
+
+      {error && <Banner kind="error">{error}</Banner>}
+      {notice && <Banner kind="success">{notice}</Banner>}
+      {!hasPayment && (
+        <Banner kind="warning">
+          Der er ingen bankkonto registreret. Fakturaer udstedes uden
+          betalingsoplysninger, indtil du tilføjer en konto her.
+        </Banner>
+      )}
+
+      <form className="form" onSubmit={save} aria-label="Rediger stamdata">
+        <label>
+          Adresse
+          <input
+            name="address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Vej 1"
+          />
+        </label>
+        <label>
+          Postnummer
+          <input
+            name="postalCode"
+            value={postalCode}
+            onChange={(e) => setPostalCode(e.target.value)}
+            placeholder="1000"
+          />
+        </label>
+        <label>
+          By
+          <input
+            name="city"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="København"
+          />
+        </label>
+        <label>
+          Pengeinstitut
+          <input
+            name="bankName"
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            placeholder="Danske Bank"
+          />
+        </label>
+        <label>
+          Registreringsnummer
+          <input
+            name="registrationNo"
+            value={registrationNo}
+            onChange={(e) => setRegistrationNo(e.target.value)}
+            placeholder="1234"
+          />
+        </label>
+        <label>
+          Kontonummer
+          <input
+            name="accountNo"
+            value={accountNo}
+            onChange={(e) => setAccountNo(e.target.value)}
+            placeholder="0001234567"
+          />
+        </label>
+        <label>
+          IBAN (valgfrit)
+          <input
+            name="iban"
+            value={iban}
+            onChange={(e) => setIban(e.target.value)}
+            placeholder="DK0000000000000000"
+          />
+          <span className="field-hint">
+            Bruges til betalinger fra udlandet.
+          </span>
+        </label>
+        <div className="row-actions">
+          <button className="btn" type="submit" disabled={busy}>
+            {busy ? "Gemmer…" : "Gem stamdata"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

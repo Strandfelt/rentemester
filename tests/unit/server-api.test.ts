@@ -1412,6 +1412,50 @@ describe("cockpit API — VAT period selection (#272)", () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+
+  // #281: the dashboard VAT block must point at the earliest unreported
+  // quarter (the one `selectVatQuarter` picks — what the Overblik card and
+  // `vat momsangivelse` use), NOT the calendar quarter of the as-of date.
+  // When activity lives only in Q1 but the as-of date is in Q2, the old
+  // `quarterPeriodForDate` path wrongly surfaced an empty Q2.
+  test("dashboard VAT points at the earliest unreported quarter, not the as-of quarter", async () => {
+    const ws = makeWorkspace("vat-dash-earliest", ["Acme ApS"]);
+    try {
+      // The only booked activity is in Q1 2026.
+      postPnlEntry(ws, "acme-aps", "2026-02-15", 1000, 400);
+
+      // As-of date is in Q2 — but Q2 has no activity at all.
+      const dashRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/dashboard?asOf=2026-05-22",
+      );
+      expect(dashRes.status).toBe(200);
+      // Must surface Q1 2026 — the quarter that is actually due.
+      expect(dashRes.body.dashboard.vat.periodStart).toBe("2026-01-01");
+      expect(dashRes.body.dashboard.vat.periodEnd).toBe("2026-03-31");
+
+      // And it must agree with the dedicated VAT view + the Overblik card.
+      const vatRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/vat?year=2026",
+      );
+      expect(vatRes.body.vat.periodStart).toBe(
+        dashRes.body.dashboard.vat.periodStart,
+      );
+      expect(vatRes.body.vat.periodEnd).toBe(
+        dashRes.body.dashboard.vat.periodEnd,
+      );
+      const ovRes = await get(
+        config({ workspaceRoot: ws }),
+        "/api/companies/acme-aps/overview?year=2026",
+      );
+      expect(ovRes.body.overview.vat.periodEnd).toBe(
+        dashRes.body.dashboard.vat.periodEnd,
+      );
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("cockpit API — documents (GET .../documents)", () => {
@@ -1964,7 +2008,7 @@ describe("cockpit API — obligations (GET .../obligations)", () => {
     }
   });
 
-  test("a company that owes nothing returns an empty list", async () => {
+  test("a company that owes nothing still surfaces the annual-report deadline", async () => {
     const ws = makeWorkspace("obl-empty", ["Acme ApS"]);
     try {
       const res = await get(
@@ -1972,8 +2016,15 @@ describe("cockpit API — obligations (GET .../obligations)", () => {
         "/api/companies/acme-aps/obligations?year=2026",
       );
       expect(res.status).toBe(200);
-      expect(res.body.obligations.obligations).toEqual([]);
+      // Nothing is owed (no VAT, no liabilities) — totalOwed is 0 — but the
+      // årsrapport filing deadline (#290) is a recurring legal duty with no
+      // ledger amount, so it is always shown.
       expect(res.body.obligations.totalOwed).toBe(0);
+      const rows = res.body.obligations.obligations;
+      expect(rows.length).toBe(1);
+      expect(rows[0].kind).toBe("annual-report");
+      expect(rows[0].amount).toBe(0);
+      expect(rows[0].dueDate).toBe("2027-05-01");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

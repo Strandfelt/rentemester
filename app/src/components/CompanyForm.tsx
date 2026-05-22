@@ -17,6 +17,11 @@ export function CompanyForm({
   const [slug, setSlug] = useState("");
   const [cvr, setCvr] = useState("");
   const [fiscalMonth, setFiscalMonth] = useState("1");
+  // #284: optional bank/payment details — captured at creation so the very
+  // first invoice already carries payment instructions.
+  const [bankName, setBankName] = useState("");
+  const [registrationNo, setRegistrationNo] = useState("");
+  const [accountNo, setAccountNo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,11 +34,20 @@ export function CompanyForm({
     setSubmitting(true);
     setError(null);
     try {
+      const payment =
+        bankName.trim() || registrationNo.trim() || accountNo.trim()
+          ? {
+              bankName: bankName.trim() || undefined,
+              registrationNo: registrationNo.trim() || undefined,
+              accountNo: accountNo.trim() || undefined,
+            }
+          : undefined;
       const created = await api.createCompany({
         name: name.trim(),
         slug: slug.trim() || undefined,
         cvr: cvr.trim() || undefined,
         fiscalYearStartMonth: fiscalMonth.trim() || undefined,
+        ...(payment ? { payment } : {}),
       });
       onCreated(created.slug);
     } catch (err) {
@@ -97,6 +111,40 @@ export function CompanyForm({
             </option>
           ))}
         </select>
+      </label>
+
+      <label>
+        Pengeinstitut (valgfrit)
+        <input
+          name="bankName"
+          value={bankName}
+          onChange={(e) => setBankName(e.target.value)}
+          placeholder="Danske Bank"
+        />
+      </label>
+
+      <label>
+        Registreringsnummer (valgfrit)
+        <input
+          name="registrationNo"
+          value={registrationNo}
+          onChange={(e) => setRegistrationNo(e.target.value)}
+          placeholder="1234"
+        />
+      </label>
+
+      <label>
+        Kontonummer (valgfrit)
+        <input
+          name="accountNo"
+          value={accountNo}
+          onChange={(e) => setAccountNo(e.target.value)}
+          placeholder="0001234567"
+        />
+        <span className="field-hint">
+          Bankkontoen vises som betalingsoplysninger på dine fakturaer. Kan
+          også tilføjes senere under Administrér.
+        </span>
       </label>
 
       <div className="row-actions">

@@ -391,6 +391,14 @@ export function obligations(
         accountNo: null,
       },
       {
+        kind: "annual-report",
+        label: "Årsrapport — regnskabsår 2026",
+        amount: 0,
+        dueDate: "2027-05-01",
+        daysRemaining: 344,
+        accountNo: null,
+      },
+      {
         kind: "corporation-tax",
         label: "Skyldig selskabsskat",
         amount: 2906.66,
@@ -658,6 +666,7 @@ export function companySettings(
     cvrStatus: null,
     auditWaived: null,
     cvrSyncedAt: null,
+    payment: null,
     ...over,
   };
 }

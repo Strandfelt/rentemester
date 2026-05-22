@@ -9,7 +9,10 @@ import type {
   BalanceResponse,
   BankResponse,
   CashflowResponse,
+  ClosePeriodInput,
+  ClosePeriodResponse,
   CompanyListResponse,
+  CompanyProfileInput,
   CompanySettingsResponse,
   ContactsResponse,
   CreateCompanyInput,
@@ -215,11 +218,42 @@ export const api = {
       `/api/companies/${encodeURIComponent(slug)}/company`,
     ).then((r) => r.company),
 
+  /**
+   * Updates the editable company profile + bank/payment details (#284). Only
+   * the fields present in `input` are changed. The primary bank account it
+   * creates is the one every issued-invoice payment block reads from.
+   */
+  updateCompanyProfile: (slug: string, input: CompanyProfileInput) =>
+    request<CompanySettingsResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/company`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ).then((r) => r.company),
+
   syncCvr: (slug: string) =>
     request<SyncCvrResponse>(
       `/api/companies/${encodeURIComponent(slug)}/sync-cvr`,
       { method: "POST" },
     ).then((r) => r.sync),
+
+  /**
+   * Closes an accounting period (#287) — the prerequisite for a momsangivelse.
+   * Calls the same `closeAccountingPeriod` core the CLI's `period close` uses.
+   * Write-irreversible-shaped, so the server's pipeline requires `confirm`.
+   */
+  closePeriod: (slug: string, input: ClosePeriodInput) =>
+    request<ClosePeriodResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/periods/close`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+          ...(input.kind ? { kind: input.kind } : {}),
+          ...(input.reference ? { reference: input.reference } : {}),
+          confirm: true,
+        }),
+      },
+    ).then((r) => r.period),
 
   // --- write actions (#213) -----------------------------------------------
   //

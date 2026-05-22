@@ -7,18 +7,24 @@
 // of dropping to the terminal (#257). All money fields are kroner —
 // `formatKroner` is used throughout.
 
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatKroner } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type { CompanyVat, VatRubrikker } from "../lib/types";
-import { ErrorState, Loading } from "../components/Feedback";
+import { Banner, ErrorState, Loading } from "../components/Feedback";
 import { CompanyNav, useCompanyYear } from "../components/CompanyNav";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function VatView() {
   const { slug = "" } = useParams();
   const { year, setYear } = useCompanyYear();
   const state = useAsync<CompanyVat>(() => api.vat(slug, year), [slug, year]);
+  // True while the close-period ConfirmDialog is open (#287).
+  const [closing, setClosing] = useState(false);
+  // Set after a successful period close — surfaced as a success banner.
+  const [closedNotice, setClosedNotice] = useState<string | null>(null);
 
   if (state.loading && !state.data) return <Loading label="Henter moms…" />;
   if (state.error)
@@ -39,6 +45,17 @@ export function VatView() {
           </p>
         </div>
         <div className="row-actions">
+          {/* #287: closing the VAT quarter is the prerequisite for a
+              momsangivelse — hidden for an archived (read-only) year. */}
+          {!v.archived && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setClosing(true)}
+            >
+              Luk momsperiode
+            </button>
+          )}
           <Link className="btn secondary" to={`/companies/${slug}/manage`}>
             Administrér
           </Link>
@@ -51,6 +68,34 @@ export function VatView() {
         selectedYear={v.selectedYear}
         onYearChange={setYear}
       />
+
+      {closedNotice && <Banner kind="success">{closedNotice}</Banner>}
+
+      {closing && (
+        <ConfirmDialog
+          title="Luk momsperiode"
+          body={
+            <p>
+              Luk momsperioden <strong>{v.periodLabel}</strong> ({v.periodStart}{" "}
+              – {v.periodEnd}). En lukket periode er en forudsætning for at
+              indberette momsangivelsen, og bogføring i perioden låses bagefter.
+            </p>
+          }
+          confirmLabel="Luk perioden"
+          confirmKind="danger"
+          onConfirm={async () => {
+            await api.closePeriod(slug, {
+              periodStart: v.periodStart,
+              periodEnd: v.periodEnd,
+              kind: "vat_quarter",
+            });
+            setClosedNotice(
+              `Momsperioden er lukket — ${v.periodLabel} kan nu indberettes.`,
+            );
+          }}
+          onClose={() => setClosing(false)}
+        />
+      )}
 
       {v.archived ? (
         <ArchivedNotice year={v.selectedYear} />

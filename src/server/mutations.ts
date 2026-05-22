@@ -230,9 +230,14 @@ export async function withCompanyMutation<T extends CoreResult>(
     //
     // The conflict heuristic distinguishes a genuine state conflict (the
     // target is missing, or the action already happened) from a plain
-    // bad-input rejection. Two message families count as conflicts:
+    // bad-input rejection. Three message families count as conflicts:
     //   - "missing target": `findes ikke` / `does not exist` / `not found`;
-    //   - "already done":   `allerede` (Danish) OR `already` (English).
+    //   - "already done":   `allerede` (Danish) OR `already` (English);
+    //   - "overlapping state": `overlaps` — the period core (#287) refuses a
+    //     `period close` whose range collides with an existing period
+    //     (`vat_quarter period … overlaps existing period …`). Closing an
+    //     already-closed period is a conflict with existing ledger state,
+    //     not a bad input, so it is a 409.
     // The invoice core (#213, slice 4) speaks ENGLISH for its idempotency
     // rejections — `invoice X already has journal entry Y` (double post),
     // `bank transaction N is already linked …` (double settle). Those are
@@ -244,7 +249,11 @@ export async function withCompanyMutation<T extends CoreResult>(
         result.errors && result.errors.length > 0
           ? result.errors.join("; ")
           : "handlingen blev afvist";
-      if (/findes ikke|does not exist|not found|allerede|already/i.test(message)) {
+      if (
+        /findes ikke|does not exist|not found|allerede|already|overlaps/i.test(
+          message,
+        )
+      ) {
         throw ApiError.conflict(message);
       }
       throw ApiError.badRequest(message);

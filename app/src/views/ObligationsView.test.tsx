@@ -65,6 +65,25 @@ describe("ObligationsView — Forpligtelser", () => {
     ).toBeInTheDocument();
   });
 
+  // #290: the årsrapport filing deadline to Erhvervsstyrelsen must appear
+  // alongside VAT — it is the other recurring legal deadline.
+  test("lists the annual-report filing deadline", async () => {
+    mockFetch(route());
+    renderView();
+    const annualRow = (
+      await screen.findByText(/Årsrapport — regnskabsår 2026/)
+    ).closest("tr")!;
+    // It carries the derived Erhvervsstyrelsen deadline …
+    expect(
+      within(annualRow as HTMLElement).getByText("2027-05-01"),
+    ).toBeInTheDocument();
+    // … and no kroner amount — it is a deadline, not a debt. The amount
+    // cell (last td) shows a dash rather than "0,00 kr.".
+    const cells = within(annualRow as HTMLElement).getAllByRole("cell");
+    expect(cells[cells.length - 1]).toHaveTextContent("—");
+    expect(cells[cells.length - 1]).not.toHaveTextContent(/0,00/);
+  });
+
   test("an archived year shows an honest 'not available' state", async () => {
     mockFetch(route({ archived: true, selectedYear: "2025" }));
     renderView();
