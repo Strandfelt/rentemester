@@ -65,6 +65,15 @@ import { registerEmailTools } from "./tools/email";
 // ===== IMPORT ARCHIVE (#197) =====
 import { registerImportTools } from "./tools/import";
 // ===== END IMPORT ARCHIVE (#197) =====
+// ===== TAX RETURN PREPARATION =====
+import { registerTaxTools } from "./tools/tax";
+// ===== END TAX RETURN PREPARATION =====
+// ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+import { registerAccrualTools } from "./tools/accrual";
+// ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+// ===== BUDGET + LIQUIDITY FORECAST =====
+import { registerBudgetTools } from "./tools/budget";
+// ===== END BUDGET + LIQUIDITY FORECAST =====
 
 // Wraps a write tool's callback with the opt-in backup lock. The MCP tool
 // files are not uniform — some use the withCompanyDbConfirmed helper, some
@@ -162,4 +171,13 @@ export function registerAllTools(server: McpServer): void {
   // ===== IMPORT ARCHIVE (#197) =====
   registerImportTools(server);
   // ===== END IMPORT ARCHIVE (#197) =====
+  // ===== TAX RETURN PREPARATION =====
+  registerTaxTools(server);
+  // ===== END TAX RETURN PREPARATION =====
+  // ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  registerAccrualTools(server);
+  // ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  // ===== BUDGET + LIQUIDITY FORECAST =====
+  registerBudgetTools(server);
+  // ===== END BUDGET + LIQUIDITY FORECAST =====
 }

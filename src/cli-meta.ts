@@ -789,6 +789,21 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   // ===== END ANNUAL REPORT (#177) =====
+  // ===== TAX RETURN PREPARATION =====
+  {
+    key: "report tax",
+    usage: "report tax --company <path> --from <YYYY-MM-DD> --to <YYYY-MM-DD>",
+    description:
+      "Forbereder selskabets skattepligtige indkomst (oplysningsskema) for et lukket regnskabsår: årets resultat plus de skattemæssige reguleringer systemet kan se deterministisk, samt 22% selskabsskat for et ApS. Rentemester forbereder tallene; ejer/revisor gennemgår og indberetter selv via TastSelv Erhverv.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "FORUDSÆTNING: samme som 'report annual' — --from..--to skal være helt dækket af en lukket/indberettet periode, virksomheden skal have et registreret CVR, og bøgerne skal balancere.",
+      "Dette er et bevidst smalt FØRSTE SLICE: kun den deterministiske regulering for ikke-fradragsberettiget repræsentationsmoms beregnes. Skattemæssige afskrivninger (saldoafskrivning), fremført underskud og selskabsformer ud over ApS markeres som needs-review — de beregnes IKKE.",
+      "Ikke en TastSelv-integration: outputtet er tallene du selv overfører til oplysningsskemaet.",
+      "--json/--format json-outputtets feltliste er en CLI-only rapport dokumenteret i docs/cli-contract.md afsnit 3 og docs/mcp-tool-surface.md — slå skemaet op dér før maskinel parsing.",
+    ],
+  },
+  // ===== END TAX RETURN PREPARATION =====
   // ===== IMPORT FRAMEWORK (#185) =====
   {
     key: "import run",
@@ -876,6 +891,88 @@ export const COMMAND_SPECS: CommandSpec[] = [
     ],
   },
   // ===== END REGULATORY COVERAGE =====
+  // ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  {
+    key: "accrual register",
+    usage:
+      "accrual register --company <path> --type prepaid_expense|accrued_expense|deferred_revenue --description <text> --amount <n> --periods <n> --first-date <YYYY-MM-DD> --result-account <konto> [--registration-date <YYYY-MM-DD>] [--period-step-months <n>] [--balance-account <konto>] [--settlement-account <konto>] [--document-id <n>] [--note <text>]",
+    description:
+      "Registrerer en periodeafgrænsningspost: bogfører den balancerede registreringspostering, der parkerer beløbet på en balancekonto, og gemmer hovedet, så hver senere periode kan indtægts-/omkostningsføres mod en deterministisk plan.",
+    allowedFlags: [
+      "--company", "--type", "--description", "--amount", "--periods", "--first-date",
+      "--result-account", "--registration-date", "--period-step-months", "--balance-account",
+      "--settlement-account", "--document-id", "--note",
+    ],
+    inputNotes: [
+      "--type: prepaid_expense (forudbetalt omkostning — aktiv), accrued_expense (skyldig omkostning — passiv), deferred_revenue (forudbetalt indtægt — passiv).",
+      "--amount: hele beløbet i KRONER (decimal, fx 12000.00) — ikke øre. Det fordeles ligeligt over --periods perioder; sidste periode bærer øre-resten, så planen summer præcist.",
+      "--periods: antal perioder beløbet periodiseres over (positivt heltal).",
+      "--first-date: bogføringsdato for første periode (YYYY-MM-DD). --period-step-months sætter antal måneder mellem perioderne (standard 1).",
+      "--result-account: resultatkontoen hver periode føres på — en udgiftskonto for prepaid_expense/accrued_expense, en indtægtskonto for deferred_revenue.",
+      "--balance-account: balancekontoen beløbet parkeres på; defaulter pr. type (1300 / 7300 / 7310). --settlement-account: betalingskonto på modposten (standard 2000 Bank).",
+      "--registration-date: bogføringsdato for registreringsposteringen (standard: --first-date).",
+      "--document-id: heltal — bilags-id. Påkrævet hvis registreringen rammer en udgifts-/indtægtskonto (accrued_expense og deferred_revenue gør altid).",
+    ],
+  },
+  {
+    key: "accrual recognize",
+    usage: "accrual recognize --company <path> --accrual-id <n> --period <n> [--date <YYYY-MM-DD>] [--settlement-account <konto>]",
+    description:
+      "Indtægts-/omkostningsfører én periode af en periodeafgrænsningspost: bogfører den balancerede postering, der flytter periodens andel mellem balancekontoen og resultatkontoen.",
+    allowedFlags: ["--company", "--accrual-id", "--period", "--date", "--settlement-account"],
+    inputNotes: [
+      "--accrual-id: heltal — id på en post registreret med 'accrual register'.",
+      "--period <n>: periodens INDEKS i posten plan, IKKE en kalendermåned. 1 = første periode, op til --periods. Hver periode kan kun bogføres én gang.",
+      "--date: bogføringsdato YYYY-MM-DD; udelades den, bruges planens dato for perioden.",
+      "--settlement-account: kun brugt af accrued_expense (afviklingen krediterer betalingskontoen; standard 2000).",
+      "Beløbet beregnes af den deterministiske plan — du angiver det aldrig selv.",
+    ],
+  },
+  { key: "accrual register-report", usage: "accrual register-report --company <path>", description: "Viser registret af periodeafgrænsningsposter med bogførte perioder, periodiseret beløb og resterende balanceeksponering.", allowedFlags: ["--company"] },
+  // ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  // ===== BUDGET + LIQUIDITY FORECAST =====
+  {
+    key: "budget set",
+    usage: "budget set --company <path> --account <kontonr> --period <YYYY-MM> --amount <kroner> [--notes <text>]",
+    description:
+      "Sætter et budget for én konto i én kalendermåned. Budgetlinjer er append-only: hvert kald tilføjer en ny revision, og den seneste revision er det gældende budget — hele ændringshistorikken bevares til revision.",
+    allowedFlags: ["--company", "--account", "--period", "--amount", "--notes"],
+    inputNotes: [
+      "--account: kontonummer der skal findes i kontoplanen ('accounts list').",
+      "--period: kalendermåned i YYYY-MM-format (fx 2026-06).",
+      "--amount: budgetbeløb i KRONER (decimal) i kontoens naturlige fortegn — aldrig negativt.",
+    ],
+  },
+  {
+    key: "budget list",
+    usage: "budget list --company <path> [--period <YYYY-MM>] [--account <kontonr>]",
+    description: "Lister de gældende (seneste-revision) budgetlinjer, valgfrit filtreret på periode eller konto.",
+    allowedFlags: ["--company", "--period", "--account"],
+  },
+  {
+    key: "budget vs-actual",
+    usage: "budget vs-actual --company <path> --from <YYYY-MM> --to <YYYY-MM>",
+    description:
+      "Sammenligner budget mod faktisk bogføring pr. konto pr. måned i perioden. Dækker resultatkonti (indtægt/udgift) med bevægelse plus enhver konto der bærer en budgetlinje. Afvigelse = budget − faktisk for udgift, faktisk − budget for indtægt.",
+    allowedFlags: ["--company", "--from", "--to"],
+    inputNotes: [
+      "--from / --to: kalendermåneder i YYYY-MM-format; --from skal være ≤ --to.",
+      "--json/--format json-outputtets feltliste er dokumenteret i docs/cli-contract.md før maskinel parsing.",
+    ],
+  },
+  {
+    key: "budget forecast",
+    usage: "budget forecast --company <path> --start <YYYY-MM-DD> --months <n>",
+    description:
+      "Fremskriver banksaldoen måned for måned: primosaldo (bogført banksaldo) + åbne fakturaer der forfalder + planlagte gentagne fakturaer + budgetterede omkostninger = projiceret ultimosaldo pr. periode. Rent deterministisk aritmetik — ingen statistisk model.",
+    allowedFlags: ["--company", "--start", "--months"],
+    inputNotes: [
+      "--start: første dag i den første måned der fremskrives (YYYY-MM-DD).",
+      "--months: antal sammenhængende månedsperioder (1-18).",
+      "Prognosen er kun så komplet som det vedligeholdte budget; uplanlagt forbrug, moms-afregning og løn er uden for scope.",
+    ],
+  },
+  // ===== END BUDGET + LIQUIDITY FORECAST =====
 ];
 
 const SPEC_MAP = new Map(COMMAND_SPECS.map((spec) => [spec.key, spec]));

@@ -1,5 +1,5 @@
 import { type OutputFormat, buildHumanError, printStructuredResult } from "./common";
-import { renderVatReport, renderVatFiling, renderAnnualReport } from "./vat";
+import { renderVatReport, renderVatFiling, renderAnnualReport, renderTaxReturn } from "./vat";
 import {
   renderInvoiceStatus,
   renderInvoiceInterest,
@@ -33,6 +33,7 @@ export type HumanReportKind =
   | "vat-report"
   | "vat-filing"
   | "report-annual"
+  | "report-tax"
   | "invoice-status"
   | "invoice-interest"
   | "invoice-compensation"
@@ -81,6 +82,8 @@ export function renderHumanReport(
       return renderVatFiling(result);
     case "report-annual":
       return renderAnnualReport(result);
+    case "report-tax":
+      return renderTaxReturn(result);
     case "invoice-status":
       return renderInvoiceStatus(result);
     case "invoice-interest":
@@ -142,6 +145,8 @@ function humanReportTitle(kind: HumanReportKind): string {
       return "Momsangivelse";
     case "report-annual":
       return "Årsrapport";
+    case "report-tax":
+      return "Skattemæssig indkomst";
     case "invoice-status":
       return "Fakturastatus";
     case "invoice-interest":

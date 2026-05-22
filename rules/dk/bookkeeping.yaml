@@ -244,3 +244,19 @@ rules:
         - immediate_writeoff_without_confirmation
         - immediate_writeoff_when_eligibility_uncertain_without_exception
     explanation: Rentemester assists the straksafskrivning workflow by booking a balanced write-off entry only when the user/advisor explicitly confirms it and supplies a source for the applied threshold rule; when documentation is missing or eligibility is uncertain it raises an exception instead of posting, and the user/advisor owns the tax treatment.
+  # ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  - rule_id: DK-BOOKKEEPING-ACCRUAL-001
+    name: Accruals must register a balanced parking entry and recognise it through deterministic balanced period entries
+    category: ledger_validation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - balanced_accrual_registration_entry
+        - deterministic_even_period_recognition_schedule
+        - balanced_recognition_journal_entry_per_period
+        - recognition_schedule_sums_exactly_to_registered_amount
+      forbid:
+        - duplicate_period_recognition_posting
+        - recognition_total_exceeding_registered_accrual_amount
+    explanation: Rentemester assists the periodeafgrænsning workflow by parking a prepaid/accrued cost or deferred revenue on a balance-sheet accrual account with one balanced registration entry, then recognising it onto the income statement through deterministic, balanced per-period entries that split the amount evenly (the final period carries the øre remainder) so the schedule reconciles exactly to the registered amount; every entry stays append-only and a wrong accrual is corrected by reversal, while the user/advisor owns the choice of period split and accounts.

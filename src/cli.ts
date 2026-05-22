@@ -79,6 +79,15 @@ import { register as registerAgent } from "./cli/agent";
 // ===== REGULATORY COVERAGE =====
 import { register as registerReg } from "./cli/reg";
 // ===== END REGULATORY COVERAGE =====
+// ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+import { register as registerAccrual } from "./cli/accrual";
+// ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+// ===== TAX RETURN PREPARATION =====
+import { register as registerTax } from "./cli/tax";
+// ===== END TAX RETURN PREPARATION =====
+// ===== BUDGET + LIQUIDITY FORECAST =====
+import { register as registerBudget } from "./cli/budget";
+// ===== END BUDGET + LIQUIDITY FORECAST =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -262,6 +271,15 @@ for (const registerFn of [
   // ===== REGULATORY COVERAGE =====
   registerReg,
   // ===== END REGULATORY COVERAGE =====
+  // ===== TAX RETURN PREPARATION =====
+  registerTax,
+  // ===== END TAX RETURN PREPARATION =====
+  // ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  registerAccrual,
+  // ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  // ===== BUDGET + LIQUIDITY FORECAST =====
+  registerBudget,
+  // ===== END BUDGET + LIQUIDITY FORECAST =====
 ]) {
   registerFn(dispatch);
 }

@@ -111,6 +111,10 @@ export function seedAccounts(db: Database) {
     ["1010", "Gebyr- og kompensationsindtægter", "income", "credit", null],
     ["1100", "Debitorer", "asset", "debit", null],
     ["1200", "Salgsmoms", "vat", "credit", null],
+    // Periodeafgrænsningspost: forudbetalte omkostninger (asset). A prepaid
+    // expense already paid that belongs to a later period is parked here until
+    // it is recognised period by period.
+    ["1300", "Forudbetalte omkostninger", "asset", "debit", null],
     // --- Bank (2xxx) ---
     ["2000", "Bank", "asset", "debit", null],
     // --- External operating expenses (3xxx, 3000-3399) ---
@@ -165,7 +169,14 @@ export function seedAccounts(db: Database) {
     // Tax payable / skattekonto (#249): the everyday account for tax owed to
     // SKAT — B-skat / restskat for an enkeltmandsvirksomhed, selskabsskat for
     // an ApS. Credit-normal short-term liability, alongside the payroll gæld.
-    ["7200", "Skyldig skat (skattekonto)", "liability", "credit", null]
+    ["7200", "Skyldig skat (skattekonto)", "liability", "credit", null],
+    // Periodeafgrænsningsposter på passivsiden. 7300 holds accrued expenses
+    // (skyldige omkostninger): a cost that belongs to the period but is not yet
+    // paid. 7310 holds deferred revenue (forudbetalt indtægt): cash received
+    // for a service not yet delivered. Both are credit-normal liabilities that
+    // unwind period by period as the cost/revenue is recognised.
+    ["7300", "Skyldige omkostninger", "liability", "credit", null],
+    ["7310", "Forudbetalt indtægt (udskudt omsætning)", "liability", "credit", null]
   ];
   const insert = db.prepare("INSERT OR IGNORE INTO accounts (account_no,name,type,normal_balance,default_vat_code) VALUES (?,?,?,?,?)");
   db.transaction(() => rows.forEach((r) => insert.run(...r)))();

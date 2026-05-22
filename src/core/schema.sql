@@ -1238,3 +1238,127 @@ BEGIN
   SELECT RAISE(ABORT, 'import document links are append-only audit links and cannot be deleted');
 END;
 -- ===== END IMPORT DOCUMENT LINKS (#196) =====
+-- ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+-- Append-only register of periodeafgrænsningsposter: prepaid expenses
+-- (forudbetalte omkostninger), accrued expenses (skyldige omkostninger) and
+-- deferred revenue (forudbetalt indtægt). The `accruals` row is the header —
+-- the initial balanced journal entry that parks the amount on a balance-sheet
+-- accrual account. `accrual_schedule_postings` records each recognition period
+-- as it is posted: a balanced journal entry that moves one period's slice off
+-- the balance-sheet accrual account and onto the income-statement account.
+-- Money is DKK with 2 decimals. Both tables are append-only — a wrong accrual
+-- is corrected by reversing its journal entries, never by editing a row.
+CREATE TABLE IF NOT EXISTS accruals (
+  id INTEGER PRIMARY KEY,
+  accrual_type TEXT NOT NULL CHECK(accrual_type IN ('prepaid_expense','accrued_expense','deferred_revenue')),
+  description TEXT NOT NULL,
+  total_amount NUMERIC NOT NULL CHECK(total_amount > 0),
+  recognition_periods INTEGER NOT NULL CHECK(recognition_periods > 0),
+  -- The balance-sheet account the amount is parked on between periods (an
+  -- asset for prepaid expenses, a liability for accrued expenses / deferred
+  -- revenue).
+  balance_account_no TEXT NOT NULL,
+  -- The income-statement account each period's slice is recognised on.
+  result_account_no TEXT NOT NULL,
+  -- The first recognition period (YYYY-MM-DD) and the month-step between
+  -- periods, so the schedule is fully deterministic from the header alone.
+  first_recognition_date TEXT NOT NULL,
+  period_step_months INTEGER NOT NULL DEFAULT 1 CHECK(period_step_months > 0),
+  document_id INTEGER,
+  -- The journal entry that registered the accrual (parks it on the balance
+  -- sheet). NULL only transiently inside the registering transaction.
+  registration_journal_entry_id INTEGER UNIQUE,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(registration_journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE TABLE IF NOT EXISTS accrual_schedule_postings (
+  id INTEGER PRIMARY KEY,
+  accrual_id INTEGER NOT NULL,
+  period_index INTEGER NOT NULL CHECK(period_index > 0),
+  recognition_date TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK(amount > 0),
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(accrual_id, period_index),
+  FOREIGN KEY(accrual_id) REFERENCES accruals(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_accrual_schedule_postings_accrual ON accrual_schedule_postings(accrual_id);
+CREATE INDEX IF NOT EXISTS idx_accruals_document ON accruals(document_id);
+
+-- The registering transaction sets registration_journal_entry_id once, right
+-- after the header row exists; that single transition is the only mutation an
+-- accrual row may ever undergo. Everything else is append-only — a wrong
+-- accrual is corrected by reversing its journal entries.
+CREATE TRIGGER IF NOT EXISTS accruals_no_update
+BEFORE UPDATE ON accruals
+WHEN NOT (OLD.registration_journal_entry_id IS NULL AND NEW.registration_journal_entry_id IS NOT NULL
+          AND OLD.id = NEW.id AND OLD.accrual_type = NEW.accrual_type
+          AND OLD.description = NEW.description AND OLD.total_amount = NEW.total_amount
+          AND OLD.recognition_periods = NEW.recognition_periods
+          AND OLD.balance_account_no = NEW.balance_account_no
+          AND OLD.result_account_no = NEW.result_account_no
+          AND OLD.first_recognition_date = NEW.first_recognition_date
+          AND OLD.period_step_months = NEW.period_step_months)
+BEGIN
+  SELECT RAISE(ABORT, 'accruals are append-only; reverse the journal entries to correct an accrual');
+END;
+
+CREATE TRIGGER IF NOT EXISTS accruals_no_delete
+BEFORE DELETE ON accruals
+BEGIN
+  SELECT RAISE(ABORT, 'accruals are append-only; reverse the journal entries to correct an accrual');
+END;
+
+CREATE TRIGGER IF NOT EXISTS accrual_schedule_postings_no_update
+BEFORE UPDATE ON accrual_schedule_postings
+BEGIN
+  SELECT RAISE(ABORT, 'accrual schedule postings are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS accrual_schedule_postings_no_delete
+BEFORE DELETE ON accrual_schedule_postings
+BEGIN
+  SELECT RAISE(ABORT, 'accrual schedule postings are append-only; reverse the journal entry instead');
+END;
+-- ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+-- ===== BUDGET (budget per konto pr. periode) =====
+-- A budget line is an append-only revision: setting a budget for an
+-- (account_no, period) pair inserts a NEW row; the row with the highest id for
+-- that pair is the effective budget. Nothing is mutated or deleted, so the
+-- full history of every budget change is preserved for audit — the same
+-- append-only discipline the ledger and recurring-invoice templates follow.
+--
+-- `period` is a calendar month in YYYY-MM form. `amount` is a kroner figure in
+-- the account's natural sign convention (a 5000 expense budget, a 20000 income
+-- target) — never negative. The budget-vs-actual report and the liquidity
+-- forecast both read the effective line.
+CREATE TABLE IF NOT EXISTS budget_lines (
+  id INTEGER PRIMARY KEY,
+  account_no TEXT NOT NULL,
+  period TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK(amount >= 0),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(account_no) REFERENCES accounts(account_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_budget_lines_account_period
+  ON budget_lines(account_no, period, id);
+
+CREATE TRIGGER IF NOT EXISTS budget_lines_no_update
+BEFORE UPDATE ON budget_lines
+BEGIN
+  SELECT RAISE(ABORT, 'budget lines are append-only; insert a new revision instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS budget_lines_no_delete
+BEFORE DELETE ON budget_lines
+BEGIN
+  SELECT RAISE(ABORT, 'budget lines are append-only and cannot be deleted; insert a new revision instead');
+END;
+-- ===== END BUDGET =====

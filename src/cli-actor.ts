@@ -81,6 +81,13 @@ export const MUTATING_COMMANDS = new Set([
   // ===== RUNTIME AGENT (#183) =====
   "agent run",
   // ===== END RUNTIME AGENT (#183) =====
+  // ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  "accrual register",
+  "accrual recognize",
+  // ===== END ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
+  // ===== BUDGET =====
+  "budget set",
+  // ===== END BUDGET =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {
