@@ -88,6 +88,10 @@ export const MUTATING_COMMANDS = new Set([
   // ===== BUDGET =====
   "budget set",
   // ===== END BUDGET =====
+  // ===== PAYABLES / KREDITORSTYRING =====
+  "payable register",
+  "payable pay",
+  // ===== END PAYABLES / KREDITORSTYRING =====
 ]);
 
 export function trimToNull(value: string | null | undefined): string | null {

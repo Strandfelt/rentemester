@@ -88,6 +88,9 @@ import { register as registerTax } from "./cli/tax";
 // ===== BUDGET + LIQUIDITY FORECAST =====
 import { register as registerBudget } from "./cli/budget";
 // ===== END BUDGET + LIQUIDITY FORECAST =====
+// ===== PAYABLES / KREDITORSTYRING =====
+import { register as registerPayable } from "./cli/payable";
+// ===== END PAYABLES / KREDITORSTYRING =====
 import {
   isValidSlug,
   resolveConfiguredWorkspaceRoot,
@@ -280,6 +283,9 @@ for (const registerFn of [
   // ===== BUDGET + LIQUIDITY FORECAST =====
   registerBudget,
   // ===== END BUDGET + LIQUIDITY FORECAST =====
+  // ===== PAYABLES / KREDITORSTYRING =====
+  registerPayable,
+  // ===== END PAYABLES / KREDITORSTYRING =====
 ]) {
   registerFn(dispatch);
 }

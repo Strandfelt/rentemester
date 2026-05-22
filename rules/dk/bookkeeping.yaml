@@ -260,3 +260,34 @@ rules:
         - duplicate_period_recognition_posting
         - recognition_total_exceeding_registered_accrual_amount
     explanation: Rentemester assists the periodeafgrænsning workflow by parking a prepaid/accrued cost or deferred revenue on a balance-sheet accrual account with one balanced registration entry, then recognising it onto the income statement through deterministic, balanced per-period entries that split the amount evenly (the final period carries the øre remainder) so the schedule reconciles exactly to the registered amount; every entry stays append-only and a wrong accrual is corrected by reversal, while the user/advisor owns the choice of period split and accounts.
+  # ===== PAYABLES / KREDITORSTYRING =====
+  - rule_id: DK-PAYABLE-001
+    name: A registered supplier bill must be a traceable, balanced open creditor item
+    category: ledger_validation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - purchase_document_reference
+        - bill_date_and_due_date
+        - balanced_creditor_recognition_journal_entry
+        - trade_creditor_liability_credited
+      forbid:
+        - duplicate_payable_for_same_purchase_document
+        - payable_recognition_without_purchase_document
+    explanation: Rentemester registers a booked supplier bill as an open creditor item by posting a balanced recognition entry (debit expense plus deductible input VAT, credit the trade-creditor liability account), keyed one-to-one to the underlying purchase document so the same bill is never registered twice.
+  - rule_id: DK-PAYABLE-PAYMENT-001
+    name: Payable payments must be traceably applied against open creditor items and bank transactions
+    category: ledger_validation
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    severity: hard_stop
+    machine_rule:
+      require:
+        - open_payable_reference
+        - outgoing_bank_transaction_reference
+        - balanced_settlement_journal_entry
+        - immutable_payment_application
+      forbid:
+        - payment_application_above_open_payable_balance
+        - reuse_of_already_applied_bank_transaction
+    explanation: Rentemester settles an open creditor item by matching one outgoing bank transaction, posting a balanced settlement entry (debit the trade-creditor liability account, credit the bank account) and recording an immutable payment application that never exceeds the payable's open balance.

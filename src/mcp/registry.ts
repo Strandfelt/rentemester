@@ -74,6 +74,9 @@ import { registerAccrualTools } from "./tools/accrual";
 // ===== BUDGET + LIQUIDITY FORECAST =====
 import { registerBudgetTools } from "./tools/budget";
 // ===== END BUDGET + LIQUIDITY FORECAST =====
+// ===== PAYABLES / KREDITORSTYRING =====
+import { registerPayableTools } from "./tools/payable";
+// ===== END PAYABLES / KREDITORSTYRING =====
 
 // Wraps a write tool's callback with the opt-in backup lock. The MCP tool
 // files are not uniform — some use the withCompanyDbConfirmed helper, some
@@ -180,4 +183,7 @@ export function registerAllTools(server: McpServer): void {
   // ===== BUDGET + LIQUIDITY FORECAST =====
   registerBudgetTools(server);
   // ===== END BUDGET + LIQUIDITY FORECAST =====
+  // ===== PAYABLES / KREDITORSTYRING =====
+  registerPayableTools(server);
+  // ===== END PAYABLES / KREDITORSTYRING =====
 }
