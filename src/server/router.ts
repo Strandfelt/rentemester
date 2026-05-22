@@ -53,6 +53,8 @@ import {
 import { serveStatic } from "./static";
 import {
   handleBankImport,
+  handleClosePeriod,
+  handleCompanyProfile,
   handleDocumentIngest,
   handleInvoiceIssue,
   handleInvoicePost,
@@ -302,12 +304,40 @@ function handleCompanyCashflow(
   return okResponse({ cashflow: data });
 }
 
+/**
+ * Parses the optional `payment` body field on the create-company form (#284)
+ * into a core `CompanyPaymentInput`. Every sub-field is optional — `createCompany`
+ * only creates the primary bank account when at least one carries information.
+ */
+function parseCreatePayment(
+  body: Record<string, unknown>,
+): { bankName?: string; registrationNo?: string; accountNo?: string; iban?: string } | undefined {
+  const raw = body.payment;
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw ApiError.badRequest("'payment' must be an object when present");
+  }
+  const p = raw as Record<string, unknown>;
+  const payment: {
+    bankName?: string;
+    registrationNo?: string;
+    accountNo?: string;
+    iban?: string;
+  } = {};
+  for (const field of ["bankName", "registrationNo", "accountNo", "iban"] as const) {
+    const value = optionalString(p, field);
+    if (value !== undefined) payment[field] = value;
+  }
+  return Object.keys(payment).length > 0 ? payment : undefined;
+}
+
 async function handleCompanyCreate(
   config: ServerConfig,
   request: Request,
 ): Promise<Response> {
   const body = await readJsonBody(request);
   const name = requireString(body, "name");
+  const payment = parseCreatePayment(body);
   let result;
   try {
     result = createCompany(config.workspaceRoot, {
@@ -316,6 +346,7 @@ async function handleCompanyCreate(
       cvr: optionalString(body, "cvr") ?? null,
       fiscalYearStartMonth: optionalString(body, "fiscalYearStartMonth"),
       fiscalYearLabelStrategy: optionalString(body, "fiscalYearLabelStrategy"),
+      ...(payment ? { payment } : {}),
     });
   } catch (err) {
     // createCompany throws plain Errors for invalid slug / duplicate. Re-map
@@ -522,9 +553,13 @@ export async function handleRequest(
 
     const companySettingsMatch = /^\/api\/companies\/([^/]+)\/company$/.exec(path);
     if (companySettingsMatch) {
-      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(companySettingsMatch[1]!);
-      return handleCompanySettings(config, slug);
+      if (method === "GET") return handleCompanySettings(config, slug);
+      // PATCH edits the company profile + bank/payment details (#284).
+      if (method === "PATCH") {
+        return await handleCompanyProfile(config, request, slug);
+      }
+      throw ApiError.methodNotAllowed("GET or PATCH required");
     }
 
     const syncCvrMatch = /^\/api\/companies\/([^/]+)\/sync-cvr$/.exec(path);
@@ -602,6 +637,16 @@ export async function handleRequest(
       if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
       const slug = decodeURIComponent(invoiceSettleMatch[1]!);
       return await handleInvoiceSettle(config, request, slug);
+    }
+
+    // Bookkeeping write route (#287): close an accounting period — the
+    // prerequisite for a momsangivelse.
+    const periodCloseMatch =
+      /^\/api\/companies\/([^/]+)\/periods\/close$/.exec(path);
+    if (periodCloseMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(periodCloseMatch[1]!);
+      return await handleClosePeriod(config, request, slug);
     }
 
     const companyMatch = /^\/api\/companies\/([^/]+)$/.exec(path);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { VatView } from "./VatView";
 import { renderAt } from "../test/render";
 import { vat, mockFetch } from "../test/fixtures";
@@ -121,5 +122,62 @@ describe("VatView — Moms", () => {
     expect(
       screen.queryByText(/Regulering for tab på debitorer/),
     ).not.toBeInTheDocument();
+  });
+
+  // #287: a momsangivelse requires a CLOSED vat_quarter period. The VAT view
+  // must offer a "close period" action so the owner can finish a VAT return
+  // entirely from the Cockpit.
+  test("offers a close-period action", async () => {
+    mockFetch(route());
+    renderView();
+    expect(
+      await screen.findByRole("button", { name: /Luk momsperiode/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("closes the VAT period and confirms it", async () => {
+    mockFetch({
+      ...route(),
+      "POST /api/companies/acme-aps/periods/close": {
+        period: {
+          id: 1,
+          periodStart: "2026-04-01",
+          periodEnd: "2026-06-30",
+          kind: "vat_quarter",
+          status: "closed",
+          reference: null,
+        },
+      },
+    });
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Luk momsperiode/i }),
+    );
+    // A confirm step guards the irreversible close.
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Luk perioden/i }),
+    );
+    expect(
+      await screen.findByText(/Momsperioden er lukket/i),
+    ).toBeInTheDocument();
+  });
+
+  test("a backup-lock 409 on close is shown kindly", async () => {
+    mockFetch({
+      ...route(),
+      "POST /api/companies/acme-aps/periods/close": {
+        __error: { code: "conflict", message: "Bogføring er låst: backup mangler." },
+      },
+    });
+    renderView();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Luk momsperiode/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Luk perioden/i }),
+    );
+    expect(
+      await screen.findByText(/Bogføring er låst/i),
+    ).toBeInTheDocument();
   });
 });

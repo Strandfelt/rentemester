@@ -2,13 +2,36 @@ import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InvoiceIssueModal } from "./InvoiceIssueModal";
-import { mockFetch } from "../test/fixtures";
+import { companySettings, mockFetch } from "../test/fixtures";
 
 function noop() {}
 
-/** Routes the invoice-issue POST to a success summary. */
+/**
+ * The company-settings route the modal fetches on mount to decide whether to
+ * warn about missing payment details (#284). By default the company HAS a
+ * bank account, so no warning is shown.
+ */
+function companyRoute(paymentConfigured = true) {
+  return {
+    "GET /api/companies/acme-aps/company": {
+      company: companySettings({
+        payment: paymentConfigured
+          ? {
+              bankName: "Danske Bank",
+              registrationNo: "1234",
+              accountNo: "0001234567",
+              iban: null,
+            }
+          : null,
+      }),
+    },
+  };
+}
+
+/** Routes the invoice-issue POST to a success summary (+ the company route). */
 function issueRoute(over: Record<string, unknown> = {}) {
   return {
+    ...companyRoute(),
     "POST /api/companies/acme-aps/invoices/issue": {
       invoice: {
         documentId: 7,
@@ -44,6 +67,7 @@ async function fillMinimal() {
 
 describe("InvoiceIssueModal", () => {
   test("renders the dialog with date, VAT and line-item fields", () => {
+    mockFetch(companyRoute());
     render(
       <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
     );
@@ -58,6 +82,7 @@ describe("InvoiceIssueModal", () => {
   });
 
   test("Tilføj linje adds another editable line-item row", async () => {
+    mockFetch(companyRoute());
     render(
       <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
     );
@@ -121,6 +146,7 @@ describe("InvoiceIssueModal", () => {
   });
 
   test("a missing date is reported without POSTing", async () => {
+    mockFetch(companyRoute());
     render(
       <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
     );
@@ -139,6 +165,7 @@ describe("InvoiceIssueModal", () => {
   });
 
   test("a non-numeric quantity is reported without POSTing", async () => {
+    mockFetch(companyRoute());
     render(
       <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
     );
@@ -159,6 +186,7 @@ describe("InvoiceIssueModal", () => {
 
   test("a 409 backup-lock conflict is shown as a kind lock banner", async () => {
     mockFetch({
+      ...companyRoute(),
       "POST /api/companies/acme-aps/invoices/issue": {
         __error: {
           code: "conflict",
@@ -186,6 +214,7 @@ describe("InvoiceIssueModal", () => {
 
   test("a validation error from the server is shown as an error banner", async () => {
     mockFetch({
+      ...companyRoute(),
       "POST /api/companies/acme-aps/invoices/issue": {
         __error: { code: "bad_request", message: "buyer.name is required" },
       },
@@ -203,6 +232,7 @@ describe("InvoiceIssueModal", () => {
   });
 
   test("Annullér closes the modal without issuing", async () => {
+    mockFetch(companyRoute());
     const onClose = vi.fn();
     render(
       <InvoiceIssueModal
@@ -213,5 +243,29 @@ describe("InvoiceIssueModal", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Annullér" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // #284 — issuing an invoice without a bank account warns the human that the
+  // invoice will carry no payment instructions.
+  test("warns when the company has no payment details configured", async () => {
+    mockFetch(companyRoute(false));
+    render(
+      <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
+    );
+    expect(
+      await screen.findByText(/ingen bankkonto registreret/i),
+    ).toBeInTheDocument();
+  });
+
+  test("no warning when the company has payment details", async () => {
+    mockFetch(companyRoute(true));
+    render(
+      <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
+    );
+    // Let the company-settings fetch settle.
+    await screen.findByLabelText("Fakturadato");
+    expect(
+      screen.queryByText(/ingen bankkonto registreret/i),
+    ).not.toBeInTheDocument();
   });
 });

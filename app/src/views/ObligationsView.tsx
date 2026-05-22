@@ -112,7 +112,11 @@ export function ObligationsView() {
                       <DeadlineFlag row={row} />
                     </td>
                     <td className="num">
-                      {formatKroner(row.amount, currency)}
+                      {/* The annual-report row is a filing DEADLINE, not a
+                          debt — it has no kroner amount, so show a dash. */}
+                      {row.kind === "annual-report"
+                        ? "—"
+                        : formatKroner(row.amount, currency)}
                     </td>
                   </tr>
                 ))}
@@ -128,7 +132,8 @@ export function ObligationsView() {
           <p className="statement-check ok">
             Beløbene er læst direkte fra ledgeren. Frister vises hvor de kan
             udledes — moms efter kvartalsperioden, selskabsskat efter
-            indkomståret; øvrige poster har ingen kendt dato.
+            indkomståret, og årsrapporten til Erhvervsstyrelsen efter
+            regnskabsåret; øvrige poster har ingen kendt dato.
           </p>
         </>
       )}

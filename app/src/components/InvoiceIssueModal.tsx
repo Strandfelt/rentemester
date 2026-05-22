@@ -65,6 +65,10 @@ export function InvoiceIssueModal({
   const [error, setError] = useState<string | null>(null);
   const [locked, setLocked] = useState<string | null>(null);
   const [done, setDone] = useState<InvoiceIssueSummary | null>(null);
+  // #284: true when the company has no bank account configured — an invoice
+  // would then go out with no payment instructions. Null until the company
+  // settings have loaded; false once a payment account is confirmed present.
+  const [missingPayment, setMissingPayment] = useState<boolean | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // Move focus into the dialog and let Escape dismiss it — basic modal hygiene.
@@ -76,6 +80,33 @@ export function InvoiceIssueModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
+
+  // Check up-front whether the company has payment details — an invoice with
+  // no bank account carries no "BETALING" block, so the human is warned (#284).
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .companySettings(slug)
+      .then((settings) => {
+        if (cancelled) return;
+        const payment = settings.payment;
+        const hasPayment = Boolean(
+          payment &&
+            (payment.bankName ||
+              payment.registrationNo ||
+              payment.accountNo ||
+              payment.iban),
+        );
+        setMissingPayment(!hasPayment);
+      })
+      .catch(() => {
+        // A failed settings lookup must not block invoicing — skip the warning.
+        if (!cancelled) setMissingPayment(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   function updateLine(index: number, patch: Partial<LineDraft>) {
     setLines((prev) =>
@@ -244,6 +275,13 @@ export function InvoiceIssueModal({
 
             {locked && <LockBanner message={locked} />}
             {error && <Banner kind="error">{error}</Banner>}
+            {missingPayment && (
+              <Banner kind="warning">
+                Virksomheden har ingen bankkonto registreret — fakturaen
+                udstedes uden betalingsoplysninger. Tilføj en konto under
+                Administrér, så kunden ved hvortil der skal betales.
+              </Banner>
+            )}
 
             <div className="modal-field-grid">
               <label className="modal-field">

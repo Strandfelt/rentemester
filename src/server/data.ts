@@ -10,7 +10,9 @@ import { companyPaths } from "../core/paths";
 import { openDb, migrate } from "../core/db";
 import {
   getCompanySettings,
+  resolveCompanyPaymentDetails,
   syncCompanyFromCvr,
+  type CompanyPaymentDetails,
   type CompanySettings,
   type SyncCompanyFromCvrResult,
 } from "../core/company";
@@ -56,22 +58,6 @@ export function resolveAsOfDate(raw: string | null | undefined): string {
     throw ApiError.badRequest("asOf must be a YYYY-MM-DD date");
   }
   return raw;
-}
-
-function quarterPeriodForDate(asOfDate: string): { start: string; end: string } {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(asOfDate);
-  if (!m) return { start: asOfDate, end: asOfDate };
-  const year = parseInt(m[1]!, 10);
-  const month = parseInt(m[2]!, 10);
-  const quarter = Math.floor((month - 1) / 3) + 1;
-  const startMonth = (quarter - 1) * 3 + 1;
-  const endMonth = startMonth + 2;
-  const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return {
-    start: `${year}-${pad(startMonth)}-01`,
-    end: `${year}-${pad(endMonth)}-${pad(lastDay)}`,
-  };
 }
 
 function daysBetween(a: string, b: string): number {
@@ -422,9 +408,17 @@ export function buildCompanyDashboardData(
     const overdueInvoices = buildOverdueInvoiceList(db, { asOfDate });
     const unlinkedBank = listBankTransactions(db, { status: "unmatched" });
     const exceptions = listExceptions(db, { status: "open" });
-    const period = quarterPeriodForDate(asOfDate);
+    // VAT: surface the earliest unreported quarter — the one the owner must
+    // file now — exactly as the Overblik card and `vat momsangivelse` do
+    // (#281). The old `quarterPeriodForDate(asOfDate)` path keyed off the
+    // calendar quarter of the as-of date, which wrongly showed an empty
+    // current quarter when the activity sat in an earlier, unfiled one.
+    const { year: vatYear } = currentFiscalYear(db, company);
+    const { quarter: vatQuarter } = selectVatQuarter(db, vatYear);
+    const period = quarterPeriod(vatYear, vatQuarter);
     const vatPeriod = buildVatReport(db, period.start, period.end);
-    const vatDaysRemaining = daysBetween(asOfDate, period.end);
+    const vatDeadline = vatQuarterDeadline(vatYear, vatQuarter);
+    const vatDaysRemaining = daysBetween(asOfDate, vatDeadline);
     const recentActivity = listRecentAuditLog(db, 10);
     const backup = getBackupComplianceStatus(db, companyRoot, asOfDate);
     const audit = verifyAuditChain(db);
@@ -1736,18 +1730,33 @@ function requireCompanyDbPath(workspaceRoot: string, slug: string): string {
 }
 
 /**
- * The full company settings row, including the CVR-register stamdata. Read-only
- * — backs `GET /api/companies/:slug/company` so the cockpit can show the
- * synced address/branche/status.
+ * The full company settings row plus the company's own payment/bank details.
+ *
+ * `payment` is the primary `bank_accounts` row resolved via
+ * `core/company.ts#resolveCompanyPaymentDetails` — the same source every issued
+ * invoice's payment block reads from. It is null when no bank account is
+ * configured yet, which is exactly when the Cockpit must let the owner add one
+ * (#284): without it, an invoice goes out with no payment instructions.
+ */
+export type CompanySettingsView = CompanySettings & {
+  payment: CompanyPaymentDetails | null;
+};
+
+/**
+ * The full company settings row, including the CVR-register stamdata and the
+ * payment/bank details. Read-only — backs `GET /api/companies/:slug/company` so
+ * the cockpit can show the synced address/branche/status and the bank account.
  */
 export function buildCompanySettings(
   workspaceRoot: string,
   slug: string,
-): CompanySettings {
+): CompanySettingsView {
   const db = openDb(requireCompanyDbPath(workspaceRoot, slug));
   try {
     migrate(db);
-    return getCompanySettings(db);
+    const settings = getCompanySettings(db);
+    const payment = resolveCompanyPaymentDetails(db, settings.currency) ?? null;
+    return { ...settings, payment };
   } finally {
     db.close();
   }
@@ -3254,7 +3263,13 @@ export function buildCompanyContacts(workspaceRoot: string, slug: string) {
 /** One thing the company owes — a payable surfaced from the ledger. */
 export type ObligationRow = {
   /** A short, stable key for the obligation kind. */
-  kind: "vat" | "corporation-tax" | "creditors" | "auditor" | "other";
+  kind:
+    | "vat"
+    | "corporation-tax"
+    | "annual-report"
+    | "creditors"
+    | "auditor"
+    | "other";
   /** A human Danish label, e.g. "Moms — Q2 2026". */
   label: string;
   /** The amount owed, kroner; positive is payable. */
@@ -3395,6 +3410,35 @@ export function buildCompanyObligations(
         });
       }
     }
+
+    // Annual report (årsrapport) — the statutory filing to Erhvervsstyrelsen.
+    // It is not a ledger payable (it has no amount owed), but it is the other
+    // recurring legal deadline an owner must not miss, so the Forpligtelser
+    // screen surfaces it alongside VAT (#290). The deadline is computed the
+    // SAME way `agent run` does (`src/agent/loop.ts#checkDeadlines`): a
+    // class-B company files its årsrapport by the 1st of the 5th month after
+    // the fiscal year ends. The fiscal year is derived from the company's own
+    // `fiscalYearStartMonth` / label strategy, so a non-calendar year is
+    // handled correctly. `amount` is 0 — it is a deadline, not a debt.
+    const fy = fiscalYearForDate(
+      yearEnd,
+      ctx.company.fiscalYearStartMonth,
+      ctx.company.fiscalYearLabelStrategy,
+    );
+    const fyEndYear = parseInt(fy.end.slice(0, 4), 10);
+    const fyEndMonth = parseInt(fy.end.slice(5, 7), 10);
+    const annualReportDue = new Date(Date.UTC(fyEndYear, fyEndMonth + 4, 1));
+    const annualReportDueDate = `${annualReportDue.getUTCFullYear()}-${String(
+      annualReportDue.getUTCMonth() + 1,
+    ).padStart(2, "0")}-01`;
+    obligations.push({
+      kind: "annual-report",
+      label: `Årsrapport — regnskabsår ${fy.displayLabel}`,
+      amount: 0,
+      dueDate: annualReportDueDate,
+      daysRemaining: daysBetween(today, annualReportDueDate),
+      accountNo: null,
+    });
 
     // Liability accounts with a credit balance — corporation tax, trade
     // creditors, accrued auditor and anything else. A debit (negative) balance
