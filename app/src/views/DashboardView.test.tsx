@@ -165,16 +165,19 @@ describe("DashboardView — Overblik", () => {
     ).toBeInTheDocument();
   });
 
-  test("renders the bruttomargin and egenkapitalandel nøgletal", async () => {
+  test("labels the resultat ÷ omsætning ratio Overskudsgrad, not Bruttomargin (#304)", async () => {
     mockFetch(
       overviewRoute({
         keyFigures: { bruttomargin: 0.7423, egenkapitalandel: 0.9186 },
       }),
     );
     renderDashboard();
-    expect(await screen.findByText("Bruttomargin")).toBeInTheDocument();
+    // The figure computes resultat ÷ omsætning — that is the profit margin
+    // (overskudsgrad), not the gross margin. The label must match the maths.
+    expect(await screen.findByText("Overskudsgrad")).toBeInTheDocument();
+    expect(screen.queryByText("Bruttomargin")).not.toBeInTheDocument();
     expect(screen.getByText("Egenkapitalandel")).toBeInTheDocument();
-    const margin = screen.getByText("Bruttomargin").closest(".key-figure")!;
+    const margin = screen.getByText("Overskudsgrad").closest(".key-figure")!;
     expect(
       within(margin as HTMLElement).getByText(/74,2\s*%/),
     ).toBeInTheDocument();
