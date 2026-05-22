@@ -5,7 +5,38 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
-import { validateVatAgainstVies, lookupCachedViesValidation } from "../../src/core/vies";
+import {
+  validateVatAgainstVies,
+  lookupCachedViesValidation,
+  requireCachedViesValidation,
+} from "../../src/core/vies";
+
+describe("#293 — the missing-VIES error is surface-neutral", () => {
+  test("does not hardcode a CLI-only `rentemester ...` command", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-vies-msg-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const result = requireCachedViesValidation(db, "DE123456789", "supplier VAT");
+    expect(result.ok).toBe(false);
+    const message = result.errors[0] ?? "";
+
+    // The agent calling this over MCP cannot run a CLI binary — the error
+    // must not send it to one.
+    expect(message).not.toContain("rentemester customer validate-vat");
+    expect(message).not.toContain("--company");
+    expect(message).not.toContain("--cvr");
+    // It must still name the required action and the VAT number.
+    expect(message).toContain("DE123456789");
+    expect(message.toLowerCase()).toContain("vies");
+    // Both surfaces must be discoverable: the CLI subcommand and the MCP tool.
+    expect(message).toContain("customer validate-vat");
+    expect(message).toContain("customer_validate_vat");
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+});
 
 describe("VIES malformed-response handling", () => {
   test("does not cache an ambiguous VIES response as an authoritative invalid result (#144)", async () => {

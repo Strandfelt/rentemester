@@ -77,7 +77,7 @@ export function registerCustomerTools(server: McpServer): void {
     {
       title: "Create customer",
       description:
-        "Opretter en kundepost. write-reversible — kræver confirm:true. Kan arkiveres eller rettes senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret.",
+        "Opretter en kundepost. Kræver confirm:true. Kan arkiveres eller rettes senere. Med fromCvr udfyldes felter der ikke er sat i input fra CVR-registret. write-reversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         // `name` is optional only because `fromCvr` can supply it; a create

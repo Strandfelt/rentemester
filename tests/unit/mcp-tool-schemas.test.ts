@@ -690,6 +690,187 @@ describe("#277 — older tools' flat scalar fields carry field descriptions", ()
   });
 });
 
+describe("#294 — scalar-flag tools carry field descriptions and the documentId|invoiceNumber selector", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  function schemaOf(name: string) {
+    const tool = tools.find((t) => t.name === name);
+    expect(tool, `tool ${name} not found`).toBeDefined();
+    return tool.inputSchema as any;
+  }
+
+  test("expense_book flat scalar fields carry descriptions", () => {
+    const props = schemaOf("expense_book").properties ?? {};
+    for (const field of [
+      "documentId",
+      "bankTransactionId",
+      "expenseAccount",
+      "paymentAccount",
+      "date",
+      "text",
+    ]) {
+      expect(typeof props[field]?.description, `expense_book.${field} description`).toBe(
+        "string",
+      );
+      expect(
+        (props[field]?.description ?? "").length,
+        `expense_book.${field} description length`,
+      ).toBeGreaterThan(10);
+    }
+    // date must state the YYYY-MM-DD format.
+    expect(props.date?.description).toContain("YYYY-MM-DD");
+    // paymentAccount must state the account-2000 default.
+    expect(props.paymentAccount?.description).toContain("2000");
+  });
+
+  test("invoice_remind / journal_reverse flat scalar fields carry descriptions", () => {
+    const remind = schemaOf("invoice_remind").properties ?? {};
+    expect(remind.date?.description).toContain("YYYY-MM-DD");
+    expect(typeof remind.fee?.description).toBe("string");
+    expect(typeof remind.note?.description).toBe("string");
+
+    const reverse = schemaOf("journal_reverse").properties ?? {};
+    for (const field of ["entryId", "entryNo", "matchText", "date", "reason"]) {
+      expect(typeof reverse[field]?.description, `journal_reverse.${field}`).toBe("string");
+    }
+    expect(reverse.date?.description).toContain("YYYY-MM-DD");
+  });
+
+  test("read tools bank_list / invoice_list / invoice_status / reconcile_bank carry field descriptions", () => {
+    const bank = schemaOf("bank_list").properties ?? {};
+    expect(typeof bank.status?.description).toBe("string");
+    expect(bank.from?.description).toContain("YYYY-MM-DD");
+    expect(bank.to?.description).toContain("YYYY-MM-DD");
+    expect(typeof bank.account?.description).toBe("string");
+
+    const invList = schemaOf("invoice_list").properties ?? {};
+    expect(typeof invList.status?.description).toBe("string");
+    expect(invList.from?.description).toContain("YYYY-MM-DD");
+
+    const invStatus = schemaOf("invoice_status").properties ?? {};
+    expect(invStatus.asOf?.description).toContain("YYYY-MM-DD");
+
+    const recon = schemaOf("reconcile_bank").properties ?? {};
+    expect(recon.from?.description).toContain("YYYY-MM-DD");
+    expect(recon.to?.description).toContain("YYYY-MM-DD");
+  });
+
+  // The documentId|invoiceNumber selector must be visible in BOTH fields.
+  const SELECTOR_TOOLS = [
+    "invoice_status",
+    "invoice_post",
+    "invoice_render",
+    "invoice_remind",
+    "invoice_post_reminder",
+    "invoice_claim_interest",
+    "invoice_post_interest",
+    "invoice_claim_compensation",
+    "invoice_post_compensation",
+    "invoice_interest_calc",
+    "invoice_compensation_calc",
+  ];
+
+  for (const name of SELECTOR_TOOLS) {
+    test(`${name}: documentId and invoiceNumber both describe the exactly-one selector rule`, () => {
+      const props = schemaOf(name).properties ?? {};
+      const docDesc: string = props.documentId?.description ?? "";
+      const numDesc: string = props.invoiceNumber?.description ?? "";
+      expect(docDesc.length, `${name}.documentId description`).toBeGreaterThan(10);
+      expect(numDesc.length, `${name}.invoiceNumber description`).toBeGreaterThan(10);
+      // The "provide exactly one" rule must be visible in BOTH fields.
+      for (const [field, desc] of [
+        ["documentId", docDesc],
+        ["invoiceNumber", numDesc],
+      ] as const) {
+        const lc = desc.toLowerCase();
+        expect(lc, `${name}.${field} mentions the alternative`).toContain("invoicenumber");
+        expect(lc, `${name}.${field} mentions documentId`).toContain("documentid");
+        expect(lc, `${name}.${field} states the one-of rule`).toMatch(
+          /exactly one|provide (?:either|one)/,
+        );
+      }
+    });
+  }
+});
+
+describe("#295 — every write tool's description ends with a consistent write-class token", () => {
+  let tools: any[];
+
+  beforeAll(async () => {
+    const response = await client.send("tools/list");
+    tools = response.result?.tools ?? [];
+  });
+
+  test("no write tool's description ends with a bare 'write.'", () => {
+    const offenders = tools
+      .filter((t) => t.annotations?.readOnlyHint !== true)
+      .filter((t) => /(^|[^-])\bwrite\.\s*$/.test((t.description ?? "").trim()))
+      .map((t) => t.name);
+    expect(offenders).toEqual([]);
+  });
+
+  test("every non-destructive write tool ENDS with write-reversible. or write-irreversible.", () => {
+    // The class token must be the final sentence so it is reliably the last
+    // thing an agent parses — not buried mid-description.
+    const ENDS_WITH = /\b(write-reversible|write-irreversible)\.\s*$/;
+    const missing: string[] = [];
+    for (const tool of tools) {
+      if (tool.annotations?.readOnlyHint === true) continue; // read tools
+      if (tool.annotations?.destructiveHint === true) continue; // destructive class
+      const desc: string = (tool.description ?? "").trim();
+      if (!ENDS_WITH.test(desc)) missing.push(tool.name);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  test("the class token appears exactly once per write tool description", () => {
+    // No description may carry two conflicting class tokens.
+    const offenders: string[] = [];
+    for (const tool of tools) {
+      if (tool.annotations?.readOnlyHint === true) continue;
+      if (tool.annotations?.destructiveHint === true) continue;
+      const matches = (tool.description ?? "").match(
+        /\bwrite-(?:reversible|irreversible)\b/gi,
+      );
+      if ((matches?.length ?? 0) !== 1) offenders.push(tool.name);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("the previously-untokened backup + workspace tools carry an explicit class token", () => {
+    const TOKEN = /\b(write-reversible|write-irreversible)\b/;
+    for (const name of [
+      "system_backup_archive",
+      "system_backup_destination_add",
+      "system_backup_destination_remove",
+      "system_backup_place",
+      "system_backup_confirm_placement",
+      "system_backup_lock",
+      "company_add",
+    ]) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool, `tool ${name} not found`).toBeDefined();
+      expect(TOKEN.test(tool.description ?? ""), `${name} has a write-class token`).toBe(
+        true,
+      );
+    }
+  });
+
+  test("bank_import stays write-reversible and journal_post stays write-irreversible", () => {
+    const bank = tools.find((t) => t.name === "bank_import");
+    const journal = tools.find((t) => t.name === "journal_post");
+    expect((bank?.description ?? "")).toContain("write-reversible");
+    expect((journal?.description ?? "")).toContain("write-irreversible");
+    // The two classes must be machine-distinguishable from the description.
+    expect((journal?.description ?? "")).not.toContain("write-reversible");
+  });
+});
+
 describe("#200 — typed schemas reject structurally invalid payloads", () => {
   test("invoice_issue rejects a payload missing the required invoiceType", async () => {
     // With the typed schema the SDK rejects this before the handler. The point

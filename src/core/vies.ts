@@ -139,7 +139,15 @@ export function requireCachedViesValidation(db: Database, vatOrCvr: string | nul
   }
   const cached = lookupCachedViesValidation(db, parsed.normalized);
   if (!cached) {
-    return { ok: false, appliedRules: [RULE_ID], errors: [`VIES lookup not yet performed for ${label} (${parsed.normalized}) — run \`rentemester customer validate-vat --company <path> --cvr ${parsed.normalized}\` first`] };
+    return {
+      ok: false,
+      appliedRules: [RULE_ID],
+      errors: [
+        `VIES lookup not yet performed for ${label} (${parsed.normalized}) — ` +
+          `validate the VAT number against VIES first ` +
+          `(CLI: \`customer validate-vat\`; MCP: \`customer_validate_vat\`).`,
+      ],
+    };
   }
   if (!cached.valid) {
     return { ok: false, appliedRules: [RULE_ID], errors: [`${label} ${parsed.normalized} is not a valid EU VAT number per cached VIES result from ${cached.validatedAt}`] };

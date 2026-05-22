@@ -108,10 +108,11 @@ export function registerJournalTools(server: McpServer): void {
       title: "Post journal entry",
       description:
         "Bogfører en manuel finanspostering i den append-only kæde. " +
-        "Write-irreversible — kræver confirm:true. Modposteres via journal_reverse. " +
+        "Kræver confirm:true. Modposteres via journal_reverse. " +
         "Alle beløb er i kroner (decimal DKK, 2 decimaler — ikke øre). " +
         "payload.documentId er påkrævet hvis nogen linje bogfører på en udgifts- eller " +
-        "indtægtskonto; valgfri kun for posteringer der udelukkende rører balancekonti.",
+        "indtægtskonto; valgfri kun for posteringer der udelukkende rører balancekonti. " +
+        "write-irreversible.",
       inputSchema: {
         company: z.string().min(1, "company path is required"),
         payload: payloadSchema,
@@ -144,17 +145,56 @@ export function registerJournalTools(server: McpServer): void {
     {
       title: "Reverse journal entry",
       description:
-        "Tilbagefører en bogført finanspostering ved at oprette en modpost. write-irreversible. " +
-        "Identificér posten via entryId, entryNo eller matchText (+ valgfri matchDate/matchDocumentId).",
+        "Tilbagefører en bogført finanspostering ved at oprette en modpost. " +
+        "Identificér posten via entryId, entryNo eller matchText (+ valgfri matchDate/matchDocumentId). " +
+        "write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
-        entryId: z.number().int().positive().optional(),
-        entryNo: z.string().optional(),
-        matchText: z.string().optional(),
-        matchDate: z.string().optional(),
-        matchDocumentId: z.number().int().positive().optional(),
-        date: z.string().min(1, "date (transaction date for the reversal) is required"),
-        reason: z.string().min(1, "reason is required"),
+        entryId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "ID of the journal entry to reverse. Identify the entry by exactly one " +
+              "of entryId, entryNo or matchText. See journal_list.",
+          ),
+        entryNo: z
+          .string()
+          .optional()
+          .describe(
+            "Entry number of the journal entry to reverse. Identify the entry by " +
+              "exactly one of entryId, entryNo or matchText.",
+          ),
+        matchText: z
+          .string()
+          .optional()
+          .describe(
+            "Substring of the entry text used to locate the journal entry to " +
+              "reverse. Identify the entry by exactly one of entryId, entryNo or " +
+              "matchText; narrow an ambiguous text match with matchDate / " +
+              "matchDocumentId.",
+          ),
+        matchDate: z
+          .string()
+          .optional()
+          .describe(
+            "Optional posting date (YYYY-MM-DD) that further narrows a matchText lookup.",
+          ),
+        matchDocumentId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Optional document ID that further narrows a matchText lookup."),
+        date: z
+          .string()
+          .min(1, "date (transaction date for the reversal) is required")
+          .describe("Posting date of the reversal entry, in YYYY-MM-DD format."),
+        reason: z
+          .string()
+          .min(1, "reason is required")
+          .describe("Human-readable reason for the reversal, recorded on the counter-entry."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

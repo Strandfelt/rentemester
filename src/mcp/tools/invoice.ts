@@ -381,10 +381,20 @@ const statusEnum = z
   .enum(["open", "paid", "credited", "refunded", "overpaid", "written_off", "overdue", "all"])
   .optional();
 
+// The issued-invoice selector. Every tool below identifies an invoice by
+// EITHER documentId OR invoiceNumber — the rule is spelled out in BOTH field
+// descriptions so an agent reading either one sees it.
+const SELECTOR_DOC_ID =
+  "Document ID of the issued invoice. Provide exactly one of documentId or " +
+  "invoiceNumber. Find IDs with invoice_list / invoice_find.";
+const SELECTOR_INVOICE_NUMBER =
+  "Invoice number of the issued invoice, e.g. '2026-001'. Provide exactly one " +
+  "of documentId or invoiceNumber. Find numbers with invoice_list / invoice_find.";
+
 const docIdOrNumberSchema = {
   company: z.string().min(1),
-  documentId: z.number().int().positive().optional(),
-  invoiceNumber: z.string().optional(),
+  documentId: z.number().int().positive().optional().describe(SELECTOR_DOC_ID),
+  invoiceNumber: z.string().optional().describe(SELECTOR_INVOICE_NUMBER),
 };
 
 function notFoundEnvelope(args: { documentId?: number | null; invoiceNumber?: string | null }) {
@@ -422,7 +432,16 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Invoice status",
       description: "Viser åben saldo og status på en faktura. Read-only.",
-      inputSchema: { ...docIdOrNumberSchema, asOf: z.string().optional() },
+      inputSchema: {
+        ...docIdOrNumberSchema,
+        asOf: z
+          .string()
+          .optional()
+          .describe(
+            "As-of date in YYYY-MM-DD format for the status snapshot. " +
+              "Defaults to today.",
+          ),
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -444,15 +463,42 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Lister udstedte fakturaer med filtre. Read-only.",
       inputSchema: {
         company: z.string().min(1),
-        status: statusEnum,
-        from: z.string().optional(),
-        to: z.string().optional(),
-        customerCvr: z.string().optional(),
-        customer: z.string().optional(),
-        invoiceNumber: z.string().optional(),
-        minAmount: z.number().optional(),
-        maxAmount: z.number().optional(),
-        asOf: z.string().optional(),
+        status: statusEnum.describe(
+          "Filter by invoice status: 'open', 'paid', 'credited', 'refunded', " +
+            "'overpaid', 'written_off', 'overdue' or 'all'. Defaults to 'all'.",
+        ),
+        from: z
+          .string()
+          .optional()
+          .describe("Only invoices issued on or after this date (YYYY-MM-DD)."),
+        to: z
+          .string()
+          .optional()
+          .describe("Only invoices issued on or before this date (YYYY-MM-DD)."),
+        customerCvr: z
+          .string()
+          .optional()
+          .describe("Filter by the customer's CVR/VAT number, e.g. 'DK12345678'."),
+        customer: z
+          .string()
+          .optional()
+          .describe("Filter by a substring of the customer name."),
+        invoiceNumber: z
+          .string()
+          .optional()
+          .describe("Filter by exact invoice number, e.g. '2026-001'."),
+        minAmount: z
+          .number()
+          .optional()
+          .describe("Only invoices with a gross total at or above this amount (kroner, decimal DKK)."),
+        maxAmount: z
+          .number()
+          .optional()
+          .describe("Only invoices with a gross total at or below this amount (kroner, decimal DKK)."),
+        asOf: z
+          .string()
+          .optional()
+          .describe("As-of date (YYYY-MM-DD) used for status/balance computation. Defaults to today."),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -546,8 +592,16 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Beregner morarente uden at registrere. Read-only.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        asOf: z.string().min(1),
-        referenceRate: z.number(),
+        asOf: z
+          .string()
+          .min(1)
+          .describe("As-of date in YYYY-MM-DD format the interest is calculated up to."),
+        referenceRate: z
+          .number()
+          .describe(
+            "Nationalbanken's reference rate as a percentage (e.g. 2.65 for 2.65%); " +
+              "the statutory late-interest surcharge is added on top.",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -577,8 +631,17 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Beregner kompensationskrav for sen betaling uden at registrere. Read-only.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        asOf: z.string().min(1),
-        amountDkk: z.number().optional(),
+        asOf: z
+          .string()
+          .min(1)
+          .describe("As-of date in YYYY-MM-DD format the compensation is calculated up to."),
+        amountDkk: z
+          .number()
+          .optional()
+          .describe(
+            "Optional fixed compensation amount in kroner (decimal DKK). When " +
+              "omitted, the statutory DKK 310 late-payment compensation is used.",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -608,8 +671,9 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Issue invoice",
       description:
-        "Udsteder kundefaktura + immutable snapshot. write-irreversible. " +
-        "Alle beløb i payload er i kroner (decimal DKK, 2 decimaler — ikke øre); vatRate er en brøk (0.25 = 25%).",
+        "Udsteder kundefaktura + immutable snapshot. " +
+        "Alle beløb i payload er i kroner (decimal DKK, 2 decimaler — ikke øre); vatRate er en brøk (0.25 = 25%). " +
+        "write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: invoicePayloadSchema,
@@ -660,8 +724,8 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Issue credit note",
       description:
-        "Udsteder kreditnota mod en eksisterende faktura. write-irreversible. " +
-        "payload.grossAmount er i kroner (decimal DKK, ikke øre).",
+        "Udsteder kreditnota mod en eksisterende faktura. " +
+        "payload.grossAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: creditNotePayloadSchema,
@@ -708,8 +772,8 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Settle invoice from bank",
       description:
-        "Matcher en bankbetaling mod en faktura. write-irreversible. " +
-        "payload.amount er i kroner (decimal DKK, ikke øre).",
+        "Matcher en bankbetaling mod en faktura. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: bankSettlementPayloadSchema,
@@ -734,8 +798,8 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Settle invoice claims from bank",
       description:
-        "Matcher en bankbetaling mod fakturakrav. write-irreversible. " +
-        "payload.amount er i kroner (decimal DKK, ikke øre).",
+        "Matcher en bankbetaling mod fakturakrav. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: bankSettlementPayloadSchema,
@@ -760,8 +824,8 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Write off bad debt",
       description:
-        "Bogfører tab på debitor. write-irreversible. " +
-        "payload.grossAmount er i kroner (decimal DKK, ikke øre).",
+        "Bogfører tab på debitor. " +
+        "payload.grossAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: badDebtPayloadSchema,
@@ -786,8 +850,8 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Apply invoice payment",
       description:
-        "Registrerer fakturabetaling fra payload. write-irreversible. " +
-        "payload.amount er i kroner (decimal DKK, ikke øre).",
+        "Registrerer fakturabetaling fra payload. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: applyPaymentPayloadSchema,
@@ -812,8 +876,8 @@ export function registerInvoiceTools(server: McpServer): void {
     {
       title: "Refund invoice to bank",
       description:
-        "Bogfører refundering til kunde fra banken. write-irreversible. " +
-        "payload.amount er i kroner (decimal DKK, ikke øre).",
+        "Bogfører refundering til kunde fra banken. " +
+        "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: refundBankPayloadSchema,
@@ -840,9 +904,18 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Registrerer rykker på forfalden faktura. write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        date: z.string().min(1),
-        fee: z.number().optional(),
-        note: z.string().optional(),
+        date: z
+          .string()
+          .min(1)
+          .describe("Reminder date in YYYY-MM-DD format."),
+        fee: z
+          .number()
+          .optional()
+          .describe(
+            "Optional reminder fee in kroner (decimal DKK). When omitted, no fee " +
+              "is added to the reminder.",
+          ),
+        note: z.string().optional().describe("Optional free-text note on the reminder."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -876,8 +949,22 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Bogfører en registreret rykker. write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        reminderId: z.number().int().positive().optional(),
-        date: z.string().optional(),
+        reminderId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Optional ID of the specific registered reminder to post. When " +
+              "omitted, the latest unposted reminder on the invoice is posted.",
+          ),
+        date: z
+          .string()
+          .optional()
+          .describe(
+            "Posting date in YYYY-MM-DD format. When omitted, the reminder's own " +
+              "date is used.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -909,9 +996,17 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Registrerer morarentekrav. write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        asOf: z.string().min(1),
-        referenceRate: z.number(),
-        note: z.string().optional(),
+        asOf: z
+          .string()
+          .min(1)
+          .describe("As-of date in YYYY-MM-DD format the late interest is computed up to."),
+        referenceRate: z
+          .number()
+          .describe(
+            "Nationalbanken's reference rate as a percentage (e.g. 2.65 for 2.65%); " +
+              "the statutory late-interest surcharge is added on top.",
+          ),
+        note: z.string().optional().describe("Optional free-text note on the interest claim."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -945,8 +1040,21 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Bogfører registreret morarentekrav. write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        claimId: z.number().int().positive().optional(),
-        date: z.string().optional(),
+        claimId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Optional ID of the specific registered interest claim to post. When " +
+              "omitted, the latest unposted interest claim on the invoice is posted.",
+          ),
+        date: z
+          .string()
+          .optional()
+          .describe(
+            "Posting date in YYYY-MM-DD format. When omitted, the claim's own date is used.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -978,9 +1086,18 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Registrerer kompensationskrav (uden at bogføre). write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        asOf: z.string().min(1),
-        amountDkk: z.number().optional(),
-        note: z.string().optional(),
+        asOf: z
+          .string()
+          .min(1)
+          .describe("As-of date in YYYY-MM-DD format the compensation is computed up to."),
+        amountDkk: z
+          .number()
+          .optional()
+          .describe(
+            "Optional fixed compensation amount in kroner (decimal DKK). When " +
+              "omitted, the statutory DKK 310 late-payment compensation is used.",
+          ),
+        note: z.string().optional().describe("Optional free-text note on the compensation claim."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -1014,7 +1131,12 @@ export function registerInvoiceTools(server: McpServer): void {
       description: "Bogfører registreret kompensationskrav. write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
-        date: z.string().optional(),
+        date: z
+          .string()
+          .optional()
+          .describe(
+            "Posting date in YYYY-MM-DD format. When omitted, the claim's own date is used.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

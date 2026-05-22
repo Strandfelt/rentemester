@@ -148,9 +148,9 @@ export function registerVatTools(server: McpServer): void {
     {
       title: "Post EU service reverse-charge purchase",
       description:
-        "Bogfører EU-servicekøb med reverse charge. write-irreversible. " +
+        "Bogfører EU-servicekøb med reverse charge. " +
         "Hvis payload.invoiceNo er sat, slås documentId op automatisk. " +
-        "payload.netAmount er i kroner (decimal DKK, ikke øre).",
+        "payload.netAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: euServicePurchasePayloadSchema,
@@ -190,8 +190,8 @@ export function registerVatTools(server: McpServer): void {
     {
       title: "Post representation purchase (partial VAT deduction)",
       description:
-        "Bogfører repræsentationsudgift med delvis momsfradrag. write-irreversible. " +
-        "payload.netAmount er i kroner (decimal DKK, ikke øre).",
+        "Bogfører repræsentationsudgift med delvis momsfradrag. " +
+        "payload.netAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         payload: representationPurchasePayloadSchema,

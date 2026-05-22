@@ -34,13 +34,48 @@ export function registerExpenseTools(server: McpServer): void {
         "Bogfører leverandørudgift fra bilag + bankpost i ét tag. write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
-        documentId: z.number().int().positive(),
-        bankTransactionId: z.number().int().positive(),
-        expenseAccount: z.string().min(1),
+        documentId: z
+          .number()
+          .int()
+          .positive()
+          .describe(
+            "ID of the ingested document (bilag) the expense is booked from. " +
+              "Find it with documents_list.",
+          ),
+        bankTransactionId: z
+          .number()
+          .int()
+          .positive()
+          .describe(
+            "ID of the imported bank transaction that paid the expense. " +
+              "Find it with bank_list.",
+          ),
+        expenseAccount: z
+          .string()
+          .min(1)
+          .describe(
+            "Account number from the chart of accounts the expense is posted to, " +
+              "e.g. '3000' (Software og SaaS). See accounts_list.",
+          ),
         vatTreatment: vatTreatmentEnum,
-        paymentAccount: z.string().optional(),
-        date: z.string().optional(),
-        text: z.string().optional(),
+        paymentAccount: z
+          .string()
+          .optional()
+          .describe(
+            "Account number the payment is credited to. Defaults to account 2000 " +
+              "(Bank); set it only when the payment came from a different account.",
+          ),
+        date: z
+          .string()
+          .optional()
+          .describe(
+            "Posting date in YYYY-MM-DD format. When omitted, the bank " +
+              "transaction's own date is used.",
+          ),
+        text: z
+          .string()
+          .optional()
+          .describe("Optional free-text description of the expense posting."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
