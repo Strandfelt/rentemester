@@ -152,6 +152,7 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 | `invoice_send_email` | `{ invoiceNumber, kind, recipient, subject, messageId, duplicate }` — `duplicate:true` ⇒ en identisk afsendelse fandtes allerede (idempotent). |
 | `customer_validate_vat` | `{ validation: { … VIES-record … } }` |
 | `audit_verify` | `{ entries }` — kun antallet af verificerede posteringer. Integritets-verdikten er **konvoluttens** `ok`/`errors[]`, ikke et felt i `data`: `ok=true` ⇒ kæden er intakt, `ok=false` ⇒ `errors[]` lister bruddene. |
+| `system_restore_backup` | `{ backupId, restoredAt, targetCompanyRoot, restoredDbPath, restoredFiles: { documentsOriginals, invoicesIssued, config } }` — `backupId`/`restoredAt` er ISO-tidsstempler; `restoredFiles`-felterne er antal genskabte filer pr. kategori. `appliedRules` (på konvoluttens topniveau) er `["DK-BOOKKEEPING-RESTORE-001"]`. |
 
 > **Discovery-kontrakten:** Konvolut-formen er maskin-kendt via `outputSchema`
 > i `tools/list`. Den præcise `data`-feltliste står her og i kildens
@@ -511,11 +512,17 @@ Output (success):
 {
   "ok": true,
   "data": {
-    "restoredCompany": "/Users/mikkel/companies/acme-aps-restored",
-    "filesRestored": 1842,
-    "manifestVerified": true,
-    "signatureVerified": true
-  }
+    "backupId": "2026-05-17T22-00-00Z",
+    "restoredAt": "2026-05-18T09-14-02Z",
+    "targetCompanyRoot": "/Users/mikkel/companies/acme-aps-restored",
+    "restoredDbPath": "/Users/mikkel/companies/acme-aps-restored/ledger.sqlite",
+    "restoredFiles": {
+      "documentsOriginals": 41,
+      "invoicesIssued": 18,
+      "config": 3
+    }
+  },
+  "appliedRules": ["DK-BOOKKEEPING-RESTORE-001"]
 }
 ```
 

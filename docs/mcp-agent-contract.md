@@ -103,9 +103,10 @@ array.** An agent that always reads `errors[]` from the envelope must guard
 against it:
 
 - **Detect it:** the JSON-RPC `result` has `isError: true` but no
-  `structuredContent` (equivalently, the `error` field carries code `-32602`,
-  or the text content begins with `MCP error -32602: Input validation
-  error`).
+  `structuredContent` (equivalently, the text content begins with
+  `MCP error -32602: Input validation error`). There is **no top-level
+  `error` field** on this reply — the `-32602` code appears only inside
+  `content[0].text`.
 - **Read it:** the human-readable cause is in `content[0].text` — it names
   the tool and lists the offending fields (zod issues with `path` and
   `message`).
@@ -165,7 +166,7 @@ Common precondition failures and the fix:
 | `confirm: true required for write tool …` | Write attempted without `confirm`. | Re-call with `confirm: true`. |
 | `confirmText must match …` | `system_restore_backup` confirmText wrong. | Supply `RESTORE <targetCompany>` exactly. |
 | balance / "går ikke i nul" | Journal entry debit ≠ credit. | Correct the lines so they balance. |
-| period lock / "periode … lukket" | Posting into a closed period. | Post in an open period. Reopening a closed period is **CLI-only** — there is no MCP tool for it; surface it to the human to run `rentemester period reopen` (a controlled, audit-logged action; a `reported` period cannot be reopened). |
+| `<field> <date> falls in <closed\|reported> period <kind> <start>..<end>` | Posting into a closed or reported period. | Post in an open period. Reopening a closed period is **CLI-only** — there is no MCP tool for it; surface it to the human to run `rentemester period reopen` (a controlled, audit-logged action; a `reported` period cannot be reopened). |
 | VIES / VAT validation missing | EU customer not VAT-validated. | Run `customer_validate_vat` first. |
 | `… låst …` (backup lock) | The opt-in bookkeeping lock is active. | Run `system_backup` with `archive:true`, then place it; see below. |
 
