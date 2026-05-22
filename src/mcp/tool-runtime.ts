@@ -206,6 +206,16 @@ export function withCompanyDbConfirmed<TArgs extends { company: string; confirm?
  * (`system_restore_backup`).
  *
  * Håndhæver `confirm: true` og `confirmText`-matching mod en forventet streng.
+ *
+ * **`confirmText` er bevidst schema-valgfri** (#307): var feltet et påkrævet
+ * `z.string()` ville SDK'ens zod-validering afvise et kald hvor `confirmText`
+ * mangler *før* handleren kører — og returnere en rå `-32602`-fejl uden
+ * `structuredContent`-envelope. Det gav en inkonsistens hvor et *udeladt*
+ * `confirmText` returnerede `-32602`, mens et *forkert* `confirmText`
+ * returnerede den normale envelope. Ved at gøre feltet valgfrit når både et
+ * udeladt og et forkert `confirmText` frem til denne handler, som behandler
+ * et manglende/tomt felt præcis som et mismatch og returnerer den samme
+ * `{ ok:false, errors:[...] }`-envelope.
  */
 export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confirmText?: string }>(
   toolName: string,
@@ -219,6 +229,8 @@ export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confir
       );
     }
     const expected = expectedText(args);
+    // A missing/empty `confirmText` collapses to "" and is rejected with the
+    // same envelope as a mismatch (#307) — never a raw -32602.
     const provided = typeof args?.confirmText === "string" ? args.confirmText : "";
     if (provided !== expected) {
       return envelopeToCallResult(

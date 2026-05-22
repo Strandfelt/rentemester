@@ -516,17 +516,35 @@ export function registerSystemTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            "Optional path to an ed25519 public key used to verify the backup " +
-              "signature. Typically required when backupDir is a .tar archive.",
+            "Optional path to the SYMMETRIC HMAC verification key (the " +
+              "'.backup-manifest.key' file) used to verify the backup manifest's " +
+              "HMAC tag. This is NOT the ed25519 public key — see publicKey for " +
+              "that. Typically required when backupDir is a .tar archive; for a " +
+              "backup directory still inside its company 'backups/' folder the " +
+              "key is otherwise inferred. Mirrors the CLI's --verify-key.",
+          ),
+        publicKey: z
+          .string()
+          .optional()
+          .describe(
+            "Optional path to the ASYMMETRIC ed25519 public key used to verify " +
+              "the backup manifest's ed25519 signature (the signature added by " +
+              "'system backup --sign-with-ed25519'). Supplying it out-of-band lets " +
+              "an independent third party verify authenticity without the HMAC " +
+              "key. Distinct from verifyKey, which is the symmetric HMAC key. " +
+              "Mirrors the CLI's --public-key.",
           ),
         confirm: confirmField,
         confirmText: z
           .string()
-          .min(1)
+          .optional()
           .describe(
             "Destructive-confirmation text. Must be EXACTLY 'RESTORE <targetCompany>' " +
               "— i.e. the literal word RESTORE, a space, then the targetCompany value " +
-              "passed above, verbatim. Any mismatch rejects the call.",
+              "passed above, verbatim. Deliberately schema-OPTIONAL (#307): a " +
+              "missing/empty value reaches the handler and yields the normal " +
+              "{ ok:false, errors:[...] } envelope, exactly like a mismatch — never " +
+              "a raw -32602. Any mismatch (or omission) rejects the call.",
           ),
       },
       outputSchema: envelopeShape,
@@ -536,8 +554,9 @@ export function registerSystemTools(server: McpServer): void {
       backupDir: string;
       targetCompany: string;
       verifyKey?: string;
+      publicKey?: string;
       confirm?: boolean;
-      confirmText: string;
+      confirmText?: string;
     }>(
       "system_restore_backup",
       (args) => `RESTORE ${args.targetCompany}`,
@@ -546,6 +565,7 @@ export function registerSystemTools(server: McpServer): void {
           backupDir: args.backupDir,
           targetCompanyRoot: args.targetCompany,
           verificationKeyPath: args.verifyKey,
+          publicKeyPath: args.publicKey,
         });
         return wrapCoreResult(result);
       },

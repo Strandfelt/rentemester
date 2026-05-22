@@ -246,6 +246,13 @@ Alle write-tools kræver `confirm: true`. Mangler flaget returneres
 `{ ok: false, errors: ["confirm: true required for write tool <name>"] }`
 uden at kernen kaldes.
 
+> **Bemærk — det destruktive `system_restore_backup` afviger:** dets
+> manglende-`confirm`-fejl lyder `confirm: true required for destructive
+> tool system_restore_backup` (ordet **destructive**, ikke **write**). En
+> agent der streng-matcher `required for write tool` rammer derfor IKKE
+> restore-tool'et — match på `confirm: true required for` for at fange
+> begge.
+
 ### write-reversible
 
 10 tools. Opretter state der kan tilbageføres/arkiveres uden at røre den
@@ -325,7 +332,18 @@ fremhæves kun det destruktive tool.
 
 | Tool | CLI-ækvivalent | Klassifikation | Input | Brief |
 |---|---|---|---|---|
-| `system_restore_backup` | `system restore-backup` | **destructive** | `{ backupDir, targetCompany, verifyKey?, confirm, confirmText }` | Gendanner backup til en ny virksomhedssti. `confirmText` skal være `"RESTORE <targetCompany>"` præcist. Sletter intet på source, men kan overskrive filer i `targetCompany`. |
+| `system_restore_backup` | `system restore-backup` | **destructive** | `{ backupDir, targetCompany, verifyKey?, publicKey?, confirm, confirmText? }` | Gendanner backup til en ny virksomhedssti. `confirmText` skal være `"RESTORE <targetCompany>"` præcist. Sletter intet på source, men kan overskrive filer i `targetCompany`. |
+
+Felt-detaljer for `system_restore_backup`:
+
+| Felt | Påkrævet | Beskrivelse |
+|---|---|---|
+| `backupDir` | ja | Sti til backup-mappen eller `.tar`-arkivet der gendannes fra (på MCP-serverens filsystem). Røres aldrig af restore. |
+| `targetCompany` | ja | Sti til virksomhedsmappen backuppen gendannes IND i. Eksisterende filer her kan blive overskrevet. |
+| `verifyKey` | nej | Sti til den **symmetriske HMAC-verifikationsnøgle** (`.backup-manifest.key`) der verificerer manifestets HMAC-tag. **Ikke** ed25519-nøglen. Typisk påkrævet for et `.tar`-arkiv; for en backup-mappe stadig i sin `backups/`-mappe udledes nøglen ellers. Spejler CLI'ens `--verify-key`. |
+| `publicKey` | nej | Sti til den **asymmetriske ed25519 public key** der verificerer manifestets ed25519-signatur (signaturen `system backup --sign-with-ed25519` tilføjer). Adskilt fra `verifyKey`. Spejler CLI'ens `--public-key`. |
+| `confirm` | nej (schema), men `true` kræves | `confirm: true` for at bekræfte de destruktive sideeffekter. Udeladt/`false` → `{ ok:false, errors:["confirm: true required for destructive tool system_restore_backup"] }`. |
+| `confirmText` | nej (schema) | Skal være `"RESTORE <targetCompany>"` præcist. Schema-valgfri (#307): et udeladt/tomt `confirmText` returnerer den normale `{ ok:false, errors:["confirmText must match …"] }`-envelope — IKKE en rå `-32602`. |
 
 ## CLI/MCP-mapping
 
@@ -500,12 +518,19 @@ Input:
   "arguments": {
     "backupDir": "/Users/mikkel/backups/acme-aps/2026-05-17T22-00-00Z",
     "targetCompany": "/Users/mikkel/companies/acme-aps-restored",
-    "verifyKey": "/Users/mikkel/keys/acme-aps-backup.pub",
+    "verifyKey": "/Users/mikkel/keys/.backup-manifest.key",
+    "publicKey": "/Users/mikkel/keys/acme-aps-backup.pub",
     "confirm": true,
     "confirmText": "RESTORE /Users/mikkel/companies/acme-aps-restored"
   }
 }
 ```
+
+> `verifyKey` er den symmetriske HMAC-nøgle (`.backup-manifest.key`);
+> `publicKey` er den asymmetriske ed25519 public key (`*.pub`). Begge er
+> valgfrie — `verifyKey` udelades typisk når backuppen restoreres fra sin
+> oprindelige `backups/`-mappe; `publicKey` udelades når manifestet ikke
+> har en ed25519-signatur eller nøglen ligger inde i backuppen.
 
 Output (success):
 ```json
@@ -535,6 +560,11 @@ Manglende `confirm` på write-tool:
   "errors": ["confirm: true required for write tool journal_post"]
 }
 ```
+
+> Det destruktive `system_restore_backup` bruger ordet **destructive** i
+> stedet for **write**: `confirm: true required for destructive tool
+> system_restore_backup`. Match på `confirm: true required for` for at
+> fange begge varianter.
 
 Validation-fejl fra kernen:
 ```json
