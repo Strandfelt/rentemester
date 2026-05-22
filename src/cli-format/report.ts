@@ -44,7 +44,10 @@ export type HumanReportKind =
   | "report-balance"
   | "retention-status"
   | "reconcile-bank"
-  | "backup-status";
+  | "backup-status"
+  // #177: `report annual --ixbrl-taxonomy` prints the bounded iXBRL subset.
+  // No dedicated renderer — it falls back to the generic structured output.
+  | "report-annual-ixbrl-taxonomy";
 
 /**
  * Render a read/report `result` payload as Danish human-readable text.
@@ -169,6 +172,8 @@ function humanReportTitle(kind: HumanReportKind): string {
       return "Bankafstemning";
     case "backup-status":
       return "Backup-status";
+    case "report-annual-ixbrl-taxonomy":
+      return "iXBRL-taksonomi (afgrænset udsnit)";
   }
 }
 
