@@ -17,6 +17,10 @@ import type { BankTransactionListResult } from "./reconciliation";
 import type { VatPeriodReport } from "./vat";
 import type { BackupComplianceStatus } from "./system-backups";
 import type { AuditLogRow } from "./audit-log";
+import type { PayablesListResult } from "./payables";
+import type { DueAccrualRecognitionResult, AccrualRegisterReport } from "./accruals";
+import type { BudgetVsActualReport } from "./budget";
+import type { LiquidityForecastResult } from "./liquidity-forecast";
 import {
   vatPeriodWindowFor,
   vatPeriodLabel,
@@ -58,6 +62,47 @@ export type DashboardAuditStatus = {
   firstError?: string;
 };
 
+/**
+ * Corporate-tax status for the dashboard's Tax card.
+ *
+ * The render-engine stays pure: the CLI decides which state applies and the
+ * card just renders it. There are two states, by fiscal-year lock status:
+ *  - `available: false` — the open fiscal year. No final result to file from
+ *    yet; the card shows "preparation available once the year is closed".
+ *  - `available: true` — a closed fiscal year. The card shows the estimated
+ *    selskabsskat and the count of needs-review items the slice did not
+ *    compute deterministically.
+ */
+export type DashboardTaxStatus = {
+  /** Fiscal-year label, e.g. "2025". */
+  fiscalYearLabel: string;
+  /** True once the fiscal year is closed and the tax return can be prepared. */
+  available: boolean;
+  /** Estimated corporate tax (selskabsskat), DKK — only when `available`. */
+  corporateTax?: number | null;
+  /** Bookkept årets resultat, DKK — only when `available`. */
+  bookkeptResult?: number;
+  /** Count of needs-review items — only when `available`. */
+  needsReviewCount?: number;
+};
+
+/**
+ * EU sales-list / OSS indicator for the dashboard.
+ *
+ * A LIGHT indicator: it only ever surfaces a card when there is cross-border
+ * B2B sales activity (the EU-salg uden moms-liste) or OSS-classified consumer
+ * sales in the period — i.e. something that needs a separate filing. When both
+ * are zero the dashboard renders nothing for it.
+ */
+export type DashboardEuSalesOssStatus = {
+  /** Net value (DKK) of cross-border B2B reverse-charge sales in the period. */
+  euSalesValue: number;
+  /** Number of EU customers on the recapitulative statement. */
+  euCustomerCount: number;
+  /** Net value (DKK) of OSS-classified EU consumer sales in the period. */
+  ossConsumerSalesBase: number;
+};
+
 export type DashboardInput = {
   asOfDate: string;            // YYYY-MM-DD
   generatedAt: string;         // ISO 8601 UTC
@@ -73,6 +118,19 @@ export type DashboardInput = {
   recentActivity: AuditLogRow[];
   backup: BackupComplianceStatus;
   audit: DashboardAuditStatus;
+  /**
+   * The recurring-feature inputs (#islands → control surfaces). All optional
+   * so the render-engine and its existing fixtures stay backward-compatible:
+   * a `DashboardInput` without them renders exactly the historical dashboard.
+   * The CLI always supplies them.
+   */
+  payables?: PayablesListResult;
+  accrualsDue?: DueAccrualRecognitionResult;
+  accrualRegister?: AccrualRegisterReport;
+  budgetVsActual?: BudgetVsActualReport;
+  liquidity?: LiquidityForecastResult;
+  tax?: DashboardTaxStatus;
+  euSalesOss?: DashboardEuSalesOssStatus;
 };
 
 export type RenderOptions = {
@@ -773,6 +831,242 @@ ${metricCard("ÅBNE EXCEPTIONS", String(input.exceptions.count), undefined, inpu
 </section>`;
 }
 
+// --------------------------------------------------------------------------
+// Recurring-feature cards (#islands → control surfaces)
+//
+// These wire the accruals / payables / budget / liquidity / tax / EU-sales
+// features onto the dashboard. Each is additive: an input without the field
+// renders nothing, so the historical dashboard is byte-for-byte unchanged.
+// --------------------------------------------------------------------------
+
+/**
+ * Creditor card — open and overdue accounts-payable. Symmetric to the
+ * existing open-invoices (debitor) table.
+ */
+function payablesSection(payables: PayablesListResult): string {
+  if (payables.count === 0 || payables.rows.length === 0) {
+    return `<div class="empty-state">Ingen åbne kreditorposter</div>`;
+  }
+  const maxRows = 10;
+  // buildPayablesList already sorts most-overdue first.
+  const visible = payables.rows.slice(0, maxRows);
+  const overflow = payables.rows.length - visible.length;
+  const rows = visible.map((row) => {
+    const supplier = row.supplierName ?? "—";
+    const pill = row.isOverdue
+      ? `<span class="pill danger">forfalden${row.overdueDays > 0 ? ` (${row.overdueDays} d)` : ""}</span>`
+      : `<span class="pill success">åben</span>`;
+    return `<tr>
+  <td class="mono">${escapeHtml(row.billNo ?? `#${row.payableId}`)}</td>
+  <td>${escapeHtml(supplier)}</td>
+  <td class="amount">${escapeHtml(formatDkk(row.openBalance))}</td>
+  <td class="amount mono">${escapeHtml(formatDateShort(row.dueDate))}</td>
+  <td class="center">${pill}</td>
+</tr>`;
+  }).join("\n");
+  const overflowRow = overflow > 0
+    ? `<div class="muted" style="margin-top: var(--space-xs); font-size: 13px;">… og ${overflow} yderligere</div>`
+    : "";
+  const summary =
+    `<div class="muted" style="margin-bottom: var(--space-sm); font-size: 13px;">` +
+    `Åben kreditorgæld i alt <span class="mono">${escapeHtml(formatDkk(payables.totalOpenBalance))}</span>` +
+    (payables.overdueOpenBalance > 0
+      ? ` · heraf overforfalden <span class="mono">${escapeHtml(formatDkk(payables.overdueOpenBalance))}</span>`
+      : "") +
+    `</div>`;
+  return `${summary}<table class="dash-table">
+  <thead>
+    <tr>
+      <th>Bilagsnr.</th>
+      <th>Leverandør</th>
+      <th class="amount">Åben saldo</th>
+      <th class="amount">Forfald</th>
+      <th class="center">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+${rows}
+  </tbody>
+</table>
+${overflowRow}`;
+}
+
+/**
+ * Accruals card — open balance-sheet accrual exposure + the count of
+ * recognition periods that are due/overdue and not yet posted.
+ */
+function accrualsSection(
+  register: AccrualRegisterReport | undefined,
+  due: DueAccrualRecognitionResult | undefined,
+): string {
+  const remainingExposure = register?.totals.remainingAmount ?? 0;
+  const accrualCount = register?.accruals.length ?? 0;
+  if (accrualCount === 0) {
+    return `<div class="empty-state">Ingen periodeafgrænsningsposter</div>`;
+  }
+  const dueCount = due?.periods.length ?? 0;
+  const dueAmount = due?.totalDueAmount ?? 0;
+  const duePill = dueCount > 0
+    ? `<span class="pill danger">${dueCount} forfalden${dueCount === 1 ? "" : "e"}</span>`
+    : `<span class="pill success">✔ ingen forfaldne</span>`;
+  return `<div class="status-row">
+    <div>
+      <div class="label">Resterende balanceeksponering</div>
+      <div class="detail">${accrualCount} aktiv${accrualCount === 1 ? "" : "e"} periodeafgrænsningsposter</div>
+    </div>
+    <div class="amount-lg">${escapeHtml(formatDkk(remainingExposure))}</div>
+  </div>
+  <div class="status-row">
+    <div>
+      <div class="label">Recognition-perioder der skal bogføres</div>
+      <div class="detail">${dueCount > 0 ? `${escapeHtml(formatDkk(dueAmount))} skal indtægts-/omkostningsføres` : "alle forfaldne perioder er bogført"}</div>
+    </div>
+    <div>${duePill}</div>
+  </div>`;
+}
+
+/**
+ * Budget & liquidity card — budget-vs-actual for the current period plus the
+ * liquidity forecast for the coming months.
+ */
+function budgetLiquiditySection(
+  budget: BudgetVsActualReport | undefined,
+  liquidity: LiquidityForecastResult | undefined,
+): string {
+  const parts: string[] = [];
+
+  const hasBudget = budget && budget.ok && budget.lines.length > 0;
+  if (hasBudget) {
+    const variance = budget!.totalVariance;
+    // totalVariance is totalActual − totalBudget; the meaning depends on the
+    // account mix, so the dashboard states it neutrally and lets the figure
+    // speak. A non-negative variance reads calm; a shortfall reads warning.
+    const pill = variance >= 0
+      ? `<span class="pill success">budget overholdt</span>`
+      : `<span class="pill warning">afvigelse</span>`;
+    parts.push(`<div class="status-row">
+    <div>
+      <div class="label">Budget vs. faktisk · ${escapeHtml(budget!.periodStart)}</div>
+      <div class="detail">budget <span class="mono">${escapeHtml(formatDkk(budget!.totalBudget))}</span> · faktisk <span class="mono">${escapeHtml(formatDkk(budget!.totalActual))}</span></div>
+    </div>
+    <div>${pill} <span class="muted">${escapeHtml(formatDkk(variance))}</span></div>
+  </div>`);
+  } else {
+    parts.push(`<div class="status-row">
+    <div>
+      <div class="label">Budget vs. faktisk</div>
+      <div class="detail">Intet budget sat for perioden</div>
+    </div>
+    <div><span class="pill neutral">—</span></div>
+  </div>`);
+  }
+
+  const hasForecast = liquidity && liquidity.ok && liquidity.periods.length > 0;
+  if (hasForecast) {
+    const final = liquidity!.periods[liquidity!.periods.length - 1]!;
+    const lowest = liquidity!.periods.reduce(
+      (min, p) => (p.closingBalance < min ? p.closingBalance : min),
+      liquidity!.periods[0]!.closingBalance,
+    );
+    // A projected balance dipping below zero is the one thing the owner must
+    // see — surface it as a danger pill.
+    const pill = lowest < 0
+      ? `<span class="pill danger">negativ likviditet</span>`
+      : `<span class="pill success">positiv</span>`;
+    parts.push(`<div class="status-row">
+    <div>
+      <div class="label">Likviditetsprognose · ${liquidity!.periods.length} måneder</div>
+      <div class="detail">projiceret saldo ${escapeHtml(final.period)} <span class="mono">${escapeHtml(formatDkk(final.closingBalance))}</span>${lowest < 0 ? ` · laveste <span class="mono">${escapeHtml(formatDkk(lowest))}</span>` : ""}</div>
+    </div>
+    <div>${pill}</div>
+  </div>`);
+  } else {
+    parts.push(`<div class="status-row">
+    <div>
+      <div class="label">Likviditetsprognose</div>
+      <div class="detail">Ingen prognosedata</div>
+    </div>
+    <div><span class="pill neutral">—</span></div>
+  </div>`);
+  }
+
+  return parts.join("\n");
+}
+
+/**
+ * Tax card — estimated corporate tax for the open fiscal year, or a
+ * "preparation available once the year is closed" state.
+ */
+function taxSection(tax: DashboardTaxStatus): string {
+  if (!tax.available) {
+    return `<div class="status-row">
+    <div>
+      <div class="label">Selskabsskat · regnskabsår ${escapeHtml(tax.fiscalYearLabel)}</div>
+      <div class="detail">Forberedelse er klar, når regnskabsåret er lukket</div>
+    </div>
+    <div><span class="pill neutral">afventer årsafslutning</span></div>
+  </div>`;
+  }
+  const corporateTax = tax.corporateTax ?? null;
+  const taxValue = corporateTax == null ? "—" : formatDkk(corporateTax);
+  const reviewCount = tax.needsReviewCount ?? 0;
+  const reviewPill = reviewCount > 0
+    ? `<span class="pill warning">${reviewCount} til gennemgang</span>`
+    : `<span class="pill success">✔ ingen åbne punkter</span>`;
+  return `<div class="status-row">
+    <div>
+      <div class="label">Estimeret selskabsskat · regnskabsår ${escapeHtml(tax.fiscalYearLabel)}</div>
+      <div class="detail">årets resultat <span class="mono">${escapeHtml(formatDkk(tax.bookkeptResult ?? 0))}</span></div>
+    </div>
+    <div class="amount-lg">${escapeHtml(taxValue)}</div>
+  </div>
+  <div class="status-row">
+    <div>
+      <div class="label">Needs-review</div>
+      <div class="detail">${reviewCount > 0 ? "poster Rentemester ikke beregner deterministisk" : "oplysningsskemaet kan forberedes"}</div>
+    </div>
+    <div>${reviewPill}</div>
+  </div>`;
+}
+
+/**
+ * EU sales / OSS indicator — a LIGHT card. It only renders when there is
+ * cross-border B2B sales activity or OSS-classified consumer sales in the
+ * period that need a separate filing; otherwise the caller omits the section.
+ */
+function euSalesOssSection(status: DashboardEuSalesOssStatus): string {
+  const rows: string[] = [];
+  if (status.euSalesValue > 0 || status.euCustomerCount > 0) {
+    rows.push(`<div class="status-row">
+    <div>
+      <div class="label">EU-salg uden moms (VIES)</div>
+      <div class="detail">${status.euCustomerCount} EU-kunde${status.euCustomerCount === 1 ? "" : "r"} — separat liste til SKAT</div>
+    </div>
+    <div class="amount-lg">${escapeHtml(formatDkk(status.euSalesValue))}</div>
+  </div>`);
+  }
+  if (status.ossConsumerSalesBase > 0) {
+    rows.push(`<div class="status-row">
+    <div>
+      <div class="label">OSS — salg til EU-forbrugere</div>
+      <div class="detail">grundlag for separat OSS-angivelse</div>
+    </div>
+    <div class="amount-lg">${escapeHtml(formatDkk(status.ossConsumerSalesBase))}</div>
+  </div>`);
+  }
+  return rows.join("\n");
+}
+
+/** Whether the EU sales / OSS indicator has anything to surface. */
+function hasEuSalesOssActivity(status: DashboardEuSalesOssStatus | undefined): boolean {
+  if (!status) return false;
+  return (
+    status.euSalesValue > 0 ||
+    status.euCustomerCount > 0 ||
+    status.ossConsumerSalesBase > 0
+  );
+}
+
 // A bare exception count tells the owner *that* something needs attention but
 // not *what* — which only creates unease and forces a trip to the terminal.
 // The dashboard therefore lists each open exception as a short line: severity,
@@ -895,10 +1189,47 @@ export function renderDashboard(input: DashboardInput, _options: RenderOptions =
     `<section class="section"><h2>Åbne exceptions</h2>${exceptionsSection(input)}</section>`,
     `<section class="section"><h2>Næste deadline</h2>${deadlineSection(input)}</section>`,
     `<section class="section"><h2>Åbne fakturaer</h2>${invoiceTable(input.invoices)}</section>`,
+  ];
+
+  // Creditor card — symmetric to the open-invoices (debitor) view above.
+  if (input.payables) {
+    sections.push(
+      `<section class="section"><h2>Åbne kreditorposter</h2>${payablesSection(input.payables)}</section>`,
+    );
+  }
+  // Accruals — open balance-sheet exposure + due recognition periods.
+  if (input.accrualRegister || input.accrualsDue) {
+    sections.push(
+      `<section class="section"><h2>Periodeafgrænsningsposter</h2>${accrualsSection(input.accrualRegister, input.accrualsDue)}</section>`,
+    );
+  }
+  // Budget & liquidity — budget-vs-actual + the forward forecast.
+  if (input.budgetVsActual || input.liquidity) {
+    sections.push(
+      `<section class="section"><h2>Budget &amp; likviditet</h2>${budgetLiquiditySection(input.budgetVsActual, input.liquidity)}</section>`,
+    );
+  }
+  // Tax — estimated selskabsskat, or the "awaiting year-end" state.
+  if (input.tax) {
+    sections.push(
+      `<section class="section"><h2>Skat</h2>${taxSection(input.tax)}</section>`,
+    );
+  }
+  // EU sales / OSS — a light indicator: only surfaced when there is activity
+  // that needs a separate filing.
+  if (hasEuSalesOssActivity(input.euSalesOss)) {
+    sections.push(
+      `<section class="section"><h2>EU-salg &amp; OSS</h2>${euSalesOssSection(input.euSalesOss!)}</section>`,
+    );
+  }
+
+  sections.push(
     `<section class="section"><h2>Seneste aktivitet</h2>${activityList(input.recentActivity)}</section>`,
     statusSection(input),
     footer(input),
-  ].join("\n");
+  );
+
+  const rendered = sections.join("\n");
 
   return `<!DOCTYPE html>
 <html lang="da">
@@ -913,7 +1244,7 @@ ${buildStyle()}
 </head>
 <body>
 <main class="page">
-${sections}
+${rendered}
 </main>
 </body>
 </html>

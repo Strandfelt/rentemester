@@ -115,12 +115,15 @@ export function attentionFlags(c: CompanySummary): AttentionFlag[] {
     flags.push({ level: "critical", label: "Negativt resultat" });
   }
   if (c.vat && c.vat.payable > 0) {
+    // The countdown targets the SKAT filing/payment deadline — NOT the end of
+    // the VAT period, which is an earlier date. The flag says "Momsfrist" so
+    // an owner does not read it as the current period ending.
     if (c.vat.daysRemaining < 0) {
-      flags.push({ level: "critical", label: "Moms overskredet" });
+      flags.push({ level: "critical", label: "Momsfrist overskredet" });
     } else if (c.vat.daysRemaining <= VAT_DEADLINE_SOON_DAYS) {
       flags.push({
         level: "warning",
-        label: `Moms om ${c.vat.daysRemaining} dage`,
+        label: `Momsfrist om ${c.vat.daysRemaining} dage`,
       });
     }
   }

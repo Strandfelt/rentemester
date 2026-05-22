@@ -33,7 +33,11 @@ import {
   recordException,
   listExceptions,
   syncUnmatchedBankTransactionExceptions,
+  syncOverduePayableExceptions,
+  syncAccrualRecognitionDueExceptions,
 } from "../core/exceptions";
+import { buildPayablesList, payPayableFromBank } from "../core/payables";
+import { listDueAccrualRecognitionPeriods } from "../core/accruals";
 import { buildVatReport, vatFilingDeadline } from "../core/vat";
 import { buildVatFiling } from "../core/vat-filing";
 import { fiscalYearForDate } from "../core/fiscal-year";
@@ -107,6 +111,20 @@ export type DeadlineNotice = {
   note: string;
 };
 
+/**
+ * A creditor item the agent settled automatically — an unmatched outgoing bank
+ * payment whose amount exactly equals exactly one open payable's open balance.
+ */
+export type PayableMatch = {
+  payableId: number;
+  documentId: number;
+  bankTransactionId: number;
+  supplier: string;
+  amount: number;
+  /** The settlement journal entry number, or `null` if unavailable. */
+  journalEntryNo: string | null;
+};
+
 export type AgentRunReport = {
   ok: boolean;
   /** Canonical actor the agent booked under. */
@@ -119,6 +137,17 @@ export type AgentRunReport = {
   documentsRejected: number;
   bankTransactionsImported: number;
   expensesBooked: BookedExpense[];
+  /**
+   * Creditor items the agent settled automatically from an exact-match
+   * outgoing bank payment. Additive field — empty on a run with no payables.
+   */
+  payablesMatched: PayableMatch[];
+  /**
+   * Count of accrual recognition periods that are due/overdue and not yet
+   * posted, surfaced as `AGENT_ACCRUAL_RECOGNITION_DUE` exceptions. The agent
+   * never posts the recognition entry — it surfaces the pending work.
+   */
+  accrualRecognitionsDue: number;
   /** Exceptions left open at end of run — the human's work list. */
   openExceptions: RoutedException[];
   upcomingDeadlines: DeadlineNotice[];
@@ -194,6 +223,8 @@ export function runAgentLoop(input: AgentRunInput): AgentRunReport {
     documentsRejected: 0,
     bankTransactionsImported: 0,
     expensesBooked: [],
+    payablesMatched: [],
+    accrualRecognitionsDue: 0,
     openExceptions: [],
     upcomingDeadlines: [],
     summary: [],
@@ -424,10 +455,17 @@ function runPhases(db: Database, input: AgentRunInput, report: AgentRunReport): 
     }
   }
 
+  // ---- Phase: payables --------------------------------------------------
+  // Settle the unambiguous creditor payments and surface the overdue ones.
+  report.phases.push("payables");
+  matchPayables(db, report);
+  syncOverduePayableExceptions(db, input.asOf);
+
   // ---- Phase 4: reconcile -----------------------------------------------
   // Any bank transaction with no posted journal entry is surfaced as an
   // exception by the shared reconciliation sync — the agent calls the
-  // existing core function rather than reimplementing it.
+  // existing core function rather than reimplementing it. It runs AFTER the
+  // payables phase so a creditor item just settled is no longer unmatched.
   report.phases.push("reconcile");
   syncUnmatchedBankTransactionExceptions(db);
 
@@ -476,6 +514,69 @@ function routeException(
   });
   if (!res.ok) {
     report.errors.push(`failed to record exception (${input.type}): ${res.errors.join("; ")}`);
+  }
+}
+
+/**
+ * Settles the unambiguous creditor payments.
+ *
+ * A bank transaction is matched against a payable only when the match is
+ * fully deterministic: an outgoing DKK bank line, not yet linked to any
+ * journal entry, whose absolute amount equals the open balance of EXACTLY ONE
+ * open payable. Zero candidates or more than one ⇒ ambiguous; the agent does
+ * NOT guess — the line stays unmatched and the reconcile phase surfaces it.
+ *
+ * Settlement goes through the existing `payPayableFromBank` feature, so the
+ * ledger still has the final word, and every mutation is attributed to the
+ * agent's canonical actor.
+ */
+function matchPayables(db: Database, report: AgentRunReport): void {
+  const openPayables = buildPayablesList(db, { status: "open" });
+  if (!openPayables.ok || openPayables.rows.length === 0) return;
+
+  // Unmatched outgoing DKK bank lines — no posted journal entry, negative
+  // amount. Stable order: ascending id, so the run is replayable.
+  const bankRows = db.query(
+    `SELECT bt.id, bt.amount, bt.currency
+       FROM bank_transactions bt
+       LEFT JOIN journal_entries je ON je.source_bank_transaction_id = bt.id
+      WHERE je.id IS NULL
+        AND bt.amount < 0
+      ORDER BY bt.id ASC`,
+  ).all() as Array<{ id: number; amount: number; currency: string }>;
+
+  for (const bank of bankRows) {
+    if ((bank.currency ?? "DKK").trim().toUpperCase() !== "DKK") continue;
+    const absOre = Math.round(Math.abs(Number(bank.amount)) * 100);
+    // Exactly-one-candidate rule: the open balance must match precisely.
+    const candidates = openPayables.rows.filter(
+      (p) => Math.round(p.openBalance * 100) === absOre,
+    );
+    if (candidates.length !== 1) continue; // 0 or >1 ⇒ ambiguous, never guessed
+    const payable = candidates[0]!;
+
+    const paid = payPayableFromBank(db, {
+      payableId: payable.payableId,
+      bankTransactionId: bank.id,
+      createdBy: AGENT_ACTOR_ID,
+      createdByProgram: AGENT_PROGRAM,
+    });
+    if (paid.ok) {
+      report.payablesMatched.push({
+        payableId: payable.payableId,
+        documentId: payable.documentId,
+        bankTransactionId: bank.id,
+        supplier: payable.supplierName ?? "ukendt",
+        amount: payable.openBalance,
+        journalEntryNo: paid.journalEntryId != null ? String(paid.journalEntryId) : null,
+      });
+      // A payable just settled is no longer an open candidate for a later
+      // bank line in the same run.
+      const idx = openPayables.rows.indexOf(payable);
+      if (idx >= 0) openPayables.rows.splice(idx, 1);
+    }
+    // A failed settlement is left unmatched — the reconcile/route phases and
+    // the overdue-payable sync still surface it. The agent never forces it.
   }
 }
 
@@ -596,6 +697,18 @@ function checkDeadlines(db: Database, asOf: string, report: AgentRunReport): voi
         ? `Årsrapport for regnskabsår ${fy.displayLabel} nærmer sig — forbered med 'report annual'.`
         : `Regnskabsår ${fy.displayLabel} løber — årsrapport forfalder ${fyDueDate}.`,
   });
+
+  // --- Accrual recognition periods due ---
+  // A periodeafgrænsningspost recognition is a recurring, dated obligation
+  // like a VAT period. The loop SURFACES every recognition period whose
+  // schedule date has arrived and that is not yet posted — it does NOT post
+  // the recognition entry itself, exactly as it surfaces (never auto-posts) a
+  // possible fixed-asset purchase. Choosing the posting date is the human's.
+  const due = listDueAccrualRecognitionPeriods(db, asOf);
+  if (due.ok) {
+    report.accrualRecognitionsDue = due.periods.length;
+    syncAccrualRecognitionDueExceptions(db, asOf);
+  }
 }
 
 /** Builds the plain-language end-of-run summary lines. */
@@ -607,6 +720,14 @@ function buildSummary(report: AgentRunReport): void {
   );
   lines.push(`${report.bankTransactionsImported} banktransaktioner importeret`);
   lines.push(`${report.expensesBooked.length} udgifter bogført automatisk af agenten`);
+  lines.push(
+    `${report.payablesMatched.length} kreditorposter afregnet automatisk fra banken`,
+  );
+  if (report.accrualRecognitionsDue > 0) {
+    lines.push(
+      `${report.accrualRecognitionsDue} periodeafgrænsnings-perioder forfaldne — kræver bogføring`,
+    );
+  }
   lines.push(
     `${report.openExceptions.length} i exception-kø — kræver et menneske` +
       (report.openExceptions.length === 0 ? " (intet)" : ""),

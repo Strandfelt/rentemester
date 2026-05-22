@@ -329,8 +329,10 @@ function VatCard({
 }) {
   // VAT is a live-ledger figure — never rendered for an archived year.
   if (vat === null) return null;
-  // The quarterly momsangivelse is easy to forget — surface the statutory
-  // filing/payment deadline and a "X dage tilbage" countdown right on the card.
+  // The momsangivelse is easy to forget — surface it right on the card. Two
+  // dates that an owner must not conflate: the VAT period's own span, and the
+  // SKAT filing/payment deadline (the 1st of the third month AFTER the period
+  // ends). The countdown targets the deadline, so the card spells both out.
   const days = vat.daysRemaining;
   const countdown =
     days < 0
@@ -347,10 +349,11 @@ function VatCard({
         {formatKroner(vat.payable, currency)}
       </div>
       <p className="muted status-note">
-        {vat.periodLabel} · {vat.payable >= 0 ? "at betale" : "tilgode"}
+        Momsperiode {vat.periodLabel} ({vat.periodStart} – {vat.periodEnd}) ·{" "}
+        {vat.payable >= 0 ? "at betale" : "tilgode"}
       </p>
       <p className="muted status-note">
-        Frist {vat.deadline} ·{" "}
+        Indberettes og betales til SKAT senest {vat.deadline} ·{" "}
         <span className={`bank-diff ${tone === "ok" ? "ok" : "alert"}`}>
           {countdown}
         </span>

@@ -15,6 +15,7 @@ import {
   recognizeAccrualPeriod,
   computeAccrualSchedule,
   buildAccrualRegisterReport,
+  listDueAccrualRecognitionPeriods,
 } from "../../src/core/accruals";
 
 function setup(label: string) {
@@ -351,6 +352,47 @@ describe("accrual guardrails", () => {
     const verify = verifyAuditChain(db);
     expect(verify.ok).toBe(true);
     expect(verify.errors).toEqual([]);
+    cleanup();
+  });
+
+  test("lists the recognition periods that are due/overdue and not yet posted", () => {
+    const { db, documentId, cleanup } = setup("accrual-due");
+    // 3-month prepaid expense, recognised on the last of Jan/Feb/Mar 2026.
+    const reg = registerAccrual(db, {
+      accrualType: "prepaid_expense",
+      description: "Forsikring Q1",
+      totalAmount: 9000,
+      recognitionPeriods: 3,
+      firstRecognitionDate: "2026-01-31",
+      registrationDate: "2026-01-05",
+      resultAccountNo: "3150",
+      documentId,
+    });
+    expect(reg.ok).toBe(true);
+
+    // As of 2026-02-15: period 1 (31-01) is due, period 2 (28-02) is not yet,
+    // period 3 (31-03) is in the future — only period 1 must surface.
+    const due = listDueAccrualRecognitionPeriods(db, "2026-02-15");
+    expect(due.ok).toBe(true);
+    expect(due.periods.length).toBe(1);
+    expect(due.periods[0]!.accrualId).toBe(reg.accrualId!);
+    expect(due.periods[0]!.periodIndex).toBe(1);
+    expect(due.periods[0]!.recognitionDate).toBe("2026-01-31");
+    expect(due.periods[0]!.amount).toBe(3000);
+    expect(due.totalDueAmount).toBe(3000);
+
+    // Post period 1; now nothing is due as of the same date (idempotent).
+    expect(recognizeAccrualPeriod(db, { accrualId: reg.accrualId!, periodIndex: 1 }).ok).toBe(true);
+    const afterPost = listDueAccrualRecognitionPeriods(db, "2026-02-15");
+    expect(afterPost.periods.length).toBe(0);
+
+    // As of 2026-04-30 the remaining periods 2 and 3 are both overdue.
+    const allDue = listDueAccrualRecognitionPeriods(db, "2026-04-30");
+    expect(allDue.periods.length).toBe(2);
+    expect(allDue.periods.map((p) => p.periodIndex)).toEqual([2, 3]);
+    // Period 2 is 61 days overdue (28-02 → 30-04), surfaced as overdue.
+    expect(allDue.periods[0]!.overdueDays).toBeGreaterThan(0);
+    expect(allDue.totalDueAmount).toBe(6000);
     cleanup();
   });
 

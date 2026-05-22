@@ -11,6 +11,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { initialiseCompanyVolume } from "../../src/core/company";
 import { runAgentLoop } from "../../src/agent/loop";
 import { formatRunReport } from "../../src/agent/run";
@@ -18,6 +19,9 @@ import { AGENT_ACTOR_ID } from "../../src/agent/contract";
 import { openDb, migrate } from "../../src/core/db";
 import { companyPaths } from "../../src/core/paths";
 import { closeAccountingPeriod } from "../../src/core/periods";
+import { ingestDocument } from "../../src/core/documents";
+import { registerPayable } from "../../src/core/payables";
+import { registerAccrual } from "../../src/core/accruals";
 
 const DEMO_DIR = join(import.meta.dir, "..", "..", "examples", "agent-demo");
 const INBOX = join(DEMO_DIR, "inbox");
@@ -59,6 +63,7 @@ describe("runtime bookkeeper agent — deterministic agent-run (#183)", () => {
         "ingest",
         "book",
         "route",
+        "payables",
         "reconcile",
         "deadlines",
         "report",
@@ -230,6 +235,159 @@ describe("runtime bookkeeper agent — deterministic agent-run (#183)", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  // Islands → control surfaces: the agent loop must reach the accruals and
+  // payables features. They are additive AgentRunReport fields — the existing
+  // report shape stays backward-compatible.
+  describe("agent loop wires in payables and accruals", () => {
+    test("auto-settles an unambiguous creditor payment and surfaces an overdue one", () => {
+      const root = freshCompany();
+      const inboxDir = mkdtempSync(join(tmpdir(), "rentemester-agent-payables-inbox-"));
+      try {
+        const db = openDb(companyPaths(root).db);
+        migrate(db);
+
+        // Two registered creditor items: one paid by an exact bank line, one
+        // left overdue with no payment.
+        const billA = join(inboxDir, "bill-a.txt");
+        writeFileSync(billA, "Leverandørbilag A\n2500 DKK\n");
+        const docA = ingestDocument(db, root, billA, {
+          source: "email",
+          issueDate: "2026-03-01",
+          invoiceNo: "KRED-A",
+          deliveryDescription: "Leverandørydelse",
+          amountIncVat: 2500,
+          currency: "DKK",
+          sender: { name: "Kreditor A ApS", address: "Vej 1", vatOrCvr: "DK11112222" },
+          recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+          vatAmount: 500,
+          paymentDetails: "Bank",
+        });
+        expect(docA.ok).toBe(true);
+        const payableA = registerPayable(db, {
+          documentId: docA.documentId!,
+          billDate: "2026-03-01",
+          dueDate: "2026-03-31",
+          expenseAccountNo: "3000",
+        });
+        expect(payableA.ok).toBe(true);
+
+        const billB = join(inboxDir, "bill-b.txt");
+        writeFileSync(billB, "Leverandørbilag B\n4000 DKK\n");
+        const docB = ingestDocument(db, root, billB, {
+          source: "email",
+          issueDate: "2026-01-05",
+          invoiceNo: "KRED-B",
+          deliveryDescription: "Leverandørydelse",
+          amountIncVat: 4000,
+          currency: "DKK",
+          sender: { name: "Kreditor B ApS", address: "Vej 2", vatOrCvr: "DK33334444" },
+          recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+          vatAmount: 800,
+          paymentDetails: "Bank",
+        });
+        expect(docB.ok).toBe(true);
+        const payableB = registerPayable(db, {
+          documentId: docB.documentId!,
+          billDate: "2026-01-05",
+          dueDate: "2026-02-04",
+          expenseAccountNo: "3000",
+        });
+        expect(payableB.ok).toBe(true);
+        db.close();
+
+        // A bank CSV with one outgoing payment that exactly matches payable A.
+        const bankCsv = join(inboxDir, "bank.csv");
+        writeFileSync(
+          bankCsv,
+          "transaction_date,text,amount,currency\n2026-04-02,Betaling Kreditor A,-2500,DKK\n",
+        );
+
+        const report = runAgentLoop({ companyRoot: root, asOf: AS_OF, bankCsvPath: bankCsv });
+        expect(report.ok).toBe(true);
+
+        // The exact-match outgoing payment auto-settles creditor item A.
+        expect(report.payablesMatched.length).toBe(1);
+        expect(report.payablesMatched[0]!.payableId).toBe(payableA.payableId);
+        expect(report.payablesMatched[0]!.journalEntryNo).toBeTruthy();
+
+        // Creditor item B is overdue and unpaid — surfaced, never paid.
+        const overdueEx = report.openExceptions.find((x) => x.type === "AGENT_PAYABLE_OVERDUE");
+        expect(overdueEx).toBeDefined();
+        expect(overdueEx!.message).toContain("Kreditor B ApS");
+
+        // The payables phase ran.
+        expect(report.phases).toContain("payables");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(inboxDir, { recursive: true, force: true });
+      }
+    });
+
+    test("surfaces a due accrual recognition period without auto-posting it", () => {
+      const root = freshCompany();
+      const inboxDir = mkdtempSync(join(tmpdir(), "rentemester-agent-accrual-inbox-"));
+      try {
+        const db = openDb(companyPaths(root).db);
+        migrate(db);
+        const bilag = join(inboxDir, "forsikring.txt");
+        writeFileSync(bilag, "Forsikring helår\n9000 DKK\n");
+        const doc = ingestDocument(db, root, bilag, {
+          source: "email",
+          issueDate: "2026-01-05",
+          invoiceNo: "FORS-1",
+          deliveryDescription: "Forsikring helår",
+          amountIncVat: 9000,
+          currency: "DKK",
+          sender: { name: "Forsikring ApS", address: "Vej 1", vatOrCvr: "DK11223344" },
+          recipient: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+          vatAmount: 0,
+          paymentDetails: "Bank",
+        });
+        expect(doc.ok).toBe(true);
+        // 3 recognition periods on the last of Jan/Feb/Mar 2026 — all due as
+        // of the 2026-05-20 run date, none posted.
+        const reg = registerAccrual(db, {
+          accrualType: "prepaid_expense",
+          description: "Forsikring Q1",
+          totalAmount: 9000,
+          recognitionPeriods: 3,
+          firstRecognitionDate: "2026-01-31",
+          registrationDate: "2026-01-05",
+          resultAccountNo: "3150",
+          documentId: doc.documentId!,
+        });
+        expect(reg.ok).toBe(true);
+
+        // The journal-entry count before the run — the loop must NOT post any
+        // recognition entry (it surfaces, it does not auto-post).
+        const beforeEntries = (
+          db.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number }
+        ).n;
+        db.close();
+
+        const report = runAgentLoop({ companyRoot: root, asOf: AS_OF });
+        expect(report.ok).toBe(true);
+        expect(report.accrualRecognitionsDue).toBe(3);
+        const accrualEx = report.openExceptions.find(
+          (x) => x.type === "AGENT_ACCRUAL_RECOGNITION_DUE",
+        );
+        expect(accrualEx).toBeDefined();
+        expect(accrualEx!.requiredAction).toContain("accrual recognize");
+
+        // No recognition entry was posted by the loop.
+        const afterDb = openDb(companyPaths(root).db);
+        const afterEntries = (
+          afterDb.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number }
+        ).n;
+        afterDb.close();
+        expect(afterEntries).toBe(beforeEntries);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(inboxDir, { recursive: true, force: true });
+      }
+    });
   });
 
   test("a deadline-only run (no inbox, no bank) still checks deadlines", () => {

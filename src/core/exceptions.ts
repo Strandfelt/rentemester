@@ -1,5 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { formatKronerDa, normalizeCurrency } from "./money";
+import { isValidIsoDate as looksLikeIsoDate } from "./dates";
+import { buildPayablesList } from "./payables";
+import { listDueAccrualRecognitionPeriods } from "./accruals";
+import { buildTaxReturn } from "./tax-return";
 
 export type ExceptionSeverity = "low" | "medium" | "high";
 export type ExceptionStatus = "open" | "resolved" | "all";
@@ -508,4 +512,160 @@ export function syncUnmatchedBankTransactionExceptions(db: Database) {
   }
 
   return { ok: true, created, refreshed, resolvedStale, errors: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Recurring-feature exception sync (#: islands → control surfaces)
+//
+// The accruals / payables / tax-return features were merged in isolation and
+// never reached the exception queue. These sync functions close that gap: each
+// surfaces the work that the recurring deterministic features generate, with
+// the same `recordException` shape and `AGENT_*` type naming the agent loop
+// already uses for `AGENT_POSSIBLE_FIXED_ASSET` etc. They never post and never
+// guess — an overdue obligation is *surfaced*, the human acts.
+// ---------------------------------------------------------------------------
+
+export type SyncExceptionResult = { ok: boolean; created: number; errors: string[] };
+
+/**
+ * Surfaces every open creditor item (payable) that is past its due date as an
+ * `AGENT_PAYABLE_OVERDUE` exception. Symmetric to the unmatched-bank sync:
+ * deterministic, idempotent (a re-run dedups on the identical message), and
+ * read-only against the ledger — it never pays the bill.
+ */
+export function syncOverduePayableExceptions(db: Database, asOfDate: string): SyncExceptionResult {
+  if (!looksLikeIsoDate(asOfDate)) {
+    return { ok: false, created: 0, errors: ["asOfDate must be YYYY-MM-DD"] };
+  }
+  const overdue = buildPayablesList(db, { status: "overdue", asOfDate });
+  if (!overdue.ok) return { ok: false, created: 0, errors: overdue.errors };
+
+  let created = 0;
+  for (const row of overdue.rows) {
+    const supplier = row.supplierName ?? "ukendt leverandør";
+    const billRef = row.billNo ? `kreditorpost ${row.billNo}` : `kreditorpost #${row.payableId}`;
+    const res = recordException(db, {
+      type: "AGENT_PAYABLE_OVERDUE",
+      severity: row.overdueDays >= 30 ? "high" : "medium",
+      relatedDocumentId: row.documentId,
+      message:
+        `${billRef} til ${supplier} på ${formatKronerDa(row.openBalance)} forfaldt ${row.dueDate} ` +
+        `og er ${row.overdueDays} dage overforfalden pr. ${asOfDate}.`,
+      requiredAction:
+        "Betal kreditorposten, og afstem den udgående bankbetaling mod den med 'payable pay'.",
+      sourceEvidence: {
+        rule: "DK-PAYABLE-001",
+        payableId: row.payableId,
+        dueDate: row.dueDate,
+        overdueDays: row.overdueDays,
+        openBalance: row.openBalance,
+        agingBucket: row.agingBucket,
+      },
+    });
+    if (res.ok && !res.duplicate) created += 1;
+  }
+  return { ok: true, created, errors: [] };
+}
+
+/**
+ * Surfaces every accrual recognition period that is due/overdue as of `asOfDate`
+ * and not yet posted, as an `AGENT_ACCRUAL_RECOGNITION_DUE` exception.
+ *
+ * IMPORTANT — this never posts the recognition entry. Choosing the posting date
+ * is the owner's decision; the exception just makes the pending periodisering
+ * visible, exactly as the agent loop surfaces (rather than auto-posts) a
+ * possible fixed-asset purchase.
+ */
+export function syncAccrualRecognitionDueExceptions(
+  db: Database,
+  asOfDate: string,
+): SyncExceptionResult {
+  if (!looksLikeIsoDate(asOfDate)) {
+    return { ok: false, created: 0, errors: ["asOfDate must be YYYY-MM-DD"] };
+  }
+  const due = listDueAccrualRecognitionPeriods(db, asOfDate);
+  if (!due.ok) return { ok: false, created: 0, errors: due.errors };
+
+  let created = 0;
+  for (const period of due.periods) {
+    const overdueText =
+      period.overdueDays > 0
+        ? `er ${period.overdueDays} dage overforfalden pr. ${asOfDate}`
+        : `er forfalden pr. ${asOfDate}`;
+    const res = recordException(db, {
+      type: "AGENT_ACCRUAL_RECOGNITION_DUE",
+      severity: period.overdueDays >= 31 ? "high" : "medium",
+      message:
+        `Periodeafgrænsningspost "${period.description}" — periode ${period.periodIndex}/${period.totalPeriods} ` +
+        `(${formatKronerDa(period.amount)}) skulle indtægts-/omkostningsføres ${period.recognitionDate} og ${overdueText}.`,
+      requiredAction:
+        `Bogfør periode ${period.periodIndex} af periodeafgrænsningsposten med 'accrual recognize'.`,
+      sourceEvidence: {
+        rule: "DK-BOOKKEEPING-ACCRUAL-001",
+        accrualId: period.accrualId,
+        accrualType: period.accrualType,
+        periodIndex: period.periodIndex,
+        recognitionDate: period.recognitionDate,
+        amount: period.amount,
+        overdueDays: period.overdueDays,
+      },
+    });
+    if (res.ok && !res.duplicate) created += 1;
+  }
+  return { ok: true, created, errors: [] };
+}
+
+/**
+ * Surfaces the corporate tax-return needs-review flags for a fiscal year as
+ * `AGENT_TAX_RETURN_NEEDS_REVIEW` exceptions — **only when the fiscal year is
+ * closed**. A still-open year has no final result to file from, so raising a
+ * tax exception then would be a guess at a moving figure; the loop refuses.
+ *
+ * Returns `{ ok: true, created: 0 }` (no exceptions) when the year is not
+ * closed or the tax-return preparation itself fails its prerequisites — the
+ * caller decides whether to surface that elsewhere.
+ */
+export function syncTaxReturnReviewExceptions(
+  db: Database,
+  fiscalYearStart: string,
+  fiscalYearEnd: string,
+): SyncExceptionResult {
+  if (!looksLikeIsoDate(fiscalYearStart) || !looksLikeIsoDate(fiscalYearEnd)) {
+    return { ok: false, created: 0, errors: ["fiscalYearStart and fiscalYearEnd must be YYYY-MM-DD"] };
+  }
+
+  // A tax exception is only meaningful once the fiscal year is locked. The
+  // taxable income rests on a final result — an open year has none.
+  const period = db
+    .query(
+      `SELECT status FROM accounting_periods
+        WHERE kind = 'fiscal_year' AND period_start = ? AND period_end = ?
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .get(fiscalYearStart, fiscalYearEnd) as { status: string } | null;
+  const yearClosed = period?.status === "closed" || period?.status === "reported";
+  if (!yearClosed) return { ok: true, created: 0, errors: [] };
+
+  const taxReturn = buildTaxReturn(db, fiscalYearStart, fiscalYearEnd);
+  if (!taxReturn.ok) return { ok: true, created: 0, errors: [] };
+
+  let created = 0;
+  for (const item of taxReturn.needsReview) {
+    const res = recordException(db, {
+      type: "AGENT_TAX_RETURN_NEEDS_REVIEW",
+      severity: "medium",
+      message:
+        `Oplysningsskema for regnskabsår ${fiscalYearStart}..${fiscalYearEnd}: ${item.label}. ` +
+        `Dette tal beregner Rentemester ikke deterministisk og skal afklares før indberetning.`,
+      requiredAction: item.requiredAction,
+      sourceEvidence: {
+        rule: "DK-TAX-RETURN-CORP-001",
+        fiscalYearStart,
+        fiscalYearEnd,
+        needsReviewKind: item.kind,
+      },
+    });
+    if (res.ok && !res.duplicate) created += 1;
+  }
+  return { ok: true, created, errors: [] };
 }

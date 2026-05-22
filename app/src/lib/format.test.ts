@@ -57,6 +57,27 @@ describe("attentionFlags", () => {
     expect(attentionLevel(c)).toBe("critical");
   });
 
+  test("the VAT flag names the filing deadline, not the period", () => {
+    // The countdown targets the SKAT filing/payment deadline. The flag must
+    // say so ("Momsfrist") — a bare "Moms om N dage" reads as the VAT period
+    // itself ending, which is a different, earlier date.
+    const soon = summary({
+      vat: { payable: 3371.2, deadline: "2026-06-01", daysRemaining: 10 },
+    });
+    const soonFlag = attentionFlags(soon).find((f) =>
+      f.label.toLowerCase().includes("moms"),
+    );
+    expect(soonFlag?.label).toBe("Momsfrist om 10 dage");
+
+    const overdue = summary({
+      vat: { payable: 3371.2, deadline: "2026-01-01", daysRemaining: -4 },
+    });
+    const overdueFlag = attentionFlags(overdue).find((f) =>
+      f.label.toLowerCase().includes("moms"),
+    );
+    expect(overdueFlag?.label).toBe("Momsfrist overskredet");
+  });
+
   test("a negative result outranks open tasks to critical", () => {
     const c = summary({ resultat: -100, openTaskCount: 3 });
     expect(attentionLevel(c)).toBe("critical");

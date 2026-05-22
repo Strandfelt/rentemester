@@ -38,8 +38,8 @@
 import type { Database } from "bun:sqlite";
 import { postJournalEntry, type JournalPostResult } from "./ledger";
 import { insertAuditLog } from "./actor";
-import { isValidIsoDate as looksLikeIsoDate } from "./dates";
-import { fromOre, roundDkk, toOre } from "./money";
+import { isValidIsoDate as looksLikeIsoDate, diffDays } from "./dates";
+import { fromOre, roundDkk, sumDkk, toOre } from "./money";
 
 const ACCRUAL_RULE_ID = "DK-BOOKKEEPING-ACCRUAL-001";
 
@@ -703,6 +703,117 @@ export function buildAccrualRegisterReport(db: Database): AccrualRegisterReport 
       recognizedAmount: fromOre(recognizedOre),
       remainingAmount: fromOre(totalOre - recognizedOre),
     },
+    errors: [],
+  };
+}
+
+/**
+ * One recognition period of a registered accrual that is *due* — its scheduled
+ * recognition date has arrived (or passed) relative to an as-of date — and has
+ * NOT yet been posted via {@link recognizeAccrualPeriod}.
+ */
+export type DueAccrualRecognitionPeriod = {
+  accrualId: number;
+  accrualType: AccrualType;
+  description: string;
+  periodIndex: number;
+  totalPeriods: number;
+  recognitionDate: string;
+  amount: number;
+  /** Days from `recognitionDate` to the as-of date; 0 when due today. */
+  overdueDays: number;
+};
+
+export type DueAccrualRecognitionResult = {
+  ok: boolean;
+  asOfDate: string;
+  periods: DueAccrualRecognitionPeriod[];
+  /** Sum of `periods[].amount` — the income-statement effect still un-posted. */
+  totalDueAmount: number;
+  errors: string[];
+};
+
+/**
+ * Lists the accrual recognition periods that are *due or overdue* as of a date
+ * and have not yet been posted to the ledger.
+ *
+ * A recognition period is due when its deterministic schedule date (see
+ * {@link computeAccrualSchedule}) is on or before `asOfDate`. A period that
+ * already has an `accrual_schedule_postings` row is recognised and excluded.
+ *
+ * This is a READ-ONLY surface — it never posts. It deliberately does NOT
+ * recognise the period itself: choosing the posting date is the owner's
+ * decision, exactly as the agent loop never auto-posts a fixed-asset purchase.
+ * Callers (dashboard, agent loop, exception queue) use it to *surface* the
+ * pending work.
+ */
+export function listDueAccrualRecognitionPeriods(
+  db: Database,
+  asOfDate: string,
+): DueAccrualRecognitionResult {
+  if (!looksLikeIsoDate(asOfDate)) {
+    return { ok: false, asOfDate, periods: [], totalDueAmount: 0, errors: ["asOfDate must be YYYY-MM-DD"] };
+  }
+
+  const headers = db.query(
+    `SELECT id, accrual_type, description, total_amount, recognition_periods,
+            first_recognition_date, period_step_months
+     FROM accruals ORDER BY id ASC`,
+  ).all() as Array<{
+    id: number;
+    accrual_type: AccrualType;
+    description: string;
+    total_amount: number;
+    recognition_periods: number;
+    first_recognition_date: string;
+    period_step_months: number;
+  }>;
+
+  const periods: DueAccrualRecognitionPeriod[] = [];
+  for (const header of headers) {
+    const postedIndexes = new Set(
+      (
+        db.query(
+          "SELECT period_index FROM accrual_schedule_postings WHERE accrual_id = ?",
+        ).all(header.id) as Array<{ period_index: number }>
+      ).map((r) => r.period_index),
+    );
+    const schedule = computeAccrualSchedule({
+      totalAmount: Number(header.total_amount),
+      recognitionPeriods: header.recognition_periods,
+      firstRecognitionDate: header.first_recognition_date,
+      periodStepMonths: header.period_step_months,
+    });
+    for (const period of schedule) {
+      if (postedIndexes.has(period.periodIndex)) continue;
+      if (period.recognitionDate > asOfDate) continue;
+      periods.push({
+        accrualId: header.id,
+        accrualType: header.accrual_type,
+        description: header.description,
+        periodIndex: period.periodIndex,
+        totalPeriods: schedule.length,
+        recognitionDate: period.recognitionDate,
+        amount: period.amount,
+        overdueDays: Math.max(0, diffDays(period.recognitionDate, asOfDate)),
+      });
+    }
+  }
+
+  // Stable order: oldest recognition date first, then accrual id / period.
+  periods.sort((a, b) => {
+    if (a.recognitionDate !== b.recognitionDate) {
+      return a.recognitionDate < b.recognitionDate ? -1 : 1;
+    }
+    if (a.accrualId !== b.accrualId) return a.accrualId - b.accrualId;
+    return a.periodIndex - b.periodIndex;
+  });
+
+  return {
+    ok: true,
+    asOfDate,
+    periods,
+    totalDueAmount: sumDkk(periods.map((p) => p.amount)),
     errors: [],
   };
 }
