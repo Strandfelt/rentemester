@@ -129,6 +129,7 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 |---|---|
 | `accounts_list` | `{ accounts: [{ accountNo, name, type, defaultVatCode }], count }` |
 | `journal_list` | `{ entries: [{ id, entryNo, transactionDate, text, currency, amountForeign, amountDkk, fxRateToDkk, documentId, sourceBankTransactionId, status, reversalOfEntryId }], count }` |
+| `journal_dry_run` | `{ entryId, entryNo, previousHash, entryHash, accountEffects: [{ accountNo, accountName, balanceBefore, balanceAfter, delta }] }` — ikke-bindende forhåndsvisning af `journal_post`: felterne beskriver hvad posteringen *ville* få. `accountEffects` lister saldo før/efter pr. berørt konto (debet-minus-kredit-netto, i kroner). Ved en ugyldig payload er konvolutten `ok=false` med `errors[]`, og `data` mangler. |
 | `bank_list` | `{ rows: [...], count }` |
 | `invoice_list` | `{ invoices: [...], count }` |
 | `exceptions_list` | `{ exceptions: [...], count }` |
@@ -164,15 +165,15 @@ fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
 
 Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 
-- **Read-tools**: 33
+- **Read-tools**: 34
 - **Write-reversible**: 10
 - **Write-irreversible**: 37
 - **Destructive**: 1 (`system_restore_backup`)
-- **Total**: **81**
+- **Total**: **82**
 
 ## Read-tools
 
-33 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
+34 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
 
 | Tool | CLI-ækvivalent | Input | Brief |
 |---|---|---|---|
@@ -195,6 +196,7 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 | `invoice_overdue` | `invoice overdue` | `{ company, asOf?, minDays? }` | Lister forfaldne, ikke fuldt afregnede fakturaer. |
 | `invoice_status` | `invoice status` | `{ company, documentId? \| invoiceNumber?, asOf? }` | Viser åben saldo og status på en faktura. |
 | `invoice_validate` | `invoice validate` | `{ payload: InvoicePayload }` | Validerer faktura-payload uden at gemme. |
+| `journal_dry_run` | `journal dry-run` | `{ company, payload: JournalEntryInput }` | Forhåndsviser hvad `journal_post` ville gøre — uden at skrive. Intet journalnummer forbruges. |
 | `journal_list` | `journal list` | `{ company }` | Lister finansposteringer. |
 | `mileage_list` | `mileage list` | `{ company }` | Lister registrerede kørselsposter. |
 | `mileage_report` | `mileage report` | `{ company, from, to }` | Deterministisk periode-rapport over kilometer og beløbsgrundlag. |

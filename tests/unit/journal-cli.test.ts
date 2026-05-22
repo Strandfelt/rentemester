@@ -128,3 +128,46 @@ describe("journal post CLI", () => {
     expect(stderr).toContain("actor required for mutations");
   });
 });
+
+describe("journal dry-run CLI", () => {
+  test("previews an entry without writing it to the ledger", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-journaldryrun-cli-"));
+    const company = join(root, "company");
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+
+    const payloadPath = join(root, "entry.json");
+    writeFileSync(
+      payloadPath,
+      JSON.stringify({
+        transactionDate: "2026-05-16",
+        text: "Owner contribution",
+        lines: [
+          { accountNo: "2000", debitAmount: 1000 },
+          { accountNo: "5020", creditAmount: 1000 },
+        ],
+      }),
+    );
+
+    const proc = Bun.spawn(
+      ["bun", "run", "src/cli.ts", "journal", "dry-run", "--company", company, "--input", payloadPath],
+      { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" },
+    );
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.entryNo).toBe("2026-00001");
+    expect(parsed.accountEffects).toHaveLength(2);
+
+    // The dry run must not have written anything: the ledger is still empty.
+    const db = openDb(companyPaths(company).db);
+    const count = db.query("SELECT COUNT(*) AS n FROM journal_entries").get() as { n: number };
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    expect(count.n).toBe(0);
+  });
+});

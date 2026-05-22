@@ -61,11 +61,11 @@ describe("docs/mcp-tool-surface.md", () => {
     expect(content).toContain("`destructive`");
   });
 
-  test("documents the real tool total of 81 — not a stale count", () => {
+  test("documents the real tool total of 82 — not a stale count", () => {
     // #217 — the doc previously said "Total: 50" while the server exposed
-    // 81 tools. Guard against the count drifting out of sync again.
+    // more tools. Guard against the count drifting out of sync again.
     const content = readFileSync(DOC_PATH, "utf8");
-    expect(content).toMatch(/\*\*?Total\*\*?\s*[:|]\s*\*\*?81\*\*?/);
+    expect(content).toMatch(/\*\*?Total\*\*?\s*[:|]\s*\*\*?82\*\*?/);
     expect(content).not.toContain("Total**: 50");
   });
 

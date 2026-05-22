@@ -361,8 +361,8 @@ describe("#202 — every tool declares the shared envelope outputSchema", () => 
     tools = response.result?.tools ?? [];
   });
 
-  test("all 81 tools expose an outputSchema in tools/list", () => {
-    expect(tools.length).toBeGreaterThanOrEqual(81);
+  test("all 82 tools expose an outputSchema in tools/list", () => {
+    expect(tools.length).toBeGreaterThanOrEqual(82);
     const missing = tools.filter((t) => !t.outputSchema).map((t) => t.name);
     expect(missing).toEqual([]);
   });

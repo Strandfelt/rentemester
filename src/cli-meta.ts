@@ -503,7 +503,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   {
     key: "journal post",
     usage: "journal post --company <path> --input <file.json>",
-    description: "Bogfører en manuel finanspostering.",
+    description: "Bogfører en manuel finanspostering. Brug 'journal dry-run' først for en ikke-bindende forhåndsvisning.",
     allowedFlags: ["--company", "--input"],
     examplePath: "examples/journal-entry.expense.json",
     inputNotes: [
@@ -515,6 +515,19 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "documentId: heltal — PÅKRÆVET når en linje rammer en udgifts- eller indtægtskonto (bilagsbevis)",
       'currency: valgfri 3-bogstavs ISO (standard "DKK")',
       "Ved currency != DKK kræves desuden amountForeign, amountDkk og fxRateToDkk (beløb i KRONER)",
+    ],
+  },
+  {
+    key: "journal dry-run",
+    usage: "journal dry-run --company <path> --input <file.json>",
+    description: "Forhåndsviser en finanspostering uden at bogføre den (ikke-bindende).",
+    allowedFlags: ["--company", "--input"],
+    examplePath: "examples/journal-entry.expense.json",
+    inputNotes: [
+      "Samme JSON-payload som 'journal post'.",
+      "Skriver intet i den append-only kæde: intet journalnummer forbruges, intet bilag bogføres.",
+      "Svaret rummer entryNo og entryHash posteringen ville få, samt accountEffects (saldo før/efter).",
+      "Resultatet er ikke-bindende — entryNo og saldi kan ændre sig hvis en anden postering bogføres inden 'journal post'.",
     ],
   },
   {

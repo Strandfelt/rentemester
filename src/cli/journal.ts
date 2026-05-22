@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Database } from "bun:sqlite";
 import { migrate } from "../core/db";
-import { postJournalEntry, reverseJournalEntry } from "../core/ledger";
+import { dryRunJournalEntry, postJournalEntry, reverseJournalEntry } from "../core/ledger";
 import { asJournalEntryId, type JournalEntryId } from "../core/ids";
 import { openCommandDb } from "../cli-dispatch";
 import { formatKroner } from "../cli-format";
@@ -68,6 +68,22 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = JSON.parse(readFileSync(input, "utf8"));
     const result = postJournalEntry(db, payload);
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
+  });
+
+  dispatch.on("journal", "dry-run", (ctx) => {
+    const input = ctx.arg("--input");
+    if (!input) {
+      console.error("Missing required --input <file.json>");
+      process.exit(2);
+    }
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const payload = JSON.parse(readFileSync(input, "utf8"));
+    // Non-binding preview: dryRunJournalEntry rolls its transaction back, so
+    // this never writes to the append-only ledger.
+    const result = dryRunJournalEntry(db, payload);
     ctx.emitResult(result as Record<string, unknown>);
     db.close();
   });

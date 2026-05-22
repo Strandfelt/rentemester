@@ -273,6 +273,7 @@ describe("MCP tools full surface (#78)", () => {
     "invoice_overdue",
     "invoice_status",
     "invoice_validate",
+    "journal_dry_run",
     "journal_list",
     "period_list",
     "reconcile_bank",

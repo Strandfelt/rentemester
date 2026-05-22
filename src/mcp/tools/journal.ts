@@ -16,6 +16,7 @@ import { z } from "zod";
 import {
   postJournalEntry,
   reverseJournalEntry,
+  dryRunJournalEntry,
   type JournalEntryInput,
 } from "../../core/ledger";
 import { withActor } from "../actor";
@@ -109,6 +110,8 @@ export function registerJournalTools(server: McpServer): void {
       description:
         "Bogfører en manuel finanspostering i den append-only kæde. " +
         "Kræver confirm:true. Modposteres via journal_reverse. " +
+        "Kør journal_dry_run med samme payload først for en ikke-bindende " +
+        "forhåndsvisning af postering og kontosaldi. " +
         "Alle beløb er i kroner (decimal DKK, 2 decimaler — ikke øre). " +
         "payload.documentId er påkrævet hvis nogen linje bogfører på en udgifts- eller " +
         "indtægtskonto; valgfri kun for posteringer der udelukkende rører balancekonti. " +
@@ -137,6 +140,42 @@ export function registerJournalTools(server: McpServer): void {
     }>(server, "journal_post", ({ db, actor, args }) => {
       const entry: JournalEntryInput = withActor(args.payload as JournalEntryInput, actor);
       return wrapCoreResult(postJournalEntry(db, entry));
+    }),
+  );
+
+  server.registerTool(
+    "journal_dry_run",
+    {
+      title: "Dry-run journal entry",
+      description:
+        "Forhåndsviser hvad journal_post ville gøre med præcis samme payload — UDEN at " +
+        "skrive noget. Posteringen køres mod den append-only kæde i en transaktion der " +
+        "altid rulles tilbage: intet journalnummer forbruges, intet bilag bogføres. " +
+        "Svaret rummer det entryNo og entryHash posteringen ville få, den nuværende " +
+        "previousHash, samt accountEffects: saldo før/efter pr. berørt konto opgjort " +
+        "som debet-minus-kredit-netto i kroner — kreditnormale konti (indtægt, moms, " +
+        "egenkapital, gæld) står derfor negative. " +
+        "VIGTIGT: resultatet er ikke-bindende — entryNo, previousHash og saldi kan " +
+        "ændre sig hvis en anden postering bogføres inden journal_post kaldes. " +
+        "Read-only; intet confirm påkrævet.",
+      inputSchema: {
+        company: z.string().min(1, "company path is required"),
+        payload: payloadSchema,
+      },
+      outputSchema: envelopeShape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    withCompanyDb<{
+      company: string;
+      payload: z.infer<typeof payloadSchema>;
+    }>(server, ({ db, actor, args }) => {
+      const entry: JournalEntryInput = withActor(args.payload as JournalEntryInput, actor);
+      return wrapCoreResult(dryRunJournalEntry(db, entry));
     }),
   );
 
