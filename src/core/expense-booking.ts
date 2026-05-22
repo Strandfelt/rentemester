@@ -193,7 +193,13 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
   }
   const vatTreatment: ExpenseVatTreatment = inferredTreatment;
   const transactionDate = input.transactionDate ?? bank.transaction_date;
-  const text = input.text?.trim() || `${document.sender_name ?? "Expense"} from bank transaction ${bank.id}`;
+  // Posting text is read by a Danish owner — keep it fully Danish. The
+  // supplier name is used when known; otherwise fall back to a Danish word.
+  const supplierName = document.sender_name?.trim();
+  const text = input.text?.trim()
+    || (supplierName
+      ? `Udgift fra ${supplierName} (banktransaktion ${bank.id})`
+      : `Udgift (banktransaktion ${bank.id})`);
   const paymentAccountNo = input.paymentAccountNo ?? "2000";
   const fxBasis = resolveFxBookingBasis(document, bank);
   if (!fxBasis.ok) return { ok: false, appliedRules: [], errors: [fxBasis.error] };
@@ -244,8 +250,8 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
       createdByProgram: input.createdByProgram,
       ...journalMetadata,
       lines: [
-        { accountNo: account.account_no, debitAmount: netAmountDkk, vatCode: "DK_PURCHASE_25", text: document.invoice_no ?? "Expense base" },
-        { accountNo: "4000", debitAmount: vatAmountDkk, text: "Input VAT" },
+        { accountNo: account.account_no, debitAmount: netAmountDkk, vatCode: "DK_PURCHASE_25", text: document.invoice_no ?? "Udgift, grundbeløb" },
+        { accountNo: "4000", debitAmount: vatAmountDkk, text: "Købsmoms" },
         { accountNo: paymentAccountNo, creditAmount: grossAmountDkk, text: bank.text },
       ],
     });
@@ -296,7 +302,7 @@ export function bookExpenseFromBank(db: Database, input: BookExpenseFromBankInpu
     createdByProgram: input.createdByProgram,
     ...journalMetadata,
     lines: [
-      { accountNo: account.account_no, debitAmount: grossAmountDkk, text: document.invoice_no ?? "Expense" },
+      { accountNo: account.account_no, debitAmount: grossAmountDkk, text: document.invoice_no ?? "Udgift" },
       { accountNo: paymentAccountNo, creditAmount: grossAmountDkk, text: bank.text },
     ],
   });
