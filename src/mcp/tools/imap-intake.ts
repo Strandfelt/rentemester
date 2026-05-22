@@ -48,7 +48,8 @@ export function registerImapIntakeTools(server: McpServer): void {
         "(PDF/JPG/PNG) til den eksisterende bilagsmail-pipeline (#122). Dedup på message-id + " +
         "attachment-hash er rerun-stabil — gentaget poll skaber ingen dubletter. Beskeder uden " +
         "brugbar vedhæftning routes til exception-køen. IMAP-credentials kommer fra argumenter " +
-        "og RENTEMESTER_IMAP_PASSWORD i miljøet, aldrig fra ledger'en. write-reversible — kræver confirm:true.",
+        "og RENTEMESTER_IMAP_PASSWORD i miljøet, aldrig fra ledger'en. Kræver confirm:true. " +
+        "write-reversible.",
       inputSchema: {
         company: z.string().min(1),
         imapHost: z.string().min(1).optional().describe("IMAP-host; standard RENTEMESTER_IMAP_HOST"),

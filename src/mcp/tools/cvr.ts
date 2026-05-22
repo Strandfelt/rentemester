@@ -37,7 +37,7 @@ export function registerCvrTools(server: McpServer): void {
     {
       title: "Sync company stamdata from the CVR register",
       description:
-        "Henter virksomhedens egne stamdata fra CVR-registret og opdaterer companies-rækken (navn, adresse, branche, virksomhedsform, status). write-reversible — kræver confirm:true. Regnskabsåret røres aldrig; et afvigende regnskabsår rapporteres kun.",
+        "Henter virksomhedens egne stamdata fra CVR-registret og opdaterer companies-rækken (navn, adresse, branche, virksomhedsform, status). Kræver confirm:true. Regnskabsåret røres aldrig; et afvigende regnskabsår rapporteres kun. write-reversible.",
       inputSchema: {
         company: z.string().min(1),
         confirm: confirmField,

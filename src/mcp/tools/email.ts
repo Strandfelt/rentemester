@@ -58,7 +58,7 @@ export function registerEmailTools(server: McpServer): void {
       title: "Send invoice or reminder by email",
       description:
         "Sender en udstedt faktura eller en betalingspaamindelse til kundens email via SMTP " +
-        "med PDF'en vedhaeftet og registrerer afsendelsen append-only. write-irreversible. " +
+        "med PDF'en vedhaeftet og registrerer afsendelsen append-only. " +
         "Idempotent: en identisk afsendelse genudsendes ikke. " +
         "SMTP-config laeses fra filen config/smtp.json i virksomhedsmappen; credentials gemmes " +
         "aldrig i bogføringstilstanden. config/smtp.json er et JSON-objekt med PAAKRAEVEDE felter " +
@@ -68,7 +68,7 @@ export function registerEmailTools(server: McpServer): void {
         "ingen exception. Den indbyggede SMTP-transport koerer KUN i dry-run: med dryRun:true " +
         "registreres afsendelsen uden et netvaerkskald (ok:true); uden dryRun:true fejler et " +
         "rigtigt send med envelopen { ok:false, errors:[\"the built-in SMTP transport runs in " +
-        "dryRun only ...\"] }. Aegte levering kraever en injiceret EmailTransport.",
+        "dryRun only ...\"] }. Aegte levering kraever en injiceret EmailTransport. write-irreversible.",
       inputSchema: {
         company: z
           .string()

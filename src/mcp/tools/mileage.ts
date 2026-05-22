@@ -63,9 +63,9 @@ export function registerMileageTools(server: McpServer): void {
     {
       title: "Log a mileage entry",
       description:
-        "Tilføjer en append-only kørselspost til kørselsregnskabet. write-reversible — kræver confirm:true. " +
+        "Tilføjer en append-only kørselspost til kørselsregnskabet. Kræver confirm:true. " +
         "ratePerKm/rateBasis skal være bruger-oplyst og kilde-bakket; Rentemester fører kun loggen, " +
-        "skattemæssig behandling er brugerens/rådgiverens ansvar.",
+        "skattemæssig behandling er brugerens/rådgiverens ansvar. write-reversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         input: z
@@ -121,7 +121,7 @@ export function registerMileageTools(server: McpServer): void {
       title: "Export mileage log",
       description:
         "Skriver et deterministisk eksport-artifact (JSON + CSV) over kørselsregnskabet for en periode. " +
-        "write-reversible — kræver confirm:true.",
+        "Kræver confirm:true. write-reversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         from: z.string().min(1).describe("Start of the export period (inclusive), in YYYY-MM-DD format."),

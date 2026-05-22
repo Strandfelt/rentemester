@@ -131,12 +131,13 @@ export function registerDocumentTools(server: McpServer): void {
     {
       title: "Ingest document",
       description:
-        "Indlæser og hash-lagrer et bilag med metadata. write-reversible — kræver confirm:true. " +
+        "Indlæser og hash-lagrer et bilag med metadata. Kræver confirm:true. " +
         "Skriver en exception hvis ingest blokeres (fx duplicate). " +
         "VIGTIGT: filePath er en sti på MCP-serverens eget filsystem — bilaget skal allerede " +
         "ligge på serveren. Klienten/agenten kan IKKE uploade en fil her, og der findes (i " +
         "modsætning til bank_import's csvContent) ingen inline-content-variant: filen kan kun " +
-        "angives via sti. Alle beløb i metadata er i kroner (decimal DKK, ikke øre).",
+        "angives via sti. Alle beløb i metadata er i kroner (decimal DKK, ikke øre). " +
+        "write-reversible.",
       inputSchema: {
         company: z.string().min(1),
         filePath: z

@@ -37,13 +37,33 @@ export function registerBankTools(server: McpServer): void {
         "Lister importerede banktransaktioner med valgfri filtre på status, dato, tekstmatch og beløb. Read-only.",
       inputSchema: {
         company: z.string().min(1),
-        status: statusSchema,
-        from: z.string().optional(),
-        to: z.string().optional(),
-        textMatch: z.string().optional(),
-        amount: z.number().optional(),
+        status: statusSchema.describe(
+          "Filter by reconciliation status: 'all' (default), 'matched' or 'unmatched'.",
+        ),
+        from: z
+          .string()
+          .optional()
+          .describe("Only transactions dated on or after this date (YYYY-MM-DD)."),
+        to: z
+          .string()
+          .optional()
+          .describe("Only transactions dated on or before this date (YYYY-MM-DD)."),
+        textMatch: z
+          .string()
+          .optional()
+          .describe("Filter by a case-insensitive substring of the transaction text."),
+        amount: z
+          .number()
+          .optional()
+          .describe("Filter by exact transaction amount in kroner (decimal DKK)."),
         // ===== BANK CLUSTER (#187) =====
-        account: z.string().optional(),
+        account: z
+          .string()
+          .optional()
+          .describe(
+            "Optional bank account identifier (id or name/slug) to filter by. " +
+              "When omitted, transactions across all bank accounts are listed.",
+          ),
         // ===== END BANK CLUSTER (#187) =====
       },
       outputSchema: envelopeShape,
@@ -114,13 +134,33 @@ export function registerBankTools(server: McpServer): void {
         "Bygger en bank-afstemningsrapport for en periode med valgfri status/tekst/beløb-filtre. Read-only.",
       inputSchema: {
         company: z.string().min(1),
-        from: z.string().min(1),
-        to: z.string().min(1),
-        status: statusSchema,
-        textMatch: z.string().optional(),
-        amount: z.number().optional(),
+        from: z
+          .string()
+          .min(1)
+          .describe("Start of the reconciliation period (inclusive), in YYYY-MM-DD format."),
+        to: z
+          .string()
+          .min(1)
+          .describe("End of the reconciliation period (inclusive), in YYYY-MM-DD format."),
+        status: statusSchema.describe(
+          "Filter by reconciliation status: 'all' (default), 'matched' or 'unmatched'.",
+        ),
+        textMatch: z
+          .string()
+          .optional()
+          .describe("Filter by a case-insensitive substring of the transaction text."),
+        amount: z
+          .number()
+          .optional()
+          .describe("Filter by exact transaction amount in kroner (decimal DKK)."),
         // ===== BANK CLUSTER (#187) =====
-        account: z.string().optional(),
+        account: z
+          .string()
+          .optional()
+          .describe(
+            "Optional bank account identifier (id or name/slug) to scope the " +
+              "report to. When omitted, all bank accounts are reconciled.",
+          ),
         // ===== END BANK CLUSTER (#187) =====
       },
       outputSchema: envelopeShape,
@@ -161,8 +201,9 @@ export function registerBankTools(server: McpServer): void {
     {
       title: "Import bank CSV",
       description:
-        "Importerer banktransaktioner fra CSV. write-reversible — kræver confirm:true. " +
-        "Send enten csvPath (absolut sti) eller csvContent (rå CSV-tekst).",
+        "Importerer banktransaktioner fra CSV. Kræver confirm:true. " +
+        "Send enten csvPath (absolut sti) eller csvContent (rå CSV-tekst). " +
+        "write-reversible.",
       inputSchema: {
         company: z.string().min(1),
         csvPath: z

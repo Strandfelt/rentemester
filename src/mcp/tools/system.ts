@@ -99,8 +99,9 @@ export function registerSystemTools(server: McpServer): void {
     {
       title: "Create system backup",
       description:
-        "Opretter revisionsklar backup. write-irreversible. Med archive:true " +
-        "pakkes backuppen straks til ét .tar-arkiv klar til off-site placering.",
+        "Opretter revisionsklar backup. Med archive:true " +
+        "pakkes backuppen straks til ét .tar-arkiv klar til off-site placering. " +
+        "write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         at: z.string().optional(),
@@ -135,7 +136,8 @@ export function registerSystemTools(server: McpServer): void {
       title: "Pack a backup into a single-file archive",
       description:
         "Pakker en eksisterende backup til ét deterministisk .tar-arkiv (+ .sha256) " +
-        "klar til at agenten kan flytte det off-site. Uden backupId pakkes den nyeste.",
+        "klar til at agenten kan flytte det off-site. Uden backupId pakkes den nyeste. " +
+        "write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         backupId: z.string().optional(),
@@ -190,7 +192,7 @@ export function registerSystemTools(server: McpServer): void {
       title: "Add a backup destination",
       description:
         "Tilføjer en backup-destination. inEeaOrEu attesterer at destinationen ligger " +
-        "på en server i EU/EØS, jf. BEK 205/2024 § 4, stk. 2. write.",
+        "på en server i EU/EØS, jf. BEK 205/2024 § 4, stk. 2. write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         label: z.string().min(1).describe("Human-readable name for this destination, e.g. 'Revisor Dropbox'."),
@@ -293,7 +295,7 @@ export function registerSystemTools(server: McpServer): void {
     "system_backup_destination_remove",
     {
       title: "Remove a backup destination",
-      description: "Fjerner en konfigureret backup-destination. write.",
+      description: "Fjerner en konfigureret backup-destination. write-irreversible.",
       inputSchema: { company: z.string().min(1), id: z.string().min(1), confirm: confirmField },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -311,7 +313,7 @@ export function registerSystemTools(server: McpServer): void {
       title: "Place a backup archive at a destination",
       description:
         "Kopierer et backup-arkiv til en destination med en lokal/synkroniseret mappe " +
-        "(fx en Dropbox-desktopmappe) og verificerer kopien med sha256. write.",
+        "(fx en Dropbox-desktopmappe) og verificerer kopien med sha256. write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         archivePath: z.string().min(1),
@@ -353,7 +355,7 @@ export function registerSystemTools(server: McpServer): void {
       description:
         "Registrerer en backup-placering foretaget uden for Rentemester — fx en agent " +
         "der har pushet arkivet til Dropbox/Drive/SSH med egne værktøjer. Verificeres " +
-        "med sha256 hvis destinationen er læsbar. write.",
+        "med sha256 hvis destinationen er læsbar. write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         destinationId: z.string().min(1),
@@ -400,7 +402,8 @@ export function registerSystemTools(server: McpServer): void {
       title: "Configure the opt-in bookkeeping lock",
       description:
         "Konfigurerer den frivillige bogførings-lås. Slået til blokeres ny bogføring " +
-        "hvis den ugentlige backup (BEK 205/2024 § 4) er forsømt ud over grace-perioden. write.",
+        "hvis den ugentlige backup (BEK 205/2024 § 4) er forsømt ud over grace-perioden. " +
+        "write-irreversible.",
       inputSchema: {
         company: z.string().min(1),
         enforced: z.boolean().optional(),

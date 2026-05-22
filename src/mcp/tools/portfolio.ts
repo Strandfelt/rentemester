@@ -174,7 +174,8 @@ export function registerPortfolioTools(server: McpServer): void {
         "Opretter en ny virksomhed i workspace'et: udleder/validerer et slug, bygger virksomheds-volumen " +
         "under <workspace>/<slug>/, initialiserer ledgeren og registrerer virksomheden i workspace-manifestet. " +
         "Workspace-niveau write-tool — kalder kerne-funktionen createCompany. " +
-        "Mutationer er altid enkelt-virksomhed; dette tool tilføjer netop én.",
+        "Mutationer er altid enkelt-virksomhed; dette tool tilføjer netop én. " +
+        "write-irreversible.",
       inputSchema: {
         workspace: z
           .string()

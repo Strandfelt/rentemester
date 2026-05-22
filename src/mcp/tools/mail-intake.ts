@@ -42,7 +42,8 @@ export function registerMailIntakeTools(server: McpServer): void {
         "Indlæser en lokal .eml-fil eller maildrop-mappe, parser vedhæftninger (PDF/JPG/PNG) " +
         "og videresender dem til document-ingest-pipelinen. Deduplikerer på message-id + " +
         "attachment-hash så reruns er idempotente. Beskeder uden brugbar vedhæftning eller " +
-        "med tvetydig metadata routes til exception-køen. write-reversible — kræver confirm:true.",
+        "med tvetydig metadata routes til exception-køen. Kræver confirm:true. " +
+        "write-reversible.",
       inputSchema: {
         company: z.string().min(1),
         source: z.string().min(1).describe("Sti til en .eml-fil eller en maildrop-mappe"),

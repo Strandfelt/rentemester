@@ -47,8 +47,8 @@ export function registerExceptionTools(server: McpServer): void {
     {
       title: "Resolve exception",
       description:
-        "Markerer en exception som løst. write-reversible — kræver confirm:true. " +
-        "Kan ikke gen-åbnes manuelt.",
+        "Markerer en exception som løst. Kræver confirm:true. " +
+        "Kan ikke gen-åbnes manuelt. write-reversible.",
       inputSchema: {
         company: z.string().min(1),
         id: z.number().int().positive(),
