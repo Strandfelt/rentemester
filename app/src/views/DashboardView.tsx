@@ -222,7 +222,11 @@ function KeyFigures({
   return (
     <div className="key-figures">
       <div className="key-figure">
-        <span className="key-figure-label">Bruttomargin</span>
+        {/* `keyFigures.bruttomargin` is computed as resultat ÷ omsætning —
+            that is the profit margin (overskudsgrad/resultatgrad), not the
+            gross margin. The label tracks what the figure actually measures
+            so an owner never quotes the wrong term to a bank or accountant. */}
+        <span className="key-figure-label">Overskudsgrad</span>
         <span className="key-figure-value">
           {formatPercent(keyFigures.bruttomargin)}
         </span>
