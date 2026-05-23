@@ -12,7 +12,7 @@
 // binary document as base64), and the handler writes it to a `mkdtemp` file
 // before calling core. Slice 4 (invoicing) follows the same shape.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import {
@@ -22,6 +22,8 @@ import {
 import { importBankCsv } from "../core/bank";
 import { importDineroContacts } from "../core/import/dinero-contacts";
 import { detectImportSource } from "../core/import/source-detect";
+import { exportAuthorityPackage } from "../core/authority-export";
+import { createTar, dirToTarEntries } from "../core/tar";
 import { ingestDocument, type DocumentMetadata } from "../core/documents";
 import { resolveDocumentMasterData, resolveInvoiceMasterData } from "../core/master-data";
 import {
@@ -291,6 +293,88 @@ export async function handleDataImport(
       detected: result.detected,
       summary: result.summary,
       errors: result.errors,
+    },
+  });
+}
+
+/**
+ * POST /api/companies/:slug/accountant-export — the "share with revisor"
+ * action.
+ *
+ * Body: `{ periodStart: string, periodEnd: string, confirm: true }`. Generates
+ * the same `accountant_handoff` package the CLI's `system export-accountant`
+ * produces (a manifest plus the machine-readable + documents-readable
+ * subtrees), packs the whole thing into one deterministic .tar, and returns
+ * the archive as a single download. The temp output dir is removed on the way
+ * out — the response is the only copy that leaves the workspace.
+ *
+ * Goes through `withCompanyMutation` (backup lock, localhost gate, actor
+ * attribution); `requireConfirm` is set because the export writes an audit
+ * event into the ledger.
+ */
+export async function handleAccountantExport(
+  config: ServerConfig,
+  request: Request,
+  slug: string,
+): Promise<Response> {
+  const result = await withCompanyMutation(
+    request,
+    config,
+    slug,
+    (ctx, body) => {
+      const periodStart = requireBodyString(body, "periodStart");
+      const periodEnd = requireBodyString(body, "periodEnd");
+
+      const outputDir = mkdtempSync(
+        join(tmpdir(), "rentemester-cockpit-accountant-"),
+      );
+      try {
+        const exported = exportAuthorityPackage(ctx.db, ctx.companyRoot, {
+          periodStart,
+          periodEnd,
+          outputDir,
+          packageProfile: "accountant_handoff",
+        });
+        if (!exported.ok || !exported.exportDir) {
+          throw ApiError.badRequest(
+            (exported.errors ?? []).join("; ") ||
+              "accountant export failed",
+          );
+        }
+        // The flat directory the export wrote — packing this (not the parent
+        // temp dir) keeps the tar coherent: untarring it yields a single
+        // package folder, not a wrapper.
+        const entries = dirToTarEntries(exported.exportDir);
+        const tar = createTar(entries);
+        return {
+          ok: true,
+          errors: [] as string[],
+          tar,
+          filename: `revisor-eksport-${slug}-${periodStart}-${periodEnd}.tar`,
+          journalEntryCount: exported.journalEntryCount ?? 0,
+          documentCount: exported.documentCount ?? 0,
+          bankTransactionCount: exported.bankTransactionCount ?? 0,
+        };
+      } finally {
+        try {
+          rmSync(outputDir, { recursive: true, force: true });
+        } catch {}
+      }
+    },
+    { requireConfirm: true },
+  );
+
+  return new Response(result.tar, {
+    headers: {
+      "content-type": "application/x-tar",
+      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, no-store",
+      // Summary counters carried as headers so the UI can show a receipt
+      // alongside the download without a second round-trip.
+      "x-rentemester-journal-entries": String(result.journalEntryCount),
+      "x-rentemester-documents": String(result.documentCount),
+      "x-rentemester-bank-transactions": String(result.bankTransactionCount),
     },
   });
 }

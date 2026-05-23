@@ -323,6 +323,52 @@ export const api = {
     ).then((r) => r.import),
 
   /**
+   * Generates the accountant-handoff package and returns it as a downloadable
+   * .tar blob — the cockpit's "share with revisor" action. The server packs
+   * the same files the CLI's `system export-accountant` produces; the browser
+   * triggers a download from the returned blob.
+   */
+  accountantExport: async (
+    slug: string,
+    input: { periodStart: string; periodEnd: string },
+  ): Promise<AccountantExportResult> => {
+    const res = await fetch(
+      `/api/companies/${encodeURIComponent(slug)}/accountant-export`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...input, confirm: true }),
+      },
+    );
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      let code = "internal";
+      try {
+        const body = (await res.json()) as {
+          error?: { code?: string; message?: string };
+        };
+        message = body.error?.message ?? message;
+        code = body.error?.code ?? code;
+      } catch {}
+      throw new ApiError(code, message, res.status);
+    }
+    const filename =
+      parseFilenameFromContentDisposition(res.headers.get("content-disposition")) ??
+      `revisor-eksport-${slug}-${input.periodStart}-${input.periodEnd}.tar`;
+    return {
+      blob: await res.blob(),
+      filename,
+      journalEntryCount: Number(
+        res.headers.get("x-rentemester-journal-entries") ?? 0,
+      ),
+      documentCount: Number(res.headers.get("x-rentemester-documents") ?? 0),
+      bankTransactionCount: Number(
+        res.headers.get("x-rentemester-bank-transactions") ?? 0,
+      ),
+    };
+  },
+
+  /**
    * Imports an export file from another accounting system. The browser reads
    * the chosen file and passes its text as `content`; the server recognises
    * which system the file came from and routes it to the matching importer.
@@ -494,6 +540,32 @@ export type BankImportInput = {
   account?: string;
   profile?: string;
 };
+
+/** The accountant-export result the server echoes back, plus the tar blob. */
+export type AccountantExportResult = {
+  /** The .tar archive as a Blob — the browser triggers a download from this. */
+  blob: Blob;
+  /** Suggested download filename derived from the response. */
+  filename: string;
+  /** Number of journal entries included — surfaced in the UI receipt. */
+  journalEntryCount: number;
+  /** Number of supporting documents included. */
+  documentCount: number;
+  /** Number of bank transactions included. */
+  bankTransactionCount: number;
+};
+
+/** Picks the filename from a `filename*=UTF-8''…` content-disposition header. */
+function parseFilenameFromContentDisposition(cd: string | null): string | null {
+  if (!cd) return null;
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  if (!m || !m[1]) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+}
 
 /** Input for `api.importData` — the file name + text, plus the CVR-enrich opt-in. */
 export type DataImportInput = {

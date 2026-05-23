@@ -53,6 +53,7 @@ import {
 } from "./data";
 import { serveStatic } from "./static";
 import {
+  handleAccountantExport,
   handleBankImport,
   handleClosePeriod,
   handleCompanyProfile,
@@ -655,6 +656,16 @@ export async function handleRequest(
       if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
       const slug = decodeURIComponent(dataImportMatch[1]!);
       return await handleDataImport(config, request, slug);
+    }
+
+    // Cockpit write route: the accountant-export download. Generates the
+    // accountant-handoff package and streams it back as one .tar file.
+    const accountantExportMatch =
+      /^\/api\/companies\/([^/]+)\/accountant-export$/.exec(path);
+    if (accountantExportMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(accountantExportMatch[1]!);
+      return await handleAccountantExport(config, request, slug);
     }
 
     // Bookkeeping write route (#213, slice 3): ingest a document (bilag).
