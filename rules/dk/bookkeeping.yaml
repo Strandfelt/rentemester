@@ -127,6 +127,23 @@ rules:
       forbid:
         - silently_missing_backup_after_more_than_7_days_with_new_activity
     explanation: Rentemester must be able to create a full backup of bookkeeping data and supporting documents and deterministically report when the weekly backup duty has become due because new activity happened after the last backup.
+  - rule_id: DK-BOOKKEEPING-BACKUP-KEY-ROTATE-001
+    name: Rotation of the Ed25519 backup signing key must be auditable and preserve the verifiability of older backups
+    category: backup_compliance
+    source_id: DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
+    provisions:
+      - ref: "§ 4, stk. 1"
+        text_hash: "sha256:96235d331f5562c3334b1ae7b4cf25a44ed1593abcdb75808c9c896b4709c7e2"
+    severity: hard_stop
+    machine_rule:
+      require:
+        - explicit_reason_for_each_key_rotation
+        - audit_log_entry_naming_old_and_new_public_key_fingerprints
+        - archived_old_keypair_preserved_so_older_backups_remain_verifiable
+      forbid:
+        - silent_overwrite_of_the_existing_signing_key
+        - rotation_without_a_recorded_reason
+    explanation: When the backup signing key is rotated, Rentemester archives the old keypair under a fingerprint-named filename, writes a fresh keypair to the live path, and audit-logs both fingerprints together with the operator's reason — so an auditor can always reconstruct which key signed a given older backup and why the rotation happened.
   - rule_id: DK-BOOKKEEPING-AUTHORITY-EXPORT-001
     name: Bookkeeping data and vouchers must be exportable by period in a structured machine-readable package
     category: authority_access
