@@ -41,6 +41,7 @@ import {
   buildCompanyMultiYear,
   buildCompanyObligations,
   buildCompanyOverview,
+  buildCompanyRecurringInvoices,
   buildCompanySettings,
   buildCompanyTrialBalance,
   buildCompanyVat,
@@ -59,6 +60,7 @@ import {
   handleCompanyProfile,
   handleDataImport,
   handleDocumentIngest,
+  handleGenerateRecurringInvoice,
   handleInvoiceIssue,
   handleInvoicePost,
   handleInvoiceSettle,
@@ -238,6 +240,14 @@ function handleCompanyVat(
 function handleCompanyDocuments(config: ServerConfig, slug: string): Response {
   const data = buildCompanyDocuments(config.workspaceRoot, slug);
   return okResponse({ documents: data });
+}
+
+function handleCompanyRecurringInvoices(
+  config: ServerConfig,
+  slug: string,
+): Response {
+  const data = buildCompanyRecurringInvoices(config.workspaceRoot, slug);
+  return okResponse({ recurringInvoices: data });
 }
 
 /**
@@ -565,6 +575,27 @@ export async function handleRequest(
       if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
       const slug = decodeURIComponent(documentFileMatch[1]!);
       return handleCompanyDocumentFile(config, slug, documentFileMatch[2]!);
+    }
+
+    const recurringInvoicesMatch =
+      /^\/api\/companies\/([^/]+)\/recurring-invoices$/.exec(path);
+    if (recurringInvoicesMatch) {
+      if (method !== "GET") throw ApiError.methodNotAllowed("GET required");
+      const slug = decodeURIComponent(recurringInvoicesMatch[1]!);
+      return handleCompanyRecurringInvoices(config, slug);
+    }
+
+    const recurringInvoiceGenerateMatch =
+      /^\/api\/companies\/([^/]+)\/recurring-invoices\/(\d+)\/generate$/.exec(path);
+    if (recurringInvoiceGenerateMatch) {
+      if (method !== "POST") throw ApiError.methodNotAllowed("POST required");
+      const slug = decodeURIComponent(recurringInvoiceGenerateMatch[1]!);
+      return await handleGenerateRecurringInvoice(
+        config,
+        request,
+        slug,
+        recurringInvoiceGenerateMatch[2]!,
+      );
     }
 
     const archiveMatch =

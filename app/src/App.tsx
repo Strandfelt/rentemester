@@ -38,6 +38,7 @@ import { DocumentsView } from "./views/DocumentsView";
 import { ArchiveView } from "./views/ArchiveView";
 import { MultiYearView } from "./views/MultiYearView";
 import { InvoicesView } from "./views/InvoicesView";
+import { RecurringInvoicesView } from "./views/RecurringInvoicesView";
 import { ContactsView } from "./views/ContactsView";
 import { ManageCompanyView } from "./views/ManageCompanyView";
 
@@ -93,6 +94,10 @@ export function App() {
           <Route
             path="/companies/:slug/fakturaer"
             element={<InvoicesView />}
+          />
+          <Route
+            path="/companies/:slug/faktura-skabeloner"
+            element={<RecurringInvoicesView />}
           />
           <Route
             path="/companies/:slug/kontakter"

@@ -1069,3 +1069,53 @@ export type SyncCvrResponse = {
   ok: true;
   sync: SyncCvrResult;
 };
+
+/** One previously generated invoice for a recurring-invoice template. */
+export type RecurringInvoiceGenerationRow = {
+  id: number;
+  periodIndex: number;
+  invoiceNumber: string;
+  issueDate: string;
+  documentId: number;
+  deliveryPeriodStart: string | null;
+  deliveryPeriodEnd: string | null;
+};
+
+/** One recurring-invoice template plus the invoices it has already issued. */
+export type RecurringInvoiceTemplateRow = {
+  id: number;
+  name: string;
+  interval: "monthly" | "quarterly" | "yearly";
+  firstIssueDate: string;
+  nextIssueDate: string;
+  paymentTermsDays: number;
+  deliveryPeriodMode: "issue_month" | "interval_window" | "none";
+  notes: string | null;
+  active: boolean;
+  createdAt: string;
+  generations: RecurringInvoiceGenerationRow[];
+};
+
+export type CompanyRecurringInvoices = {
+  slug: string;
+  templates: RecurringInvoiceTemplateRow[];
+};
+
+export type RecurringInvoicesResponse = {
+  ok: true;
+  recurringInvoices: CompanyRecurringInvoices;
+};
+
+/** The generate-from-template result the server echoes back. */
+export type RecurringInvoiceGenerationResult = {
+  /** True for a freshly-issued invoice, false for an idempotent re-run. */
+  created: boolean;
+  templateId: number | null;
+  periodIndex: number | null;
+  documentId: number | null;
+  invoiceNumber: string | null;
+  issueDate: string | null;
+  dueDate: string | null;
+  deliveryPeriodStart: string | null;
+  deliveryPeriodEnd: string | null;
+};

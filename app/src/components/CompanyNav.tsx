@@ -84,6 +84,7 @@ const TAB_GROUPS: { name: string; tabs: NavTab[] }[] = [
     name: "Salg",
     tabs: [
       { to: "fakturaer", label: "Fakturaer" },
+      { to: "faktura-skabeloner", label: "Skabeloner" },
       { to: "kontakter", label: "Kontakter" },
     ],
   },

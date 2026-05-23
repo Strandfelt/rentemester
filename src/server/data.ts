@@ -95,6 +95,7 @@ export {
   buildCompanyContacts,
   buildCompanyObligations,
   buildCompanyCashflow,
+  buildCompanyRecurringInvoices,
 } from "./data/company-views";
 export type {
   CompanySettingsView,
@@ -116,4 +117,7 @@ export type {
   CashflowMonth,
   CashflowBalancePoint,
   CompanyCashflow,
+  RecurringInvoiceGenerationRow,
+  RecurringInvoiceTemplateRow,
+  CompanyRecurringInvoices,
 } from "./data/company-views";

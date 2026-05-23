@@ -24,6 +24,7 @@ import { importDineroContacts } from "../core/import/dinero-contacts";
 import { detectImportSource } from "../core/import/source-detect";
 import { exportAuthorityPackage } from "../core/authority-export";
 import { createTar, dirToTarEntries } from "../core/tar";
+import { generateRecurringInvoice } from "../core/recurring-invoices";
 import { ingestDocument, type DocumentMetadata } from "../core/documents";
 import { resolveDocumentMasterData, resolveInvoiceMasterData } from "../core/master-data";
 import {
@@ -377,6 +378,60 @@ export async function handleAccountantExport(
       "x-rentemester-bank-transactions": String(result.bankTransactionCount),
     },
   });
+}
+
+/**
+ * POST /api/companies/:slug/recurring-invoices/:id/generate — materializes the
+ * next invoice from a recurring template. Body: `{ asOfDate, confirm: true }`.
+ *
+ * Wraps the same `generateRecurringInvoice` core the CLI and MCP use.
+ * Idempotent: a second call for the same period returns the existing
+ * generation with `created: false`. Goes through `withCompanyMutation`, so the
+ * backup lock + actor attribution apply; `requireConfirm` is set because the
+ * action issues a real invoice document into the ledger.
+ */
+export async function handleGenerateRecurringInvoice(
+  config: ServerConfig,
+  request: Request,
+  slug: string,
+  templateIdRaw: string,
+): Promise<Response> {
+  const templateId = Number(templateIdRaw);
+  if (!Number.isInteger(templateId) || templateId <= 0) {
+    throw ApiError.badRequest("template id must be a positive integer");
+  }
+  const result = await withCompanyMutation(
+    request,
+    config,
+    slug,
+    (ctx, body) => {
+      const asOfDate = requireBodyString(body, "asOfDate");
+      const gen = generateRecurringInvoice(ctx.db, ctx.companyRoot, {
+        templateId,
+        asOfDate,
+        createdBy: ctx.actor.createdBy,
+        createdByProgram: ctx.actor.createdByProgram,
+      });
+      return {
+        ok: gen.ok,
+        errors: gen.errors,
+        generation: {
+          created: gen.created ?? false,
+          templateId: gen.templateId ?? null,
+          periodIndex: gen.periodIndex ?? null,
+          documentId: gen.documentId ?? null,
+          invoiceNumber: gen.invoiceNumber ?? null,
+          issueDate: gen.issueDate ?? null,
+          dueDate: gen.dueDate ?? null,
+          deliveryPeriodStart: gen.deliveryPeriodStart ?? null,
+          deliveryPeriodEnd: gen.deliveryPeriodEnd ?? null,
+        },
+      };
+    },
+    { requireConfirm: true },
+  );
+
+  return okResponse({ generation: result.generation });
 }
 
 /**

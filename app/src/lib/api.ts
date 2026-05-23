@@ -29,6 +29,8 @@ import type {
   ObligationsResponse,
   OverviewResponse,
   PortfolioResponse,
+  RecurringInvoiceGenerationResult,
+  RecurringInvoicesResponse,
   SyncCvrResponse,
   TrialBalanceResponse,
   UpdateCompanyInput,
@@ -172,6 +174,27 @@ export const api = {
    */
   documentFileUrl: (slug: string, id: number) =>
     `/api/companies/${encodeURIComponent(slug)}/documents/${id}/file`,
+
+  /** Recurring-invoice templates + their past generations for a company. */
+  recurringInvoices: (slug: string) =>
+    request<RecurringInvoicesResponse>(
+      `/api/companies/${encodeURIComponent(slug)}/recurring-invoices`,
+    ).then((r) => r.recurringInvoices),
+
+  /**
+   * Generates the next invoice from a template for the given `asOfDate`. The
+   * core is idempotent: a second call for the same period returns the existing
+   * generation with `created: false`. Write-irreversible (issues an invoice
+   * document), so the body carries `confirm: true`.
+   */
+  generateRecurringInvoice: (slug: string, templateId: number, asOfDate: string) =>
+    request<{ ok: true; generation: RecurringInvoiceGenerationResult }>(
+      `/api/companies/${encodeURIComponent(slug)}/recurring-invoices/${templateId}/generate`,
+      {
+        method: "POST",
+        body: JSON.stringify({ asOfDate, confirm: true }),
+      },
+    ).then((r) => r.generation),
 
   archive: (slug: string, year: string) =>
     request<ArchiveResponse>(
