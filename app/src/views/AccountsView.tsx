@@ -64,10 +64,11 @@ export function AccountsView() {
       </header>
 
       <p className="muted">
-        {data.accounts.length} konti i kontoplanen. Read-only: kontoplanen
-        styres centralt fra <code>seedAccounts</code> og opdateres ved Dinero-
-        import via <code>reconcileChartOfAccounts</code> (#193). En konto med
-        bogføringslinjer kan ikke ændres uden brud på append-only-garantien.
+        {data.accounts.length} konti i kontoplanen. Kontoplanen kommer som
+        standard fra Rentemester og opdateres automatisk når du migrerer fra
+        et andet system. En konto, der allerede har bogføringslinjer, kan ikke
+        ændres — det er en garanti for at de tidligere posteringer bliver
+        stående uændret.
       </p>
 
       <section className="card">

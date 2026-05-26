@@ -56,10 +56,10 @@ export function AccrualsView() {
 
       <p className="muted">
         Periodeafgrænsningsposter (PAP): forudbetalte omkostninger,
-        skyldige omkostninger, udskudt omsætning. Beløb rulles ud lineært
-        over de aftalte perioder. Read-only; nye accruals registreres via
-        CLI'ens <code>accrual register</code> (skrive-flow i cockpittet
-        følger).
+        skyldige omkostninger og udskudt omsætning. Beløb rulles ud lineært
+        over de aftalte perioder. Visningen er læsbar — nye periodiseringer
+        oprettes i øjeblikket via kommandolinjen; et skrive-flow i cockpittet
+        følger.
       </p>
 
       <section className="card">

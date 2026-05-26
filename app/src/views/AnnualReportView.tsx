@@ -1,7 +1,7 @@
 // Årsrapport-builder UI (#338).
 //
-// Per-virksomhed view der bygger en regnskabsklasse-B-arsrapport for en
-// fiscal year. Brugeren angiver start + slut; resten kommer fra kernens
+// Per-virksomhed view der bygger en regnskabsklasse-B-årsrapport for et
+// regnskabsår. Brugeren angiver start + slut; resten kommer fra kernens
 // `buildAnnualReport` (samme funktion som CLI'ens `report annual`).
 // Forudsætnings-fejl (CVR mangler, periode er ikke låst, bøgerne
 // balancerer ikke) vises tydeligt så ejeren kan rette dem og prøve igen.
@@ -46,8 +46,8 @@ export function AnnualReportView() {
         <div>
           <h2>Årsrapport (regnskabsklasse B)</h2>
           <p className="muted">
-            Forbereder en arsrapport for en lukket fiscal year. Rentemester
-            samler resultatopgørelse, balance og noter — det endelige aflæsning
+            Forbereder en årsrapport for et lukket regnskabsår. Rentemester
+            samler resultatopgørelse, balance og noter — den endelige aflæsning
             sker hos revisor.
           </p>
         </div>
@@ -59,7 +59,7 @@ export function AnnualReportView() {
       </header>
 
       <section className="card">
-        <h3>Vælg fiscal year</h3>
+        <h3>Vælg regnskabsår</h3>
         <form onSubmit={build} className="filter-bar">
           <label>
             Start (YYYY-MM-DD)
@@ -102,15 +102,13 @@ function ReportPanel({ report }: { report: AnnualReport }) {
       <section className="card">
         <h3>Forudsætninger mangler</h3>
         <p className="muted">
-          For at en arsrapport kan dannes skal: virksomhedens CVR være
-          registreret, regnskabsåret være lukket via <code>period close</code>{" "}
-          og bøgerne balancere.
+          For at en årsrapport kan dannes skal: virksomhedens CVR være
+          registreret, regnskabsåret være lukket under{" "}
+          <Link to="../periods">Periodelås</Link>, og bøgerne skal balancere.
         </p>
         <ul className="audit-errors">
           {report.errors.map((err, i) => (
-            <li key={i}>
-              <code>{err}</code>
-            </li>
+            <li key={i}>{err}</li>
           ))}
         </ul>
       </section>

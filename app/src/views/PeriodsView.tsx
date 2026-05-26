@@ -321,7 +321,7 @@ function ReopenPeriodModal({
         <h3>Genåbn periode</h3>
         <p className="muted">
           {target.periodStart} – {target.periodEnd} ({KIND_LABEL[target.kind]})
-          . En begrundelse logges verbatim i audit-log'en.
+          . Din begrundelse gemmes ordret i revisionssporet.
         </p>
         <form onSubmit={submit}>
           <label>

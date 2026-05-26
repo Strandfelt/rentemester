@@ -30,6 +30,7 @@ import type {
   AgentSuggestionRow,
   CompanyAgentSuggestions,
 } from "../lib/types";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorState, Loading } from "../components/Feedback";
 
 const SEVERITY_LABEL: Record<AgentSuggestionRow["severity"], string> = {
@@ -175,14 +176,9 @@ function SuggestionRowView({
   onError: (msg: string) => void;
 }) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [pending, setPending] = useState<"approve" | "reject" | null>(null);
 
-  async function handleApprove() {
-    if (
-      !window.confirm(
-        `Godkend agent-forslaget "${row.kindLabel}"? Forslaget løses som godkendt — du bogfører selv den konkrete handling bagefter.`,
-      )
-    )
-      return;
+  async function doApprove() {
     setBusy("approve");
     try {
       await api.approveAgentSuggestion(slug, row.exceptionId);
@@ -193,31 +189,26 @@ function SuggestionRowView({
           ? err.message
           : "Kunne ikke godkende forslaget.",
       );
+      throw err;
     } finally {
       setBusy(null);
     }
   }
 
-  async function handleReject() {
-    const reason = window.prompt(
-      `Afvis agent-forslaget "${row.kindLabel}"? Skriv en kort begrundelse (gemmes på audit-sporet, så agenten kan lære af afvisningen):`,
-      "",
-    );
-    // window.prompt returns null on cancel, "" when the owner left it blank.
-    // Both are valid — null cancels, "" still rejects (without a reason).
-    if (reason === null) return;
+  async function doReject(note: string) {
     setBusy("reject");
     try {
       await api.rejectAgentSuggestion(
         slug,
         row.exceptionId,
-        reason.trim().length > 0 ? reason.trim() : undefined,
+        note.length > 0 ? note : undefined,
       );
       onChanged();
     } catch (err) {
       onError(
         err instanceof ApiError ? err.message : "Kunne ikke afvise forslaget.",
       );
+      throw err;
     } finally {
       setBusy(null);
     }
@@ -273,7 +264,7 @@ function SuggestionRowView({
           <button
             type="button"
             className="btn"
-            onClick={handleApprove}
+            onClick={() => setPending("approve")}
             disabled={busy !== null}
             aria-label={`Godkend ${row.kindLabel}`}
           >
@@ -282,13 +273,49 @@ function SuggestionRowView({
           <button
             type="button"
             className="btn secondary"
-            onClick={handleReject}
+            onClick={() => setPending("reject")}
             disabled={busy !== null}
             aria-label={`Afvis ${row.kindLabel}`}
           >
             {busy === "reject" ? "Afviser…" : "Afvis"}
           </button>
         </div>
+        {pending === "approve" && (
+          <ConfirmDialog
+            title={`Godkend forslag: ${row.kindLabel}`}
+            body={
+              <p>
+                Forslaget løses som godkendt — du bogfører selv den konkrete
+                handling bagefter. Godkendelsen gemmes på revisionssporet.
+              </p>
+            }
+            confirmLabel="Godkend"
+            onConfirm={async () => {
+              await doApprove();
+            }}
+            onClose={() => setPending(null)}
+          />
+        )}
+        {pending === "reject" && (
+          <ConfirmDialog
+            title={`Afvis forslag: ${row.kindLabel}`}
+            body={
+              <p>
+                Skriv eventuelt en kort begrundelse — den gemmes på
+                revisionssporet, så agenten kan lære af afvisningen. Du kan
+                også lade feltet stå tomt.
+              </p>
+            }
+            confirmLabel="Afvis forslag"
+            confirmKind="danger"
+            noteLabel="Begrundelse (valgfri)"
+            notePlaceholder="fx 'ikke et nyt anlæg — direkte i drift'"
+            onConfirm={async (note) => {
+              await doReject(note);
+            }}
+            onClose={() => setPending(null)}
+          />
+        )}
       </td>
     </tr>
   );

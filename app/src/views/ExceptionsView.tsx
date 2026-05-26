@@ -132,7 +132,7 @@ export function ExceptionsView() {
             <tr>
               <th>ID</th>
               <th>Type</th>
-              <th>Severity</th>
+              <th>Alvor</th>
               <th>Status</th>
               <th>Besked</th>
               <th>Næste skridt</th>

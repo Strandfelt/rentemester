@@ -54,7 +54,7 @@ export function GdprView() {
     if (!exportData) return;
     if (
       !confirm(
-        "Anonymisering skriver append-only tombstones. Rækker der stadig er under bogføringspligt (5 år) afvises. Fortsæt?",
+        "Anonymisering erstatter personoplysningerne med en spærret markering. Rækker der stadig er bogføringspligtige (5-års-fristen) springes over. Vil du fortsætte?",
       )
     )
       return;
@@ -87,8 +87,9 @@ export function GdprView() {
         <div>
           <h2>GDPR-indsigt</h2>
           <p className="muted">
-            Find personoplysninger om en data-subject (kunde/leverandør) og
-            anonymisér dem hvor bogføringspligten ikke længere kræver dem.
+            Find personoplysninger om en person eller virksomhed (kunde eller
+            leverandør) og anonymisér dem hvor bogføringspligten ikke længere
+            kræver dem.
           </p>
         </div>
         <div className="row-actions">
@@ -99,7 +100,7 @@ export function GdprView() {
       </header>
 
       <section className="card">
-        <h3>Søg subject</h3>
+        <h3>Søg person eller virksomhed</h3>
         <form onSubmit={runExport} className="filter-bar">
           <label>
             CVR
@@ -128,7 +129,8 @@ export function GdprView() {
           </button>
         </form>
         <p className="muted">
-          Mindst ét felt er påkrævet. Søgning er sag-følsom på navn.
+          Mindst ét felt er påkrævet. Navnesøgning skelner mellem store og små
+          bogstaver.
         </p>
       </section>
 
@@ -180,7 +182,7 @@ function ExportPanel({
       </p>
       {records.length === 0 ? (
         <p className="muted">
-          Ingen personoplysninger fundet for det angivne subject.
+          Ingen personoplysninger fundet for det angivne navn/CVR.
         </p>
       ) : (
         <>

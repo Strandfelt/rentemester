@@ -149,7 +149,7 @@ describe("BankImportModal", () => {
     expect(screen.getByText(/danske-bank/)).toBeInTheDocument();
   });
 
-  test("shows hints for the Bankkonto and Importprofil fields (#422)", () => {
+  test("shows hints for the Bankkonto and Bankformat fields (#422)", () => {
     render(
       <BankImportModal slug="acme-aps" onImported={noop} onClose={noop} />,
     );
@@ -157,9 +157,9 @@ describe("BankImportModal", () => {
     expect(
       screen.getByText(/flere bankkonti/i),
     ).toBeInTheDocument();
-    // Importprofil hint explains auto-detection when the field is empty.
+    // Bankformat hint explains auto-detection when the field is empty.
     expect(
-      screen.getByText(/auto-detekterer formatet/i),
+      screen.getByText(/automatisk at genkende formatet/i),
     ).toBeInTheDocument();
   });
 

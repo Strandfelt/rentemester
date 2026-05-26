@@ -36,7 +36,7 @@ import {
 const VAT_TREATMENT_LABELS: Record<string, string> = {
   standard: "Standardmoms",
   domestic_reverse_charge: "Omvendt betalingspligt (DK)",
-  foreign_reverse_charge: "Omvendt betalingspligt (udland)",
+  foreign_reverse_charge: "Omvendt betalingspligt (EU-tjenester)",
   exempt: "Momsfritaget",
 };
 

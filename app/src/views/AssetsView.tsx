@@ -33,6 +33,7 @@ import type {
   CompanyDocuments,
   DocumentRow,
 } from "../lib/types";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorState, Loading } from "../components/Feedback";
 
 const DEFAULT_EXPENSE_ACCOUNT = "3000";
@@ -275,16 +276,10 @@ function AssetRowView({
   onError: (msg: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(false);
   const canDepreciate = row.status === "active" && row.remainingPeriods > 0;
 
-  async function handleDepreciate() {
-    if (!canDepreciate) return;
-    if (
-      !window.confirm(
-        `Bogfør næste afskrivningsperiode for "${row.name}"? Posteringen kan ikke fortrydes uden modposterings-entry.`,
-      )
-    )
-      return;
+  async function doDepreciate() {
     setBusy(true);
     try {
       await api.depreciateAsset(slug, row.assetId, {
@@ -297,6 +292,7 @@ function AssetRowView({
           ? err.message
           : "Kunne ikke bogføre afskrivningen.",
       );
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -325,12 +321,30 @@ function AssetRowView({
         <button
           type="button"
           className="btn secondary"
-          onClick={handleDepreciate}
+          onClick={() => setPending(true)}
           disabled={!canDepreciate || busy}
           aria-label={`Beregn afskrivning for ${row.name}`}
         >
           {busy ? "Bogfører…" : "Beregn afskrivning"}
         </button>
+        {pending && (
+          <ConfirmDialog
+            title={`Bogfør afskrivning: ${row.name}`}
+            body={
+              <p>
+                Bogfører næste afskrivningsperiode for anlægget. Posteringen
+                kan ikke fortrydes — kun rettes ved at lave en modpostering
+                bagefter.
+              </p>
+            }
+            confirmLabel="Bogfør afskrivning"
+            confirmKind="danger"
+            onConfirm={async () => {
+              await doDepreciate();
+            }}
+            onClose={() => setPending(false)}
+          />
+        )}
       </td>
     </tr>
   );

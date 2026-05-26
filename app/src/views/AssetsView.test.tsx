@@ -129,14 +129,23 @@ describe("AssetsView — Anlægskartotek (#336)", () => {
       });
     });
     vi.stubGlobal("fetch", fetchMock);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     renderView();
     const row = (await screen.findByText("MacBook Pro")).closest("tr")!;
-    const button = within(row as HTMLElement).getByRole("button", {
+    const rowBtn = within(row as HTMLElement).getByRole("button", {
       name: /Beregn afskrivning for MacBook Pro/,
     });
-    fireEvent.click(button);
+    fireEvent.click(rowBtn);
+
+    // The cockpit now opens a ConfirmDialog instead of using window.confirm.
+    // The dialog's primary action is "Bogfør afskrivning".
+    const dialog = await screen.findByRole("dialog", {
+      name: /Bogfør afskrivning: MacBook Pro/,
+    });
+    const confirmBtn = within(dialog as HTMLElement).getByRole("button", {
+      name: /Bogfør afskrivning/,
+    });
+    fireEvent.click(confirmBtn);
 
     await vi.waitFor(() => {
       const calls = fetchMock.mock.calls;

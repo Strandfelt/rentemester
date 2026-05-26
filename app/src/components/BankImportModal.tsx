@@ -232,7 +232,7 @@ export function BankImportModal({ slug, onImported, onClose }: BankImportModalPr
             </label>
 
             <label className="modal-field">
-              Importprofil (valgfri)
+              Bankformat (valgfri)
               <input
                 type="text"
                 value={profile}
@@ -241,9 +241,11 @@ export function BankImportModal({ slug, onImported, onClose }: BankImportModalPr
                 disabled={busy}
               />
               <span className="field-hint">
-                Lad feltet stå tomt — importeren auto-detekterer formatet for
-                de fleste danske bank-CSV'er. Angiv kun et profilnavn (se
-                listen ovenfor) hvis auto-detektionen fejler.
+                Lad feltet stå tomt — importeren forsøger automatisk at
+                genkende formatet for de fleste danske bank-CSV'er. Angiv kun
+                et formatnavn (se listen ovenfor), hvis autogenkendelsen fejler.
+                Andre banker virker også, hvis du vælger eksport som
+                standard-CSV — sig til hvis din ikke virker.
               </span>
             </label>
 
