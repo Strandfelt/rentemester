@@ -42,7 +42,7 @@ describe("cockpit error envelope (#368)", () => {
     expect(status).toBe(500);
     expect(body).toEqual({
       ok: false,
-      errors: ["internal server error"],
+      errors: ["intern serverfejl"],
       code: "internal",
     });
     // The real (potentially sensitive) message is NEVER leaked.

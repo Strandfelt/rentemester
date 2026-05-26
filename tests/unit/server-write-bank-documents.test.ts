@@ -234,8 +234,10 @@ describe("Cockpit write — bank import (gates + input errors)", () => {
         config({ workspaceRoot: ws }),
       );
       expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: { message: string } };
-      expect(body.errors[0]).toContain("limit");
+      const body = (await res.json()) as { errors: string[] };
+      // Post-#242 the size-guard message is in Danish ("…overskrider grænsen…").
+      // The previous assertion pinned the English token "limit".
+      expect(body.errors[0]).toMatch(/overskrider grænsen|bytes/i);
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

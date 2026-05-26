@@ -125,7 +125,7 @@ async function readMutationBody(
     const declared = Number(request.headers.get("content-length") ?? "");
     if (Number.isFinite(declared) && declared > maxBodyBytes) {
       throw ApiError.badRequest(
-        `request body exceeds the ${maxBodyBytes}-byte limit`,
+        `request-body overskrider grænsen på ${maxBodyBytes} bytes`,
       );
     }
   }
@@ -134,7 +134,7 @@ async function readMutationBody(
     const actual = Buffer.byteLength(raw, "utf8");
     if (actual > maxBodyBytes) {
       throw ApiError.badRequest(
-        `request body exceeds the ${maxBodyBytes}-byte limit`,
+        `request-body overskrider grænsen på ${maxBodyBytes} bytes`,
       );
     }
   }

@@ -382,7 +382,7 @@ describe("Agent-forslag — godkend (#346)", () => {
       );
       expect(res.status).toBe(404);
       // /abc/ doesn't match the dispatch regex (\d+), so it falls through to
-      // the "no such endpoint" 404 — that's the friendlier outcome and is also
+      // the "ukendt endpoint" 404 — that's the friendlier outcome and is also
       // consistent with how every other id-bearing route in this router
       // handles a non-numeric segment.
       expect(res.body.code).toBe("not_found");

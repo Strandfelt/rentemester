@@ -93,6 +93,6 @@ export function toErrorResponse(err: unknown): {
   }
   return {
     status: 500,
-    body: { ok: false, errors: ["internal server error"], code: "internal" },
+    body: { ok: false, errors: ["intern serverfejl"], code: "internal" },
   };
 }

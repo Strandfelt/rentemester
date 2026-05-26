@@ -29,7 +29,12 @@ function zipDir(srcDir: string): string {
 }
 
 describe("#199 fallback path — temp dir preserves mkdtempSync's 0o700 mode", () => {
-  test("a .zip extracted via resolveSource yields a tmp dir that is not world-readable", () => {
+  test("a .zip extracted via resolveSource yields a tmp dir at exactly mode 0o700", () => {
+    // Pin umask to the common Linux/macOS default so the assertion below is
+    // deterministic — otherwise a CI runner with hardened umask=0o077 would
+    // mask the buggy `mkdirSync()` output into 0o700 by accident and the
+    // test would pass on broken code (caught in adversarial review).
+    const previousUmask = process.umask(0o022);
     const src = mkdtempSync(join(tmpdir(), "rm-perm-src-"));
     mkdirSync(join(src, "2025"));
     writeFileSync(join(src, "Firmaoplysninger.csv"), "Firmanavn\nTest ApS\n");
@@ -42,12 +47,13 @@ describe("#199 fallback path — temp dir preserves mkdtempSync's 0o700 mode", (
       // Mask off the type bits — we only care about permission bits.
       const mode = statSync(resolved.rootDir).mode & 0o777;
 
-      // mkdtempSync creates with 0o700 on POSIX; if the fallback path ran
-      // and re-created the dir without preserving mode, this would be
-      // ~0o755 (world-readable). Reject any non-owner read/write/execute
-      // bits — group and other bits MUST be zero.
-      expect(mode & 0o077).toBe(0);
+      // Exact-match — under umask 0o022 the buggy `mkdirSync(dest, recursive:true)`
+      // path would produce 0o755 and this would catch it. The looser
+      // `mode & 0o077 === 0` assertion would pass on a CI with umask=0o077
+      // even on the buggy code; this strict form does not.
+      expect(mode).toBe(0o700);
     } finally {
+      process.umask(previousUmask);
       rmSync(src, { recursive: true, force: true });
       rmSync(zipPath, { recursive: true, force: true });
     }

@@ -540,7 +540,7 @@ export async function handleAccountantExport(
         if (!exported.ok || !exported.exportDir) {
           throw ApiError.badRequest(
             (exported.errors ?? []).join("; ") ||
-              "accountant export failed",
+              "revisor-eksport mislykkedes",
           );
         }
         // The flat directory the export wrote — packing this (not the parent
@@ -1984,7 +1984,7 @@ export async function handleInvoiceSendReminder(
       });
       if (!registered.ok) {
         throw ApiError.badRequest(
-          registered.errors[0] ?? "Reminder could not be registered.",
+          registered.errors[0] ?? "rykkeren kunne ikke registreres",
         );
       }
 
@@ -2001,7 +2001,7 @@ export async function handleInvoiceSendReminder(
         });
         if (!posted.ok) {
           throw ApiError.badRequest(
-            posted.errors?.[0] ?? "Reminder fee could not be booked.",
+            posted.errors?.[0] ?? "rykkergebyret kunne ikke bogføres",
           );
         }
         journalEntryNo = posted.entryNo ?? null;
@@ -2021,7 +2021,7 @@ export async function handleInvoiceSendReminder(
       });
       if (!sent.ok) {
         throw ApiError.badRequest(
-          sent.errors?.[0] ?? "Reminder e-mail could not be sent.",
+          sent.errors?.[0] ?? "rykkermailen kunne ikke sendes",
         );
       }
 
@@ -2159,7 +2159,7 @@ export async function handleCompanyProfile(
         !hasPayment
       ) {
         throw ApiError.badRequest(
-          "provide at least one profile field to update " +
+          "angiv mindst et profilfelt for at opdatere " +
             "(name, cvr, address, postalCode, city, paymentTermsDays, vatPeriodType, payment)",
         );
       }

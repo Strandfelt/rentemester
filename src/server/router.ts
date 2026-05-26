@@ -1028,7 +1028,7 @@ async function handleCompanyCreate(
     // "already exists" case, so collapse that to a generic conflict.
     const message = err instanceof Error ? err.message : String(err);
     if (/already exists|already registered/i.test(message)) {
-      throw ApiError.conflict("a company with that slug already exists");
+      throw ApiError.conflict("der findes allerede en virksomhed med den slug");
     }
     throw ApiError.badRequest(message);
   }
@@ -1060,7 +1060,7 @@ async function handleCompanyUpdate(
     throw ApiError.badRequest("'archived' must be a boolean when present");
   }
   if (name === undefined && archivedRaw === undefined) {
-    throw ApiError.badRequest("provide 'name' and/or 'archived' to update");
+    throw ApiError.badRequest("angiv 'name' og/eller 'archived' for at opdatere");
   }
   try {
     let entry = findWorkspaceCompany(config.workspaceRoot, slug)!;
