@@ -1940,7 +1940,7 @@ export async function handleRequest(
       }
     }
 
-    throw ApiError.notFound("no such endpoint");
+    throw ApiError.notFound("ukendt endpoint");
   } catch (err) {
     // (4) Single error edge. ApiError → its code; anything else → generic 500
     // with no leaked detail.

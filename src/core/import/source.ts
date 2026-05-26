@@ -10,7 +10,7 @@
 // so the resulting `files` map and any derived ordering is reproducible.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ImportArtifact, MultiArtifactSource } from "./types";
@@ -68,33 +68,57 @@ function unzipToTempDir(zipPath: string): string {
   // #199 — Dinero-exports carry some entry names i CP437 (legacy DOS-encoding),
   // især `Ikke-bogførte-bilag/`-mappen. På Info-ZIP-builds (Linux) tager
   // `-O CP437` flaget den encoding og transcoder til filesystem-locale — så
-  // de danske tegn overlever som UTF-8. På BSD unzip (macOS) eksisterer
-  // flaget ikke; vi falder tilbage til plain unzip og tolerer at de få
-  // entries med ikke-UTF-8 navne droppes (#192's eksisterende mitigation).
+  // de danske tegn overlever som UTF-8. På BSD unzip / Apple's Info-ZIP build
+  // honorerer flaget ikke (empirisk: exit 10 med usage-banner, ingen
+  // udpakning); vi falder tilbage til plain unzip og tolerer at de få entries
+  // med ikke-UTF-8 navne droppes (#192's eksisterende mitigation).
+  //
+  // Detektering: hvis CP437-forsøget producerede et tomt dest, kører
+  // fallback'en. Hvis det producerede indhold, beholder vi det (selv om
+  // unzip ekstrahere "uden transcoding", er det funktionelt det samme som
+  // fallback'en ville give — plus eventuelt korrekt-transcodede navne på
+  // platforme hvor -O virker).
   const tryWithCharset = spawnSync(
     "unzip",
     ["-q", "-O", "CP437", "-o", zipPath, "-d", dest],
     { encoding: "utf8" },
   );
-  const charsetSupported =
-    !tryWithCharset.error &&
-    readdirSync(dest).length > 0 &&
-    !/invalid option|unknown option/i.test(tryWithCharset.stderr ?? "");
+  const cp437Stderr = (tryWithCharset.stderr ?? "").trim();
+  const charsetExtractedSomething =
+    !tryWithCharset.error && readdirSync(dest).length > 0;
   let result = tryWithCharset;
-  if (!charsetSupported) {
-    // BSD unzip rejects -O — reset dest så et halvt-pakket træ fra forsøget
-    // ikke smelter ind i fallback'en, og kør så plain unzip.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("node:fs") as typeof import("node:fs");
-    fs.rmSync(dest, { recursive: true, force: true });
-    fs.mkdirSync(dest, { recursive: true });
+  if (!charsetExtractedSomething) {
+    // CP437-forsøget gav et tomt dest — vi kører fallback'en. Tøm dest IN-PLACE
+    // (ikke rm-and-mkdir) for at bevare mkdtempSync's 0o700-mode og undgå
+    // TOCTOU-vindue på shared /tmp. I praksis er dest tomt her (verificeret
+    // empirisk på macOS), men vi rydder defensivt for at undgå at lade et
+    // halvt-pakket træ fra et fremtidigt unzip-build forurene fallback'en.
+    try {
+      for (const entry of readdirSync(dest)) {
+        rmSync(join(dest, entry), { recursive: true, force: true });
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `failed to prepare fallback directory for '${zipPath}': ${detail}`,
+      );
+    }
     result = spawnSync("unzip", ["-q", "-o", zipPath, "-d", dest], { encoding: "utf8" });
   }
   if (result.error) {
     throw new Error(`failed to run 'unzip' for '${zipPath}': ${result.error.message}`);
   }
   if (readdirSync(dest).length === 0) {
-    const detail = (result.stderr || "").trim().split(/\r?\n/)[0] ?? "";
+    const fallbackDetail = (result.stderr || "").trim().split(/\r?\n/)[0] ?? "";
+    // Begge forsøg fejlede — surface både CP437- og fallback-stderr så
+    // operatøren kan diagnosticere root cause uden at miste den ene.
+    const cp437Detail = cp437Stderr ? cp437Stderr.split(/\r?\n/)[0] ?? "" : "";
+    const detail = [
+      fallbackDetail,
+      cp437Detail && cp437Detail !== fallbackDetail ? `cp437 attempt: ${cp437Detail}` : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
     throw new Error(
       `unzip extracted nothing from '${zipPath}'` +
         (typeof result.status === "number" ? ` (exit ${result.status})` : "") +

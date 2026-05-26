@@ -332,12 +332,12 @@ export function renameWorkspaceCompany(
 ): WorkspaceCompanyEntry {
   const trimmed = name.trim();
   if (trimmed.length === 0) {
-    throw new Error("company display name must not be empty");
+    throw new Error("firmanavn må ikke være tomt");
   }
   const manifest = loadWorkspaceManifest(workspaceRoot);
   const entry = manifest.companies.find((c) => c.slug === slug);
   if (!entry) {
-    throw new Error(`no company with slug '${slug}' in the workspace`);
+    throw new Error(`ingen virksomhed med slug '${slug}' findes i workspacet`);
   }
   entry.name = trimmed;
   saveWorkspaceManifest(workspaceRoot, manifest);
@@ -358,7 +358,7 @@ export function setWorkspaceCompanyArchived(
   const manifest = loadWorkspaceManifest(workspaceRoot);
   const entry = manifest.companies.find((c) => c.slug === slug);
   if (!entry) {
-    throw new Error(`no company with slug '${slug}' in the workspace`);
+    throw new Error(`ingen virksomhed med slug '${slug}' findes i workspacet`);
   }
   entry.archived = archived;
   saveWorkspaceManifest(workspaceRoot, manifest);

@@ -91,7 +91,7 @@ export function resolveCompanyArg(raw: string): CompanyArgResolution {
       if (fromSlug) return { ok: true, companyRoot: fromSlug };
       return {
         ok: false,
-        error: `no company with slug '${raw}' in the configured workspace`,
+        error: `ingen virksomhed med slug '${raw}' findes i det konfigurerede workspace`,
       };
     }
     // No workspace configured: fall through and treat the value as a path.
