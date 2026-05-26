@@ -1,7 +1,7 @@
 /**
  * Central tools-registrering for Rentemester-MCP-serveren.
  *
- * `registerAllTools` registrerer hele tool-surface'en — 95 tools fordelt
+ * `registerAllTools` registrerer hele tool-surface'en — 98 tools fordelt
  * på de domæne-funktioner der kaldes herunder. Den autoritative liste
  * (klassifikation, inputs, CLI-mapping) står i docs/mcp-tool-surface.md;
  * driv en kørende server med `tools/list` for den faktiske, aktuelle liste.
@@ -86,6 +86,9 @@ import { registerBudgetTools } from "./tools/budget";
 // ===== PAYABLES / KREDITORSTYRING =====
 import { registerPayableTools } from "./tools/payable";
 // ===== END PAYABLES / KREDITORSTYRING =====
+// ===== COMPANY PROFILE READ =====
+import { registerCompanyProfileTools } from "./tools/company";
+// ===== END COMPANY PROFILE READ =====
 
 // Wraps a write tool's callback with the opt-in backup lock. The MCP tool
 // files are not uniform — some use the withCompanyDbConfirmed helper, some
@@ -197,4 +200,7 @@ export function registerAllTools(server: McpServer): void {
   // ===== PAYABLES / KREDITORSTYRING =====
   registerPayableTools(server);
   // ===== END PAYABLES / KREDITORSTYRING =====
+  // ===== COMPANY PROFILE READ =====
+  registerCompanyProfileTools(server);
+  // ===== END COMPANY PROFILE READ =====
 }

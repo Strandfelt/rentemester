@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   importBankCsv,
+  listBankAccounts,
   resolveBankAccount,
   type BankImportResult,
 } from "../../core/bank";
@@ -350,5 +351,46 @@ export function registerBankTools(server: McpServer): void {
         }
       },
     ),
+  );
+
+  // bank_account_list — read-only enumeration of the bank-accounts registry
+  // (mirrors CLI `bank-account list`). Without this, an agent can't discover
+  // which `--account` slugs exist before passing one to `bank_import`.
+  server.registerTool(
+    "bank_account_list",
+    {
+      title: "List registered bank accounts",
+      description:
+        "Lister de bankkonti der er registreret på virksomheden — slug, " +
+        "navn, bank, valuta, IBAN og om kontoen er aktiv. Den slug, der " +
+        "returneres her, er den værdi en agent kan sende som `account` til " +
+        "`bank_import` og `bank_list`. Read-only.\n\n" +
+        "Default returneres ALLE konti (aktive + inaktive). Sæt " +
+        "`includeInactive: false` for kun at få de aktive — fx før et import-" +
+        "kald, hvor en inaktiv konto vil blive afvist længere nede i kæden.",
+      inputSchema: {
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+        includeInactive: z
+          .boolean()
+          .optional()
+          .describe(
+            "When false, only active bank accounts are returned. Default true.",
+          ),
+      },
+      outputSchema: envelopeShape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    withCompanyDb<{ company: string; includeInactive?: boolean }>(server, ({ db, args }) => {
+      const includeInactive = args.includeInactive !== false;
+      return wrapCoreResult(listBankAccounts(db, includeInactive));
+    }),
   );
 }

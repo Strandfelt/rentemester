@@ -101,7 +101,7 @@ selv ændres ikke.
 
 ## Resultat-shapes (`outputSchema`)
 
-**Alle 95 tools deklarerer et `outputSchema`** (#202). Det er det samme
+**Alle 98 tools deklarerer et `outputSchema`** (#202). Det er det samme
 delte schema for hver tool — konvolutten — så en agent kan læse
 resultat-kontrakten fra `tools/list` *uden* at kalde tool'et først.
 Schemaet er defineret én gang i `src/mcp/envelope.ts` (`envelopeShape`).
@@ -120,7 +120,7 @@ Konvolutten (`structuredContent` på et `tools/call`-svar):
 den konkrete feltliste i `data` varierer pr. tool, og MCP-SDK'en validerer
 kun `structuredContent` mod schemaet for *succes*-svar (`isError:false`) —
 fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
-95 gange; de er dokumenteret nedenfor og i tool-brief'ene.
+98 gange; de er dokumenteret nedenfor og i tool-brief'ene.
 
 ### Cross-cutting preconditions (envelope-`code`)
 
@@ -182,24 +182,27 @@ på fri-tekst.
 
 Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 
-- **Read-tools**: 42
+- **Read-tools**: 45
 - **Write-reversible**: 11
 - **Write-irreversible**: 41
 - **Destructive**: 1 (`system_restore_backup`)
-- **Total**: **95**
+- **Total**: **98**
 
 ## Read-tools
 
-42 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
+45 tools. Ingen state-bivirkninger; må kaldes frit og parallelt.
 
 | Tool | CLI-ækvivalent | Input | Brief |
 |---|---|---|---|
 | `accounts_list` | `accounts list` | `{ company }` | Lister kontoplanen. |
 | `accrual_register_report` | `accrual register-report` | `{ company }` | Register af periodeafgrænsningsposter med bogførte perioder, periodiseret beløb og resterende balanceeksponering. |
 | `asset_register_report` | `asset register-report` | `{ company }` | Aktivregister med akkumulerede afskrivninger og bogført værdi. |
+| `audit_log_list` | `gdpr audit-log` (delvis) | `{ company, fromDate?, toDate?, eventTypeLike?, actorLike?, limit?, offset? }` | Filtreret, pagineret read af audit_log — den menneskelæsbare revisionsspor over hvad agenten/cockpittet/CLI'en har gjort. Append-only på server-siden. |
 | `audit_verify` | `audit verify` | `{ company }` | Verificerer hash-chain og bogføringsintegritet. |
+| `bank_account_list` | `bank-account list` | `{ company, includeInactive? }` | Lister registrerede bankkonti (slug, navn, valuta, IBAN, aktiv). Den slug, der returneres her, er den værdi en agent kan sende som `account` til `bank_import` og `bank_list`. |
 | `bank_list` | `bank list` | `{ company, status?, from?, to?, textMatch?, amount?, account? }` | Lister importerede banktransaktioner med filtre. |
 | `bank_suggest_matches` | `bank suggest-matches` | `{ company, bankTransactionId?, max? }` | Foreslår deterministiske match mellem uafstemte bank-poster og bilag. |
+| `company_profile_get` | `company profile` | `{ company }` | Henter virksomhedens gemte profil-stamdata (navn, CVR, valuta, land, adresse, regnskabsår-start, betalingsfrist, momsperiode). Hver fakturering, momsrapport og årsrapport bygger på disse felter. |
 | `budget_forecast` | `budget forecast` | `{ company, startDate, months }` | Likviditetsprognose: fremskriver banksaldoen måned for måned ud fra primosaldo, åbne fakturaer der forfalder, planlagte gentagne fakturaer og budgetterede omkostninger. Rent deterministisk. |
 | `budget_list` | `budget list` | `{ company, period?, accountNo? }` | Lister de gældende (seneste-revision) budgetlinjer. |
 | `budget_vs_actual` | `budget vs-actual` | `{ company, from, to }` | Sammenligner budget mod faktisk bogføring pr. konto pr. måned. |
@@ -221,7 +224,7 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 | `journal_list` | `journal list` | `{ company }` | Lister finansposteringer. |
 | `mileage_list` | `mileage list` | `{ company }` | Lister registrerede kørselsposter. |
 | `mileage_report` | `mileage report` | `{ company, from, to }` | Deterministisk periode-rapport over kilometer og beløbsgrundlag. |
-| `payable_list` | `payable list` | `{ company, status?, asOfDate?, supplier?, vendorId?, from?, to?, minDays? }` | Bygger kreditorlisten: åbne leverandørposter med åben saldo og forfaldsintervaller (forfaldne/ikke-forfaldne). |
+| `payable_list` | `payable list` | `{ company, status?, asOf? (legacy alias: asOfDate), supplier?, vendorId?, from?, to?, minDays? }` | Bygger kreditorlisten: åbne leverandørposter med åben saldo og forfaldsintervaller (forfaldne/ikke-forfaldne). |
 | `period_list` | (ingen — kun MCP)² | `{ company }` | Lister regnskabsperioder (open/closed/reported). |
 | `portfolio_overview` | `dashboard` (delvist) | `{ workspace, asOf? }` | Status side om side for hver virksomhed i workspace'et. Intet konsolideres. |
 | `reconcile_bank` | `reconcile bank` | `{ company, from, to, status?, textMatch?, amount?, account? }` | Bygger bank-afstemningsrapport for periode. |
