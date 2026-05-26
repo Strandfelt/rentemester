@@ -190,7 +190,7 @@ export function registerJournalTools(server: McpServer): void {
         "Identificér posten via entryId, entryNo eller matchText (+ valgfri matchDate/matchDocumentId). " +
         "write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         entryId: z
           .number()
           .int()
@@ -282,7 +282,7 @@ export function registerJournalTools(server: McpServer): void {
         "Lister finansposteringer i append-only kæden med valgfri filtre på status og datointerval. Read-only." +
         paginationDescriptionSuffix,
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         from: z
           .string()
           .optional()

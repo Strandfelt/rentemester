@@ -392,7 +392,7 @@ const SELECTOR_INVOICE_NUMBER =
   "of documentId or invoiceNumber. Find numbers with invoice_list / invoice_find.";
 
 const docIdOrNumberSchema = {
-  company: z.string().min(1),
+  company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
   documentId: z.number().int().positive().optional().describe(SELECTOR_DOC_ID),
   invoiceNumber: z.string().optional().describe(SELECTOR_INVOICE_NUMBER),
 };
@@ -578,7 +578,7 @@ export function registerInvoiceTools(server: McpServer): void {
       title: "List invoices",
       description: "Lister udstedte fakturaer med filtre. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         status: statusEnum.describe(
           "Filter by invoice status: 'open', 'paid', 'credited', 'refunded', " +
             "'overpaid', 'written_off', 'overdue' or 'all'. Defaults to 'all'.",
@@ -656,7 +656,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Bemærk: 'amount' er eksakt match — brug minAmount/maxAmount til range-søgning " +
         "(fx bank-afstemning, hvor øre-afvigelser er normale).",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         query: z
           .string()
           .optional()
@@ -739,7 +739,7 @@ export function registerInvoiceTools(server: McpServer): void {
       title: "List overdue invoices",
       description: "Lister forfaldne udstedte fakturaer som ikke er fuldt afregnet. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         asOf: z.string().optional(),
         minDays: z.number().int().nonnegative().optional(),
       },
@@ -842,7 +842,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Alle beløb i payload er i kroner (decimal DKK, 2 decimaler — ikke øre); vatRate er en brøk (0.25 = 25%). " +
         "write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: invoicePayloadSchema,
         customerId: z.number().int().positive().optional(),
         confirm: confirmField,
@@ -896,7 +896,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Forudsætning: den oprindelige faktura skal være udstedt med invoice_issue og bogført med invoice_post (kredit mod en ubogført faktura giver et åbent tilgodehavende uden modpostering). " +
         "payload.grossAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: creditNotePayloadSchema,
         confirm: confirmField,
       },
@@ -949,7 +949,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Forudsætning: fakturaen skal være bogført med invoice_post — ellers er der intet åbent tilgodehavende at modregne. " +
         "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: bankSettlementPayloadSchema,
         confirm: confirmField,
       },
@@ -981,7 +981,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Forudsætning: fakturaen skal være bogført med invoice_post, og de krav der modregnes skal være registreret og bogført (invoice_post_reminder / invoice_post_interest / invoice_post_compensation). " +
         "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: bankSettlementPayloadSchema,
         confirm: confirmField,
       },
@@ -1013,7 +1013,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Forudsætning: fakturaen skal være bogført med invoice_post — kun et bogført tilgodehavende kan afskrives som tab. " +
         "payload.grossAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: badDebtPayloadSchema,
         confirm: confirmField,
       },
@@ -1045,7 +1045,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Forudsætning: fakturaen skal være bogført med invoice_post — der skal være et åbent tilgodehavende at lukke. " +
         "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: applyPaymentPayloadSchema,
         confirm: confirmField,
       },
@@ -1077,7 +1077,7 @@ export function registerInvoiceTools(server: McpServer): void {
         "Forudsætning: fakturaen skal være bogført med invoice_post (typisk efter en kreditnota via invoice_credit_note som har skabt overskydende betaling). " +
         "payload.amount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: refundBankPayloadSchema,
         confirm: confirmField,
       },

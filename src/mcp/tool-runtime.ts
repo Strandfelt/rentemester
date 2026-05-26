@@ -193,8 +193,15 @@ export function withCompanyDbConfirmed<TArgs extends { company: string; confirm?
 ): (args: TArgs) => Promise<ReturnType<typeof envelopeToCallResult>> {
   return async (args) => {
     if (args?.confirm !== true) {
+      // The machine-readable `code: "CONFIRM_REQUIRED"` lets an agent branch
+      // on the missing-confirm precondition without parsing the free-text
+      // message. The message text itself stays stable for callers that pin
+      // the docs-published string (`docs/confirm-contract.md`).
       return envelopeToCallResult(
-        errorEnvelope(`confirm: true required for write tool ${toolName}`),
+        errorEnvelope(
+          `confirm: true required for write tool ${toolName}`,
+          { code: "CONFIRM_REQUIRED" },
+        ),
       );
     }
     return withCompanyDb(server, handler)(args);
@@ -225,7 +232,10 @@ export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confir
   return async (args) => {
     if (args?.confirm !== true) {
       return envelopeToCallResult(
-        errorEnvelope(`confirm: true required for destructive tool ${toolName}`),
+        errorEnvelope(
+          `confirm: true required for destructive tool ${toolName}`,
+          { code: "CONFIRM_REQUIRED" },
+        ),
       );
     }
     const expected = expectedText(args);
@@ -234,7 +244,10 @@ export function withDestructiveConfirm<TArgs extends { confirm?: boolean; confir
     const provided = typeof args?.confirmText === "string" ? args.confirmText : "";
     if (provided !== expected) {
       return envelopeToCallResult(
-        errorEnvelope(`confirmText must match '${expected}' exactly (got: '${provided}')`),
+        errorEnvelope(
+          `confirmText must match '${expected}' exactly (got: '${provided}')`,
+          { code: "CONFIRMTEXT_MISMATCH" },
+        ),
       );
     }
     try {

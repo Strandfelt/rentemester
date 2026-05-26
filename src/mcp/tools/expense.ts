@@ -33,7 +33,7 @@ export function registerExpenseTools(server: McpServer): void {
       description:
         "Bogfører leverandørudgift fra bilag + bankpost i ét tag. write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         documentId: z
           .number()
           .int()

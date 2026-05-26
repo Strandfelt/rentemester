@@ -88,7 +88,7 @@ export function registerDocumentTools(server: McpServer): void {
       title: "List documents",
       description: "Lister gemte bilag i virksomhedsmappen. Read-only." + paginationDescriptionSuffix,
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         ...paginationFields,
       },
       outputSchema: envelopeShape,
@@ -147,7 +147,7 @@ export function registerDocumentTools(server: McpServer): void {
         "angives via sti. Alle beløb i metadata er i kroner (decimal DKK, ikke øre). " +
         "write-reversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         filePath: z
           .string()
           .min(1)

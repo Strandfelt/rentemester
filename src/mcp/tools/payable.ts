@@ -174,10 +174,22 @@ export function registerPayableTools(server: McpServer): void {
           .enum(["open", "paid", "overdue", "all"])
           .optional()
           .describe("Filter by payable status. Default 'all'."),
+        asOf: z
+          .string()
+          .optional()
+          .describe(
+            "Date in YYYY-MM-DD format the due dates are aged against. " +
+              "Defaults to today (UTC) when omitted, so status='overdue' returns " +
+              "currently overdue items. This is the canonical name used by every " +
+              "other MCP tool; the legacy `asOfDate` alias is still accepted.",
+          ),
         asOfDate: z
           .string()
           .optional()
-          .describe("Date in YYYY-MM-DD format the due dates are aged against. Defaults to today (UTC) when omitted, so status='overdue' returns currently overdue items."),
+          .describe(
+            "DEPRECATED — use `asOf`. Still accepted for back-compat. " +
+              "If both are present, `asOf` wins.",
+          ),
         supplier: z.string().optional().describe("Case-insensitive substring filter on the supplier name."),
         vendorId: z.number().int().positive().optional().describe("Filter to payables linked to this vendor id."),
         from: z.string().optional().describe("Earliest bill date (YYYY-MM-DD) to include."),
@@ -195,6 +207,7 @@ export function registerPayableTools(server: McpServer): void {
     withCompanyDb<{
       company: string;
       status?: "open" | "paid" | "overdue" | "all";
+      asOf?: string;
       asOfDate?: string;
       supplier?: string;
       vendorId?: number;
@@ -202,9 +215,13 @@ export function registerPayableTools(server: McpServer): void {
       to?: string;
       minDays?: number;
     }>(server, ({ db, args }) => {
+      // #(integration-review) — accept both `asOf` (canonical, used by every
+      // other tool) and `asOfDate` (legacy alias). The new field wins when
+      // both are supplied.
+      const asOfDate = args.asOf ?? args.asOfDate;
       const result = buildPayablesList(db, {
         status: args.status,
-        asOfDate: args.asOfDate,
+        asOfDate,
         supplier: args.supplier,
         vendorId: args.vendorId,
         from: args.from,

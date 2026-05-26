@@ -134,7 +134,7 @@ export function registerVatTools(server: McpServer): void {
       title: "VAT period report",
       description: "Bygger momsrapport for perioden. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         from: z
           .string()
           .min(1)
@@ -166,7 +166,7 @@ export function registerVatTools(server: McpServer): void {
         "B2B-salg uden dansk moms. En selvstændig indberetning ved siden af momsangivelsen. " +
         "Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         from: z.string().min(1).describe("Period start, YYYY-MM-DD (inclusive)."),
         to: z
           .string()
@@ -191,7 +191,7 @@ export function registerVatTools(server: McpServer): void {
         "grundlag for digitale ydelser solgt til EU-forbrugere bogført med momskoden " +
         "OSS_EU_CONSUMER. Bevidst smal — ikke en OSS-indberetning til SKAT. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         from: z.string().min(1).describe("Period start, YYYY-MM-DD (inclusive)."),
         to: z
           .string()
@@ -216,7 +216,7 @@ export function registerVatTools(server: McpServer): void {
         "Hvis payload.invoiceNo er sat, slås documentId op automatisk. " +
         "payload.netAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: euServicePurchasePayloadSchema,
         confirm: confirmField,
       },
@@ -257,7 +257,7 @@ export function registerVatTools(server: McpServer): void {
         "Bogfører repræsentationsudgift med delvis momsfradrag. " +
         "payload.netAmount er i kroner (decimal DKK, ikke øre). write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         payload: representationPurchasePayloadSchema,
         confirm: confirmField,
       },

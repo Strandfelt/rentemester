@@ -82,7 +82,7 @@ export function registerSystemTools(server: McpServer): void {
       title: "Backup compliance status",
       description: "Tjekker om backup-pligten er opfyldt. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         asOf: z.string().optional(),
       },
       outputSchema: envelopeShape,
@@ -103,7 +103,7 @@ export function registerSystemTools(server: McpServer): void {
         "pakkes backuppen straks til ét .tar-arkiv klar til off-site placering. " +
         "write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         at: z.string().optional(),
         archive: z.boolean().optional(),
         confirm: confirmField,
@@ -139,7 +139,7 @@ export function registerSystemTools(server: McpServer): void {
         "klar til at agenten kan flytte det off-site. Uden backupId pakkes den nyeste. " +
         "write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         backupId: z.string().optional(),
         out: z.string().optional(),
         confirm: confirmField,
@@ -194,7 +194,7 @@ export function registerSystemTools(server: McpServer): void {
         "Tilføjer en backup-destination. inEeaOrEu attesterer at destinationen ligger " +
         "på en server i EU/EØS, jf. BEK 205/2024 § 4, stk. 2. write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         label: z.string().min(1).describe("Human-readable name for this destination, e.g. 'Revisor Dropbox'."),
         kind: z
           .enum(["local-folder", "dropbox", "google-drive", "ssh", "other"])
@@ -315,7 +315,7 @@ export function registerSystemTools(server: McpServer): void {
         "Kopierer et backup-arkiv til en destination med en lokal/synkroniseret mappe " +
         "(fx en Dropbox-desktopmappe) og verificerer kopien med sha256. write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         archivePath: z.string().min(1),
         destinationId: z.string().min(1),
         actorKind: z.enum(["human", "agent"]).optional(),
@@ -357,7 +357,7 @@ export function registerSystemTools(server: McpServer): void {
         "der har pushet arkivet til Dropbox/Drive/SSH med egne værktøjer. Verificeres " +
         "med sha256 hvis destinationen er læsbar. write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         destinationId: z.string().min(1),
         backupId: z.string().min(1),
         archiveSha256: z.string().min(1),
@@ -405,7 +405,7 @@ export function registerSystemTools(server: McpServer): void {
         "hvis den ugentlige backup (BEK 205/2024 § 4) er forsømt ud over grace-perioden. " +
         "write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         enforced: z.boolean().optional(),
         graceDays: z.number().optional(),
         at: z.string().optional(),
@@ -540,11 +540,13 @@ export function registerSystemTools(server: McpServer): void {
           .optional()
           .describe(
             "Destructive-confirmation text. Must be EXACTLY 'RESTORE <targetCompany>' " +
-              "— i.e. the literal word RESTORE, a space, then the targetCompany value " +
-              "passed above, verbatim. Deliberately schema-OPTIONAL (#307): a " +
-              "missing/empty value reaches the handler and yields the normal " +
-              "{ ok:false, errors:[...] } envelope, exactly like a mismatch — never " +
-              "a raw -32602. Any mismatch (or omission) rejects the call.",
+              "— the literal word RESTORE, a space, then your targetCompany argument " +
+              "verbatim. Concrete example: for targetCompany='/data/acme', use " +
+              "confirmText='RESTORE /data/acme'. Deliberately schema-OPTIONAL (#307): " +
+              "a missing/empty value reaches the handler and yields the normal " +
+              "{ ok:false, errors:[...] } envelope (with code:'CONFIRMTEXT_MISMATCH'), " +
+              "exactly like a mismatch — never a raw -32602. Any mismatch (or omission) " +
+              "rejects the call.",
           ),
       },
       outputSchema: envelopeShape,

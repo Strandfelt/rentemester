@@ -38,7 +38,7 @@ export function registerBankTools(server: McpServer): void {
         "Lister importerede banktransaktioner med valgfri filtre på status, dato, tekstmatch og beløb. Read-only." +
         paginationDescriptionSuffix,
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         status: statusSchema.describe(
           "Filter by reconciliation status: 'all' (default), 'matched' or 'unmatched'.",
         ),
@@ -140,7 +140,7 @@ export function registerBankTools(server: McpServer): void {
         "Suggestions-listen pr. række er truncated til `max` (default 5); selve `rows` " +
         "er IKKE truncated af `max` (én række pr. uafstemt transaktion i scope, jf. #381).",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         bankTransactionId: z
           .number()
           .int()
@@ -190,7 +190,7 @@ export function registerBankTools(server: McpServer): void {
       description:
         "Bygger en bank-afstemningsrapport for en periode med valgfri status/tekst/beløb-filtre. Read-only.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         from: z
           .string()
           .min(1)
@@ -267,7 +267,7 @@ export function registerBankTools(server: McpServer): void {
         "uden for virksomhedsmappen. " +
         "write-reversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         csvPath: z
           .string()
           .optional()
@@ -304,7 +304,11 @@ export function registerBankTools(server: McpServer): void {
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      // `bank_import` is idempotent by design: each row is deduplicated by
+      // (date + amount + reference) so re-running the same import never
+      // double-creates transactions. The annotation reflects that contract so
+      // an agent retrying after a network hiccup knows it's safe.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     withCompanyDbConfirmed<{ company: string; csvPath?: string; csvContent?: string; account?: string; profile?: string; confirm?: boolean }>(
       server,

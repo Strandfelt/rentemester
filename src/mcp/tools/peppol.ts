@@ -48,7 +48,7 @@ export function registerPeppolTools(server: McpServer): void {
         "OIOUBL-handoff-artifaktet og registrerer submission-forsøget. " +
         "Access-point-credentials gemmes aldrig i bogføringstilstanden. write-irreversible.",
       inputSchema: {
-        company: z.string().min(1),
+        company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         documentId: z.number().int().positive().optional(),
         invoiceNumber: z.string().optional(),
         accessPoint: accessPointSchema,
