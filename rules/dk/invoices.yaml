@@ -1,4 +1,4 @@
-version: dk-invoices-v0.0.7
+version: dk-invoices-v0.0.8
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
   - DK-MOMSLOVEN-2024-209
@@ -336,7 +336,10 @@ rules:
   - rule_id: DK-INVOICE-LATE-COMPENSATION-001
     name: Overdue commercial invoices must support deterministic assessment of the fixed compensation claim
     category: invoice_lifecycle
-    source_id: DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105
+    source_id: DK-RENTELOVEN-2014-459
+    provisions:
+      - ref: "§ 9a, stk. 3"
+        text_hash: "sha256:95574e5d4b20f2400b9187fff377ddb513eb287f5126fcddde9f7afcd3dc2869"
     severity: hard_stop
     machine_rule:
       require:
@@ -349,7 +352,10 @@ rules:
   - rule_id: DK-INVOICE-LATE-COMPENSATION-REGISTER-001
     name: A fixed compensation claim may only be registered once per overdue commercial invoice and must stay traceable in the claim balance
     category: invoice_lifecycle
-    source_id: DK-UDENRETLIGE-INDDRIVELSESOMKOSTNINGER-AMEND-2013-105
+    source_id: DK-RENTELOVEN-2014-459
+    provisions:
+      - ref: "§ 9a, stk. 3"
+        text_hash: "sha256:95574e5d4b20f2400b9187fff377ddb513eb287f5126fcddde9f7afcd3dc2869"
     severity: hard_stop
     machine_rule:
       require:
@@ -418,7 +424,10 @@ rules:
   - rule_id: DK-INVOICE-SETTLEMENT-001
     name: Bank-settled customer payments must clear receivables with traceable invoice and bank links
     category: invoice_lifecycle
-    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -434,6 +443,9 @@ rules:
     name: Bank-settled invoice claim receipts must clear booked claim receivables with traceable invoice and bank links
     category: invoice_lifecycle
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -452,6 +464,9 @@ rules:
     name: A single incoming bank receipt may settle principal and booked claims in one deterministic application
     category: invoice_lifecycle
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -468,7 +483,10 @@ rules:
   - rule_id: DK-INVOICE-PAYMENT-001
     name: Invoice payments must be traceably applied against issued invoices and bank transactions
     category: invoice_lifecycle
-    source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -483,6 +501,9 @@ rules:
     name: Open invoice balance must reflect linked credit notes as well as payments
     category: invoice_lifecycle
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 2"
+        text_hash: "sha256:7491f9df0204116cdee57939d3765170ba8de20a2188e6cc807fded3d7f64227"
     severity: hard_stop
     machine_rule:
       require:
@@ -517,6 +538,11 @@ rules:
     name: Customer refunds after credit notes must be traceably settled against the bank and corrected invoice balance
     category: invoice_lifecycle
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 2"
+        text_hash: "sha256:7491f9df0204116cdee57939d3765170ba8de20a2188e6cc807fded3d7f64227"
+      - ref: "§ 66, stk. 1, nr. 6"
+        text_hash: "sha256:5708034ac432b9bee2826945ba679fca8327f0e328a999268d84e9f256d96248"
     severity: hard_stop
     machine_rule:
       require:
@@ -599,6 +625,9 @@ rules:
     name: Recurring invoice generation is explicit, deterministic and idempotent per template period
     category: invoice_lifecycle
     source_id: DK-MOMSBEKENDTGORELSEN-2023-1435
+    provisions:
+      - ref: "§ 58, stk. 1"
+        text_hash: "sha256:04629844bae235a49e49aaa95f21e625e1a8bbca1c51bccc0604cc20a3bdb97a"
     severity: hard_stop
     machine_rule:
       require:

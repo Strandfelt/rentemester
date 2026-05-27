@@ -40,6 +40,7 @@ import { register as registerExpense } from "./cli/expense";
 import { register as registerRetention } from "./cli/retention";
 import { register as registerPeriod } from "./cli/period";
 import { register as registerDashboard } from "./cli/dashboard";
+import { register as registerCompliance } from "./cli/compliance";
 // ===== RECURRING INVOICES (#118) =====
 import { register as registerRecurringInvoice } from "./cli/recurring-invoice";
 // ===== END RECURRING INVOICES (#118) =====
@@ -273,6 +274,7 @@ for (const registerFn of [
   // ===== END RUNTIME AGENT (#183) =====
   // ===== REGULATORY COVERAGE =====
   registerReg,
+  registerCompliance,
   // ===== END REGULATORY COVERAGE =====
   // ===== TAX RETURN PREPARATION =====
   registerTax,
