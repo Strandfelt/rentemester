@@ -499,6 +499,10 @@ regnskabsperiode (`period reopen`) er fx CLI-only — se også underafsnittet
   primosaldo). Ingen `opening_balance_*`-MCP-tools.
 - `src/cli/reg.ts` — `reg coverage` og `reg citations` (regulatorisk
   dækningsrapport + paragrafhenvisninger). Ingen `reg_*`-MCP-tools.
+- `src/cli/compliance.ts` — `compliance report` (genererer en
+  deterministisk, byte-stabil HTML-rapport til revisor eller myndighed
+  med audit-kæde, backup-status, retention, GDPR, regulatorisk dækning
+  og hele regel→paragraf-mappingen). Ingen `compliance_*`-MCP-tools.
 - `src/cli/report.ts` — `report balance`, `report profit-loss`,
   `report trial-balance`, `report tax`. MCP har kun `tax_return_prepare`;
   resten er CLI-only.

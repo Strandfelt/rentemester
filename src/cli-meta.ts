@@ -949,6 +949,20 @@ export const COMMAND_SPECS: CommandSpec[] = [
       "--out skriver review-filen; uden --out skrives den til stdout",
     ],
   },
+  {
+    key: "compliance report",
+    usage: "compliance report --company <path> --out <file.html> [--as-of YYYY-MM-DD]",
+    description:
+      "Skriver en deterministisk HTML-rapport en virksomhedsejer kan udlevere til revisor eller myndighed. Rapporten samler audit-kæde-status, backup-overholdelse, opbevaringsfrister, GDPR-posture, regulatorisk dækning og hele regel→paragraf-mapping i ét printbart dokument. Rapport-fingerprint (sha256) viser at en udleveret kopi ikke er ændret.",
+    allowedFlags: ["--company", "--out", "--as-of", "--as-of-instant"],
+    inputNotes: [
+      "--out: stien til HTML-filen der genereres. Forældermappen oprettes ved behov.",
+      "--as-of (YYYY-MM-DD, standard: dags dato): regnedatoen retention og backup-status evalueres mod.",
+      "--as-of-instant (ISO-8601, standard: nu): tidsstemplet i rapporthovedet. Bruges typisk til byte-deterministisk gendannelse i tests og smoke; spring over i daglig brug.",
+      "Rapporten er byte-for-byte deterministisk når samme --as-of og --as-of-instant gives — fingerprint kan bruges til at bevise integritet.",
+      "Genererer ikke nye bogføringsposter eller audit-events — rent læse-kald.",
+    ],
+  },
   // ===== END REGULATORY COVERAGE =====
   // ===== ACCRUALS / PERIODEAFGRÆNSNINGSPOSTER =====
   {
