@@ -1,4 +1,4 @@
-version: dk-bookkeeping-v0.0.6
+version: dk-bookkeeping-v0.0.7
 sources:
   - DK-BOGFORINGSLOVEN-2022-700
   - DK-DIGITAL-BOGFORING-NONREGISTERED-2024-205
@@ -8,6 +8,9 @@ rules:
     name: Double-entry postings must balance
     category: ledger_validation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 7, stk. 1"
+        text_hash: "sha256:1094e0af03f6b6383aee9c5bbc46f629ab94d04b2f949d01621ad54195f1b744"
     severity: hard_stop
     machine_rule:
       require: debit_sum_equals_credit_sum
@@ -257,6 +260,11 @@ rules:
     name: Fixed-asset depreciation must post deterministic, balanced period entries linked to the purchase
     category: ledger_validation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 7, stk. 1"
+        text_hash: "sha256:1094e0af03f6b6383aee9c5bbc46f629ab94d04b2f949d01621ad54195f1b744"
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -270,6 +278,9 @@ rules:
     name: Immediate small-asset write-off requires explicit confirmation and source-backed rule metadata
     category: ledger_validation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
     severity: hard_stop
     machine_rule:
       require:
@@ -286,6 +297,9 @@ rules:
     name: Accruals must register a balanced parking entry and recognise it through deterministic balanced period entries
     category: ledger_validation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 7, stk. 1"
+        text_hash: "sha256:1094e0af03f6b6383aee9c5bbc46f629ab94d04b2f949d01621ad54195f1b744"
     severity: hard_stop
     machine_rule:
       require:
@@ -302,6 +316,11 @@ rules:
     name: A registered supplier bill must be a traceable, balanced open creditor item
     category: ledger_validation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
+      - ref: "§ 9, stk. 2"
+        text_hash: "sha256:74176e8a44dc7c34034445ee127cbace3ee8a739c979ab4473b0696e62e17c24"
     severity: hard_stop
     machine_rule:
       require:
@@ -317,6 +336,11 @@ rules:
     name: Payable payments must be traceably applied against open creditor items and bank transactions
     category: ledger_validation
     source_id: DK-BOGFORINGSLOVEN-2022-700
+    provisions:
+      - ref: "§ 9, stk. 1"
+        text_hash: "sha256:75acd88eca28d81d86de2d14ed3c3871304f3e4da3cffc0920be43322a96153a"
+      - ref: "§ 11, stk. 1"
+        text_hash: "sha256:8a1a2a31b9b0c4e29a1b74f5433907f26f276c95348950c907dc5e8f758f1eea"
     severity: hard_stop
     machine_rule:
       require:
