@@ -209,7 +209,7 @@ describe("InvoicesView — write actions", () => {
     // Krediter is hidden for credited / refunded / written_off — those three
     // are non-creditable terminal states. Four rows remain (open, paid,
     // overpaid, overdue) where the action is offered.
-    expect(screen.getAllByRole("button", { name: "Krediter" })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Kreditér" })).toHaveLength(4);
   });
 
   test("Krediter is hidden for an archived year (no live ledger)", async () => {
@@ -217,7 +217,7 @@ describe("InvoicesView — write actions", () => {
     renderView();
     await screen.findByText(/Fakturaer er ikke tilgængelige for 2025/);
     expect(
-      screen.queryByRole("button", { name: "Krediter" }),
+      screen.queryByRole("button", { name: "Kreditér" }),
     ).not.toBeInTheDocument();
   });
 
@@ -767,7 +767,7 @@ describe("InvoicesView — write actions", () => {
     renderView();
     await screen.findByRole("heading", { name: "Acme ApS" });
     // Both fixture invoices are creditable; click the first Krediter button.
-    await userEvent.click(screen.getAllByRole("button", { name: "Krediter" })[0]!);
+    await userEvent.click(screen.getAllByRole("button", { name: "Kreditér" })[0]!);
     await userEvent.type(
       screen.getByLabelText("Begrundelse"),
       "Aftale annulleret",

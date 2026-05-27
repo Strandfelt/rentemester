@@ -26,8 +26,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerAllTools } from "./registry";
 
-const SERVER_NAME = "rentemester-mcp";
-const SERVER_VERSION = "0.0.1";
+// Exported so the `system_about` MCP tool can return the live identity
+// without re-declaring it. (Batch F-2)
+export const SERVER_NAME = "rentemester-mcp";
+export const SERVER_VERSION = "0.0.1";
 
 /**
  * Orientering der sendes til agenten i `initialize`-svarets

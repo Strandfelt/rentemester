@@ -159,8 +159,14 @@ describe("authority export", () => {
     ]);
 
     const readme = readFileSync(join(exported.exportDir!, "README.txt"), "utf8");
-    expect(readme).toContain("Primary handoff model: local export package");
-    expect(readme).toContain("Out of scope: hosted reviewer/accountant access");
+    // README is now Danish (round-2 review: a Danish revisor opening the
+    // .tar should not get English instructions). The parenthetical English
+    // trust-boundary terms are kept so the manifestExtras vocabulary stays
+    // searchable from JSON-only consumers.
+    expect(readme).toContain("Primær overdragelsesmodel: lokal eksportpakke");
+    expect(readme).toContain("local export package");
+    expect(readme).toContain("Uden for omfang");
+    expect(readme).toContain("hosted reviewer/accountant access");
 
     const auditRows = db.query(
       "SELECT event_type, message FROM audit_log WHERE event_type = 'accountant_handoff_export' ORDER BY id DESC LIMIT 1"

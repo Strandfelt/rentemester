@@ -23,6 +23,25 @@ const SEVERITY_LABEL: Record<ExceptionRow["severity"], string> = {
   low: "Lav",
 };
 
+/**
+ * Human-readable Danish labels for the raw `exception.type` codes the core
+ * emits. Falls back to the raw code (in a <code>-tag) when an unknown type
+ * shows up, so the screen never silently drops information. (Round-2 review:
+ * "UNMATCHED_BANK_TRANSACTION raw code is shown to the user — should be
+ * mapped to a Danish label.")
+ */
+const TYPE_LABEL: Record<string, string> = {
+  UNMATCHED_BANK_TRANSACTION: "Ubehandlet banktransaktion",
+  AGENT_NEEDS_REVIEW: "Agenten har brug for godkendelse",
+  AGENT_PAYABLE_OVERDUE: "Forfalden leverandørpost (agent)",
+  AGENT_ACCRUAL_READY: "Periodisering klar til bogføring (agent)",
+  AGENT_ASSET_CANDIDATE: "Muligt anlæg over kapitaliseringsgrænsen (agent)",
+  AGENT_TAX_NEEDS_REVIEW: "Oplysningsskema-felt skal kontrolleres (agent)",
+  DOCUMENT_NO_BILAG: "Bilag mangler",
+  PERIOD_LOCKED_WRITE: "Bogføring blokeret af periodelås",
+  BACKUP_LOCKED_WRITE: "Bogføring blokeret af backup-lås",
+};
+
 export function ExceptionsView() {
   const { slug = "" } = useParams();
   const [params, setParams] = useSearchParams();
@@ -145,7 +164,7 @@ export function ExceptionsView() {
               <tr key={row.id}>
                 <td>#{row.id}</td>
                 <td>
-                  <code>{row.type}</code>
+                  {TYPE_LABEL[row.type] ?? <code>{row.type}</code>}
                 </td>
                 <td className={`severity-${row.severity}`}>
                   {SEVERITY_LABEL[row.severity]}

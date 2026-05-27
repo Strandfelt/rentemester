@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readJsonCliInput } from "../cli-dispatch";
 import { companyPaths } from "../core/paths";
 import { openDb, migrate } from "../core/db";
 import {
@@ -202,7 +203,7 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --input <file.json>");
       process.exit(2);
     }
-    const payload = JSON.parse(readFileSync(input, "utf8"));
+    const payload = readJsonCliInput(ctx, input, "--input");
     const result = validateInvoice(payload);
     // #250: render the validation verdict — valid/invalid plus every concrete
     // rejection reason — in Danish for a human; `--format json` is unchanged.
@@ -218,7 +219,7 @@ export function register(dispatch: CommandDispatch): void {
     const root = ctx.companyRoot();
     const db = openDb(companyPaths(root).db);
     migrate(db);
-    const payload = JSON.parse(readFileSync(input, "utf8"));
+    const payload = readJsonCliInput(ctx, input, "--input");
     const customerIdRaw = ctx.arg("--customer-id");
     const customerId = customerIdRaw === undefined ? undefined : Number(customerIdRaw);
     const resolved = resolveInvoiceMasterData(db, payload, {
@@ -396,25 +397,18 @@ export function register(dispatch: CommandDispatch): void {
       console.error("Missing required --access-point <file.json>");
       process.exit(2);
     }
-    let accessPoint: PeppolAccessPointConfig;
-    let acknowledgement: PeppolTransportAcknowledgement | undefined;
-    try {
-      const parsed = JSON.parse(readFileSync(accessPointPath, "utf8")) as {
-        accessPointId?: string;
-        endpointUrl?: string;
-        senderEndpointId?: string;
-        acknowledgement?: PeppolTransportAcknowledgement;
-      };
-      accessPoint = {
-        accessPointId: parsed.accessPointId ?? "",
-        endpointUrl: parsed.endpointUrl ?? "",
-        senderEndpointId: parsed.senderEndpointId ?? "",
-      };
-      acknowledgement = parsed.acknowledgement;
-    } catch (error) {
-      console.error(`Could not read --access-point config: ${(error as Error).message}`);
-      process.exit(2);
-    }
+    const parsed = readJsonCliInput(ctx, accessPointPath, "--access-point") as {
+      accessPointId?: string;
+      endpointUrl?: string;
+      senderEndpointId?: string;
+      acknowledgement?: PeppolTransportAcknowledgement;
+    };
+    const accessPoint: PeppolAccessPointConfig = {
+      accessPointId: parsed.accessPointId ?? "",
+      endpointUrl: parsed.endpointUrl ?? "",
+      senderEndpointId: parsed.senderEndpointId ?? "",
+    };
+    const acknowledgement: PeppolTransportAcknowledgement | undefined = parsed.acknowledgement;
     const db = openCommandDb(ctx);
     migrate(db);
     const documentId = resolveInvoiceDocumentId(db, ctx);
@@ -440,7 +434,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
-      JSON.parse(readFileSync(input, "utf8")),
+      readJsonCliInput(ctx, input, "--input"),
       "originalInvoiceDocumentId",
       "originalInvoiceNumber",
     );
@@ -468,7 +462,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
-      JSON.parse(readFileSync(input, "utf8")),
+      readJsonCliInput(ctx, input, "--input"),
       "invoiceDocumentId",
       "invoiceNumber",
     );
@@ -487,7 +481,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
-      JSON.parse(readFileSync(input, "utf8")),
+      readJsonCliInput(ctx, input, "--input"),
       "invoiceDocumentId",
       "invoiceNumber",
     );
@@ -506,7 +500,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
-      JSON.parse(readFileSync(input, "utf8")),
+      readJsonCliInput(ctx, input, "--input"),
       "invoiceDocumentId",
       "invoiceNumber",
     );
@@ -525,7 +519,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
-      JSON.parse(readFileSync(input, "utf8")),
+      readJsonCliInput(ctx, input, "--input"),
       "invoiceDocumentId",
       "invoiceNumber",
     );
@@ -544,7 +538,7 @@ export function register(dispatch: CommandDispatch): void {
     migrate(db);
     const payload = withResolvedInvoicePayload(
       db,
-      JSON.parse(readFileSync(input, "utf8")),
+      readJsonCliInput(ctx, input, "--input"),
       "invoiceDocumentId",
       "invoiceNumber",
     );

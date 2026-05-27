@@ -21,7 +21,8 @@ export function registerExceptionTools(server: McpServer): void {
     {
       title: "List exceptions",
       description:
-        "Lister exceptions-køen. Filtrér på status: open|resolved|all. Exceptions i arkiverede/lukkede perioder udelades som standard — sæt includeArchived:true for at vise dem. Read-only.",
+        "Lister exceptions-køen. Filtrér på status: open|resolved|all. Exceptions i arkiverede/lukkede perioder udelades som standard — sæt includeArchived:true for at vise dem. Read-only. " +
+        "Rækkefølge: id DESC (nyeste først, deterministisk).",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         status: z.enum(["open", "resolved", "all"]).optional(),

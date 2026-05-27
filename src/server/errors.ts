@@ -25,26 +25,34 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 /**
  * An error that is safe to surface to an HTTP client. The `message` is
  * deliberately curated by the thrower — keep it free of paths/secrets.
+ *
+ * `subcode` (optional) carries the SAME stable, machine-readable marker the
+ * MCP envelope's `code` field uses for cross-cutting preconditions —
+ * `"CONFIRM_REQUIRED"`, `"CONFIRMTEXT_MISMATCH"`, `"BACKUP_LOCKED"` — so an
+ * agent driving both HTTP and MCP can share one error parser. The top-level
+ * `code` keeps its 6-value HTTP enum unchanged (Batch F-1).
  */
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status: number;
+  readonly subcode: string | null;
 
-  constructor(code: ApiErrorCode, message: string) {
+  constructor(code: ApiErrorCode, message: string, options?: { subcode?: string }) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = STATUS_BY_CODE[code];
+    this.subcode = options?.subcode ?? null;
   }
 
-  static badRequest(message: string): ApiError {
-    return new ApiError("bad_request", message);
+  static badRequest(message: string, options?: { subcode?: string }): ApiError {
+    return new ApiError("bad_request", message, options);
   }
   static notFound(message: string): ApiError {
     return new ApiError("not_found", message);
   }
-  static conflict(message: string): ApiError {
-    return new ApiError("conflict", message);
+  static conflict(message: string, options?: { subcode?: string }): ApiError {
+    return new ApiError("conflict", message, options);
   }
   static unauthorized(message: string): ApiError {
     return new ApiError("unauthorized", message);
@@ -72,6 +80,14 @@ export type ApiErrorBody = {
   ok: false;
   errors: string[];
   code: ApiErrorCode;
+  /**
+   * Optional cross-surface stable marker for cross-cutting preconditions —
+   * mirrors the MCP envelope's `code` field (`"CONFIRM_REQUIRED"`,
+   * `"CONFIRMTEXT_MISMATCH"`, `"BACKUP_LOCKED"`, ...). Set only when the
+   * thrower passes `subcode` to ApiError. An agent that pins on `subcode`
+   * gets the same identifier on HTTP and MCP. (Batch F-1)
+   */
+  subcode?: string;
 };
 
 /**
@@ -86,10 +102,9 @@ export function toErrorResponse(err: unknown): {
   body: ApiErrorBody;
 } {
   if (err instanceof ApiError) {
-    return {
-      status: err.status,
-      body: { ok: false, errors: [err.message], code: err.code },
-    };
+    const body: ApiErrorBody = { ok: false, errors: [err.message], code: err.code };
+    if (err.subcode) body.subcode = err.subcode;
+    return { status: err.status, body };
   }
   return {
     status: 500,

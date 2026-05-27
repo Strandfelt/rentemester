@@ -202,6 +202,9 @@ export async function withCompanyMutation<T extends CoreResult>(
   if (options.requireConfirm && body.confirm !== true) {
     throw ApiError.badRequest(
       "denne handling er irreversibel og kræver 'confirm: true'",
+      // Stable, cross-surface code so an agent driving HTTP gets the
+      // same machine-readable marker the MCP envelope sets. (Batch F-1)
+      { subcode: "CONFIRM_REQUIRED" },
     );
   }
 

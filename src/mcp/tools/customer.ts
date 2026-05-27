@@ -24,7 +24,10 @@ export function registerCustomerTools(server: McpServer): void {
     "customer_list",
     {
       title: "List customers",
-      description: "Lister kendte kunder. Read-only." + paginationDescriptionSuffix,
+      description:
+        "Lister kendte kunder. Read-only. " +
+        "Rækkefølge: lower(name) ASC, id ASC (deterministisk)." +
+        paginationDescriptionSuffix,
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         archived: z

@@ -14,6 +14,7 @@ import { api, ApiError } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { formatKroner } from "../lib/format";
 import type { CompanyBilagsmail } from "../lib/types";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ErrorState, Loading } from "../components/Feedback";
 
 export function BilagsmailView() {
@@ -149,6 +150,7 @@ function ImapConfigPanel({
   const [secure, setSecure] = useState(status?.secure ?? true);
   const [mailbox, setMailbox] = useState(status?.mailbox ?? "INBOX");
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,13 +178,13 @@ function ImapConfigPanel({
   };
 
   const remove = async () => {
-    if (!confirm("Slet den gemte IMAP-config? Bilagsmail-polling vil stoppe.")) return;
     setSaving(true);
     try {
       await api.deleteBilagsmailImapConfig(slug);
       onDone();
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Kunne ikke slette config.");
+      throw err;
     } finally {
       setSaving(false);
     }
@@ -261,7 +263,7 @@ function ImapConfigPanel({
             <button
               type="button"
               className="btn secondary danger"
-              onClick={remove}
+              onClick={() => setPendingDelete(true)}
               disabled={saving}
             >
               Slet config
@@ -269,6 +271,24 @@ function ImapConfigPanel({
           )}
         </div>
       </form>
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Slet IMAP-konfigurationen"
+          body={
+            <p>
+              Bilagsmail-polling stopper, og du skal indtaste host, port,
+              brugernavn og password igen for at slå den til. Handlingen
+              ændrer kun lokal konfiguration — ingen bilag slettes.
+            </p>
+          }
+          confirmLabel="Slet konfiguration"
+          confirmKind="danger"
+          onConfirm={async () => {
+            await remove();
+          }}
+          onClose={() => setPendingDelete(false)}
+        />
+      )}
     </section>
   );
 }

@@ -41,8 +41,17 @@ export function registerSystemTools(server: McpServer): void {
     "system_healthcheck",
     {
       title: "Company directory healthcheck",
-      description: "Tjekker at virksomhedsmappen og kernefilerne findes. Read-only.",
-      inputSchema: { company: z.string().min(1) },
+      description:
+        "Tjekker at virksomhedsmappen og kernefilerne findes — company_root, " +
+        "data_dir, ledger, documents, config. Returnerer envelope.data.checks " +
+        "med { name, ok } pr. tjek og envelope.data.missing med navnene på " +
+        "dem der mangler. Read-only.",
+      inputSchema: {
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -83,7 +92,13 @@ export function registerSystemTools(server: McpServer): void {
       description: "Tjekker om backup-pligten er opfyldt. Read-only.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
-        asOf: z.string().optional(),
+        asOf: z
+          .string()
+          .optional()
+          .describe(
+            "Optional YYYY-MM-DD date to evaluate the backup compliance against " +
+              "(default: today UTC). Use this to ask 'were we compliant on 2026-03-31?'",
+          ),
       },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -104,8 +119,21 @@ export function registerSystemTools(server: McpServer): void {
         "write-irreversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
-        at: z.string().optional(),
-        archive: z.boolean().optional(),
+        at: z
+          .string()
+          .optional()
+          .describe(
+            "Optional ISO-8601 timestamp the backup is created at (overrides the " +
+              "wall clock for deterministic testing). Default: current UTC time.",
+          ),
+        archive: z
+          .boolean()
+          .optional()
+          .describe(
+            "When true, ALSO pack the backup into a single deterministic .tar " +
+              "(plus a .sha256 sidecar) ready for off-site placement. Default: false " +
+              "— the on-disk backup directory is created without an archive.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -140,8 +168,21 @@ export function registerSystemTools(server: McpServer): void {
         "write-irreversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
-        backupId: z.string().optional(),
-        out: z.string().optional(),
+        backupId: z
+          .string()
+          .optional()
+          .describe(
+            "Backup id to pack (returned by `system_backup` or visible in " +
+              "`system_backup_status`). When omitted, the most recent backup is " +
+              "selected.",
+          ),
+        out: z
+          .string()
+          .optional()
+          .describe(
+            "Optional output path for the .tar archive (default: alongside the " +
+              "backup directory). A .sha256 sidecar is always written next to it.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -162,7 +203,19 @@ export function registerSystemTools(server: McpServer): void {
       description:
         "Samlet backup-status: forfald, bogførings-lås, destinationer og om seneste " +
         "backup er placeret sikkert i EU/EØS. Read-only.",
-      inputSchema: { company: z.string().min(1), asOf: z.string().optional() },
+      inputSchema: {
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+        asOf: z
+          .string()
+          .optional()
+          .describe(
+            "Optional YYYY-MM-DD date to evaluate governance status against " +
+              "(default: today UTC).",
+          ),
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -176,7 +229,12 @@ export function registerSystemTools(server: McpServer): void {
     {
       title: "List backup destinations",
       description: "Lister konfigurerede backup-destinationer med deres attestering. Read-only.",
-      inputSchema: { company: z.string().min(1) },
+      inputSchema: {
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -296,7 +354,19 @@ export function registerSystemTools(server: McpServer): void {
     {
       title: "Remove a backup destination",
       description: "Fjerner en konfigureret backup-destination. write-irreversible.",
-      inputSchema: { company: z.string().min(1), id: z.string().min(1), confirm: confirmField },
+      inputSchema: {
+        company: z
+          .string()
+          .min(1)
+          .describe("Absolute path to the company directory, or a workspace slug."),
+        id: z
+          .string()
+          .min(1)
+          .describe(
+            "Destination id to remove. Get the id from `system_backup_destination_list`.",
+          ),
+        confirm: confirmField,
+      },
       outputSchema: envelopeShape,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -316,11 +386,42 @@ export function registerSystemTools(server: McpServer): void {
         "(fx en Dropbox-desktopmappe) og verificerer kopien med sha256. write-irreversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
-        archivePath: z.string().min(1),
-        destinationId: z.string().min(1),
-        actorKind: z.enum(["human", "agent"]).optional(),
-        at: z.string().optional(),
-        note: z.string().optional(),
+        archivePath: z
+          .string()
+          .min(1)
+          .describe(
+            "Absolute path to the .tar archive produced by `system_backup` with " +
+              "archive:true (or `system_backup_archive`). The .sha256 sidecar is " +
+              "located automatically next to it.",
+          ),
+        destinationId: z
+          .string()
+          .min(1)
+          .describe(
+            "Destination id (from `system_backup_destination_list`) to copy the " +
+              "archive to. The destination's `location` must be a local or synced " +
+              "folder reachable by this process.",
+          ),
+        actorKind: z
+          .enum(["human", "agent"])
+          .optional()
+          .describe(
+            "Who is performing the placement: 'human' for a person clicking a " +
+              "button, 'agent' for an AI/automation. Default: 'agent'.",
+          ),
+        at: z
+          .string()
+          .optional()
+          .describe(
+            "Optional ISO-8601 timestamp recorded in the placement log " +
+              "(default: current UTC time).",
+          ),
+        note: z
+          .string()
+          .optional()
+          .describe(
+            "Optional free-text note attached to the placement record.",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -358,13 +459,51 @@ export function registerSystemTools(server: McpServer): void {
         "med sha256 hvis destinationen er læsbar. write-irreversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
-        destinationId: z.string().min(1),
-        backupId: z.string().min(1),
-        archiveSha256: z.string().min(1),
-        archiveSizeBytes: z.number().optional(),
-        actorKind: z.enum(["human", "agent"]).optional(),
-        at: z.string().optional(),
-        note: z.string().optional(),
+        destinationId: z
+          .string()
+          .min(1)
+          .describe(
+            "Destination id (from `system_backup_destination_list`) the agent " +
+              "placed the archive at.",
+          ),
+        backupId: z
+          .string()
+          .min(1)
+          .describe(
+            "Backup id (returned by `system_backup`) the archive was produced from.",
+          ),
+        archiveSha256: z
+          .string()
+          .min(1)
+          .describe(
+            "Lowercase hex sha256 digest (64 chars) of the placed .tar archive. " +
+              "If the destination is reachable from this process, the digest is " +
+              "re-verified server-side before the placement is recorded.",
+          ),
+        archiveSizeBytes: z
+          .number()
+          .optional()
+          .describe(
+            "Optional file size in bytes of the placed .tar archive. Recorded " +
+              "alongside the sha256 for audit.",
+          ),
+        actorKind: z
+          .enum(["human", "agent"])
+          .optional()
+          .describe(
+            "Who performed the external placement: 'human' or 'agent'. Default: 'agent'.",
+          ),
+        at: z
+          .string()
+          .optional()
+          .describe(
+            "Optional ISO-8601 timestamp recorded in the placement log " +
+              "(default: current UTC time).",
+          ),
+        note: z
+          .string()
+          .optional()
+          .describe("Optional free-text note attached to the placement record."),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,
@@ -406,9 +545,28 @@ export function registerSystemTools(server: McpServer): void {
         "write-irreversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
-        enforced: z.boolean().optional(),
-        graceDays: z.number().optional(),
-        at: z.string().optional(),
+        enforced: z
+          .boolean()
+          .optional()
+          .describe(
+            "Whether the lock is enforced (true) or just monitored (false). When " +
+              "enforced AND the weekly backup is overdue beyond graceDays, " +
+              "subsequent bookkeeping writes return code:'BACKUP_LOCKED'. " +
+              "Default: keep existing setting (or false on a fresh ledger).",
+          ),
+        graceDays: z
+          .number()
+          .optional()
+          .describe(
+            "Days of grace AFTER the weekly backup deadline before the lock " +
+              "activates. Integer ≥ 0. Default: keep existing setting (initial: 3).",
+          ),
+        at: z
+          .string()
+          .optional()
+          .describe(
+            "Optional ISO-8601 timestamp recorded as the change time (default: now UTC).",
+          ),
         confirm: confirmField,
       },
       outputSchema: envelopeShape,

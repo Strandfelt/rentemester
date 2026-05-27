@@ -69,7 +69,7 @@ function renderView(payload: ReturnType<typeof sample> = sample()) {
 describe("IntegrityView (#333)", () => {
   test("viser PASS-status når hash-kæden er hel", async () => {
     renderView(sample());
-    expect(await screen.findByText(/PASS — kæden er hel/)).toBeInTheDocument();
+    expect(await screen.findByText(/OK — kæden er hel/)).toBeInTheDocument();
     expect(
       screen.queryByText(/Revisionskæden er brudt/),
     ).not.toBeInTheDocument();
@@ -125,12 +125,12 @@ describe("IntegrityView (#333)", () => {
   test("'Verificér igen' refetcher endpointet", async () => {
     const user = userEvent.setup();
     renderView(sample());
-    expect(await screen.findByText(/PASS — kæden er hel/)).toBeInTheDocument();
+    expect(await screen.findByText(/OK — kæden er hel/)).toBeInTheDocument();
     const button = screen.getByRole("button", { name: /Verificér igen/ });
     await user.click(button);
     // Endpointet er idempotent — anden runde giver samme svar; vi tjekker
     // bare at vi er kommet retur til en gyldig state efter klik.
-    expect(await screen.findByText(/PASS — kæden er hel/)).toBeInTheDocument();
+    expect(await screen.findByText(/OK — kæden er hel/)).toBeInTheDocument();
   });
 
   test("citerer bogføringsloven § 14 og linker til Lovgrundlag-viewet", async () => {

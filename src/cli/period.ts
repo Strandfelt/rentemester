@@ -63,6 +63,9 @@ export function register(dispatch: CommandDispatch): void {
       kind: (ctx.arg("--kind") as any) ?? undefined,
       status: (ctx.arg("--status") as any) ?? undefined,
       reference: ctx.arg("--reference") ?? undefined,
+      // Bypass the open-high/medium-exceptions safety guard (Batch D-7).
+      // The bypass itself is visible in the close result + audit log.
+      force: ctx.arg("--force") === "yes" || ctx.arg("--force") === "true",
     });
     ctx.emitResult(result as Record<string, unknown>);
     db.close();

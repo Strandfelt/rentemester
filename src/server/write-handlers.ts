@@ -2275,11 +2275,13 @@ export async function handleClosePeriod(
           "'kind' must be 'vat_quarter', 'fiscal_year' or 'custom' when present",
         );
       }
+      const force = body.force === true;
       const closed = closeAccountingPeriod(ctx.db, {
         periodStart,
         periodEnd,
         ...(kindRaw ? { kind: kindRaw } : {}),
         ...(reference ? { reference } : {}),
+        force,
         createdBy: ctx.actor.createdBy,
         createdByProgram: ctx.actor.createdByProgram,
       });

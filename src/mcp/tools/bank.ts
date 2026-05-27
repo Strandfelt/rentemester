@@ -265,7 +265,21 @@ export function registerBankTools(server: McpServer): void {
         "tmpdir under os.tmpdir() (mønster `rentemester-mcp-bank-*`). " +
         "Den tmpdir slettes altid før kaldet returnerer — både ved success og " +
         "ved fejl/exception — så agenten kan retry'e uden at efterlade spor " +
-        "uden for virksomhedsmappen. " +
+        "uden for virksomhedsmappen.\n\n" +
+        "CSV-format (når `profile` IKKE er sat — den generiske parser): " +
+        "header-rækken auto-detekteres; kolonnenavnene matches case-insensitivt. " +
+        "Påkrævede kolonner: " +
+        "`transaction_date` (eller `date` / `dato`) — YYYY-MM-DD eller dd-mm-yyyy; " +
+        "`text` (eller `description` / `tekst` / `narrative`) — fri tekst der vises i Bank-listen; " +
+        "`amount` (eller `beløb`) — DKK med punktum eller komma som decimaltegn, negativ = debit (træk). " +
+        "Valgfri kolonner: `reference` (entydig nøgle for dedup), `currency` (default DKK), " +
+        "`counterparty` / `modpart`, `message` / `besked`. " +
+        "Dedup: rækker matches på (transaction_date + amount + reference + counterparty) og " +
+        "genimporteres ikke — agenten kan retry'e samme CSV uden duplikater " +
+        "(idempotentHint: true).\n\n" +
+        "Find tilgængelige `account`-slugs med `bank_account_list` før kaldet. " +
+        "Den slug du sender skal matche `slug`-feltet returneret derfra; et ukendt " +
+        "navn afvises før parsing. " +
         "write-reversible.",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
@@ -288,8 +302,10 @@ export function registerBankTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            "Optional bank account identifier (name or number) to import the " +
-              "transactions into. When omitted, the company's default bank account is used.",
+            "Optional bank account identifier — the `slug` field returned by " +
+              "`bank_account_list` (or the human-readable name). When omitted, the " +
+              "company's default bank account is used. An unknown account aborts " +
+              "the import with a clear error before parsing.",
           ),
         profile: z
           .enum(["danske-bank"])

@@ -22,7 +22,10 @@ export function registerVendorTools(server: McpServer): void {
     "vendor_list",
     {
       title: "List vendors",
-      description: "Lister kendte leverandører. Read-only." + paginationDescriptionSuffix,
+      description:
+        "Lister kendte leverandører. Read-only. " +
+        "Rækkefølge: lower(name) ASC, id ASC (deterministisk)." +
+        paginationDescriptionSuffix,
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         archived: z

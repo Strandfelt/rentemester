@@ -87,7 +87,7 @@ export function IntegrityView() {
             <tr>
               <th>Status</th>
               <td className={chainOk ? "ok" : "warn"}>
-                {chainOk ? "PASS — kæden er hel" : "FAIL — kæden er brudt"}
+                {chainOk ? "OK — kæden er hel" : "FEJL — kæden er brudt"}
               </td>
             </tr>
             <tr>

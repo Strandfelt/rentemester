@@ -86,7 +86,10 @@ export function registerDocumentTools(server: McpServer): void {
     "documents_list",
     {
       title: "List documents",
-      description: "Lister gemte bilag i virksomhedsmappen. Read-only." + paginationDescriptionSuffix,
+      description:
+        "Lister gemte bilag i virksomhedsmappen. Read-only. " +
+        "Rækkefølge: id DESC (nyeste først, deterministisk)." +
+        paginationDescriptionSuffix,
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         ...paginationFields,

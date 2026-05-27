@@ -60,6 +60,7 @@ import {
   withCompanyDb,
   withCompanyDbConfirmed,
   resolveIssuedInvoiceDocumentId,
+  invoiceNotFoundEnvelope,
   confirmField,
 } from "../tool-runtime";
 
@@ -397,11 +398,11 @@ const docIdOrNumberSchema = {
   invoiceNumber: z.string().optional().describe(SELECTOR_INVOICE_NUMBER),
 };
 
-function notFoundEnvelope(args: { documentId?: number | null; invoiceNumber?: string | null }) {
-  return errorEnvelope(
-    `Could not resolve invoice: provide documentId or invoiceNumber (got documentId=${args.documentId ?? "-"}, invoiceNumber='${args.invoiceNumber ?? ""}')`,
-  );
-}
+// Re-exported under the local name `notFoundEnvelope` to keep all the
+// `if (!id) return notFoundEnvelope(args)` call-sites in this file readable.
+// The actual builder lives in tool-runtime.ts so peppol.ts / email.ts use
+// the same shared string (Batch D-6).
+const notFoundEnvelope = invoiceNotFoundEnvelope;
 
 // ---------------------------------------------------------- lifecycle gates (#374)
 // The invoice_* family is a sequence: invoice_issue → invoice_post →
@@ -576,7 +577,9 @@ export function registerInvoiceTools(server: McpServer): void {
     "invoice_list",
     {
       title: "List invoices",
-      description: "Lister udstedte fakturaer med filtre. Read-only.",
+      description:
+        "Lister udstedte fakturaer med filtre. Read-only. " +
+        "Rækkefølge: invoice_date ASC, id ASC (deterministisk).",
       inputSchema: {
         company: z.string().min(1).describe("Absolute path to the company directory, or a workspace slug."),
         status: statusEnum.describe(

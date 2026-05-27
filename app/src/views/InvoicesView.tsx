@@ -165,7 +165,7 @@ export function InvoicesView() {
           title="Udsted kreditnota"
           body={
             <p>
-              Krediter faktura <strong>{crediting.invoiceNo}</strong>. En
+              Kreditér faktura <strong>{crediting.invoiceNo}</strong>. En
               kreditnota bogføres som modgående postering med eget nummer fra
               kreditnota-serien. Handlingen kan ikke fortrydes og kræver en
               begrundelse til revisionssporet.
@@ -596,7 +596,7 @@ export function InvoicesView() {
                               className="btn secondary"
                               onClick={() => setCrediting(row)}
                             >
-                              Krediter
+                              Kreditér
                             </button>
                           )}
                           {/* #428 — "Send som e-faktura" is shown ONLY when

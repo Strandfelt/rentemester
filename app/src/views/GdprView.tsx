@@ -13,6 +13,7 @@ import type {
   GdprErasureResult,
   GdprExportRecord,
 } from "../lib/types";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 const SOURCE_LABEL: Record<string, string> = {
   customers: "Kunde",
@@ -30,6 +31,7 @@ export function GdprView() {
   const [loading, setLoading] = useState(false);
   const [erasing, setErasing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingErase, setPendingErase] = useState(false);
 
   const runExport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,12 +54,6 @@ export function GdprView() {
 
   const runErase = async () => {
     if (!exportData) return;
-    if (
-      !confirm(
-        "Anonymisering erstatter personoplysningerne med en spærret markering. Rækker der stadig er bogføringspligtige (5-års-fristen) springes over. Vil du fortsætte?",
-      )
-    )
-      return;
     setError(null);
     setErasing(true);
     try {
@@ -76,6 +72,7 @@ export function GdprView() {
       setError(
         err instanceof ApiError ? err.message : "Anonymisering fejlede.",
       );
+      throw err;
     } finally {
       setErasing(false);
     }
@@ -144,11 +141,30 @@ export function GdprView() {
         <ExportPanel
           data={exportData}
           erasing={erasing}
-          onErase={runErase}
+          onErase={() => setPendingErase(true)}
         />
       )}
 
       {erasure && <ErasureSummary result={erasure} />}
+
+      {pendingErase && (
+        <ConfirmDialog
+          title="Anonymisér personoplysninger"
+          body={
+            <p>
+              Anonymisering erstatter personoplysningerne med en spærret
+              markering. Rækker, der stadig er bogføringspligtige (5-års-fristen),
+              springes over. Handlingen kan ikke fortrydes.
+            </p>
+          }
+          confirmLabel="Anonymisér nu"
+          confirmKind="danger"
+          onConfirm={async () => {
+            await runErase();
+          }}
+          onClose={() => setPendingErase(false)}
+        />
+      )}
     </section>
   );
 }
