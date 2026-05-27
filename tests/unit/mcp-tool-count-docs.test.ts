@@ -14,14 +14,24 @@ import { join } from "node:path";
 const REPO_ROOT = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 
 function countRegisteredTools(): number {
-  const dir = join(REPO_ROOT, "src/mcp/tools");
+  // Recurses through src/mcp/tools/ so the count stays correct when a large
+  // tool family (e.g. invoice.ts → invoice/{issuance,settlement,...}.ts) is
+  // split into a subdirectory of per-sub-domain register helpers.
   let count = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
-    const text = readFileSync(join(dir, entry.name), "utf8");
-    const matches = text.match(/\bregisterTool\s*\(/g);
-    if (matches) count += matches.length;
+  function walk(dir: string): void {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+      const text = readFileSync(full, "utf8");
+      const matches = text.match(/\bregisterTool\s*\(/g);
+      if (matches) count += matches.length;
+    }
   }
+  walk(join(REPO_ROOT, "src/mcp/tools"));
   return count;
 }
 
