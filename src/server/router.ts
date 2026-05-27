@@ -16,78 +16,80 @@
 // lock, the confirm gate, actor attribution and the localhost hard-gate that
 // the agent CLI / MCP stacks enforce — the server does not inherit them.
 
-import { createCompany } from "../core/company";
-import {
-  findWorkspaceCompany,
-  renameWorkspaceCompany,
-  setWorkspaceCompanyArchived,
-} from "../core/workspace";
-import { discoverWorkspaceCompanies } from "./discovery";
-import {
-  readLegalSources,
-  readRuleBundleMetadata,
-  readRuleMetadata,
-} from "../core/rules-metadata";
-import { buildCompanyRetention } from "./data/retention-view";
-import { buildCompanyIntegrity } from "./data/integrity-view";
-import { buildCompanyAccounts } from "./data/accounts-view";
-import { buildCompanyExceptions } from "./data/exceptions-list";
-import { buildCompanyPeriods } from "./data/periods-view";
-import { buildCompanyBankAccounts } from "./data/bank-accounts-view";
-import { buildCompanyGdprExport } from "./data/gdpr-view";
-import { buildCompanyAccruals } from "./data/accruals-view";
-import { buildCompanyAnnualReport } from "./data/annual-report-view";
-import { buildCompanyBilagsmail } from "./data/bilagsmail-view";
 import type { ServerConfig } from "./config";
 import { authMiddleware } from "./auth";
 import { ApiError, toErrorResponse } from "./errors";
-import {
-  exportBalanceCsv,
-  exportBalancePdf,
-  exportIncomeStatementCsv,
-  exportIncomeStatementPdf,
-  exportJournalCsv,
-  exportTrialBalanceCsv,
-  exportTrialBalancePdf,
-  exportVatPdf,
-  type StatementCsvExport,
-} from "./data/statement-exports";
-import {
-  buildAssetNextDepreciationPeriod,
-  buildCompanyAgentSuggestions,
-  buildCompanyArchiveYear,
-  buildCompanyAssets,
-  buildCompanyBalance,
-  buildCompanyBank,
-  buildCompanyBudget,
-  buildCompanyBudgetVsActual,
-  buildCompanyCashflow,
-  buildCompanyContacts,
-  buildCompanyDashboardData,
-  buildCompanyDocuments,
-  buildDocumentBookingOptions,
-  buildCompanyFiscalYears,
-  buildCompanyIncomeStatement,
-  buildCompanyInvoices,
-  buildCompanyJournal,
-  buildCompanyMileage,
-  buildCompanyMultiYear,
-  buildCompanyObligations,
-  buildCompanyOverview,
-  buildCompanyPayables,
-  buildCompanyRecurringInvoices,
-  buildCompanySettings,
-  buildCompanyTrialBalance,
-  buildCompanyVat,
-  buildPortfolioOverview,
-  resolveAsOfDate,
-  resolveCompanyDocumentFile,
-  resolveCompanyIssuedInvoicePdf,
-  resolvePathYear,
-  resolveYearParam,
-  syncCompanyCvr,
-} from "./data";
 import { serveStatic } from "./static";
+import { jsonResponse } from "./router/_shared";
+import {
+  handleHealth,
+  handleRules,
+  handleSystemCvrStatus,
+} from "./router/system";
+import {
+  handleCompanyList,
+  handlePortfolio,
+} from "./router/portfolio";
+import {
+  handleCompanyDashboard,
+  handleCompanyFiscalYears,
+  handleCompanyMultiYear,
+  handleCompanyOverview,
+} from "./router/dashboard";
+import {
+  handleCompanyBalance,
+  handleCompanyIncomeStatement,
+  handleCompanyJournal,
+  handleCompanyJournalExport,
+  handleCompanyStatementExport,
+  handleCompanyTrialBalance,
+  handleCompanyVatExport,
+} from "./router/statements";
+import {
+  handleCompanyBank,
+  handleCompanyBankAccounts,
+} from "./router/bank";
+import { handleCompanyVat } from "./router/vat";
+import {
+  handleCompanyDocumentBookingOptions,
+  handleCompanyDocumentFile,
+  handleCompanyDocuments,
+} from "./router/documents";
+import {
+  handleCompanyInvoicePdf,
+  handleCompanyInvoices,
+  handleCompanyRecurringInvoices,
+} from "./router/invoices";
+import { handleCompanyContacts } from "./router/contacts";
+import {
+  handleAssetNextDepreciation,
+  handleCompanyAssets,
+} from "./router/assets";
+import {
+  handleCompanyAccounts,
+  handleCompanyAccruals,
+  handleCompanyAgentSuggestions,
+  handleCompanyAnnualReport,
+  handleCompanyArchiveYear,
+  handleCompanyBilagsmail,
+  handleCompanyBudget,
+  handleCompanyBudgetVsActual,
+  handleCompanyCashflow,
+  handleCompanyExceptions,
+  handleCompanyGdprExport,
+  handleCompanyIntegrity,
+  handleCompanyMileage,
+  handleCompanyObligations,
+  handleCompanyPayables,
+  handleCompanyPeriods,
+  handleCompanyRetention,
+  handleCompanySettings,
+  handleCompanySyncCvr,
+} from "./router/company";
+import {
+  handleCompanyCreate,
+  handleCompanyUpdate,
+} from "./router/workspace-writes";
 import {
   handleAccountantExport,
   handleApproveAgentSuggestion,
@@ -131,54 +133,6 @@ import {
   handleUpdateCustomer,
   handleUpdateVendor,
 } from "./write-handlers";
-
-const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
-}
-
-function okResponse(body: Record<string, unknown>, status = 200): Response {
-  return jsonResponse({ ok: true, ...body }, status);
-}
-
-/** Parses a JSON request body, mapping any failure to a safe 400. */
-async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
-  let parsed: unknown;
-  try {
-    parsed = await request.json();
-  } catch {
-    throw ApiError.badRequest("request body must be valid JSON");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw ApiError.badRequest("request body must be a JSON object");
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function requireString(
-  body: Record<string, unknown>,
-  key: string,
-): string {
-  const value = body[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw ApiError.badRequest(`'${key}' is required and must be a non-empty string`);
-  }
-  return value.trim();
-}
-
-function optionalString(
-  body: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = body[key];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") {
-    throw ApiError.badRequest(`'${key}' must be a string when present`);
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
 
 // --------------------------------------------------------------------------
 // Route handlers — reads + workspace management only.
@@ -294,831 +248,6 @@ export const ROUTE_CATALOG: ReadonlyArray<{
   { method: "POST", pattern: "/api/companies/:slug/agent-suggestions/:id/reject", summary: "Ejer afviser agent-forslag — løser undtagelsen med 'Afvist'-note (#346)." },
 ];
 
-function handleHealth(config: ServerConfig): Response {
-  return okResponse({
-    service: "rentemester-cockpit",
-    workspace: config.workspaceRoot,
-    authRequired: config.authRequired,
-    routes: ROUTE_CATALOG,
-  });
-}
-
-/**
- * #402 — tells the cockpit whether the CVR-register login (`CVR_USERNAME`
- * / `CVR_PASSWORD`) is configured on the server. The cockpit reads this
- * *before* it shows the "Hent fra CVR" button so the owner sees a friendly
- * "log ind med dit virk.dk-login" message instead of clicking a button that
- * fails silently or returns a raw API error.
- *
- * The endpoint deliberately returns only a boolean — never the credential
- * values themselves — so it stays safe to call from the browser.
- */
-function handleSystemCvrStatus(): Response {
-  const configured = Boolean(process.env.CVR_USERNAME && process.env.CVR_PASSWORD);
-  return okResponse({ cvrStatus: { configured } });
-}
-
-/**
- * GET /api/rules — Lovgrundlag-viewer (#347).
- *
- * Eksponerer rules/dk-bundlerne + tilhørende retsinformation-citationer så
- * cockpittet kan vise SMB-ejeren *hvilke regler* der styrer bogføringen og
- * *hvor* de er hentet fra. Read-only: regler kan kun ændres via PR i
- * `rules/dk/`. Bundler, regler og legal-sources hentes via de eksisterende
- * helpers (`readRuleBundleMetadata`, `readRuleMetadata`, `readLegalSources`)
- * så der ikke er duplikeret parsing.
- */
-function handleRules(): Response {
-  const bundles = readRuleBundleMetadata().map((b) => ({
-    name: b.name,
-    version: b.version,
-    ruleCount: b.ruleIds.length,
-    sources: b.declaredSources,
-    vatCodes: b.vatCodes,
-  }));
-  const rules = readRuleMetadata().map((r) => ({
-    ruleId: r.ruleId,
-    bundle: r.bundle,
-    sourceId: r.sourceId,
-    name: r.name,
-    explanation: r.explanation,
-    severity: r.severity,
-    category: r.category,
-    provisions: r.provisions,
-  }));
-  const sources = readLegalSources();
-  return okResponse({ ruleBundles: bundles, rules, legalSources: sources });
-}
-
-function handlePortfolio(config: ServerConfig, url: URL): Response {
-  const asOf = resolveAsOfDate(url.searchParams.get("asOf"));
-  const overview = buildPortfolioOverview(config.workspaceRoot, asOf);
-  return okResponse({ portfolio: overview });
-}
-
-function handleCompanyList(config: ServerConfig): Response {
-  // Discover-and-adopt any present-but-unlisted company directory before
-  // listing (#256): an owner who set a company up via the CLI then opened the
-  // cockpit must see that real company, not "0 virksomheder" + a blank create.
-  const companies = discoverWorkspaceCompanies(config.workspaceRoot);
-  return okResponse({
-    workspace: config.workspaceRoot,
-    count: companies.length,
-    companies: companies.map((c) => ({
-      slug: c.slug,
-      name: c.name,
-      createdAt: c.createdAt,
-      archived: c.archived,
-    })),
-  });
-}
-
-function handleCompanyDashboard(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const asOf = resolveAsOfDate(url.searchParams.get("asOf"));
-  const data = buildCompanyDashboardData(config.workspaceRoot, slug, asOf);
-  return okResponse({ dashboard: data });
-}
-
-function handleCompanyFiscalYears(config: ServerConfig, slug: string): Response {
-  const data = buildCompanyFiscalYears(config.workspaceRoot, slug);
-  return okResponse({ fiscalYears: data });
-}
-
-/**
- * GET /api/companies/:slug/retention — Retention status view (#343).
- *
- * Genbruger `buildRetentionStatusReport` fra kernen og wrapper den i en
- * cockpit-venlig payload med company-block + dansk rule-citation. Read-only.
- */
-function handleCompanyRetention(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyRetention(config.workspaceRoot, slug);
-  return okResponse({ retention: data });
-}
-
-/**
- * GET /api/companies/:slug/integrity — Audit chain + backup status panel (#333).
- *
- * Idempotent — `verifyAuditChain` er read-only og kan kaldes så ofte cockpittet
- * ønsker uden side-effekter. Genbruger `getBackupComplianceStatus` +
- * `listBackupDestinations` så cockpittet ikke duplikerer kerne-logik.
- */
-function handleCompanyIntegrity(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyIntegrity(config.workspaceRoot, slug);
-  return okResponse({ integrity: data });
-}
-
-/**
- * GET /api/companies/:slug/accounts — Kontoplan-view (#344).
- *
- * Read-only liste over kontoplanen. Cockpittet kan vise hvilke konti der
- * er seedet og hvilke der har bogføringslinjer.
- */
-function handleCompanyAccounts(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyAccounts(config.workspaceRoot, slug);
-  return okResponse({ accounts: data });
-}
-
-/**
- * GET /api/companies/:slug/periods — Periodelås-liste (#342).
- *
- * Read-only. Wrapper omkring accounting_periods + effectivePeriodState.
- */
-function handleCompanyPeriods(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyPeriods(config.workspaceRoot, slug);
-  return okResponse({ periods: data });
-}
-
-/**
- * GET /api/companies/:slug/bank-accounts — Bankkonti + CSV-mapping-profiler
- * (#345). Read-only. POST på samme path opretter en konto.
- */
-function handleCompanyBankAccounts(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyBankAccounts(config.workspaceRoot, slug);
-  return okResponse({ bankAccounts: data });
-}
-
-/**
- * GET /api/companies/:slug/gdpr/export?cvr=&name=&asOf= — GDPR-indsigt (#334).
- *
- * Wrapper omkring buildGdprSubjectExport. Read-only: en indsigtsrapport
- * over de personoplysninger en data-subject findes med pr. en given dato.
- */
-function handleCompanyGdprExport(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const cvr = url.searchParams.get("cvr") ?? undefined;
-  const name = url.searchParams.get("name") ?? undefined;
-  const asOf = url.searchParams.get("asOf") ?? undefined;
-  const data = buildCompanyGdprExport(config.workspaceRoot, slug, {
-    cvr: cvr || undefined,
-    name: name || undefined,
-    asOf: asOf || undefined,
-  });
-  return okResponse({ gdpr: data });
-}
-
-/**
- * GET /api/companies/:slug/accruals — Periodiseringsregister (#337).
- *
- * Wrapper omkring buildAccrualRegisterReport. Read-only.
- */
-function handleCompanyAccruals(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyAccruals(config.workspaceRoot, slug);
-  return okResponse({ accruals: data });
-}
-
-/**
- * GET /api/companies/:slug/annual-report?fiscalYearStart=&fiscalYearEnd= —
- * Årsrapport-builder (#338). Read-only.
- */
-/**
- * GET /api/companies/:slug/bilagsmail — Bilagsmail-status (#348/#350/#351).
- *
- * Read-only: returnerer IMAP-config-status (uden password), mail-alias, og
- * inbox-listen over mail-drop-dokumenter. Write-handlers ligger på de
- * separate /imap-config + /alias paths.
- */
-function handleCompanyBilagsmail(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyBilagsmail(config.workspaceRoot, slug);
-  return okResponse({ bilagsmail: data });
-}
-
-function handleCompanyAnnualReport(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const fiscalYearStart = url.searchParams.get("fiscalYearStart");
-  const fiscalYearEnd = url.searchParams.get("fiscalYearEnd");
-  if (!fiscalYearStart || !fiscalYearEnd) {
-    throw ApiError.badRequest(
-      "fiscalYearStart og fiscalYearEnd (YYYY-MM-DD) er begge påkrævet.",
-    );
-  }
-  const data = buildCompanyAnnualReport(
-    config.workspaceRoot,
-    slug,
-    fiscalYearStart,
-    fiscalYearEnd,
-  );
-  return okResponse({ annualReport: data });
-}
-
-/**
- * GET /api/companies/:slug/exceptions[?status=open|resolved|all] — Exceptions
- * queue (#332). Read-only liste; POST .../exceptions/:id/resolve er en
- * separat write-handler.
- */
-function handleCompanyExceptions(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const raw = (url.searchParams.get("status") ?? "open").toLowerCase();
-  if (raw !== "open" && raw !== "resolved" && raw !== "all") {
-    throw ApiError.badRequest(
-      `status='${raw}' understøttes ikke — brug open, resolved eller all.`,
-    );
-  }
-  const data = buildCompanyExceptions(
-    config.workspaceRoot,
-    slug,
-    raw as "open" | "resolved" | "all",
-  );
-  return okResponse({ exceptions: data });
-}
-
-function handleCompanyOverview(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyOverview(config.workspaceRoot, slug, year);
-  return okResponse({ overview: data });
-}
-
-function handleCompanyIncomeStatement(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyIncomeStatement(config.workspaceRoot, slug, year);
-  return okResponse({ incomeStatement: data });
-}
-
-function handleCompanyBalance(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyBalance(config.workspaceRoot, slug, year);
-  return okResponse({ balance: data });
-}
-
-function handleCompanyTrialBalance(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyTrialBalance(config.workspaceRoot, slug, year);
-  return okResponse({ trialBalance: data });
-}
-
-/**
- * GET /api/companies/:slug/(income-statement|balance|trial-balance)/export
- * — #372: cockpittet skal kunne hente de tre kerne-rapporter som CSV-filer
- * uden at gå via "Print hele browser-siden". Endpointet returnerer en
- * UTF-8-BOM-CSV med stabile danske kolonnenavne (header + metadata-blok), så
- * filen åbner direkte i Excel/Numbers/Sheets.
- *
- * Kun `format=csv` er understøttet i denne første slice — PDF-eksporten
- * kræver en ny render-pipeline og er bevidst udskudt til et opfølger-issue.
- * Et fravær eller `format=csv` accepteres som CSV; alt andet (fx `pdf`,
- * `xlsx`) afvises som en venlig 400 så cockpittet kan vise en hint i
- * stedet for at silent-fejle.
- */
-function handleCompanyStatementExport(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-  kind: "income-statement" | "balance" | "trial-balance",
-): Response {
-  const format = (url.searchParams.get("format") ?? "csv").toLowerCase();
-  if (format !== "csv" && format !== "pdf") {
-    throw ApiError.badRequest(
-      `format=${format} understøttes ikke — kun csv og pdf er gyldige.`,
-    );
-  }
-  const year = resolveYearParam(url.searchParams.get("year"));
-  if (format === "pdf") {
-    // #463 — PDF-slice. Deterministisk Helvetica/WinAnsi PDF uden
-    // browser-print-chrome; samme tal som CSV-eksporten.
-    let pdfExport: { content: Buffer; filename: string };
-    if (kind === "income-statement") {
-      pdfExport = exportIncomeStatementPdf(config.workspaceRoot, slug, year);
-    } else if (kind === "balance") {
-      pdfExport = exportBalancePdf(config.workspaceRoot, slug, year);
-    } else {
-      pdfExport = exportTrialBalancePdf(config.workspaceRoot, slug, year);
-    }
-    return new Response(pdfExport.content, {
-      headers: {
-        "content-type": "application/pdf",
-        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(pdfExport.filename)}`,
-        "x-content-type-options": "nosniff",
-        "cache-control": "private, no-store",
-      },
-    });
-  }
-  let exported: StatementCsvExport;
-  if (kind === "income-statement") {
-    exported = exportIncomeStatementCsv(config.workspaceRoot, slug, year);
-  } else if (kind === "balance") {
-    exported = exportBalanceCsv(config.workspaceRoot, slug, year);
-  } else {
-    exported = exportTrialBalanceCsv(config.workspaceRoot, slug, year);
-  }
-  return new Response(exported.content, {
-    headers: {
-      // text/csv per RFC 4180; charset=utf-8 fordi vi præfikser med en BOM.
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(exported.filename)}`,
-      "x-content-type-options": "nosniff",
-      "cache-control": "private, no-store",
-    },
-  });
-}
-
-/**
- * GET /api/companies/:slug/journal/export
- *
- * #465 — Posteringer (kassekladde) som CSV-download. Samme mønster som
- * statement-eksporterne (#372/#462): kun `format=csv` understøttes; et
- * valgfrit `account=<kontonr>` filtrerer til drilldown på en konto.
- */
-/**
- * GET /api/companies/:slug/vat/export?format=pdf — Moms-rapport som PDF
- * (#464). Kun PDF understøttes; CSV-eksport af Moms er ikke en separat
- * use case — momsangivelsens form er stabil og bedst som PDF.
- */
-function handleCompanyVatExport(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const format = (url.searchParams.get("format") ?? "pdf").toLowerCase();
-  if (format !== "pdf") {
-    throw ApiError.badRequest(
-      `format=${format} understøttes ikke — kun pdf er gyldig for moms-eksport.`,
-    );
-  }
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const exported = exportVatPdf(config.workspaceRoot, slug, year);
-  return new Response(exported.content, {
-    headers: {
-      "content-type": "application/pdf",
-      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(exported.filename)}`,
-      "x-content-type-options": "nosniff",
-      "cache-control": "private, no-store",
-    },
-  });
-}
-
-function handleCompanyJournalExport(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const format = (url.searchParams.get("format") ?? "csv").toLowerCase();
-  if (format !== "csv") {
-    throw ApiError.badRequest(
-      `format=${format} understøttes ikke — kun csv er gyldig for posteringer-eksport.`,
-    );
-  }
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const account = url.searchParams.get("account");
-  const exported = exportJournalCsv(config.workspaceRoot, slug, year, account);
-  return new Response(exported.content, {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(exported.filename)}`,
-      "x-content-type-options": "nosniff",
-      "cache-control": "private, no-store",
-    },
-  });
-}
-
-function handleCompanyJournal(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const account = url.searchParams.get("account");
-  const data = buildCompanyJournal(config.workspaceRoot, slug, year, account);
-  return okResponse({ journal: data });
-}
-
-function handleCompanyBank(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyBank(config.workspaceRoot, slug, year);
-  return okResponse({ bank: data });
-}
-
-function handleCompanyVat(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyVat(config.workspaceRoot, slug, year);
-  return okResponse({ vat: data });
-}
-
-function handleCompanyDocuments(config: ServerConfig, slug: string): Response {
-  const data = buildCompanyDocuments(config.workspaceRoot, slug);
-  return okResponse({ documents: data });
-}
-
-/**
- * GET /api/companies/:slug/documents/:id/booking-options — the read-side data
- * the Bogfør-bilag modal needs (#407): the document fields to prefill, the
- * bookable expense accounts, and the unmatched outgoing bank transactions the
- * owner can pair the bilag with. A read route, so it bypasses the mutation
- * pipeline; an unknown company / ledger / document is a 404.
- */
-function handleCompanyDocumentBookingOptions(
-  config: ServerConfig,
-  slug: string,
-  idRaw: string,
-): Response {
-  const id = Number(idRaw);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw ApiError.badRequest("document id must be a positive integer");
-  }
-  const data = buildDocumentBookingOptions(config.workspaceRoot, slug, id);
-  return okResponse({ options: data });
-}
-
-function handleCompanyRecurringInvoices(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyRecurringInvoices(config.workspaceRoot, slug);
-  return okResponse({ recurringInvoices: data });
-}
-
-/**
- * GET /api/companies/:slug/documents/:id/file — serves the stored bilag file
- * so a human can open it in the cockpit. A read route, so it does not run the
- * mutation pipeline; an unknown company or document is a 404.
- */
-function handleCompanyDocumentFile(
-  config: ServerConfig,
-  slug: string,
-  idRaw: string,
-): Response {
-  const id = Number(idRaw);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw ApiError.badRequest("document id must be a positive integer");
-  }
-  const file = resolveCompanyDocumentFile(config.workspaceRoot, slug, id);
-  // PDFs and images render safely inline; anything else (txt/json/unknown) is
-  // sent as a download so the browser never renders it inside the cockpit's
-  // own origin. `nosniff` stops the browser re-sniffing the body as HTML.
-  // `filename*` carries the (possibly non-ASCII) name per RFC 5987.
-  const inline =
-    file.mimeType === "application/pdf" || file.mimeType.startsWith("image/");
-  return new Response(Bun.file(file.path), {
-    headers: {
-      "content-type": file.mimeType,
-      "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
-      "x-content-type-options": "nosniff",
-      "cache-control": "private, no-store",
-    },
-  });
-}
-
-/**
- * GET /api/companies/:slug/invoices/:id/pdf — serves the issued-invoice PDF so
- * the owner can download or forward it without leaving the cockpit (#378). The
- * bytes come from the same `renderIssuedInvoicePdf` core the CLI uses, so the
- * PDF is byte-identical to `bun run cli invoice render <id>`.
- */
-function handleCompanyInvoicePdf(
-  config: ServerConfig,
-  slug: string,
-  idRaw: string,
-): Response {
-  const id = Number(idRaw);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw ApiError.badRequest("invoice id must be a positive integer");
-  }
-  const file = resolveCompanyIssuedInvoicePdf(config.workspaceRoot, slug, id);
-  return new Response(Bun.file(file.path), {
-    headers: {
-      "content-type": file.mimeType,
-      "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
-      "x-content-type-options": "nosniff",
-      "cache-control": "private, no-store",
-    },
-  });
-}
-
-function handleCompanyArchiveYear(
-  config: ServerConfig,
-  slug: string,
-  yearRaw: string,
-): Response {
-  const year = resolvePathYear(yearRaw);
-  const data = buildCompanyArchiveYear(config.workspaceRoot, slug, year);
-  return okResponse({ archive: data });
-}
-
-function handleCompanyMultiYear(config: ServerConfig, slug: string): Response {
-  const data = buildCompanyMultiYear(config.workspaceRoot, slug);
-  return okResponse({ multiYear: data });
-}
-
-function handleCompanyInvoices(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyInvoices(config.workspaceRoot, slug, year);
-  return okResponse({ invoices: data });
-}
-
-function handleCompanyContacts(config: ServerConfig, slug: string): Response {
-  const data = buildCompanyContacts(config.workspaceRoot, slug);
-  return okResponse({ contacts: data });
-}
-
-function handleCompanyAssets(config: ServerConfig, slug: string): Response {
-  const data = buildCompanyAssets(config.workspaceRoot, slug);
-  return okResponse({ assets: data });
-}
-
-function handleAssetNextDepreciation(
-  config: ServerConfig,
-  slug: string,
-  assetIdRaw: string,
-): Response {
-  const assetId = Number(assetIdRaw);
-  const data = buildAssetNextDepreciationPeriod(
-    config.workspaceRoot,
-    slug,
-    assetId,
-  );
-  return okResponse({ nextDepreciation: data });
-}
-
-function handleCompanySettings(config: ServerConfig, slug: string): Response {
-  const data = buildCompanySettings(config.workspaceRoot, slug);
-  return okResponse({ company: data });
-}
-
-/**
- * Refreshes a company's CVR-register stamdata. The CVR lookup runs server-side
- * so the CVR credentials never reach the browser. A failed lookup (missing
- * credentials, unknown CVR) is reported inside `sync.ok`, not as an HTTP error.
- */
-async function handleCompanySyncCvr(
-  config: ServerConfig,
-  slug: string,
-): Promise<Response> {
-  const data = await syncCompanyCvr(config.workspaceRoot, slug);
-  return okResponse({ sync: data });
-}
-
-function handleCompanyObligations(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyObligations(config.workspaceRoot, slug, year);
-  return okResponse({ obligations: data });
-}
-
-function handleCompanyCashflow(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyCashflow(config.workspaceRoot, slug, year);
-  return okResponse({ cashflow: data });
-}
-
-/**
- * GET /api/companies/:slug/mileage[?year=] — the cockpit Kørsel view (#335).
- * Re-uses the SAME mileage core (`buildMileagePeriodReport`) the CLI's
- * `mileage report` command runs; the server just opens the ledger and shapes
- * the JSON.
- */
-function handleCompanyMileage(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyMileage(config.workspaceRoot, slug, year);
-  return okResponse({ mileage: data });
-}
-
-/**
- * GET /api/companies/:slug/budget?year= — the effective (latest-revision)
- * budget lines for one fiscal year (#339). Drives the Budget input grid in
- * the cockpit; latest-revision-wins is owned by `core/budget.ts#listBudget`.
- */
-function handleCompanyBudget(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyBudget(config.workspaceRoot, slug, year);
-  return okResponse({ budget: data });
-}
-
-/**
- * GET /api/companies/:slug/budget-vs-actual?year= — the budget-vs-faktisk
- * comparison for one fiscal year (#339). Third caller of the same
- * `buildBudgetVsActual` core the CLI report uses, so every surface gets the
- * same numbers and the same sign convention.
- */
-function handleCompanyBudgetVsActual(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const year = resolveYearParam(url.searchParams.get("year"));
-  const data = buildCompanyBudgetVsActual(config.workspaceRoot, slug, year);
-  return okResponse({ budgetVsActual: data });
-}
-
-/**
- * Parses the optional `payment` body field on the create-company form (#284)
- * into a core `CompanyPaymentInput`. Every sub-field is optional — `createCompany`
- * only creates the primary bank account when at least one carries information.
- */
-function parseCreatePayment(
-  body: Record<string, unknown>,
-): { bankName?: string; registrationNo?: string; accountNo?: string; iban?: string } | undefined {
-  const raw = body.payment;
-  if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== "object" || Array.isArray(raw)) {
-    throw ApiError.badRequest("'payment' must be an object when present");
-  }
-  const p = raw as Record<string, unknown>;
-  const payment: {
-    bankName?: string;
-    registrationNo?: string;
-    accountNo?: string;
-    iban?: string;
-  } = {};
-  for (const field of ["bankName", "registrationNo", "accountNo", "iban"] as const) {
-    const value = optionalString(p, field);
-    if (value !== undefined) payment[field] = value;
-  }
-  return Object.keys(payment).length > 0 ? payment : undefined;
-}
-
-async function handleCompanyCreate(
-  config: ServerConfig,
-  request: Request,
-): Promise<Response> {
-  const body = await readJsonBody(request);
-  const name = requireString(body, "name");
-  const payment = parseCreatePayment(body);
-  let result;
-  try {
-    result = createCompany(config.workspaceRoot, {
-      name,
-      slug: optionalString(body, "slug"),
-      cvr: optionalString(body, "cvr") ?? null,
-      fiscalYearStartMonth: optionalString(body, "fiscalYearStartMonth"),
-      fiscalYearLabelStrategy: optionalString(body, "fiscalYearLabelStrategy"),
-      // #300: the VAT settlement cadence. `initialiseCompanyVolume` validates
-      // it and throws on an unknown value — re-mapped to a 400 below.
-      vatPeriodType: optionalString(body, "vatPeriodType"),
-      ...(payment ? { payment } : {}),
-    });
-  } catch (err) {
-    // createCompany throws plain Errors for invalid slug / duplicate. Re-map
-    // them to a safe code; the messages it produces are curated (no paths)
-    // — except `companyRoot`, which createCompany only embeds for the
-    // "already exists" case, so collapse that to a generic conflict.
-    const message = err instanceof Error ? err.message : String(err);
-    if (/already exists|already registered/i.test(message)) {
-      throw ApiError.conflict("der findes allerede en virksomhed med den slug");
-    }
-    throw ApiError.badRequest(message);
-  }
-  return okResponse(
-    {
-      company: { slug: result.slug, name: result.name },
-    },
-    201,
-  );
-}
-
-/**
- * Updates a registered company's mutable workspace metadata: the display
- * `name` and/or the `archived` flag. This never touches the slug or the
- * ledger — there is deliberately NO destructive delete of ledger data.
- */
-async function handleCompanyUpdate(
-  config: ServerConfig,
-  slug: string,
-  request: Request,
-): Promise<Response> {
-  if (!findWorkspaceCompany(config.workspaceRoot, slug)) {
-    throw ApiError.notFound(`ingen virksomhed med slug '${slug}' findes i workspacet`);
-  }
-  const body = await readJsonBody(request);
-  const name = optionalString(body, "name");
-  const archivedRaw = body.archived;
-  if (archivedRaw !== undefined && typeof archivedRaw !== "boolean") {
-    throw ApiError.badRequest("'archived' must be a boolean when present");
-  }
-  if (name === undefined && archivedRaw === undefined) {
-    throw ApiError.badRequest("angiv 'name' og/eller 'archived' for at opdatere");
-  }
-  try {
-    let entry = findWorkspaceCompany(config.workspaceRoot, slug)!;
-    if (name !== undefined) {
-      entry = renameWorkspaceCompany(config.workspaceRoot, slug, name);
-    }
-    if (typeof archivedRaw === "boolean") {
-      entry = setWorkspaceCompanyArchived(config.workspaceRoot, slug, archivedRaw);
-    }
-    return okResponse({
-      company: {
-        slug: entry.slug,
-        name: entry.name,
-        createdAt: entry.createdAt,
-        archived: entry.archived,
-      },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw ApiError.badRequest(message);
-  }
-}
-
-/**
- * GET /api/companies/:slug/payables — the read-side payload backing the
- * Leverandørfaktura-arbejdsbordet (#340): the kreditorliste from
- * `core/payables.ts#buildPayablesList`, plus the modal picker rows (vendors,
- * expense accounts, unregistered purchase documents) the "Registrér
- * leverandørfaktura"-modal needs to register an existing bilag.
- *
- * `?status=` filters the list: `open` (default), `paid`, `overdue`, `all`.
- * `?asOf=YYYY-MM-DD` overrides the comparison date for the aging buckets.
- */
-function handleCompanyPayables(
-  config: ServerConfig,
-  slug: string,
-  url: URL,
-): Response {
-  const status = url.searchParams.get("status");
-  const asOf = url.searchParams.get("asOf");
-  const data = buildCompanyPayables(config.workspaceRoot, slug, status, asOf);
-  return okResponse({ payables: data });
-}
-
-/**
- * GET /api/companies/:slug/agent-suggestions — the agent-forslag-kø (#346):
- * every open `AGENT_*` exception, enriched with the agent's rule id, rationale
- * and audit attribution. The cockpit's Agent-forslag view drives off this
- * payload; approve/reject lives in the matching write routes.
- */
-function handleCompanyAgentSuggestions(
-  config: ServerConfig,
-  slug: string,
-): Response {
-  const data = buildCompanyAgentSuggestions(config.workspaceRoot, slug);
-  return okResponse({ agentSuggestions: data });
-}
-
 // --------------------------------------------------------------------------
 // Dispatch
 // --------------------------------------------------------------------------
@@ -1143,7 +272,7 @@ export async function handleRequest(
 
     if (path === "/api" || path === "/api/health") {
       if (method !== "GET") throw ApiError.methodNotAllowed("kun GET er understøttet på denne rute");
-      return handleHealth(config);
+      return handleHealth(config, ROUTE_CATALOG);
     }
 
     // #402 — CVR-login status, so the cockpit can offer a friendly path
@@ -1936,7 +1065,7 @@ export async function handleRequest(
         const asset = serveStatic(config.staticRoot, path);
         if (asset) return asset;
         // No SPA built — keep `/` a friendly health probe for API-only runs.
-        if (path === "/") return handleHealth(config);
+        if (path === "/") return handleHealth(config, ROUTE_CATALOG);
       }
     }
 
