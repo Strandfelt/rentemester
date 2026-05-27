@@ -250,6 +250,7 @@ Rentemester er stadig under udvikling og bør endnu ikke være din eneste kilde 
 - regnskabsrapporter: saldobalance, resultatopgørelse og balance
 - en årsrapport for regnskabsklasse B, der kan skrive en iXBRL-fil — Rentemester forbereder, du og din revisor gennemgår og indberetter
 - et statisk HTML-dashboard over virksomhedens aktuelle status
+- en deterministisk **compliance-rapport** du kan udlevere til revisor eller myndighed: audit-kæde-status, backup-status, retention, GDPR, regulatorisk dækning og hele regel→paragraf-mappingen i ét printbart HTML-dokument med sha256-fingerprint
 
 **Sikkerhed, backup og udlevering**
 

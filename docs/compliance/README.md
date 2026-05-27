@@ -45,6 +45,41 @@ compliance — den agenten ikke selv kan afgøre.
   - [Google Workspace (Data Regions = Europa)](backup-destinations/google-workspace.md)
   - [Skabelon for nye udbydere](backup-destinations/_TEMPLATE.md)
 
+## Compliance-rapport til revisor
+
+Når en revisor, bogholder eller myndighed vil se virksomhedens
+nuværende compliance-billede i ét dokument, kan rapporten genereres
+deterministisk:
+
+```bash
+rentemester compliance report \
+  --company <path> \
+  --out compliance-rapport.html \
+  --as-of YYYY-MM-DD
+```
+
+Rapporten samler i ét HTML-dokument:
+
+1. Audit-kæde-status (hash-chain verificeret + entry count)
+2. Backup-overholdelse (governance-status + EU/EØS-attestering pr.
+   destination)
+3. Retention pr. tabel (dokumenter, bogføringsposter, banktransaktioner)
+4. Periode-lukning (lukkede regnskabsperioder + senest lukkede)
+5. GDPR-posture (event count + signeret audit-log-fingerprint)
+6. Regulatorisk dækning (in-scope cited/operative + per kilde +
+   closure/drift/scope-fejl)
+7. Den fulde regel→paragraf-mapping (alle rule_id grupperet efter
+   kategori, med citationer til Bogføringsloven, Momsbek, Renteloven
+   m.fl.)
+8. Pegere til myndighedsudlevering, SAF-T og revisor-håndoff
+
+Rapporten er byte-for-byte deterministisk for samme ledger-tilstand
+og samme `--as-of`/`--as-of-instant`, så en sha256-fingerprint i
+footeren gør det muligt for revisor at bekræfte at den udleverede
+kopi ikke er blevet ændret. Render-koden er ren (`src/core/compliance-
+report.ts`); CLI-handleren (`src/cli/compliance.ts`) samler virksomheds-
+data fra de eksisterende kerne-API'er og passerer dem ind.
+
 ## Sådan opdaterer du dokumentationen, når en regel ændres
 
 Når der lægges en ny rule_id til, eller en eksisterende ændrer paragraf-
