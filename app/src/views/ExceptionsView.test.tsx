@@ -129,4 +129,24 @@ describe("ExceptionsView (#332)", () => {
       screen.getByText(/Tilføj leverandørens CVR/),
     ).toBeInTheDocument();
   });
+
+  test("en fejlet load er ikke en blindgyde — der er en 'Prøv igen'-knap", async () => {
+    // Når selve listen ikke kan hentes, skal ErrorState tilbyde et retry
+    // (onRetry={state.reload}) — ellers er skærmen en dødvej.
+    mockFetch({
+      "GET /api/companies/acme-aps/exceptions": {
+        __error: { code: "internal", message: "Serveren svarede ikke." },
+      },
+    });
+    renderAt(<ExceptionsView />, {
+      route: "/companies/acme-aps/undtagelser",
+      path: "/companies/:slug/undtagelser",
+    });
+    expect(
+      await screen.findByText(/Serveren svarede ikke\./),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Prøv igen/ }),
+    ).toBeInTheDocument();
+  });
 });

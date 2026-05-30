@@ -11,6 +11,7 @@ import {
   registerInvoiceLateCompensation,
   postInvoiceLateCompensationToLedger,
 } from "../../../core/invoice-compensation";
+import { withActor } from "../../actor";
 import { envelopeShape, errorEnvelope, wrapCoreResult } from "../../envelope";
 import {
   withCompanyDbConfirmed,
@@ -72,17 +73,25 @@ export function registerInvoiceCompensationTools(server: McpServer): void {
       amountDkk?: number;
       note?: string;
       confirm?: boolean;
-    }>(server, "invoice_claim_compensation", ({ db, args }) => {
+    }>(server, "invoice_claim_compensation", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
       const blocked = requireInvoicePostedEnvelope(db, id, "invoice_claim_compensation");
       if (blocked) return blocked;
-      const result = registerInvoiceLateCompensation(db, {
-        invoiceDocumentId: id,
-        asOfDate: args.asOf,
-        compensationAmountDkk: args.amountDkk,
-        note: args.note,
-      });
+      // Actor-invariant (#63/#76): attribute the compensation-claim registration
+      // to the booking agent in the hash chain + audit_log, not the OS user.
+      const result = registerInvoiceLateCompensation(
+        db,
+        withActor(
+          {
+            invoiceDocumentId: id,
+            asOfDate: args.asOf,
+            compensationAmountDkk: args.amountDkk,
+            note: args.note,
+          },
+          actor,
+        ),
+      );
       return wrapCoreResult(result);
     }),
   );
@@ -114,7 +123,7 @@ export function registerInvoiceCompensationTools(server: McpServer): void {
       invoiceNumber?: string;
       date?: string;
       confirm?: boolean;
-    }>(server, "invoice_post_compensation", ({ db, args }) => {
+    }>(server, "invoice_post_compensation", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
       if (!hasRegisteredCompensationClaim(db, id)) {
@@ -123,9 +132,13 @@ export function registerInvoiceCompensationTools(server: McpServer): void {
             `Kald invoice_claim_compensation først for at registrere kravet før invoice_post_compensation.`,
         );
       }
+      // Actor-invariant (#63/#76): attribute the compensation posting to the
+      // booking agent in the hash chain + audit_log, not the OS user.
       const result = postInvoiceLateCompensationToLedger(db, {
         invoiceDocumentId: id,
         transactionDate: args.date,
+        createdBy: actor.createdBy,
+        createdByProgram: actor.createdByProgram,
       });
       return wrapCoreResult(result);
     }),

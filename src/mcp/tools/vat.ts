@@ -19,6 +19,7 @@ import {
 } from "../../core/vat";
 import { buildViesRecapitulativeStatement } from "../../core/vat-vies-list";
 import { buildOssReport } from "../../core/vat-oss";
+import { withActor } from "../actor";
 import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
@@ -227,7 +228,7 @@ export function registerVatTools(server: McpServer): void {
       company: string;
       payload: ReverseChargePurchaseInput & { invoiceNo?: string };
       confirm?: boolean;
-    }>(server, "vat_post_eu_service_purchase", ({ db, args }) => {
+    }>(server, "vat_post_eu_service_purchase", ({ db, actor, args }) => {
       const payload = { ...(args.payload as Record<string, unknown>) };
       const invoiceNo =
         typeof payload.invoiceNo === "string" ? (payload.invoiceNo as string).trim() : "";
@@ -244,7 +245,12 @@ export function registerVatTools(server: McpServer): void {
         }
         payload.documentId = row.id;
       }
-      const result = postEuServiceReverseChargePurchase(db, payload as ReverseChargePurchaseInput);
+      // Actor-invariant (#63/#76): attribute the reverse-charge posting to the
+      // booking agent in the hash chain + audit_log, not the OS user.
+      const result = postEuServiceReverseChargePurchase(
+        db,
+        withActor(payload as ReverseChargePurchaseInput, actor),
+      );
       return wrapCoreResult(result);
     }),
   );
@@ -268,8 +274,10 @@ export function registerVatTools(server: McpServer): void {
       company: string;
       payload: RepresentationPurchaseInput;
       confirm?: boolean;
-    }>(server, "vat_post_representation_purchase", ({ db, args }) => {
-      const result = postRepresentationPurchase(db, args.payload);
+    }>(server, "vat_post_representation_purchase", ({ db, actor, args }) => {
+      // Actor-invariant (#63/#76): attribute the representation posting to the
+      // booking agent in the hash chain + audit_log, not the OS user.
+      const result = postRepresentationPurchase(db, withActor(args.payload, actor));
       return wrapCoreResult(result);
     }),
   );

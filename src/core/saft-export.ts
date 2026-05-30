@@ -489,7 +489,12 @@ function renderSaftXml(input: {
       "        <Line>",
       xmlTag("LineNumber", index + 1, "          "),
       xmlTag("Description", line.description ?? null, "          "),
-      xmlTag("Quantity", formatAmount(line.quantity), "          "),
+      // Quantity is NOT a monetary amount — render it as-is, never through the
+      // 2-decimal øre money formatter (which would turn 3 into "3.00" and round
+      // a fractional 1.005 to "1.01"). Only a real number is emitted (mirroring
+      // the Peppol sibling's `typeof === "number"` guard), so a malformed
+      // non-number from a hand-edited payload cannot leak into the export.
+      xmlTag("Quantity", typeof line.quantity === "number" ? line.quantity : null, "          "),
       xmlTag("UnitPrice", formatAmount(line.unitPriceExVat), "          "),
       xmlTag("CreditAmount", formatAmount(line.lineTotalExVat), "          "),
       "        </Line>",

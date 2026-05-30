@@ -21,7 +21,9 @@ import {
 } from "../../core/public-einvoice";
 import {
   createSmtpTransport,
+  looksLikeEmail,
   sendInvoiceEmail,
+  validateSmtpConfig,
   type EmailKind,
   type SmtpConfig,
 } from "../../core/email";
@@ -814,6 +816,30 @@ export async function handleInvoiceSendReminder(
       const bookFee = optionalBodyBoolean(body, "bookFee") ?? true;
       const feeAmount = optionalBodyNumber(body, "feeAmount");
 
+      // (0) Load AND fully validate everything that can block the send BEFORE
+      //     any ledger write: the config file must exist, its CONTENT must be
+      //     valid (non-empty host, positive port, valid fromAddress — the same
+      //     checks sendInvoiceEmail runs internally at step 3), and the
+      //     recipient must be a real e-mail. All of these throw
+      //     ApiError.badRequest here, so the rentel. § 9b reminder and the
+      //     booked fee are never committed for a send that cannot happen.
+      //     Without this, the reminder + fee were permanently appended to the
+      //     append-only ledger and then a 400 was returned — a phantom reminder
+      //     that also counts against the max-3 / 10-days-apart limits on the
+      //     next attempt. (Validating only file-existence left the empty-host /
+      //     bad-fromAddress / bad-recipient cases still phantom-booking.)
+      const smtp = loadConfiguredSmtp(ctx.companyRoot);
+      const smtpErrors = validateSmtpConfig(smtp);
+      if (smtpErrors.length > 0) {
+        throw ApiError.badRequest(smtpErrors[0] ?? "SMTP er ikke konfigureret korrekt");
+      }
+      if (!looksLikeEmail(to)) {
+        throw ApiError.badRequest(
+          "modtagerens e-mailadresse er ugyldig — rykkeren kan ikke sendes",
+        );
+      }
+      const transport = createSmtpTransport(smtp);
+
       // Reminder date is "today" in ISO form (UTC slice) — the core enforces
       // the "10 days since previous reminder" rule and refuses anything that
       // would breach the statutory series.
@@ -859,14 +885,14 @@ export async function handleInvoiceSendReminder(
 
       // (3) Send the reminder e-mail. SAME core function as "Send på mail"
       //     (#429), with `kind: 'reminder'` so the subject + body match
-      //     what `invoice send --kind reminder` produces from the CLI.
-      const smtp = loadConfiguredSmtp(ctx.companyRoot);
+      //     what `invoice send --kind reminder` produces from the CLI. The
+      //     SMTP config + transport were already loaded in step (0).
       const sent = sendInvoiceEmail(ctx.db, ctx.companyRoot, {
         invoiceDocumentId,
         kind: "reminder",
         to,
         smtp,
-        transport: createSmtpTransport(smtp),
+        transport,
       });
       if (!sent.ok) {
         throw ApiError.badRequest(

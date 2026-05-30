@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { formatKroner } from "../lib/format";
+import { formatKroner, todayIso } from "../lib/format";
 import type { MileageEntrySummary } from "../lib/types";
 import { Banner } from "./Feedback";
 import { LockBanner } from "./LockBanner";
@@ -27,20 +27,12 @@ export type MileageRegisterModalProps = {
   onClose: () => void;
 };
 
-function todayIsoDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 export function MileageRegisterModal({
   slug,
   onRegistered,
   onClose,
 }: MileageRegisterModalProps) {
-  const [tripDate, setTripDate] = useState(todayIsoDate());
+  const [tripDate, setTripDate] = useState(todayIso());
   const [purpose, setPurpose] = useState("");
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");

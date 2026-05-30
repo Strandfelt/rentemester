@@ -10,6 +10,7 @@ import { openDb, migrate } from "../../src/core/db";
 import { ingestDocument } from "../../src/core/documents";
 import { buildVatReport } from "../../src/core/vat";
 import { buildVatFiling } from "../../src/core/vat-filing";
+import { vatRubrikkerForPeriod } from "../../src/server/data/vat";
 import { buildOssReport } from "../../src/core/vat-oss";
 import { closeAccountingPeriod } from "../../src/core/periods";
 import { postJournalEntry, seedAccounts } from "../../src/core/ledger";
@@ -209,6 +210,43 @@ describe("rubrik C — VAT-exempt sales", () => {
     expect(filing.rubrikker.rubrikC).toBe(5000);
     // No output VAT, no standard sales.
     expect(filing.rubrikker.salgsmoms).toBe(0);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(inbox, { recursive: true, force: true });
+  });
+
+  test("cockpit vatRubrikkerForPeriod reports rubrik C from exempt sales (CLI parity, not hardcoded 0)", () => {
+    const { root, inbox, db } = newCompany("rentemester-exempt-cockpit-");
+    const docId = ingest(db, root, inbox, "INV-EX-COCKPIT");
+
+    postJournalEntry(db, {
+      transactionDate: "2026-03-09",
+      text: "Momsfrit salg",
+      documentId: docId,
+      lines: [
+        { accountNo: "2000", debitAmount: 5000 },
+        { accountNo: "1000", creditAmount: 5000, vatCode: "DK_SALE_EXEMPT" },
+      ],
+    });
+
+    // The cockpit momsangivelse surface (works on an OPEN period) must show
+    // the SAME rubrik C as the CLI's `vat momsangivelse` (buildVatFiling, which
+    // needs the period closed). A stale hardcoded 0 here understated
+    // §13-exempt sales for an owner filing from the cockpit.
+    const cockpit = vatRubrikkerForPeriod(db, "2026-03-01", "2026-03-31");
+    expect(cockpit.rubrikC).toBe(5000);
+
+    const closed = closeAccountingPeriod(db, {
+      periodStart: "2026-03-01",
+      periodEnd: "2026-03-31",
+      kind: "vat_quarter",
+      status: "closed",
+      createdBy: "agent:test",
+    });
+    expect(closed.ok).toBe(true);
+    const filing = buildVatFiling(db, "2026-03-01", "2026-03-31");
+    expect(cockpit.rubrikC).toBe(filing.rubrikker.rubrikC);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

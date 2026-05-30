@@ -10,6 +10,7 @@ import {
   registerInvoiceReminder,
   postInvoiceReminderToLedger,
 } from "../../../core/invoice-reminders";
+import { withActor } from "../../actor";
 import { envelopeShape, errorEnvelope, wrapCoreResult } from "../../envelope";
 import {
   withCompanyDbConfirmed,
@@ -71,17 +72,25 @@ export function registerInvoiceReminderTools(server: McpServer): void {
       fee?: number;
       note?: string;
       confirm?: boolean;
-    }>(server, "invoice_remind", ({ db, args }) => {
+    }>(server, "invoice_remind", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
       const blocked = requireInvoicePostedEnvelope(db, id, "invoice_remind");
       if (blocked) return blocked;
-      const result = registerInvoiceReminder(db, {
-        invoiceDocumentId: id,
-        reminderDate: args.date,
-        feeAmount: args.fee,
-        note: args.note,
-      });
+      // Actor-invariant (#63/#76): attribute the reminder-registration entry to
+      // the booking agent in the hash chain + audit_log, not the OS user.
+      const result = registerInvoiceReminder(
+        db,
+        withActor(
+          {
+            invoiceDocumentId: id,
+            reminderDate: args.date,
+            feeAmount: args.fee,
+            note: args.note,
+          },
+          actor,
+        ),
+      );
       return wrapCoreResult(result);
     }),
   );
@@ -124,7 +133,7 @@ export function registerInvoiceReminderTools(server: McpServer): void {
       reminderId?: number;
       date?: string;
       confirm?: boolean;
-    }>(server, "invoice_post_reminder", ({ db, args }) => {
+    }>(server, "invoice_post_reminder", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
       if (!hasRegisteredReminder(db, id)) {
@@ -133,10 +142,14 @@ export function registerInvoiceReminderTools(server: McpServer): void {
             `Kald invoice_remind først for at registrere rykkeren før invoice_post_reminder.`,
         );
       }
+      // Actor-invariant (#63/#76): attribute the reminder-fee posting to the
+      // booking agent in the hash chain + audit_log, not the OS user.
       const result = postInvoiceReminderToLedger(db, {
         invoiceDocumentId: id,
         reminderId: args.reminderId,
         transactionDate: args.date,
+        createdBy: actor.createdBy,
+        createdByProgram: actor.createdByProgram,
       });
       return wrapCoreResult(result);
     }),

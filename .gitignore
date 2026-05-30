@@ -26,3 +26,6 @@ app/dist/
 
 # Local scratch — private migration data, kept out of git
 helheim/
+
+# Private noter (møder, samtaler, research) — ikke i git
+notes/

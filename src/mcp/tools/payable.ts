@@ -18,6 +18,7 @@ import {
   payPayableFromBank,
   buildPayablesList,
 } from "../../core/payables";
+import { withActor } from "../actor";
 import { envelopeShape, wrapCoreResult } from "../envelope";
 import { withCompanyDb, withCompanyDbConfirmed, confirmField } from "../tool-runtime";
 
@@ -81,16 +82,25 @@ export function registerPayableTools(server: McpServer): void {
       vendorId?: number;
       note?: string;
       confirm?: boolean;
-    }>(server, "payable_register", ({ db, args }) => {
-      const result = registerPayable(db, {
-        documentId: args.documentId,
-        billDate: args.billDate,
-        dueDate: args.dueDate,
-        expenseAccountNo: args.expenseAccount,
-        vatTreatment: args.vatTreatment,
-        vendorId: args.vendorId,
-        note: args.note,
-      });
+    }>(server, "payable_register", ({ db, actor, args }) => {
+      // Actor-invariant (#63/#76): thread the MCP-client identity into the
+      // hash-chained ledger so the creditor recognition entry is attributed to
+      // the booking agent, not the OS user. withActor keeps explicit values.
+      const result = registerPayable(
+        db,
+        withActor(
+          {
+            documentId: args.documentId,
+            billDate: args.billDate,
+            dueDate: args.dueDate,
+            expenseAccountNo: args.expenseAccount,
+            vatTreatment: args.vatTreatment,
+            vendorId: args.vendorId,
+            note: args.note,
+          },
+          actor,
+        ),
+      );
       return wrapCoreResult(result);
     }),
   );
@@ -148,15 +158,23 @@ export function registerPayableTools(server: McpServer): void {
       paymentAccount?: string;
       note?: string;
       confirm?: boolean;
-    }>(server, "payable_pay", ({ db, args }) => {
-      const result = payPayableFromBank(db, {
-        payableId: args.payableId,
-        bankTransactionId: args.bankTransactionId,
-        amount: args.amount,
-        paymentDate: args.date,
-        paymentAccountNo: args.paymentAccount,
-        note: args.note,
-      });
+    }>(server, "payable_pay", ({ db, actor, args }) => {
+      // Actor-invariant (#63/#76): attribute the settlement entry to the
+      // booking agent in the hash-chained ledger + audit_log, not the OS user.
+      const result = payPayableFromBank(
+        db,
+        withActor(
+          {
+            payableId: args.payableId,
+            bankTransactionId: args.bankTransactionId,
+            amount: args.amount,
+            paymentDate: args.date,
+            paymentAccountNo: args.paymentAccount,
+            note: args.note,
+          },
+          actor,
+        ),
+      );
       return wrapCoreResult(result);
     }),
   );

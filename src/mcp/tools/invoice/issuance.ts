@@ -13,6 +13,7 @@ import { resolveInvoiceMasterData } from "../../../core/master-data";
 import { postIssuedInvoiceToLedger } from "../../../core/invoice-booking";
 import { renderIssuedInvoicePdf } from "../../../core/invoice-pdf";
 import { issueCreditNote, type IssueCreditNoteInput } from "../../../core/credit-notes";
+import { withActor } from "../../actor";
 import { envelopeShape, wrapCoreResult } from "../../envelope";
 import {
   withCompanyDbConfirmed,
@@ -149,9 +150,15 @@ export function registerInvoiceIssuanceTools(server: McpServer): void {
     withCompanyDbConfirmed<{ company: string; payload: IssueCreditNoteInput; confirm?: boolean }>(
       server,
       "invoice_credit_note",
-      ({ db, args }) => {
+      ({ db, actor, args }) => {
         const resolved = resolveOriginalInvoice(db, args.payload as Record<string, unknown>);
-        const result = issueCreditNote(db, args.company, resolved as IssueCreditNoteInput);
+        // Actor-invariant (#63/#76): attribute the credit-note's reversal entry
+        // to the booking agent in the hash-chained ledger + audit_log.
+        const result = issueCreditNote(
+          db,
+          args.company,
+          withActor(resolved as IssueCreditNoteInput, actor),
+        );
         return wrapCoreResult(result);
       },
     ),
@@ -175,10 +182,16 @@ export function registerInvoiceIssuanceTools(server: McpServer): void {
       documentId?: number;
       invoiceNumber?: string;
       confirm?: boolean;
-    }>(server, "invoice_post", ({ db, args }) => {
+    }>(server, "invoice_post", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
-      const result = postIssuedInvoiceToLedger(db, { invoiceDocumentId: id });
+      // Actor-invariant (#63/#76): attribute the ledger posting to the booking
+      // agent in the hash chain + audit_log, not the OS user / "system".
+      const result = postIssuedInvoiceToLedger(db, {
+        invoiceDocumentId: id,
+        createdBy: actor.createdBy,
+        createdByProgram: actor.createdByProgram,
+      });
       return wrapCoreResult(result);
     }),
   );

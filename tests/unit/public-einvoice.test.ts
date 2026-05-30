@@ -152,6 +152,10 @@ describe("public e-invoice preview export", () => {
     expect(first.xml).toContain("<cbc:IdentificationCode>DK</cbc:IdentificationCode>");
     // Buyer name carried as the legal RegistrationName (BT-44).
     expect(first.xml).toContain("<cbc:RegistrationName>Københavns Kommune</cbc:RegistrationName>");
+    // VAT percent follows the canonical 0..1→×100 contract: a 0.25 rate renders
+    // as "25" (BT-119/BT-152), never "0.25" — and a 1.0 rate would be "100",
+    // never "1" (the old heuristic's bug).
+    expect(first.xml).toContain("<cbc:Percent>25</cbc:Percent>");
 
     const auditRows = db.query(
       "SELECT event_type, entity_type, entity_id, message FROM audit_log WHERE event_type = 'public_einvoice_oioubl_export' ORDER BY id ASC",
@@ -164,6 +168,43 @@ describe("public e-invoice preview export", () => {
       entity_id: String(issued.documentId),
       message: `Generated public OIOUBL handoff artifact for invoice 2026-0001 (sha256 ${first.sha256})`,
     });
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("renders a 100% VAT rate as cbc:Percent 100, not the old heuristic's 1", () => {
+    // totals.vatRate is the canonical 0..1 fraction, so 1.0 means 100%. The old
+    // `Number.isInteger(value) ? String(value) : ...` heuristic emitted "1" for
+    // a 1.0 rate (1% on the transmitted Peppol line, disagreeing with the
+    // invoice's own TaxAmount). The canonical ×100 rule renders "100".
+    const root = mkdtempSync(join(tmpdir(), "rentemester-public-oioubl-100pct-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-05-20",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: {
+        name: "Københavns Kommune",
+        address: "Rådhuset, 1599 København V",
+        publicRecipient: true,
+        eanNumber: "5790000000001",
+      },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 1000, lineTotalExVat: 1000 }],
+      totals: { netAmount: 1000, vatRate: 1.0, vatAmount: 1000, grossAmount: 2000 },
+      currency: "DKK",
+      dueDate: "2026-06-19",
+    });
+    expect(issued.ok).toBe(true);
+
+    const exported = exportPublicEInvoiceOioUbl(db, { invoiceDocumentId: issued.documentId! });
+    expect(exported.ok).toBe(true);
+    expect(exported.xml).toContain("<cbc:Percent>100</cbc:Percent>");
+    expect(exported.xml).not.toContain("<cbc:Percent>1</cbc:Percent>");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

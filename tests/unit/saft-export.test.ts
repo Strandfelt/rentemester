@@ -70,6 +70,10 @@ describe("SAF-T export", () => {
     expect(xml).toContain("<AccountID>1000</AccountID>");
     expect(xml).toContain("<TransactionID>2026-00001</TransactionID>");
     expect(xml).toContain("<InvoiceNo>2026-0001</InvoiceNo>");
+    // Quantity is a plain count, not a money value: integer 1 renders as "1",
+    // never the 2-decimal "1.00" the øre money formatter would emit.
+    expect(xml).toContain("<Quantity>1</Quantity>");
+    expect(xml).not.toContain("<Quantity>1.00</Quantity>");
 
     db.close();
     rmSync(root, { recursive: true, force: true });

@@ -87,8 +87,12 @@ export function ExceptionsView() {
     }
   };
 
-  if (state.loading) return <Loading />;
-  if (state.error) return <ErrorState message={state.error} />;
+  // Keep stale data visible during a reload (matches DashboardView/InvoicesView/
+  // BankView) — only show the spinner on the FIRST load, never on a refresh.
+  if (state.loading && !state.data) return <Loading />;
+  // `onRetry` so a failed load is not a dead end — the owner can re-run it.
+  if (state.error)
+    return <ErrorState message={state.error} onRetry={state.reload} />;
   const data = state.data!;
   const rows = data.rows;
 

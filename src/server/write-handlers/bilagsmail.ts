@@ -80,12 +80,16 @@ export async function handleSetBilagsmailAlias(
 ): Promise<Response> {
   await withCompanyMutation(request, config, slug, (ctx, body) => {
     const raw = body["alias"];
-    const alias =
-      raw === null || raw === undefined
-        ? null
-        : typeof raw === "string"
-          ? raw
-          : null;
+    // Only a string sets the alias and only null/absent clears it. A
+    // present-but-non-string value (e.g. `{ alias: 123 }`) is a malformed
+    // request that INTENDS to set an alias — rejecting it with a 400 (like
+    // every other body parser) is far safer than the old coercion-to-null,
+    // which silently ERASED the company's existing alias. The core trims and
+    // lower-cases the string, so no handler-side normalisation is needed.
+    if (raw !== null && raw !== undefined && typeof raw !== "string") {
+      throw ApiError.badRequest("'alias' skal være en streng eller null");
+    }
+    const alias = typeof raw === "string" ? raw : null;
     setCompanyMailAlias(ctx.db, alias);
     void ctx.actor;
     return { ok: true, errors: [] as string[] };

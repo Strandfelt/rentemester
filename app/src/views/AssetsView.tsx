@@ -24,7 +24,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { formatKroner } from "../lib/format";
+import { formatKroner, todayIso } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type {
   AssetRow,
@@ -283,7 +283,9 @@ function AssetRowView({
     setBusy(true);
     try {
       await api.depreciateAsset(slug, row.assetId, {
-        transactionDate: new Date().toISOString().slice(0, 10),
+        // Use the LOCAL date — `toISOString()` is UTC and would mis-date a
+        // BOOKED afskrivning in Danish evening hours (UTC+1/+2 → off by one).
+        transactionDate: todayIso(),
       });
       onPosted();
     } catch (err) {
@@ -388,9 +390,9 @@ function RegisterAssetModal({
   const docs = useDocumentPicker(slug);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("hardware");
-  const [acquisitionDate, setAcquisitionDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  // Default to the LOCAL date — `toISOString()` is UTC and is off-by-one in
+  // Danish evening hours (UTC+1/+2), pre-filling tomorrow's date.
+  const [acquisitionDate, setAcquisitionDate] = useState(todayIso());
   const [cost, setCost] = useState("");
   const [usefulLifeMonths, setUsefulLifeMonths] = useState("36");
   const [purchaseDocumentId, setPurchaseDocumentId] = useState<string>("");
@@ -549,12 +551,10 @@ function WriteOffModal({
   const docs = useDocumentPicker(slug);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("smaaanskaffelser");
-  const [acquisitionDate, setAcquisitionDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
-  const [transactionDate, setTransactionDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  // Default to the LOCAL date — `toISOString()` is UTC and is off-by-one in
+  // Danish evening hours (UTC+1/+2), pre-filling tomorrow's date.
+  const [acquisitionDate, setAcquisitionDate] = useState(todayIso());
+  const [transactionDate, setTransactionDate] = useState(todayIso());
   const [cost, setCost] = useState("");
   const [purchaseDocumentId, setPurchaseDocumentId] = useState<string>("");
   const [expenseAccountNo, setExpenseAccountNo] = useState(

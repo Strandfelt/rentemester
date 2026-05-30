@@ -565,6 +565,21 @@ export function reverseJournalEntry(db: Database, input: { entryId: JournalEntry
     return { ok: false, appliedRules, errors: [`journal entry ${input.entryId} has no lines to reverse`] };
   }
 
+  // Reversing an imported-historical voucher (#195) that has no Rentemester
+  // document yet (#196 attaches the bilag later): the reversal copies the same
+  // document-less income/expense lines, so it must inherit the SAME exemption
+  // the original carries — otherwise validateJournalEntry rejects it with
+  // "documentId is required when posting expense or income lines" and a
+  // legitimately posted imported voucher could never be corrected. We mark the
+  // reversal `importedHistorical` (so the post-time DOCUMENT waiver applies)
+  // AND stamp it with the original's import `created_by_program` (so
+  // verifyAuditChain, which keys the same waiver off the program, also exempts
+  // it). When the original DID carry a document, the reversal copies that
+  // document and needs no exemption.
+  const fromImport =
+    IMPORTED_HISTORICAL_PROGRAMS.has(original.created_by_program) &&
+    original.document_id == null;
+
   const reversalPayload: JournalEntryInput = {
     transactionDate: input.transactionDate,
     text: `Reversal of ${original.entry_no}: ${input.reason.trim()}`,
@@ -575,7 +590,8 @@ export function reverseJournalEntry(db: Database, input: { entryId: JournalEntry
     amountDkk: original.amount_dkk ?? undefined,
     fxRateToDkk: original.fx_rate_to_dkk ?? undefined,
     createdBy: input.createdBy,
-    createdByProgram: input.createdByProgram,
+    createdByProgram: fromImport ? original.created_by_program : input.createdByProgram,
+    importedHistorical: fromImport ? true : undefined,
     lines: originalLines.map((line) => ({
       accountNo: line.account_no,
       debitAmount: normalizeAmount(line.credit_amount) || undefined,

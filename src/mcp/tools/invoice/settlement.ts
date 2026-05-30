@@ -19,6 +19,7 @@ import {
   type ApplyInvoicePaymentInput,
 } from "../../../core/invoice-payments";
 import { refundInvoiceToBank, type RefundInvoiceToBankInput } from "../../../core/invoice-refunds";
+import { withActor } from "../../actor";
 import { envelopeShape, wrapCoreResult } from "../../envelope";
 import {
   withCompanyDbConfirmed,
@@ -202,14 +203,16 @@ export function registerInvoiceSettlementTools(server: McpServer): void {
       company: string;
       payload: SettleInvoiceFromBankInput & { invoiceNumber?: string };
       confirm?: boolean;
-    }>(server, "invoice_settle_bank", ({ db, args }) => {
+    }>(server, "invoice_settle_bank", ({ db, actor, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const docId = Number((resolved as { invoiceDocumentId?: unknown }).invoiceDocumentId);
       if (Number.isInteger(docId) && docId > 0) {
         const blocked = requireInvoicePostedEnvelope(db, docId, "invoice_settle_bank");
         if (blocked) return blocked;
       }
-      const result = settleInvoiceFromBank(db, resolved as SettleInvoiceFromBankInput);
+      // Actor-invariant (#63/#76): attribute the settlement entry to the
+      // booking agent in the hash chain + audit_log, not the OS user.
+      const result = settleInvoiceFromBank(db, withActor(resolved as SettleInvoiceFromBankInput, actor));
       return wrapCoreResult(result);
     }),
   );
@@ -234,14 +237,19 @@ export function registerInvoiceSettlementTools(server: McpServer): void {
       company: string;
       payload: SettleInvoiceClaimsFromBankInput & { invoiceNumber?: string };
       confirm?: boolean;
-    }>(server, "invoice_settle_claim_bank", ({ db, args }) => {
+    }>(server, "invoice_settle_claim_bank", ({ db, actor, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const docId = Number((resolved as { invoiceDocumentId?: unknown }).invoiceDocumentId);
       if (Number.isInteger(docId) && docId > 0) {
         const blocked = requireInvoicePostedEnvelope(db, docId, "invoice_settle_claim_bank");
         if (blocked) return blocked;
       }
-      const result = settleInvoiceClaimsFromBank(db, resolved as SettleInvoiceClaimsFromBankInput);
+      // Actor-invariant (#63/#76): attribute the claim-settlement entry to the
+      // booking agent in the hash chain + audit_log, not the OS user.
+      const result = settleInvoiceClaimsFromBank(
+        db,
+        withActor(resolved as SettleInvoiceClaimsFromBankInput, actor),
+      );
       return wrapCoreResult(result);
     }),
   );
@@ -266,14 +274,16 @@ export function registerInvoiceSettlementTools(server: McpServer): void {
       company: string;
       payload: WriteOffInvoiceBadDebtInput & { invoiceNumber?: string };
       confirm?: boolean;
-    }>(server, "invoice_write_off_bad_debt", ({ db, args }) => {
+    }>(server, "invoice_write_off_bad_debt", ({ db, actor, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const docId = Number((resolved as { invoiceDocumentId?: unknown }).invoiceDocumentId);
       if (Number.isInteger(docId) && docId > 0) {
         const blocked = requireInvoicePostedEnvelope(db, docId, "invoice_write_off_bad_debt");
         if (blocked) return blocked;
       }
-      const result = writeOffInvoiceBadDebt(db, resolved as WriteOffInvoiceBadDebtInput);
+      // Actor-invariant (#63/#76): attribute the bad-debt write-off entry to the
+      // booking agent in the hash chain + audit_log, not the OS user.
+      const result = writeOffInvoiceBadDebt(db, withActor(resolved as WriteOffInvoiceBadDebtInput, actor));
       return wrapCoreResult(result);
     }),
   );
@@ -298,14 +308,16 @@ export function registerInvoiceSettlementTools(server: McpServer): void {
       company: string;
       payload: ApplyInvoicePaymentInput & { invoiceNumber?: string };
       confirm?: boolean;
-    }>(server, "invoice_apply_payment", ({ db, args }) => {
+    }>(server, "invoice_apply_payment", ({ db, actor, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const docId = Number((resolved as { invoiceDocumentId?: unknown }).invoiceDocumentId);
       if (Number.isInteger(docId) && docId > 0) {
         const blocked = requireInvoicePostedEnvelope(db, docId, "invoice_apply_payment");
         if (blocked) return blocked;
       }
-      const result = applyInvoicePayment(db, resolved as ApplyInvoicePaymentInput);
+      // Actor-invariant (#63/#76): attribute the payment entry to the booking
+      // agent in the hash chain + audit_log, not the OS user.
+      const result = applyInvoicePayment(db, withActor(resolved as ApplyInvoicePaymentInput, actor));
       return wrapCoreResult(result);
     }),
   );
@@ -330,14 +342,16 @@ export function registerInvoiceSettlementTools(server: McpServer): void {
       company: string;
       payload: RefundInvoiceToBankInput & { invoiceNumber?: string };
       confirm?: boolean;
-    }>(server, "invoice_refund_bank", ({ db, args }) => {
+    }>(server, "invoice_refund_bank", ({ db, actor, args }) => {
       const resolved = resolveInvoiceInPayload(db, args.payload as Record<string, unknown>);
       const docId = Number((resolved as { invoiceDocumentId?: unknown }).invoiceDocumentId);
       if (Number.isInteger(docId) && docId > 0) {
         const blocked = requireInvoicePostedEnvelope(db, docId, "invoice_refund_bank");
         if (blocked) return blocked;
       }
-      const result = refundInvoiceToBank(db, resolved as RefundInvoiceToBankInput);
+      // Actor-invariant (#63/#76): attribute the refund entry to the booking
+      // agent in the hash chain + audit_log, not the OS user.
+      const result = refundInvoiceToBank(db, withActor(resolved as RefundInvoiceToBankInput, actor));
       return wrapCoreResult(result);
     }),
   );

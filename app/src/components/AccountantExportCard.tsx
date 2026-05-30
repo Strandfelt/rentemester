@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { api } from "../lib/api";
+import { todayIso } from "../lib/format";
 import { Banner } from "./Feedback";
 
 /**
@@ -24,7 +25,9 @@ import { Banner } from "./Feedback";
  * sub-period (e.g. one VAT quarter) before generating.
  */
 export function AccountantExportCard({ slug }: { slug: string }) {
-  const today = new Date().toISOString().slice(0, 10);
+  // Use the LOCAL date — `toISOString()` is UTC and is off-by-one in Danish
+  // evening hours (UTC+1/+2), defaulting the export period to tomorrow.
+  const today = todayIso();
   const yearStart = `${today.slice(0, 4)}-01-01`;
   const [periodStart, setPeriodStart] = useState(yearStart);
   const [periodEnd, setPeriodEnd] = useState(today);

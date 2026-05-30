@@ -82,7 +82,16 @@ function hasText(value: string | null | undefined): value is string {
 
 function formatVatPercent(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
-  return Number.isInteger(value) ? String(value) : String(value <= 1 ? value * 100 : value);
+  // `totals.vatRate` is the canonical 0..1 fraction everywhere else (invoice.ts,
+  // invoice-pdf.ts unconditionally multiplies by 100), so do the same here. The
+  // old `value <= 1 ? value*100 : value` heuristic rendered a 1.0 (100%) rate as
+  // "1" and passed a stray percent-form value straight through, making the
+  // transmitted cbc:Percent disagree with the PDF/TaxAmount on the same invoice.
+  const pct = value * 100;
+  // An integer rate renders plainly ("25"); a fractional rate keeps up to two
+  // decimals, rounded via integer math so a float artifact (e.g. 20.0000000004)
+  // never leaks into the transmitted cbc:Percent.
+  return Number.isInteger(pct) ? String(pct) : String(Math.round(pct * 100) / 100);
 }
 
 function buildAddressXml(
