@@ -295,8 +295,29 @@ export function handleCompanyPayables(
   slug: string,
   url: URL,
 ): Response {
-  const status = url.searchParams.get("status");
+  // Validate the filter params at the edge — like the sibling exceptions list
+  // (handleCompanyExceptions) — instead of silently coercing an unknown status
+  // to "open" or a malformed asOf to today. A discarded filter that quietly
+  // returns the default list is a misleading state for the owner. The status is
+  // lower-cased first, matching handleCompanyExceptions (so `?status=Open`
+  // behaves the same on both list endpoints).
+  const rawStatus = url.searchParams.get("status");
+  const status = rawStatus === null ? null : rawStatus.toLowerCase();
+  if (
+    status !== null &&
+    status !== "open" &&
+    status !== "paid" &&
+    status !== "overdue" &&
+    status !== "all"
+  ) {
+    throw ApiError.badRequest(
+      `status='${rawStatus}' understøttes ikke — brug open, paid, overdue eller all.`,
+    );
+  }
   const asOf = url.searchParams.get("asOf");
+  if (asOf !== null && !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+    throw ApiError.badRequest("asOf skal være en YYYY-MM-DD dato.");
+  }
   const data = buildCompanyPayables(config.workspaceRoot, slug, status, asOf);
   return okResponse({ payables: data });
 }

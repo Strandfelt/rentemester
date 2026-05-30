@@ -462,8 +462,13 @@ describe("InvoiceIssueModal", () => {
       expect(previewCall).toBeUndefined();
     });
 
-    test("a server validation error from preview is shown as an error banner", async () => {
-      // Override the preview route to return the cockpit error envelope.
+    /**
+     * Installs a fetch that fails the preview route with the UNIFIED cockpit
+     * envelope `{ ok:false, errors:[message], code }` (#368) — the real shape
+     * the server emits, not the dead `{ error: { code, message } }` shape the
+     * old `previewInvoice` parsed (which swallowed every preview error).
+     */
+    function mockFetchPreviewError(code: string, message: string) {
       vi.stubGlobal(
         "fetch",
         vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -475,12 +480,9 @@ describe("InvoiceIssueModal", () => {
             path === "/api/companies/acme-aps/invoices/preview"
           ) {
             return new Response(
-              JSON.stringify({
-                ok: false,
-                error: { code: "bad_request", message: "buyer.name is required" },
-              }),
+              JSON.stringify({ ok: false, errors: [message], code }),
               {
-                status: 400,
+                status: code === "conflict" ? 409 : 400,
                 headers: { "content-type": "application/json" },
               },
             );
@@ -505,6 +507,12 @@ describe("InvoiceIssueModal", () => {
           );
         }),
       );
+    }
+
+    test("a server validation error from preview is shown as an error banner", async () => {
+      // #368 — the server returns the unified `{ ok:false, errors, code }`
+      // envelope; `previewInvoice` must surface `errors[0]` as the message.
+      mockFetchPreviewError("bad_request", "buyer.name is required");
       stubWindowOpen();
       render(
         <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
@@ -516,6 +524,90 @@ describe("InvoiceIssueModal", () => {
       expect(
         await screen.findByText("buyer.name is required"),
       ).toBeInTheDocument();
+    });
+
+    test("a 409 conflict from preview routes to the kind LockBanner, not the red error banner", async () => {
+      // A `conflict` code (e.g. the backup lock) must be shown via LockBanner
+      // ("Bogføringen er låst") — the curated message goes in the banner body.
+      mockFetchPreviewError(
+        "conflict",
+        "Bogføring er låst: en ugentlig backup er overskredet.",
+      );
+      stubWindowOpen();
+      render(
+        <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
+      );
+      await fillMinimal();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Forhåndsvis" }),
+      );
+      expect(
+        await screen.findByText("Bogføringen er låst"),
+      ).toBeInTheDocument();
+      // The curated lock message renders inside the banner body…
+      expect(
+        screen.getByText(/en ugentlig backup er overskredet/),
+      ).toBeInTheDocument();
+      // …and the message is NOT shown as a red error alert.
+      const alerts = screen.queryAllByRole("alert");
+      for (const a of alerts) {
+        expect(a.textContent ?? "").not.toMatch(/backup er overskredet/);
+      }
+    });
+
+    test("a pending preview only swaps the Forhåndsvis label — Udsted stays 'Udsted faktura'", async () => {
+      // A single `busy` flag wrongly relabels BOTH buttons; only the button
+      // whose action is in flight should show its progress text. Here the
+      // preview never resolves, so Forhåndsvis reads "Henter…" while
+      // "Udsted faktura" keeps its label (both disabled).
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === "string" ? input : input.toString();
+          const path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+          const method = (init?.method ?? "GET").toUpperCase();
+          if (
+            method === "POST" &&
+            path === "/api/companies/acme-aps/invoices/preview"
+          ) {
+            // Never resolves — the preview stays in flight.
+            return new Promise<Response>(() => {});
+          }
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              company: companySettings({
+                payment: {
+                  bankName: "Danske Bank",
+                  registrationNo: "1234",
+                  accountNo: "0001234567",
+                  iban: null,
+                },
+              }),
+              contacts: { customers: [], vendors: [] },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }),
+      );
+      stubWindowOpen();
+      render(
+        <InvoiceIssueModal slug="acme-aps" onIssued={noop} onClose={noop} />,
+      );
+      await fillMinimal();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Forhåndsvis" }),
+      );
+
+      // Forhåndsvis flips to its progress label…
+      const previewBtn = await screen.findByRole("button", { name: "Henter…" });
+      expect(previewBtn).toBeDisabled();
+      // …but Udsted keeps its label and must NOT read "Udsteder…".
+      const issueBtn = screen.getByRole("button", { name: "Udsted faktura" });
+      expect(issueBtn).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Udsteder…" }),
+      ).not.toBeInTheDocument();
     });
   });
 });

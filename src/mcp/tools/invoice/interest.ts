@@ -11,6 +11,7 @@ import {
   registerInvoiceLateInterest,
   postInvoiceLateInterestToLedger,
 } from "../../../core/invoice-interest";
+import { withActor } from "../../actor";
 import { envelopeShape, errorEnvelope, wrapCoreResult } from "../../envelope";
 import {
   withCompanyDbConfirmed,
@@ -71,17 +72,25 @@ export function registerInvoiceInterestTools(server: McpServer): void {
       referenceRate: number;
       note?: string;
       confirm?: boolean;
-    }>(server, "invoice_claim_interest", ({ db, args }) => {
+    }>(server, "invoice_claim_interest", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
       const blocked = requireInvoicePostedEnvelope(db, id, "invoice_claim_interest");
       if (blocked) return blocked;
-      const result = registerInvoiceLateInterest(db, {
-        invoiceDocumentId: id,
-        asOfDate: args.asOf,
-        referenceRatePercent: args.referenceRate,
-        note: args.note,
-      });
+      // Actor-invariant (#63/#76): attribute the interest-claim registration to
+      // the booking agent in the hash chain + audit_log, not the OS user.
+      const result = registerInvoiceLateInterest(
+        db,
+        withActor(
+          {
+            invoiceDocumentId: id,
+            asOfDate: args.asOf,
+            referenceRatePercent: args.referenceRate,
+            note: args.note,
+          },
+          actor,
+        ),
+      );
       return wrapCoreResult(result);
     }),
   );
@@ -123,7 +132,7 @@ export function registerInvoiceInterestTools(server: McpServer): void {
       claimId?: number;
       date?: string;
       confirm?: boolean;
-    }>(server, "invoice_post_interest", ({ db, args }) => {
+    }>(server, "invoice_post_interest", ({ db, actor, args }) => {
       const id = resolveIssuedInvoiceDocumentId(db, args);
       if (!id) return notFoundEnvelope(args);
       if (!hasRegisteredInterestClaim(db, id)) {
@@ -132,10 +141,14 @@ export function registerInvoiceInterestTools(server: McpServer): void {
             `Kald invoice_claim_interest først for at registrere kravet før invoice_post_interest.`,
         );
       }
+      // Actor-invariant (#63/#76): attribute the interest posting to the
+      // booking agent in the hash chain + audit_log, not the OS user.
       const result = postInvoiceLateInterestToLedger(db, {
         invoiceDocumentId: id,
         claimId: args.claimId,
         transactionDate: args.date,
+        createdBy: actor.createdBy,
+        createdByProgram: actor.createdByProgram,
       });
       return wrapCoreResult(result);
     }),

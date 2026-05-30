@@ -32,6 +32,10 @@ export type CalculateInvoiceLateInterestResult = {
 
 export type RegisterInvoiceLateInterestInput = CalculateInvoiceLateInterestInput & {
   note?: string;
+  // Actor attribution for the registration audit_log row (the post step already
+  // threads these; the register step must too, or the row leaks the OS user).
+  createdBy?: string;
+  createdByProgram?: string;
 };
 
 export type RegisterInvoiceLateInterestResult = CalculateInvoiceLateInterestResult & {
@@ -157,6 +161,8 @@ export function registerInvoiceLateInterest(db: Database, input: RegisterInvoice
     entityType: "invoice_interest_claim",
     entityId: inserted.id,
     message: `Registered late interest ${roundDkk(Number(calculation.accruedInterestAmount))} on invoice ${calculation.invoiceNumber}`,
+    createdBy: input.createdBy,
+    createdByProgram: input.createdByProgram,
   });
 
   const statusAfter = getInvoiceStatus(db, input.invoiceDocumentId, input.asOfDate);

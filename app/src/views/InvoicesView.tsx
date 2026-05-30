@@ -24,7 +24,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { formatKroner } from "../lib/format";
+import { formatKroner, todayIso } from "../lib/format";
 import { useAsync } from "../lib/useAsync";
 import type {
   CompanyInvoiceRow,
@@ -185,7 +185,9 @@ export function InvoicesView() {
             }
             await api.creditInvoice(slug, {
               invoiceDocumentId: crediting.documentId,
-              issueDate: new Date().toISOString().slice(0, 10),
+              // Use the LOCAL date — `toISOString()` is UTC and would mis-date
+              // the BOOKED credit note in Danish evening hours (UTC+1/+2).
+              issueDate: todayIso(),
               reason: reason.trim(),
             });
             state.reload();
@@ -510,8 +512,11 @@ export function InvoicesView() {
                       <td>
                         <span className={`flag ${meta.tone}`}>
                           {meta.label}
+                          {/* Singular/plural — "· 1 dage" is wrong Danish. */}
                           {row.status === "overdue" && row.overdueDays > 0
-                            ? ` · ${row.overdueDays} dage`
+                            ? ` · ${row.overdueDays} ${
+                                row.overdueDays === 1 ? "dag" : "dage"
+                              }`
                             : ""}
                         </span>
                         {/* #429 — surface a "Sendt {dato}" flag once the

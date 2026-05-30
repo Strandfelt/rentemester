@@ -1,6 +1,6 @@
 // Bank import + bank-account write handlers (#213 slice 2, #345).
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { syncUnmatchedBankTransactionExceptions } from "../../core/exceptions";
@@ -43,26 +43,35 @@ export async function handleBankImport(
       const profile = optionalBodyString(body, "profile");
 
       // Mirror the MCP `csvContent` pattern: persist the inline CSV to a
-      // private temp file, then hand core a path — core reads from disk.
+      // private temp file, then hand core a path — core reads from disk and
+      // copies the file into the company dir, so the temp dir is a transient
+      // staging area that must be removed on EVERY exit path (success, import
+      // rejection or throw). Without the finally each cockpit import — and each
+      // retried/failing one — leaked a temp dir forever (matches the MCP bank
+      // tool's #383 cleanup).
       const tmpDir = mkdtempSync(join(tmpdir(), "rentemester-cockpit-bank-"));
-      const csvPath = join(tmpDir, "bank-import.csv");
-      writeFileSync(csvPath, csvContent, "utf8");
+      try {
+        const csvPath = join(tmpDir, "bank-import.csv");
+        writeFileSync(csvPath, csvContent, "utf8");
 
-      const imported = importBankCsv(ctx.db, ctx.companyRoot, csvPath, {
-        account,
-        profile,
-      });
-      // The CLI/MCP both sync unmatched-transaction exceptions after a
-      // successful import — replicate that so the Cockpit behaves identically.
-      const sync = imported.ok
-        ? syncUnmatchedBankTransactionExceptions(ctx.db)
-        : { ok: true, created: 0, errors: [] };
-      return {
-        ...(imported as Record<string, unknown>),
-        ok: imported.ok,
-        errors: imported.errors,
-        exceptionsCreated: sync.created,
-      };
+        const imported = importBankCsv(ctx.db, ctx.companyRoot, csvPath, {
+          account,
+          profile,
+        });
+        // The CLI/MCP both sync unmatched-transaction exceptions after a
+        // successful import — replicate that so the Cockpit behaves identically.
+        const sync = imported.ok
+          ? syncUnmatchedBankTransactionExceptions(ctx.db)
+          : { ok: true, created: 0, errors: [] };
+        return {
+          ...(imported as Record<string, unknown>),
+          ok: imported.ok,
+          errors: imported.errors,
+          exceptionsCreated: sync.created,
+        };
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
     },
     { requireConfirm: true, maxBodyBytes: MAX_UPLOAD_BODY_BYTES },
   );

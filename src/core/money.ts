@@ -145,13 +145,18 @@ export function formatDkk(value: number | string | bigint | null | undefined, cu
 export function formatKronerDa(value: unknown): string {
   const num = typeof value === "number" ? value : Number(value);
   if (value == null || value === "" || !Number.isFinite(num)) return "—";
-  const negative = num < 0;
-  const cents = Math.round(Math.abs(num) * 100);
-  const whole = Math.floor(cents / 100);
-  const fraction = (cents % 100).toString().padStart(2, "0");
-  const wholeText = whole
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  // Round through integer øre (the same half-up BigInt path as `formatAmount`
+  // and `roundDkk`) rather than float `Math.round(num * 100)`, which drifts one
+  // øre on exact halves (1.005 → "1,00" instead of "1,01"). The sign is taken
+  // from the ROUNDED øre, so a sub-øre negative that rounds to zero renders
+  // "0,00 kr." and never a misleading "-0,00 kr.". The browser copy in
+  // app/src/lib/format.ts mirrors this with its own BigInt rounding. (#314)
+  const ore = toOre(num);
+  const negative = ore < 0n;
+  const abs = negative ? -ore : ore;
+  const whole = abs / 100n;
+  const fraction = (abs % 100n).toString().padStart(2, "0");
+  const wholeText = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${negative ? "-" : ""}${wholeText},${fraction} kr.`;
 }
 

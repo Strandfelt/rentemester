@@ -136,11 +136,17 @@ export const invoicesApi = {
       let message = `HTTP ${res.status}`;
       let code = "internal";
       try {
+        // #368: unified envelope — `errors[0]` is the message, `code` is the
+        // top-level enum. Mirrors `_shared.ts`/`accountant.ts`; the old
+        // `{ error: { code, message } }` shape is dead and swallowed errors.
         const errBody = (await res.json()) as {
-          error?: { code?: string; message?: string };
+          errors?: unknown;
+          code?: unknown;
         };
-        message = errBody.error?.message ?? message;
-        code = errBody.error?.code ?? code;
+        if (Array.isArray(errBody.errors) && errBody.errors.length > 0) {
+          message = String(errBody.errors[0]);
+        }
+        if (typeof errBody.code === "string") code = errBody.code;
       } catch {}
       throw new ApiError(code, message, res.status);
     }

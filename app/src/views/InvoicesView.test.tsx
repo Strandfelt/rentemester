@@ -30,6 +30,40 @@ describe("InvoicesView — Fakturaer", () => {
     expect(screen.getByText(/Forfalden/)).toBeInTheDocument();
   });
 
+  test("an overdue-by-one-day row reads '1 dag', not '1 dage'", async () => {
+    // Danish inflection — "· 1 dage" is wrong; a single day must read "1 dag".
+    mockFetch(
+      route({
+        invoices: [
+          {
+            documentId: 1,
+            invoiceNo: "2026-00001",
+            invoiceDate: "2026-04-01",
+            customerName: "Kunde A/S",
+            customerEmail: null,
+            buyerEanNumber: null,
+            buyerPublicRecipient: false,
+            peppolStatus: null,
+            lastEmailedAt: null,
+            lastReminderAt: null,
+            lastReminderSequence: 0,
+            grossAmount: 1000,
+            openBalance: 1000,
+            currency: "DKK",
+            status: "overdue",
+            effectiveDueDate: "2026-04-30",
+            overdueDays: 1,
+          },
+        ],
+      }),
+    );
+    renderView();
+    await screen.findByRole("heading", { name: "Acme ApS" });
+    const cell = screen.getByText(/Forfalden/).closest("td")!;
+    expect(cell.textContent).toMatch(/·\s*1 dag\b/);
+    expect(cell.textContent).not.toMatch(/1 dage/);
+  });
+
   test("shows a graceful empty state when there are no invoices", async () => {
     mockFetch(route({ invoices: [], totalGross: 0, totalOpen: 0, overdueCount: 0 }));
     renderView();

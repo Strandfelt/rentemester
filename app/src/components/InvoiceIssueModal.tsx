@@ -69,7 +69,12 @@ export function InvoiceIssueModal({
   const [customers, setCustomers] = useState<ContactCustomerRow[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
 
-  const [busy, setBusy] = useState(false);
+  // Which action is in flight, if any. A single `busy` flag would swap BOTH
+  // buttons' labels at once, so the idle button shows the wrong progress text
+  // (e.g. "Udsteder…" while only the preview is running). `busy` is derived
+  // from this so all the existing disable/guard logic stays untouched.
+  const [pending, setPending] = useState<"preview" | "issue" | null>(null);
+  const busy = pending !== null;
   const [error, setError] = useState<string | null>(null);
   const [locked, setLocked] = useState<string | null>(null);
   const [done, setDone] = useState<InvoiceIssueSummary | null>(null);
@@ -270,7 +275,7 @@ export function InvoiceIssueModal({
     if (!parsed) return;
     const extras = buildPartyAndExtras();
 
-    setBusy(true);
+    setPending("preview");
     try {
       const blob = await api.previewInvoice(slug, {
         issueDate: parsed.issueDate,
@@ -290,7 +295,7 @@ export function InvoiceIssueModal({
       if (e?.code === "conflict") setLocked(message);
       else setError(message);
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
@@ -301,7 +306,7 @@ export function InvoiceIssueModal({
     const parsed = buildPayload();
     if (!parsed) return;
 
-    setBusy(true);
+    setPending("issue");
     try {
       const extras = buildPartyAndExtras();
       const summary = await api.issueInvoice(slug, {
@@ -319,7 +324,7 @@ export function InvoiceIssueModal({
       if (e?.code === "conflict") setLocked(message);
       else setError(message);
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
@@ -628,7 +633,9 @@ export function InvoiceIssueModal({
                 onClick={handlePreview}
                 disabled={busy}
               >
-                {busy ? "Henter…" : "Forhåndsvis"}
+                {/* Only swap the label on the button actually in flight — both
+                    stay disabled while either action runs (#440). */}
+                {pending === "preview" ? "Henter…" : "Forhåndsvis"}
               </button>
               <button
                 type="button"
@@ -636,7 +643,7 @@ export function InvoiceIssueModal({
                 onClick={handleIssue}
                 disabled={busy}
               >
-                {busy ? "Udsteder…" : "Udsted faktura"}
+                {pending === "issue" ? "Udsteder…" : "Udsted faktura"}
               </button>
             </div>
           </>

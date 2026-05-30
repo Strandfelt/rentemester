@@ -1,6 +1,6 @@
 // Document ingest + expense-from-bank booking handlers (#213 slice 3, #407).
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { ingestDocument, type DocumentMetadata } from "../../core/documents";
@@ -156,25 +156,34 @@ export async function handleDocumentIngest(
         throw ApiError.badRequest("'fileBase64' decodes to an empty file");
       }
       const ext = extname(fileName).toLowerCase();
+      // The temp dir is a transient staging area: ingestDocument copies the
+      // bytes into the company's permanent originals store, so the temp copy
+      // must be removed on EVERY exit path (success, duplicate rejection or
+      // throw). Without the finally each cockpit ingest leaked a temp dir
+      // forever (matches the MCP/import-export #383 cleanup).
       const tmpDir = mkdtempSync(join(tmpdir(), "rentemester-cockpit-doc-"));
-      const filePath = join(tmpDir, `document${ext}`);
-      writeFileSync(filePath, bytes);
+      try {
+        const filePath = join(tmpDir, `document${ext}`);
+        writeFileSync(filePath, bytes);
 
-      // Master-data resolution mirrors the CLI/MCP: a given `vendorId`
-      // back-fills the sender from the registered vendor.
-      const resolved = resolveDocumentMasterData(ctx.db, metadata, { vendorId });
-      if (!resolved.ok) {
-        return { ok: false, errors: resolved.errors ?? ["master-data resolution failed"] };
+        // Master-data resolution mirrors the CLI/MCP: a given `vendorId`
+        // back-fills the sender from the registered vendor.
+        const resolved = resolveDocumentMasterData(ctx.db, metadata, { vendorId });
+        if (!resolved.ok) {
+          return { ok: false, errors: resolved.errors ?? ["master-data resolution failed"] };
+        }
+        const ingested = ingestDocument(ctx.db, ctx.companyRoot, filePath, resolved.metadata, {
+          forceDuplicateLogicalIdentity: force,
+        });
+        return {
+          ok: ingested.ok,
+          errors: ingested.errors,
+          documentId: ingested.documentId,
+          documentNo: ingested.documentNo,
+        };
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
       }
-      const ingested = ingestDocument(ctx.db, ctx.companyRoot, filePath, resolved.metadata, {
-        forceDuplicateLogicalIdentity: force,
-      });
-      return {
-        ok: ingested.ok,
-        errors: ingested.errors,
-        documentId: ingested.documentId,
-        documentNo: ingested.documentNo,
-      };
     },
     { requireConfirm: true, maxBodyBytes: MAX_UPLOAD_BODY_BYTES },
   );
