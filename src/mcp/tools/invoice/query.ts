@@ -270,7 +270,11 @@ export function registerInvoiceQueryTools(server: McpServer): void {
     "invoice_interest_calc",
     {
       title: "Calculate invoice late interest",
-      description: "Beregner morarente uden at registrere. Read-only.",
+      description:
+        "Beregner morarente uden at registrere. Read-only. accruedInterestAmount er " +
+        "den rente der kan opkræves NU — for perioden siden sidste registrerede rentekrav " +
+        "(eller fra forfald hvis der ikke er noget). Felterne priorClaimedInterest og " +
+        "totalInterestToDate viser allerede opkrævet hhv. samlet rente til dato.",
       inputSchema: {
         ...docIdOrNumberSchema,
         asOf: z

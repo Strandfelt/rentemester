@@ -45,6 +45,8 @@ export function registerInvoiceInterestTools(server: McpServer): void {
       description:
         "Registrerer morarentekrav (uden at bogføre — kald invoice_post_interest bagefter). " +
         "Forudsætning: fakturaen skal være bogført med invoice_post og være forfalden. " +
+        "Et nyt krav opkræver kun renten for perioden siden sidste krav (inkrementel — " +
+        "ingen dobbelt-opkrævning), så rente kan registreres ad flere omgange. " +
         "write-irreversible.",
       inputSchema: {
         ...docIdOrNumberSchema,
@@ -112,7 +114,8 @@ export function registerInvoiceInterestTools(server: McpServer): void {
           .optional()
           .describe(
             "Optional ID of the specific registered interest claim to post. When " +
-              "omitted, the latest unposted interest claim on the invoice is posted.",
+              "omitted, the oldest not-yet-posted interest claim on the invoice is " +
+              "posted (chronological booking order).",
           ),
         date: z
           .string()

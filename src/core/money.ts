@@ -228,6 +228,31 @@ export function accrueInterestDkk(principalAmount: number, annualRatePercent: nu
   return fromOre(roundDiv(principalOre * basisPoints * BigInt(days), 10000n * 365n));
 }
 
+/**
+ * Cumulative statutory late interest across one or more contiguous accrual
+ * segments, rounded to øre exactly ONCE.
+ *
+ * Each segment is principaløre × basisPoints × days, and the denominator
+ * (10000 × 365) is identical for every segment, so we sum the integer numerators
+ * and round a single time. This avoids the drift from summing independently
+ * rounded accrueInterestDkk() segments (a sum of rounded values is not the
+ * rounded sum): staged interest claims never over- or under-charge relative to a
+ * single continuous calculation over the same window, while each segment still
+ * carries its own principal and rate (partial payments, half-yearly
+ * reference-rate changes).
+ */
+export function cumulativeInterestDkk(
+  segments: Array<{ principalAmount: number; annualRatePercent: number; days: number }>,
+): number {
+  let numerator = 0n;
+  for (const s of segments) {
+    if (!Number.isInteger(s.days) || s.days <= 0) continue;
+    if (!(s.principalAmount > 0)) continue;
+    numerator += toOre(s.principalAmount) * scaledInt(s.annualRatePercent, 2) * BigInt(s.days);
+  }
+  return fromOre(roundDiv(numerator, 10000n * 365n));
+}
+
 export function roundDiv(numerator: bigint, denominator: bigint) {
   if (denominator === 0n) throw new Error("division by zero");
   const sameSign = (numerator >= 0n && denominator > 0n) || (numerator <= 0n && denominator < 0n);
