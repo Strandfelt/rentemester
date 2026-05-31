@@ -1,4 +1,4 @@
-version: dk-invoices-v0.0.8
+version: dk-invoices-v0.0.10
 sources:
   - DK-MOMSBEKENDTGORELSEN-2023-1435
   - DK-MOMSLOVEN-2024-209
@@ -258,9 +258,12 @@ rules:
         - reference_rate_input
         - annual_rate_equals_reference_rate_plus_8pct_points
         - daily_interest_from_overdue_days
+        - incremental_accrual_anchored_at_last_registered_claim
+        - date_aware_accrual_on_outstanding_balance_per_day
       forbid:
         - late_interest_on_non_overdue_or_nonpositive_balance
-    explanation: Rentemester must be able to calculate statutory delay interest on overdue collectible balances using the renteloven formula and an explicit reference rate for the relevant half-year.
+        - re_billing_a_period_already_covered_by_an_earlier_claim
+    explanation: Rentemester must be able to calculate statutory delay interest on overdue collectible balances using the renteloven formula and an explicit reference rate for the relevant half-year. Interest is simple interest on the amount outstanding at any given time (renteloven § 5, stk. 1 — "det til enhver tid skyldige beløb"), accruing continuously from the due date (§ 3): each day accrues on the open balance as of that day, reconstructed from payments and credit notes by effective date. A later calculation bills only the incremental period since the last registered claim, so no day is ever charged twice.
   - rule_id: DK-INVOICE-LATE-INTEREST-REGISTER-001
     name: A late-interest claim may only be registered from a deterministic calculation and must remain traceable in the claim balance
     category: invoice_lifecycle
@@ -275,9 +278,11 @@ rules:
         - immutable_interest_claim_record
         - unique_interest_claim_per_invoice_date_and_reference_rate
         - claim_balance_includes_registered_interest
+        - registered_amount_is_incremental_interest_since_last_claim
       forbid:
         - interest_registration_without_positive_accrued_interest
-    explanation: Rentemester must only register late interest from a deterministic statutory calculation, keep each registered interest claim immutable and traceable, and surface the accumulated registered interest in the invoice claim balance.
+        - double_charge_of_a_period_already_covered_by_an_earlier_claim
+    explanation: Rentemester must only register late interest from a deterministic statutory calculation, keep each registered interest claim immutable and traceable, and surface the accumulated registered interest in the invoice claim balance. Each registered claim records only the incremental interest for the period since the previous claim, so progressively registering interest (e.g. with each reminder) never re-bills a period an earlier claim already covered.
   - rule_id: DK-INVOICE-LATE-INTEREST-BOOKKEEPING-001
     name: Registered late-interest claims must be bookable once to receivables and non-VAT claim income
     category: invoice_accounting

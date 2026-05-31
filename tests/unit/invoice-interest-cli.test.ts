@@ -107,4 +107,44 @@ describe("invoice interest CLI", () => {
     expect(parsed.accruedInterestAmount).toBe(0.35);
     expect(parsed.appliedRules).toContain("DK-INVOICE-LATE-INTEREST-001");
   });
+
+  test("a second `invoice interest` calculation carries the incremental fields through the CLI JSON envelope", async () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-incr-cli-"));
+    const company = join(root, "company");
+    const paymentInput = join(root, "partial-payment.json");
+
+    writeFileSync(paymentInput, JSON.stringify({
+      invoiceDocumentId: 1,
+      paymentDate: "2026-05-20",
+      amount: 1000,
+      note: "Partial payment"
+    }, null, 2));
+
+    await Bun.$`bun run src/cli.ts init --company ${company}`.quiet();
+    await Bun.$`bun run src/cli.ts invoice issue --company ${company} --input examples/full-invoice.dk.json`.quiet();
+    await Bun.$`bun run src/cli.ts invoice apply-payment --company ${company} --input ${paymentInput}`.quiet();
+    // First claim covers the first 5 overdue days.
+    await Bun.$`bun run src/cli.ts invoice claim-interest --company ${company} --invoice-number 2026-0001 --as-of 2026-06-20 --reference-rate 2.2`.quiet();
+
+    const proc = Bun.spawn(["bun", "run", "src/cli.ts", "invoice", "interest", "--company", company, "--invoice-number", "2026-0001", "--as-of", "2026-07-20", "--reference-rate", "2.2"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    rmSync(root, { recursive: true, force: true });
+    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(true);
+    // The incremental contract is carried end-to-end through the CLI JSON: the
+    // amount is the 30-day increment since the last claim, not the full window.
+    expect(parsed.accruedInterestAmount).toBe(2.10);
+    expect(parsed.claimableDays).toBe(30);
+    expect(parsed.interestFromDate).toBe("2026-06-20");
+    expect(parsed.priorClaimedInterest).toBe(0.35);
+    expect(parsed.totalInterestToDate).toBe(2.45);
+  });
 });
