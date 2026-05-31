@@ -1,14 +1,18 @@
 // Tests: src/core/invoice-interest.ts
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ensureCompanyDirs } from "../../src/core/paths";
 import { openDb, migrate } from "../../src/core/db";
 import { issueInvoice } from "../../src/core/issued-invoices";
 import { applyInvoicePayment, getInvoiceStatus } from "../../src/core/invoice-payments";
-import { calculateInvoiceLateInterest, postInvoiceLateInterestToLedger, registerInvoiceLateInterest } from "../../src/core/invoice-interest";
+import { calculateInvoiceLateInterest, postInvoiceLateInterestToLedger, registerInvoiceLateInterest, proposeInterestCorrection, postInterestCorrection } from "../../src/core/invoice-interest";
 import { issueCreditNote } from "../../src/core/credit-notes";
+import { importBankCsv } from "../../src/core/bank";
+import { postIssuedInvoiceToLedger } from "../../src/core/invoice-booking";
+import { settleInvoiceFromBank } from "../../src/core/invoice-settlement";
+import { settleInvoiceClaimsFromBank } from "../../src/core/invoice-claim-settlement";
 import { seedAccounts, verifyAuditChain } from "../../src/core/ledger";
 
 function failingInterestPostingDb(realDb: any) {
@@ -604,6 +608,255 @@ describe("invoice late interest", () => {
 
     const status = getInvoiceStatus(db, issued.documentId!, "2026-05-01");
     expect(status.totalInterestClaims).toBe(1616.44); // only claim 1; nothing stacked
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a back-dated over-claim can be proposed and booked as a correcting reversal, netting the interest-claim balance", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-correction-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 80000, lineTotalExVat: 80000 }],
+      totals: { netAmount: 80000, vatRate: 0.25, vatAmount: 20000, grossAmount: 100000 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+
+    // Claim 1 billed + POSTED on the full 100.000 (1.616,44).
+    expect(registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-03-31", referenceRatePercent: 2 }).ok).toBe(true);
+    expect(postInvoiceLateInterestToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    // A 50.000 payment is recorded BACK-DATED to 2026-02-15 (inside claim 1's window).
+    expect(applyInvoicePayment(db, { invoiceDocumentId: issued.documentId!, paymentDate: "2026-02-15", amount: 50000, note: "Bagud-dateret afdrag" }).ok).toBe(true);
+
+    // Proposal: posted 1.616,44 vs lawful 1.013,70 → over-claimed 602,74.
+    const proposal = proposeInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(proposal.ok).toBe(true);
+    expect(proposal.hasProposal).toBe(true);
+    expect(proposal.postedInterest).toBe(1616.44);
+    expect(proposal.lawfulInterest).toBe(1013.70);
+    expect(proposal.overClaimedAmount).toBe(602.74);
+    expect(proposal.throughDate).toBe("2026-03-31");
+
+    // Book the correction: debit interest income (1010), credit receivable (1100).
+    const correction = postInterestCorrection(db, { invoiceDocumentId: issued.documentId!, reason: "Bagud-dateret betaling" });
+    expect(correction.ok).toBe(true);
+    expect(correction.correctedAmount).toBe(602.74);
+    expect(correction.correctionId).toBeDefined();
+
+    const lines = db.query(
+      `SELECT a.account_no, jl.debit_amount, jl.credit_amount, jl.vat_code
+       FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+       WHERE jl.journal_entry_id = ? ORDER BY jl.id ASC`
+    ).all(correction.entryId!) as any[];
+    expect(lines).toEqual([
+      { account_no: "1010", debit_amount: 602.74, credit_amount: 0, vat_code: null },
+      { account_no: "1100", debit_amount: 0, credit_amount: 602.74, vat_code: null },
+    ]);
+
+    // Status nets the correction off the interest-claim balance.
+    const status = getInvoiceStatus(db, issued.documentId!, "2026-03-31");
+    expect(status.totalInterestCorrections).toBe(602.74);
+    expect(status.totalInterestClaims).toBe(1013.70); // 1616,44 − 602,74
+
+    // Idempotent: nothing left to correct.
+    const reProposal = proposeInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(reProposal.hasProposal).toBe(false);
+    expect(reProposal.overClaimedAmount).toBe(0);
+    const second = postInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(second.ok).toBe(false);
+    expect(second.errors[0]).toContain("no over-claimed");
+
+    expect(verifyAuditChain(db).ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a later interest claim after a correction re-bills the corrected period — the reversed amount is not permanently lost", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-correction-thenclaim-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 80000, lineTotalExVat: 80000 }],
+      totals: { netAmount: 80000, vatRate: 0.25, vatAmount: 20000, grossAmount: 100000 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+
+    // Claim 1 posted on the full 100.000 (1.616,44), back-dated 50.000 payment,
+    // then the over-claim corrected (602,74 reversed → net booked 1.013,70).
+    expect(registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-03-31", referenceRatePercent: 2 }).ok).toBe(true);
+    expect(postInvoiceLateInterestToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+    expect(applyInvoicePayment(db, { invoiceDocumentId: issued.documentId!, paymentDate: "2026-02-15", amount: 50000, note: "Bagud-dateret afdrag" }).ok).toBe(true);
+    expect(postInterestCorrection(db, { invoiceDocumentId: issued.documentId! }).correctedAmount).toBe(602.74);
+
+    // A later claim on the remaining 50.000 through 2026-05-30 must bill against
+    // the NET booked interest (1.013,70), not the raw 1.616,44: lawful-through-05-30
+    // 1.835,62 − 1.013,70 = 821,92 — NOT 219,18 (which would lose the reversed amount).
+    const c2 = registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-05-30", referenceRatePercent: 2 });
+    expect(c2.ok).toBe(true);
+    expect(c2.accruedInterestAmount).toBe(821.92);
+
+    // Net booked interest = 1.616,44 − 602,74 + 821,92 = 1.835,62 = the lawful total.
+    const status = getInvoiceStatus(db, issued.documentId!, "2026-05-30");
+    expect(status.totalInterestClaims).toBe(1835.62);
+    // And nothing is over-claimed any more.
+    expect(proposeInterestCorrection(db, { invoiceDocumentId: issued.documentId! }).hasProposal).toBe(false);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("proposeInterestCorrection measures each POSTED claim against its OWN window, so a later posted claim with an earlier UNPOSTED one is not masked", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-noncontiguous-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 80000, lineTotalExVat: 80000 }],
+      totals: { netAmount: 80000, vatRate: 0.25, vatAmount: 20000, grossAmount: 100000 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+
+    // Claim 1 registered but LEFT UNPOSTED; claim 2 (its incremental window) POSTED.
+    const c1 = registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-03-02", referenceRatePercent: 2 });
+    expect(c1.ok).toBe(true);
+    const c2 = registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-04-01", referenceRatePercent: 2 });
+    expect(c2.ok).toBe(true);
+    expect(c2.accruedInterestAmount).toBe(821.92);
+    expect(postInvoiceLateInterestToLedger(db, { invoiceDocumentId: issued.documentId!, claimId: c2.claimId }).ok).toBe(true);
+
+    // Back-dated credit note halves the balance from 2026-02-15.
+    expect(issueCreditNote(db, root, { originalInvoiceDocumentId: issued.documentId!, issueDate: "2026-02-15", reason: "Delvis kreditering", grossAmount: 50000 }).ok).toBe(true);
+
+    // The over-claim must be measured on claim 2's OWN window (2026-03-02→2026-04-01
+    // on the reduced 50.000): lawful 410,96 vs posted 821,92 → 410,96. The old
+    // contiguous-chain logic folded claim 1's unposted window into lawful and
+    // wrongly reported 0.
+    const proposal = proposeInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(proposal.ok).toBe(true);
+    expect(proposal.postedInterest).toBe(821.92);
+    expect(proposal.lawfulInterest).toBe(410.96);
+    expect(proposal.overClaimedAmount).toBe(410.96);
+    expect(proposal.requiresRefund).toBe(false);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("postInterestCorrection REFUSES when the over-claimed interest was already settled in cash (a refund, not a receivable credit, is required)", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-settled-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9", vatOrCvr: "DK87654321" },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 80000, lineTotalExVat: 80000 }],
+      totals: { netAmount: 80000, vatRate: 0.25, vatAmount: 20000, grossAmount: 100000 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(postIssuedInvoiceToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+    expect(registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-03-31", referenceRatePercent: 2 }).ok).toBe(true);
+    expect(postInvoiceLateInterestToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    // Customer pays the principal in full, THEN pays the interest claim in cash.
+    const principalCsv = join(root, "principal.csv");
+    writeFileSync(principalCsv, "transaction_date,booking_date,text,amount,currency,reference\n2026-04-01,2026-04-01,Principal,100000,DKK,INV-PRIN\n");
+    expect(importBankCsv(db, root, principalCsv).ok).toBe(true);
+    const prinTx = db.query("SELECT id FROM bank_transactions WHERE reference = 'INV-PRIN'").get() as { id: number };
+    expect(settleInvoiceFromBank(db, { invoiceDocumentId: issued.documentId!, bankTransactionId: prinTx.id }).ok).toBe(true);
+
+    const claimCsv = join(root, "claim.csv");
+    writeFileSync(claimCsv, "transaction_date,booking_date,text,amount,currency,reference\n2026-04-02,2026-04-02,Interest,1616.44,DKK,INV-INT\n");
+    expect(importBankCsv(db, root, claimCsv).ok).toBe(true);
+    const intTx = db.query("SELECT id FROM bank_transactions WHERE reference = 'INV-INT'").get() as { id: number };
+    expect(settleInvoiceClaimsFromBank(db, { invoiceDocumentId: issued.documentId!, bankTransactionId: intTx.id }).ok).toBe(true);
+
+    // NOW a back-dated credit note surfaces — the booked interest was over-charged,
+    // but the customer already PAID it in cash.
+    expect(issueCreditNote(db, root, { originalInvoiceDocumentId: issued.documentId!, issueDate: "2026-02-15", reason: "Bagud-dateret kreditnota", grossAmount: 50000 }).ok).toBe(true);
+
+    const proposal = proposeInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(proposal.ok).toBe(true);
+    expect(proposal.overClaimedAmount).toBe(602.74);
+    expect(proposal.requiresRefund).toBe(true); // over-claim exceeds the (now negative) outstanding balance
+
+    // The correction must NOT book a receivable credit — that would reverse
+    // collected income and drive the receivable negative. Refuse, point to a refund.
+    const correction = postInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(correction.ok).toBe(false);
+    expect(correction.errors[0]).toContain("refund");
+
+    expect(verifyAuditChain(db).ok).toBe(true);
+
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("proposeInterestCorrection finds nothing to correct on a clean forward-ordered invoice", () => {
+    const root = mkdtempSync(join(tmpdir(), "rentemester-invoice-interest-correction-clean-"));
+    const db = openDb(ensureCompanyDirs(root).db);
+    migrate(db);
+    seedAccounts(db);
+
+    const issued = issueInvoice(db, root, {
+      invoiceType: "full",
+      vatTreatment: "standard",
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      invoiceNumber: "2026-0001",
+      seller: { name: "Rentemester ApS", address: "Testvej 1", vatOrCvr: "DK12345678" },
+      buyer: { name: "Kunde A/S", address: "Købervej 9" },
+      lines: [{ description: "Ydelse", quantity: 1, unitPriceExVat: 80000, lineTotalExVat: 80000 }],
+      totals: { netAmount: 80000, vatRate: 0.25, vatAmount: 20000, grossAmount: 100000 },
+      currency: "DKK"
+    });
+    expect(issued.ok).toBe(true);
+    expect(registerInvoiceLateInterest(db, { invoiceDocumentId: issued.documentId!, asOfDate: "2026-03-31", referenceRatePercent: 2 }).ok).toBe(true);
+    expect(postInvoiceLateInterestToLedger(db, { invoiceDocumentId: issued.documentId! }).ok).toBe(true);
+
+    const proposal = proposeInterestCorrection(db, { invoiceDocumentId: issued.documentId! });
+    expect(proposal.ok).toBe(true);
+    expect(proposal.hasProposal).toBe(false);
+    expect(proposal.overClaimedAmount).toBe(0);
 
     db.close();
     rmSync(root, { recursive: true, force: true });

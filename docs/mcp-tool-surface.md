@@ -101,7 +101,7 @@ selv ændres ikke.
 
 ## Resultat-shapes (`outputSchema`)
 
-**Alle 99 tools deklarerer et `outputSchema`** (#202). Det er det samme
+**Alle 101 tools deklarerer et `outputSchema`** (#202). Det er det samme
 delte schema for hver tool — konvolutten — så en agent kan læse
 resultat-kontrakten fra `tools/list` *uden* at kalde tool'et først.
 Schemaet er defineret én gang i `src/mcp/envelope.ts` (`envelopeShape`).
@@ -120,7 +120,7 @@ Konvolutten (`structuredContent` på et `tools/call`-svar):
 den konkrete feltliste i `data` varierer pr. tool, og MCP-SDK'en validerer
 kun `structuredContent` mod schemaet for *succes*-svar (`isError:false`) —
 fejl-envelopes springes over. De per-tool `data`-felter er ikke hånd-typet
-99 gange; de er dokumenteret nedenfor og i tool-brief'ene.
+101 gange; de er dokumenteret nedenfor og i tool-brief'ene.
 
 ### Cross-cutting preconditions (envelope-`code`)
 
@@ -152,7 +152,7 @@ på fri-tekst.
 | `exceptions_list` | `{ exceptions: [...], count }` |
 | `period_list` | `{ periods: [{ id, periodStart, periodEnd, kind, status, reference, createdAt }], count }` — `kind` er `"vat_quarter" \| "fiscal_year" \| "custom"`; `status` er `"open" \| "closed" \| "reported"`; `reference` kan være `null`. |
 | `audit_verify` | `{ entries: <number> }` — kun antallet af verificerede posteringer. Integritets-verdikten læses fra **konvolutten**: `ok=true` (+ tom `errors[]`) ⇒ kæden er intakt; `ok=false` ⇒ `errors[]` lister bruddene. Der er hverken `ok` eller `errors` *inde i* `data`. |
-| `invoice_status` | `{ invoiceDocumentId, invoiceNumber, grossAmount, creditedAmount, paidAmount, openBalance, claimOpenBalance, asOfDate, dueDate, effectiveDueDate, isOverdue, overdueDays, status, payments[], creditNotes[], refunds[], claimPayments[], badDebtWriteOffs[], reminders[], compensationClaims[], interestClaims[], totalReminderFees, totalCompensationClaims, totalInterestClaims, totalClaimPayments, totalBadDebtWrittenOff }` — feltet hedder `invoiceDocumentId` (ikke `documentId`), `invoiceNumber` (ikke `invoiceNo`) og `overdueDays` (ikke `daysOverdue`). `status` er `"open" \| "paid" \| "credited" \| "refunded" \| "overpaid" \| "written_off"`. Den fulde typedefinition er `InvoiceStatusResult` i `src/core/invoice-payments.ts`. |
+| `invoice_status` | `{ invoiceDocumentId, invoiceNumber, grossAmount, creditedAmount, paidAmount, openBalance, claimOpenBalance, asOfDate, dueDate, effectiveDueDate, isOverdue, overdueDays, status, payments[], creditNotes[], refunds[], claimPayments[], badDebtWriteOffs[], reminders[], compensationClaims[], interestClaims[], interestCorrections[], totalReminderFees, totalCompensationClaims, totalInterestClaims, totalInterestCorrections, totalClaimPayments, totalBadDebtWrittenOff }` — feltet hedder `invoiceDocumentId` (ikke `documentId`), `invoiceNumber` (ikke `invoiceNo`) og `overdueDays` (ikke `daysOverdue`). `status` er `"open" \| "paid" \| "credited" \| "refunded" \| "overpaid" \| "written_off"`. Den fulde typedefinition er `InvoiceStatusResult` i `src/core/invoice-payments.ts`. |
 
 `write`-tools returnerer id'er + hashes på den nyligt oprettede entitet:
 
@@ -186,7 +186,7 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 - **Write-reversible**: 11
 - **Write-irreversible**: 41
 - **Destructive**: 1 (`system_restore_backup`)
-- **Total**: **99**
+- **Total**: **101**
 
 ## Read-tools
 
@@ -217,6 +217,7 @@ Tallene gælder en kørende `src/mcp/server.ts` (verificeret via `tools/list`).
 | `invoice_compensation_calc` | `invoice compensation` | `{ company, documentId? \| invoiceNumber?, asOf, amountDkk? }` | Beregner kompensationskrav (uden at registrere). |
 | `invoice_find` | `invoice find` | `{ company, query?, customer?, invoiceNumber?, amount?, asOf? }` | Søger fakturaer på nummer, kunde eller beløb. |
 | `invoice_interest_calc` | `invoice interest` | `{ company, documentId? \| invoiceNumber?, asOf, referenceRate }` | Beregner morarente (uden at registrere). `accruedInterestAmount` er den **inkrementelle** rente der kan opkræves nu (perioden siden sidste registrerede krav, eller fra forfald hvis ingen). Ekstra felter: `priorClaimedInterest`, `totalInterestToDate`, `claimableDays`, `interestFromDate`. |
+| `invoice_interest_correction_calc` | `invoice interest-correction` | `{ company, documentId? \| invoiceNumber? }` | Foreslår en korrektion af for meget opkrævet morarente (read-only). Opstår når en betaling/kreditnota er registreret med virkningsdato inde i et allerede bogført rentekravs vindue. Felter: `hasProposal`, `overClaimedAmount`, `postedInterest`, `lawfulInterest`, `alreadyCorrected`, `throughDate`. |
 | `invoice_list` | `invoice list` | `{ company, status?, from?, to?, customerCvr?, customer?, invoiceNumber?, minAmount?, maxAmount?, asOf? }` | Lister udstedte fakturaer med filtre. |
 | `invoice_overdue` | `invoice overdue` | `{ company, asOf?, minDays? }` | Lister forfaldne, ikke fuldt afregnede fakturaer. |
 | `invoice_status` | `invoice status` | `{ company, documentId? \| invoiceNumber?, asOf? }` | Viser åben saldo og status på en faktura. |
@@ -326,6 +327,7 @@ modpostering.
 | `invoice_post` | `invoice post` | `{ company, documentId? \| invoiceNumber?, confirm }` | Bogfører udstedt faktura i finansen. Forudsætning: `invoice_issue`. |
 | `invoice_post_compensation` | `invoice post-compensation` | `{ company, documentId? \| invoiceNumber?, date?, confirm }` | Bogfører registreret kompensation. Forudsætning: `invoice_claim_compensation`. |
 | `invoice_post_interest` | `invoice post-interest` | `{ company, documentId? \| invoiceNumber?, claimId?, date?, confirm }` | Bogfører registreret morarentekrav. Uden `claimId` bogføres det ældste endnu ikke bogførte krav (kronologisk). Forudsætning: `invoice_claim_interest`. |
+| `invoice_post_interest_correction` | `invoice post-interest-correction` | `{ company, documentId? \| invoiceNumber?, date?, reason?, confirm }` | Bogfører en korrektion af for meget opkrævet morarente (debiterer renteindtægt, krediterer tilgodehavende). Forudsætning: `invoice_interest_correction_calc` viser `hasProposal: true`. |
 | `invoice_post_reminder` | `invoice post-reminder` | `{ company, documentId? \| invoiceNumber?, reminderId?, date?, confirm }` | Bogfører registreret rykker. Forudsætning: `invoice_remind`. |
 | `invoice_refund_bank` | `invoice refund-bank` | `{ company, payload: RefundPayload, confirm }` | Bogfører refundering til kunde fra banken. Forudsætning: `invoice_post`. |
 | `invoice_remind` | `invoice remind` | `{ company, documentId? \| invoiceNumber?, date, fee?, note?, confirm }` | Registrerer rykker på forfalden faktura. Forudsætning: `invoice_post` (fakturaen skal være bogført og forfalden). |

@@ -104,9 +104,16 @@ export type InvoiceStatusResult = {
     note: string | null;
     journalEntryId: number | null;
   }>;
+  interestCorrections?: Array<{
+    correctionId: number;
+    correctionDate: string;
+    amountDkk: number;
+    journalEntryId: number;
+  }>;
   totalReminderFees?: number;
   totalCompensationClaims?: number;
   totalInterestClaims?: number;
+  totalInterestCorrections?: number;
   totalClaimPayments?: number;
   totalBadDebtWrittenOff?: number;
   errors: string[];
@@ -185,13 +192,22 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
      WHERE c.invoice_document_id = ? ORDER BY c.claim_date ASC, c.id ASC`
   ).all(invoiceDocumentId) as Array<{ id: number; claim_date: string; amount_dkk: number; reference_rate_percent: number; annual_interest_rate_percent: number; overdue_days: number; note: string | null; journal_entry_id: number | null }>;
 
+  // Correcting reversals of over-claimed late interest (back-dated balance
+  // reductions); they net DOWN the interest-claim balance.
+  const interestCorrections = db.query(
+    `SELECT id, correction_date, amount_dkk, journal_entry_id
+     FROM invoice_interest_corrections
+     WHERE invoice_document_id = ? ORDER BY id ASC`
+  ).all(invoiceDocumentId) as Array<{ id: number; correction_date: string; amount_dkk: number; journal_entry_id: number }>;
+
   const grossAmount = roundDkk(Number(invoice.amount_inc_vat ?? 0));
   const creditedAmount = sumDkk(creditNotes.map((c) => Number(c.amount_inc_vat ?? 0)));
   const paidAmount = sumDkk(payments.map((p) => Number(p.amount)));
   const refundedAmount = sumDkk(refunds.map((r) => Number(r.amount)));
   const totalReminderFees = sumDkk(reminders.map((r) => Number(r.fee_amount)));
   const totalCompensationClaims = sumDkk(compensationClaims.map((c) => Number(c.amount_dkk)));
-  const totalInterestClaims = sumDkk(interestClaims.map((c) => Number(c.amount_dkk)));
+  const totalInterestCorrections = sumDkk(interestCorrections.map((c) => Number(c.amount_dkk)));
+  const totalInterestClaims = subtractDkk(sumDkk(interestClaims.map((c) => Number(c.amount_dkk))), totalInterestCorrections);
   const totalClaimPayments = sumDkk(claimPayments.map((p) => Number(p.amount)));
   const totalBadDebtWrittenOff = sumDkk(badDebtWriteOffs.map((w) => Number(w.gross_amount)));
   const openBalance = subtractDkk(addDkk(subtractDkk(grossAmount, creditedAmount, paidAmount), refundedAmount), totalBadDebtWrittenOff);
@@ -249,9 +265,11 @@ export function getInvoiceStatus(db: Database, invoiceDocumentId: number, asOfDa
       note: c.note,
       journalEntryId: c.journal_entry_id == null ? null : Number(c.journal_entry_id),
     })),
+    interestCorrections: interestCorrections.map((c) => ({ correctionId: c.id, correctionDate: c.correction_date, amountDkk: roundDkk(Number(c.amount_dkk)), journalEntryId: Number(c.journal_entry_id) })),
     totalReminderFees,
     totalCompensationClaims,
     totalInterestClaims,
+    totalInterestCorrections,
     totalClaimPayments,
     totalBadDebtWrittenOff,
     errors: [],
