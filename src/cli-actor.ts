@@ -33,6 +33,7 @@ export const MUTATING_COMMANDS = new Set([
   "invoice post-reminder",
   "invoice claim-interest",
   "invoice post-interest",
+  "invoice post-interest-correction",
   "invoice claim-compensation",
   "invoice post-compensation",
   "documents ingest",

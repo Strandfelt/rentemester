@@ -16,7 +16,7 @@ import {
   type InvoiceQueryStatus,
 } from "../../../core/invoice-list";
 import { getInvoiceStatus } from "../../../core/invoice-payments";
-import { calculateInvoiceLateInterest } from "../../../core/invoice-interest";
+import { calculateInvoiceLateInterest, proposeInterestCorrection } from "../../../core/invoice-interest";
 import { calculateInvoiceLateCompensation } from "../../../core/invoice-compensation";
 import { envelopeShape, wrapCoreResult } from "../../envelope";
 import {
@@ -305,6 +305,27 @@ export function registerInvoiceQueryTools(server: McpServer): void {
         asOfDate: args.asOf,
         referenceRatePercent: args.referenceRate,
       });
+      return wrapCoreResult(result);
+    }),
+  );
+
+  server.registerTool(
+    "invoice_interest_correction_calc",
+    {
+      title: "Propose late-interest correction",
+      description:
+        "Foreslår en korrektion af for meget opkrævet morarente. Read-only. Opstår når en " +
+        "betaling eller kreditnota er registreret med en virkningsdato INDE i et allerede bogført " +
+        "rentekravs vindue, så den lovlige dato-bevidste rente er lavere end det bogførte beløb. " +
+        "Returnerer hasProposal, overClaimedAmount, postedInterest, lawfulInterest, alreadyCorrected.",
+      inputSchema: { ...docIdOrNumberSchema },
+      outputSchema: envelopeShape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    withCompanyDb<{ company: string; documentId?: number; invoiceNumber?: string }>(server, ({ db, args }) => {
+      const id = resolveIssuedInvoiceDocumentId(db, args);
+      if (!id) return notFoundEnvelope(args);
+      const result = proposeInterestCorrection(db, { invoiceDocumentId: id });
       return wrapCoreResult(result);
     }),
   );

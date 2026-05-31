@@ -11,6 +11,8 @@ import {
   calculateInvoiceLateInterest,
   postInvoiceLateInterestToLedger,
   registerInvoiceLateInterest,
+  proposeInterestCorrection,
+  postInterestCorrection,
 } from "../../core/invoice-interest";
 import type { CommandDispatch } from "../../cli-dispatch";
 import { emitHumanReport } from "../../cli-format";
@@ -56,6 +58,30 @@ export function registerInterestCommands(dispatch: CommandDispatch): void {
       asOfDate,
       referenceRatePercent,
       note: note ?? undefined,
+    });
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
+  });
+
+  dispatch.on("invoice", "interest-correction", (ctx) => {
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
+    const result = proposeInterestCorrection(db, { invoiceDocumentId: documentId });
+    ctx.emitResult(result as Record<string, unknown>);
+    db.close();
+  });
+
+  dispatch.on("invoice", "post-interest-correction", (ctx) => {
+    const transactionDate = ctx.arg("--date");
+    const reason = ctx.arg("--reason");
+    const db = openCommandDb(ctx);
+    migrate(db);
+    const documentId = resolveInvoiceDocumentId(db, ctx);
+    const result = postInterestCorrection(db, {
+      invoiceDocumentId: documentId,
+      transactionDate: transactionDate ?? undefined,
+      reason: reason ?? undefined,
     });
     ctx.emitResult(result as Record<string, unknown>);
     db.close();

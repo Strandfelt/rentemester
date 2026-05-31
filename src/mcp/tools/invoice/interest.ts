@@ -10,6 +10,7 @@ import { z } from "zod";
 import {
   registerInvoiceLateInterest,
   postInvoiceLateInterestToLedger,
+  postInterestCorrection,
 } from "../../../core/invoice-interest";
 import { withActor } from "../../actor";
 import { envelopeShape, errorEnvelope, wrapCoreResult } from "../../envelope";
@@ -150,6 +151,51 @@ export function registerInvoiceInterestTools(server: McpServer): void {
         invoiceDocumentId: id,
         claimId: args.claimId,
         transactionDate: args.date,
+        createdBy: actor.createdBy,
+        createdByProgram: actor.createdByProgram,
+      });
+      return wrapCoreResult(result);
+    }),
+  );
+
+  server.registerTool(
+    "invoice_post_interest_correction",
+    {
+      title: "Post late-interest correction",
+      description:
+        "Bogfører en korrektion af for meget opkrævet morarente (debiterer renteindtægt, " +
+        "krediterer tilgodehavende) for det beløb invoice_interest_correction_calc foreslår. " +
+        "Forudsætning: et bogført morarentekrav og en bagud-dateret saldonedsættelse der gør " +
+        "den lovlige rente lavere end det bogførte. Afvises hvis der intet er at korrigere. " +
+        "write-irreversible.",
+      inputSchema: {
+        ...docIdOrNumberSchema,
+        date: z
+          .string()
+          .optional()
+          .describe("Posting date in YYYY-MM-DD format. When omitted, the last posted claim's date is used."),
+        reason: z.string().optional().describe("Optional free-text reason for the correction."),
+        confirm: confirmField,
+      },
+      outputSchema: envelopeShape,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withCompanyDbConfirmed<{
+      company: string;
+      documentId?: number;
+      invoiceNumber?: string;
+      date?: string;
+      reason?: string;
+      confirm?: boolean;
+    }>(server, "invoice_post_interest_correction", ({ db, actor, args }) => {
+      const id = resolveIssuedInvoiceDocumentId(db, args);
+      if (!id) return notFoundEnvelope(args);
+      // Actor-invariant (#63/#76): attribute the correction posting to the
+      // booking agent in the hash chain + audit_log, not the OS user.
+      const result = postInterestCorrection(db, {
+        invoiceDocumentId: id,
+        transactionDate: args.date,
+        reason: args.reason,
         createdBy: actor.createdBy,
         createdByProgram: actor.createdByProgram,
       });

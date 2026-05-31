@@ -376,6 +376,25 @@ CREATE TABLE IF NOT EXISTS invoice_interest_postings (
   FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
 );
 
+-- A correcting reversal of over-claimed morarente. When a balance reduction
+-- (payment / credit note) is recorded with an effective date inside an already
+-- POSTED interest claim's window, the lawful date-aware interest for that window
+-- becomes lower than what was booked. This row records the correcting journal
+-- entry (debit interest income, credit receivable) that reverses the excess.
+-- amount_dkk is always the positive excess being reversed; getInvoiceStatus
+-- subtracts it from the interest-claim balance. Append-only, like every claim.
+CREATE TABLE IF NOT EXISTS invoice_interest_corrections (
+  id INTEGER PRIMARY KEY,
+  invoice_document_id INTEGER NOT NULL,
+  correction_date TEXT NOT NULL,
+  amount_dkk NUMERIC NOT NULL CHECK(amount_dkk > 0),
+  reason TEXT,
+  journal_entry_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(invoice_document_id) REFERENCES documents(id),
+  FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id)
+);
+
 CREATE TABLE IF NOT EXISTS invoice_claim_payments (
   id INTEGER PRIMARY KEY,
   invoice_document_id INTEGER NOT NULL,
@@ -698,6 +717,18 @@ CREATE TRIGGER IF NOT EXISTS invoice_interest_postings_no_delete
 BEFORE DELETE ON invoice_interest_postings
 BEGIN
   SELECT RAISE(ABORT, 'invoice interest postings are append-only; reverse the journal entry instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS invoice_interest_corrections_no_update
+BEFORE UPDATE ON invoice_interest_corrections
+BEGIN
+  SELECT RAISE(ABORT, 'invoice interest corrections are append-only; add another correction instead');
+END;
+
+CREATE TRIGGER IF NOT EXISTS invoice_interest_corrections_no_delete
+BEFORE DELETE ON invoice_interest_corrections
+BEGIN
+  SELECT RAISE(ABORT, 'invoice interest corrections are append-only; add another correction instead');
 END;
 
 CREATE TRIGGER IF NOT EXISTS invoice_claim_payments_no_update
